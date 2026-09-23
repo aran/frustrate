@@ -1,0 +1,14 @@
+# The analyzer has one context; a conditional import has two.
+#
+# `bridge/lib/init.dart` exports `src/init_native.dart` or `src/init_web.dart`
+# depending on `dart.library.js_interop`. `dart analyze` has no such condition —
+# it analyzes every file in the library under VM semantics — so the web half
+# resolves `FrustrateWeb`, which `package:frustrate` exports only on web, to
+# nothing and reports `undefined_identifier`.
+#
+# Excluding it does not leave it unchecked. The web half is type-checked by the
+# dart2wasm compile of //:app_web, which is the context where its conditions
+# actually hold, and //:web_app_build_test keeps that honest.
+analyzer:
+  exclude:
+    - "**/init_web.dart"

@@ -1,0 +1,25 @@
+name: bazel_frb_dart
+description: >-
+  The Dart half of the "can flutter_rust_bridge be built by Bazel?" experiment.
+  A plain Dart package (no Flutter): package:flutter_rust_bridge is pure Dart,
+  which this module's smoke test keeps checking.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter_rust_bridge: 2.13.0-beta.6
+
+# Pinned to match rules_dart's internal ext lock, exactly as
+# runtime/dart/pubspec.yaml is and for the same reason: the pub extension
+# rejects version skew of shared transitive packages across lock files.
+# Nothing to do with FRB.
+dev_dependencies:
+  analyzer: 10.2.0
+  test: 1.31.1
+
+dependency_overrides:
+  coverage: 1.15.0
+  meta: 1.18.2

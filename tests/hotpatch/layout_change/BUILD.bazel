@@ -1,0 +1,3 @@
+load("//tests/hotpatch:defs.bzl", "hot_patch_fixture")
+
+hot_patch_fixture()

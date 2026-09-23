@@ -1,0 +1,15 @@
+# 60 MB of third-party crate sources for the vendored rung, produced on demand
+# by `cargo vendor` into `codegen_action/vendor/` from this directory. Not
+# checked in; the rung is reproducible from the command, not from a copy of
+# crates.io in this repo.
+codegen_action/vendor/
+
+# Bazel's convenience symlinks land here too (this directory is its own
+# workspace root, so `bazel-*` is created beside MODULE.bazel).
+bazel-*
+
+# NOTE what is deliberately NOT ignored: bridge/src/frb_generated.rs and
+# lib/src/*.dart. They are `flutter_rust_bridge_codegen` output, and checking
+# them in IS the experiment — committing the generated code is FRB's own
+# convention, and the Bazel build in this directory has no other way to get
+# them.

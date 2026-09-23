@@ -1,0 +1,17 @@
+[package]
+name = "frustrate-hotpatch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Builds patches for a running frustrate bridge library from LLVM IR"
+
+[dependencies]
+# Reads the running library's symbol table and linker identity (LC_UUID,
+# GNU build-id) for Mach-O and ELF; nothing is written with it.
+object = { version = "0.37", default-features = false, features = ["read_core", "elf", "macho", "std", "unaligned"] }
+rustc-demangle = "0.1"
+serde_json = "1"
+
+[[bin]]
+name = "frustrate_hotpatch"
+path = "src/main.rs"

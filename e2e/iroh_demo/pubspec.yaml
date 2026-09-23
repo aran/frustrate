@@ -1,0 +1,12 @@
+name: iroh_demo
+publish_to: none
+environment:
+  sdk: ^3.0.0
+dependencies:
+  flutter:
+    sdk: flutter
+  # Pure-Dart QR *encoder* (no camera plugin, no permission): the app renders
+  # its pairing ticket with a CustomPainter over this. It deliberately does not
+  # scan — a camera permission is the one thing rules_flutter cannot express on
+  # either Apple platform, so pairing is by paste.
+  qr: ^3.0.2

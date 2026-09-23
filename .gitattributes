@@ -1,0 +1,17 @@
+# Exclude development-only files from release archives (`git archive`).
+#
+# Every pattern is anchored with a leading `/`. Without one, `git archive`
+# matches the basename at any depth.
+#
+# `/e2e/` is listed demo by demo: the archive keeps `e2e/wasi_demo`, which
+# `.bcr/presubmit.yml` names as `module_path` and BCR resolves inside the
+# extracted archive. Adding a demo means adding it here.
+/.bcr/ export-ignore
+/.github/ export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/.pre-commit-config.yaml export-ignore
+/bazel_frb/ export-ignore
+/e2e/_playwright/ export-ignore
+/e2e/flutter_demo/ export-ignore
+/e2e/iroh_demo/ export-ignore

@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+rust_library(
+    name = "frustrate_hotpatch_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "frustrate_hotpatch",
+    edition = "2021",
+    visibility = ["//tests/hotpatch:__pkg__"],
+    deps = [
+        "@crates//:object",
+        "@crates//:rustc-demangle",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_binary(
+    name = "frustrate_hotpatch",
+    srcs = ["src/main.rs"],
+    edition = "2021",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":frustrate_hotpatch_lib",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "frustrate_hotpatch_test",
+    crate = ":frustrate_hotpatch_lib",
+    edition = "2021",
+)

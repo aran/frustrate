@@ -1,0 +1,80 @@
+# The demo on threaded wasm: the SAME bridge crate and the SAME lib/main.dart
+# as the default app at //:app_web, with only the wasm module built differently.
+# Its own package because the module must be named demo_rust.wasm (the URL
+# initBridge() fetches; asset staging strips this package's prefix, so it
+# lands at the site root) and output names are target names — two targets
+# named demo_rust.wasm cannot share a package.
+#
+# Tagged manual: threaded wasm needs the locally built +atomics std (run
+# `bazel run //toolchain/custom_std:build` in the frustrate repo
+# first); wildcard builds stay green without it.
+load("@frustrate//bazel:defs.bzl", "frustrate_wasm_module", "frustrate_web_glue")
+load("@rules_flutter//flutter:defs.bzl", "flutter_native_library")
+load("@rules_flutter//flutter:web.bzl", "flutter_web_bundle", "flutter_web_manifest_gen")
+load("//:web_csp.bzl", "strict_csp_index_html")
+
+frustrate_wasm_module(
+    name = "demo_rust.wasm",
+    crate = "//bridge:demo_rust",
+    platform = "@frustrate//bazel:wasm32_threads",
+    tags = ["manual"],
+)
+
+# What the served module's bindings were generated from — see the wrapper
+# at //:demo_rust_wasm_module for what it buys. One per package because the
+# module is: all three must be named demo_rust.wasm, and output names are
+# target names.
+flutter_native_library(
+    name = "demo_rust_wasm_module",
+    binding_contract = ["//bridge:codegen.ir"],
+    library = ":demo_rust.wasm",
+    tags = ["manual"],
+)
+
+# Same served-glue + strict-CSP story as the root app (see //:frustrate.js);
+# under the bundle's policy the threaded pool workers must come from this
+# served URL, not blob: (web/index.html here is the sibling of
+# //:web/index.html — the glob is per-package, so each app checks in its own
+# copy).
+frustrate_web_glue(
+    name = "frustrate.js",
+    tags = ["manual"],
+)
+
+# The bundled page: this package's web/index.html with the same strict policy
+# substituted in (//:web_csp.bzl), except under //:dbg, which is what the dev
+# loop builds.
+strict_csp_index_html(
+    name = "index_html",
+    tags = ["manual"],
+)
+
+flutter_web_manifest_gen(
+    name = "manifest_json",
+    app_name = "Frustrate Demo (threaded)",
+    tags = ["manual"],
+)
+
+# Tier 2 for the same reason as //:app_web — the macro leaves no seam to
+# inject the CSP through.
+flutter_web_bundle(
+    name = "app_web_threaded",
+    package_name = "frustrate_demo",
+    index_html = ":index_html",
+    main = "//:lib/main.dart",
+    manifest_json = ":manifest_json",
+    tags = ["manual"],
+    # Required by the bundle's `script-src 'self'`: the renderer must load
+    # from the bundled canvaskit/, not the gstatic CDN.
+    use_local_canvaskit = True,
+    # Served exactly as a web_assets entry is, so it must not be named in
+    # both — declaring it here is what gets the contract watched.
+    native_modules = [":demo_rust_wasm_module"],
+    web_assets = [":frustrate.js"],
+    deps = [
+        "//bridge:demo_bridge",
+        "@frustrate//runtime/dart:frustrate",
+        "@deps//:flutter",
+        "@rules_flutter//flutter:material_icons",
+    ],
+)

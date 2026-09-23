@@ -1,0 +1,250 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@frustrate//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs")
+load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_test")
+load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library", "rust_test")
+
+# Cargo.toml/Cargo.lock exist for the crate hub (//:MODULE.bazel's
+# `crate.from_cargo`), not for cargo. The crate is built by Bazel.
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])
+
+# Only api.rs is parsed for #[bridge] items; node.rs / proto.rs / stub.rs are
+# ordinary Rust that frustrate never sees.
+frustrate_bridge_outputs(
+    name = "codegen",
+    srcs = ["src/api.rs"],
+    crate_name = "iroh_rust",
+    module_paths = ["crate::api"],
+)
+
+# Every `#[bridge(no_block)]` claim in src/api.rs is settled by placement, so
+# this target builds no wasm at all — no `crate`, no +atomics std, no `manual`
+# tag. Two kinds of placement: the `Node` actor's methods run on the actor's own
+# Worker, and `peer_id_for` is a free function whose body is handed to the pool,
+# which puts it off the main thread wherever a wait instruction exists.
+#
+# It is still a gate rather than a comment. The census codegen writes is the
+# action's input, and a claim that needs artifact evidence — a `#[bridge(sync)]`
+# member carrying `no_block`, or one whose parameters carry a user codec, or one
+# handing out a handle — makes this target fail by name rather than quietly stop
+# covering it.
+#
+# //bridge/check_fixture is the other half: a claim whose body really is scanned
+# over this same wasm dependency set, which does build a module.
+frustrate_block_check(
+    name = "block_check",
+    bridge = ":codegen",
+)
+
+build_test(
+    name = "block_check_build_test",
+    targets = [":block_check"],
+)
+
+# libiroh_rust.dylib on macOS; iroh_rust.framework on iOS; libiroh_rust.so on
+# Android/Linux. flutter_plugin's native_deps select carries it to each.
+#
+# The dep set is a select() on @platforms//os. It was written as "iroh on the
+# four native OSes, nothing on the default" because wasm could not build iroh
+# at all; the default branch is now a real dep set rather than an empty one
+# (C10/M5). Selecting on os rather than cpu:wasm32 means this file needs no
+# wasm config_setting at all — wasm32 is the `//conditions:default` here, since
+# `@platforms//os:none` is what the wasm platform carries.
+#
+# The two branches differ by exactly two crates, and both differences are
+# forced:
+#
+#  - `tokio-stream` is native-only because only `node.rs` uses it, for
+#    `Connection::path_events()`. A browser has no path to watch.
+#  - `wasm-bindgen-futures` is wasm-only because it is the executor. There is
+#    no runtime to own on web, so `spawn_local` is what `Handle::spawn` is
+#    natively.
+#
+# `tokio` is in BOTH branches but is NOT the same crate: the feature sets
+# differ (`rt-multi-thread` natively, `rt` on wasm), and that difference lives
+# in //bridge:Cargo.toml's per-target dependency tables, not here. A select()
+# cannot express it — it names per-triple *dependencies*, never per-triple
+# cargo *features*, and by the time Bazel selects, the hub has already resolved
+# tokio's features for the triple. See the comment there.
+
+# Everything node.rs needs. `tokio` is here in its own right rather than
+# through iroh: the actor owns the runtime outright, and builds it multi-thread
+# with enable_all() (see node.rs's `open`).
+_NATIVE_CRATES = [
+    "@iroh_crates//:iroh",
+    "@iroh_crates//:iroh-tickets",
+    "@iroh_crates//:tokio",
+    "@iroh_crates//:tokio-stream",
+]
+
+# Everything stub.rs needs: the same iroh, relay-only by physics rather than by
+# configuration.
+_WASM_CRATES = [
+    "@iroh_crates//:iroh",
+    "@iroh_crates//:iroh-tickets",
+    "@iroh_crates//:tokio",
+    "@iroh_crates//:js-sys",
+    "@iroh_crates//:wasm-bindgen-futures",
+]
+
+rust_shared_library(
+    name = "iroh_rust",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        "src/node.rs",
+        "src/proto.rs",
+        "src/stub.rs",
+        ":codegen.rs",
+        # Compiled only under `--test`, where node.rs `mod`s it in.
+        #
+        # This is no longer *forced*:
+        # `@frustrate//bazel:defs.bzl`'s `frustrate_bridge_library` now declares
+        # an rlib beside the cdylib, which a real `rust_test(srcs = ...)` can
+        # link. What keeps this file smuggled is its own content — it opens with
+        # `use super::*` and drives the `#[cfg(test)]` event seam in node.rs, so
+        # becoming an external test means rewriting it against the public
+        # surface (or onto `frustrate::testing`, which landed the same day).
+        # A real migration, not a rule swap; not done here.
+        "tests/two_endpoints.rs",
+    ],
+    edition = "2021",
+    proc_macro_deps = ["@frustrate//macros:frustrate_macros"],
+    visibility = [
+        "//:__pkg__",
+        "//threaded:__pkg__",
+    ],
+    deps = [
+        "@frustrate//runtime/rust:frustrate",
+        # THIS hub's `log`, never frustrate's, and //:.bazelrc points
+        # frustrate's `log` build setting at the same alias so its runtime
+        # compiles against this rlib too. `log`'s logger is a `static` per
+        # rlib and every crate in this graph that logs — iroh, rustls, quinn,
+        # through `tracing` — linked this one, so this is the only wiring in
+        # which `install_logging` hears anything but itself.
+        "@iroh_crates//:log",
+    ] + select({
+        "@platforms//os:macos": _NATIVE_CRATES,
+        "@platforms//os:ios": _NATIVE_CRATES,
+        "@platforms//os:android": _NATIVE_CRATES,
+        "@platforms//os:linux": _NATIVE_CRATES,
+        "//conditions:default": _WASM_CRATES,
+    }),
+)
+
+# The crate's own tests: proto.rs's codec unit tests and the hermetic
+# two-endpoint test in tests/two_endpoints.rs.
+#
+# `crate = ` rather than `deps = ` is forced, not chosen: :iroh_rust is a
+# cdylib and nothing can link one. This form recompiles the same sources with
+# `--test`, which is also what makes the `#[cfg(test)]` event seam in node.rs
+# reachable. Hermetic by construction — every endpoint binds 127.0.0.1 with no
+# relay, no DNS and no pkarr configured — so it needs no `tags = ["external"]`.
+rust_test(
+    name = "iroh_rust_test",
+    crate = ":iroh_rust",
+    edition = "2021",
+    target_compatible_with = select({
+        "@platforms//os:macos": [],
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+# The generated bindings as a plain Dart library, for the VM test below.
+#
+# The same package name and the same generated source as :iroh_bridge, minus
+# the `lib/init.dart` seam — which exists to find the library inside a *bundled
+# app* (a macOS Frameworks directory, an iOS framework, an Android jniLibs
+# path). A `dart_test` has none of those; it has runfiles, so the test names
+# the artifact itself. Not a `flutter_plugin` because nothing here is Flutter:
+# `dart_test` runs the plain VM, which is the whole reason this is cheap enough
+# to be an ordinary `bazel test` target.
+dart_library(
+    name = "bindings",
+    srcs = [":codegen.dart"],
+    package_name = "iroh_bridge",
+    deps = ["@frustrate//runtime/dart:frustrate"],
+)
+
+# A dependency's `log` records arriving on a Dart stream — the property
+# `frustrate::logging` exists for, asserted from a module that is not
+# frustrate. See the test's own header for why it cannot be asserted in
+# frustrate's repo.
+#
+# Hermetic on the same terms as :iroh_rust_test: `Preset::Minimal` with no
+# relay contacts nothing. Hosts only, because it dlopens a macOS/Linux dylib.
+dart_test(
+    name = "dependency_logging_test",
+    size = "small",
+    data = [":iroh_rust"],
+    main = "test/dependency_logging_test.dart",
+    target_compatible_with = select({
+        "@platforms//os:macos": [],
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":bindings",
+        "@frustrate//runtime/dart:frustrate",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The bindings package: generated Dart plus the init seam. App code imports
+# package:iroh_bridge/... and never touches a platform transport directly.
+# The library as a native dependency, told apart from its bindings: the dev tool
+# learns that `codegen.ir` is the interface both halves are generated from, so
+# it can tell a Rust edit that rewrote a body from one that moved the wire — and
+# on a -c dbg build it can ask frustrate for a patch of the first kind and
+# deliver it into the running app rather than reporting the code stale.
+frustrate_hot_patchable(
+    name = "iroh_rust_hot",
+    binding_contract = ":codegen.ir",
+    library = ":iroh_rust",
+)
+
+flutter_native_library(
+    name = "iroh_rust_native",
+    binding_contract = [":codegen.ir"],
+    hot_patch = ":iroh_rust_hot.hot_patch",
+    library = ":iroh_rust_hot",
+)
+
+flutter_plugin(
+    name = "iroh_bridge",
+    package_name = "iroh_bridge",
+    srcs = [
+        "lib/init.dart",
+        "lib/src/init_native.dart",
+        "lib/src/init_web.dart",
+        ":codegen.dart",
+    ],
+    # Web is absent here on purpose, and it is not an oversight: on web the
+    # module is not a `native_dep` at all. `flutter_web_app` stages it as an
+    # `extra_web_asset` (//:app_web) and the runtime fetches it by URL, so
+    # there is nothing for a plugin's native_deps to carry.
+    native_deps = select({
+        "@platforms//os:macos": [":iroh_rust_native"],
+        "@platforms//os:ios": [":iroh_rust_native"],
+        "@platforms//os:android": [":iroh_rust_native"],
+        "@platforms//os:linux": [":iroh_rust_native"],
+        "//conditions:default": [],
+    }),
+    platforms = [
+        "macos",
+        "ios",
+        "android",
+        "linux",
+        "web",
+    ],
+    visibility = [
+        "//:__pkg__",
+        "//threaded:__pkg__",
+    ],
+    deps = ["@frustrate//runtime/dart:frustrate"],
+)

@@ -1,0 +1,35 @@
+# Two consumers read this directory, and they take different things from it.
+#
+# Bazel takes only `pubspec.lock`, via `flutter.pub(lock = "//:pubspec.lock")`
+# in MODULE.bazel: that file pins the *hosted* packages @deps is built from.
+# The dependency list below is not part of the Bazel build — //:app_flutter and
+# //:app_web name their deps in BUILD.bazel.
+#
+# pub takes this file, and needs the two path dependencies below so that the
+# *analyzer* — your editor, `dart analyze` — can resolve what lib/main.dart
+# imports. Nothing in the build or the dev loop reads them; both go through
+# Bazel.
+#
+# Those two facts pull against each other: a `flutter pub get` here would add
+# `demo_bridge`, `frustrate` (source: path) and `ffi` to pubspec.lock, and that
+# file is Bazel's pin, not pub's scratch space.
+#
+# The consequence, stated plainly: do not run `flutter pub get` by hand here.
+# It will dirty pubspec.lock. Use `bazel run @rules_flutter//flutter:pub -- get`,
+# which resolves against the SDK Bazel pins, and drop the three entries it adds.
+# See README.md.
+name: frustrate_demo
+publish_to: none
+environment:
+  sdk: ^3.0.0
+dependencies:
+  flutter:
+    sdk: flutter
+  # Path deps, not hosted: this demo and the runtime it exercises are one
+  # source tree. `frustrate` is direct because lib/main.dart imports
+  # package:frustrate/workers.dart for the actor race, not only through
+  # the bridge.
+  demo_bridge:
+    path: bridge
+  frustrate:
+    path: ../../runtime/dart

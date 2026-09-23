@@ -1,0 +1,231 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@frustrate//bazel:defs.bzl", "frustrate_wasm_module", "frustrate_web_glue")
+load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options")
+load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
+load("@rules_flutter//flutter:defs.bzl", "flutter_application", "flutter_native_library")
+load("@rules_flutter//flutter:ios.bzl", "flutter_ios_app", "flutter_ios_simulator_build_test")
+load("@rules_flutter//flutter:linux.bzl", "flutter_linux_app")
+load("@rules_flutter//flutter:macos.bzl", "flutter_macos_app")
+load("@rules_flutter//flutter:web.bzl", "flutter_web_bundle", "flutter_web_manifest_gen")
+load("//:web_csp.bzl", "strict_csp_index_html")
+
+exports_files(["pubspec.lock"])
+
+# The threaded variant app (//threaded) reuses this exact file — the
+# portability story is that one main.dart serves every platform and web build.
+exports_files(["lib/main.dart"])
+
+# Every `analysis_options.yaml` here, for the `dart_analyze` aspect `.bazelrc`
+# enables under `bazel test`.
+dart_analysis_options(
+    name = "analysis_options",
+    src = "analysis_options.yaml",
+)
+
+dart_analysis_config(
+    name = "analysis_config",
+    options = [":analysis_options"],
+)
+
+flutter_application(
+    name = "app_flutter",
+    package_name = "frustrate_demo",
+    main = "lib/main.dart",
+    deps = [
+        "//bridge:demo_bridge",
+        # Direct dep: main.dart imports the ActorPool convenience layer
+        # (package:frustrate/workers.dart) for the actor race.
+        "@frustrate//runtime/dart:frustrate",
+        "@deps//:flutter",
+        "@rules_flutter//flutter:material_icons",
+    ],
+)
+
+flutter_macos_app(
+    name = "app",
+    app_name = "Frustrate Demo",
+    application = ":app_flutter",
+    bundle_id = "dev.frustrate.demo",
+    minimum_os_version = "26.0",  # .bazelrc sets the toolchains to match
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+# iOS: the same app_flutter + the Rust bridge, which the demo_bridge plugin's
+# native_deps select carries to iOS. flutter_ios_native_frameworks wraps the
+# cross-compiled libdemo_rust.dylib as a signed, embedded demo_rust.framework
+# (dlopen-legal on device); init_native.dart loads it by framework path.
+# Simulator build: -c dbg --platforms=@rules_flutter//flutter/platforms:ios_arm64
+# (or the sim platform).
+flutter_ios_app(
+    name = "app_ios",
+    app_name = "Frustrate Demo",
+    application = ":app_flutter",
+    bundle_id = "dev.frustrate.demo",
+)
+
+# The same app, signed for a physical iPhone. Everything except the signing
+# identity is shared with //:app_ios — one extra macro call, because
+# `flutter_ios_app` forwards **kwargs to `ios_application` and
+# `provisioning_profile` is one of the attributes it does not itself set.
+#
+# `//device` is gitignored and does not exist in a fresh checkout: copy
+# device.example/ to device/ and follow its header. Nothing in the wildcard
+# build reaches this target — `flutter_ios_app` defaults to tags = ["manual"],
+# which keeps `bazel build //...` from expanding it and therefore from loading
+# the missing //device package at all. That is also why there is no build_test
+# here: a build_test would drag //device into every wildcard build.
+flutter_ios_app(
+    name = "app_ios_device",
+    app_name = "Frustrate Demo",
+    application = ":app_flutter",
+    bundle_id = "dev.frustrate.demo",
+    provisioning_profile = "//device:profile",
+)
+
+# Android: the same app_flutter + the Rust bridge, which the demo_bridge
+# plugin's native_deps select carries as a per-ABI libdemo_rust.so
+# (init_native.dart loads it by bare name). arm64-v8a to match an Apple-Silicon
+# emulator or a device; add an x64 sibling for x86 emulators.
+#
+# --config=android is not optional: it is what registers the SDK and NDK
+# toolchains (.bazelrc says why). `flutter_android_app` defaults to
+# tags = ["manual"], so the wildcard build does not reach it.
+#   bazel build --config=android //:app_android -c dbg
+#   adb install -r bazel-bin/app_android.apk
+flutter_android_app(
+    name = "app_android",
+    app_name = "Frustrate Demo",
+    android_abi = "arm64",
+    application = ":app_flutter",
+    package_name = "dev.frustrate.demo",
+)
+
+# Linux (GTK): the same app_flutter + the Rust bridge as a libdemo_rust.so
+# beside the runner (init_native.dart loads it by bare name). flutter_linux_app
+# templates the GTK runner, so no linux/ runner dir is needed.
+#
+# **Native-host only, and deliberately untested here.** There is no build_test
+# for this target because this module carries no C cross toolchain: MODULE.bazel
+# lists x86_64-unknown-linux-gnu among the Rust triples, but nothing registers a
+# Linux `cc_toolchain`, so from a macOS host the target cannot be analysed at
+# all. Adding the ~80 lines of toolchains_llvm wiring plus a pinned
+# 13,423-file Chromium sysroot to the feature gallery would duplicate
+# e2e/iroh_demo, which already proves the Linux cross path end to end
+# (//:linux_app_build_test there, via its own bazel/linux.bzl transition).
+# A `target_compatible_with`-gated build_test here would be worse than none:
+# on every machine anyone actually runs it on, it would pass having built
+# nothing.
+flutter_linux_app(
+    name = "app_linux",
+    application = ":app_flutter",
+    gtk_app_id = "dev.frustrate.demo",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# Declared in the root package so the module lands at the site root,
+# matching the URL initBridge() fetches on web.
+frustrate_wasm_module(
+    name = "demo_rust.wasm",
+    crate = "//bridge:demo_rust",
+    # The web bundle is the one artifact here that crosses a network, so the
+    # optimizer earns its fetch. Size only — see the wasm_opt attribute's docs
+    # before reading it as a speed change.
+    wasm_opt = "@binaryen//:wasm-opt",
+)
+
+# What the served module's bindings were generated from. Without this the dev
+# tool cannot tell a Rust edit the instantiated module can still serve from one
+# it cannot, and `r` reports success while the page goes on calling the module
+# it instantiated at startup. Declared, never detected: the bundle also holds
+# Flutter's own main.dart.wasm, which moves on every Dart edit.
+flutter_native_library(
+    name = "demo_rust_wasm_module",
+    binding_contract = ["//bridge:codegen.ir"],
+    library = ":demo_rust.wasm",
+)
+
+# The served glue asset (strict-CSP delivery): web/index.html loads it with
+# a plain <script src="frustrate.js">, which is what makes the bundle's
+# no-'unsafe-inline' policy satisfiable — this app is the standing proof that
+# the bridge runs without inline scripts or blob: workers.
+frustrate_web_glue(
+    name = "frustrate.js",
+)
+
+# The bundled page: web/index.html with the strict policy substituted in,
+# except under :dbg, which is what the dev loop builds — its hot-restart
+# channel starts the app with an inline script. See web_csp.bzl.
+strict_csp_index_html(name = "index_html")
+
+config_setting(
+    name = "dbg",
+    values = {"compilation_mode": "dbg"},
+)
+
+flutter_web_manifest_gen(
+    name = "manifest_json",
+    app_name = "Frustrate Demo",
+)
+
+# Composed from Tier 2 rather than the flutter_web_app macro for one reason:
+# the macro discovers web/index.html and substitutes only Flutter's own
+# placeholders, leaving no seam to inject the CSP through. Everything else
+# here is what the macro would have done (rules_flutter's own e2e keeps Tier 1
+# covered).
+flutter_web_bundle(
+    name = "app_web",
+    package_name = "frustrate_demo",
+    index_html = ":index_html",
+    main = "lib/main.dart",
+    manifest_json = ":manifest_json",
+    # Required by the bundle's `script-src 'self'`: the renderer must load
+    # from the bundled canvaskit/, not the gstatic CDN.
+    use_local_canvaskit = True,
+    # Served exactly as a web_assets entry is, so it must not be named in
+    # both — declaring it here is what gets the contract watched.
+    native_modules = [":demo_rust_wasm_module"],
+    # web/ holds only index.html, which arrives via index_html above.
+    web_assets = [":frustrate.js"],
+    deps = [
+        "//bridge:demo_bridge",
+        "@frustrate//runtime/dart:frustrate",
+        "@deps//:flutter",
+        "@rules_flutter//flutter:material_icons",
+    ],
+)
+
+build_test(
+    name = "macos_app_build_test",
+    target_compatible_with = ["@platforms//os:macos"],
+    targets = [":app"],
+)
+
+# iOS simulator bundles (incl. the embedded Rust framework) build, in -c dbg:
+# the simulator runs nothing else. To run one:
+#   bazel build //:app_ios -c dbg   (then install the .ipa on a booted sim)
+flutter_ios_simulator_build_test(
+    name = "ios_app_build_test",
+    target_compatible_with = ["@platforms//os:macos"],
+    targets = [":app_ios"],
+)
+
+# The APK, including the per-ABI libdemo_rust.so. Manual: needs
+# --config=android and a local Android SDK/NDK (see .bazelrc.user), so
+# `bazel test //...` must not pick it up.
+build_test(
+    name = "android_app_build_test",
+    tags = ["manual"],
+    targets = [":app_android"],
+)
+
+# The web app compiles to wasm (dart2wasm) against the regenerated bridge
+# bindings. This is the guard that a change to frustrate's codegen — e.g. a
+# type mapping that moves a generated Dart signature — cannot silently break
+# the demo. NOTE: this demo is a separate Bazel module, so it is NOT part of
+# frustrate's `bazel test //...`; run `bazel test //...` from this directory
+# (e2e/flutter_demo) after any frustrate codegen change.
+build_test(
+    name = "web_app_build_test",
+    targets = [":app_web"],
+)
+

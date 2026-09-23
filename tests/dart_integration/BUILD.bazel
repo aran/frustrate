@@ -1,0 +1,975 @@
+load("@rules_dart//dart:defs.bzl", "dart_binary", "dart_test")
+load("//bazel:manual_scheduler.bzl", "frustrate_manual_scheduler_library")
+
+# The extern-type fixture's Dart side (a stand-in for a protoc-generated
+# class). Lives here so the cargo/pub flow finds it under this package's
+# lib/; the Bazel bindings package copies it in (//tests/test_api).
+exports_files(["lib/fake_plan.dart"])
+
+# The browser (dart2wasm + Chrome) side of the suite — including the decisive
+# single-threaded-web "1000 concurrent async fn calls multiplex on one thread"
+# test. rules_dart's dart_test is VM-only (no browser launcher) and a Chrome
+# run is not hermetic, so this cannot be a `bazel test` target; it is a Dart
+# driver (never a shell script) run via `bazel run`:
+#   bazel run //tests/dart_integration:web_test                 # single-threaded
+#   bazel run //tests/dart_integration:web_test -- --threaded   # threaded wasm
+# It builds the wasm fixture, then runs `dart test -p chrome -c dart2wasm`.
+dart_binary(
+    name = "web_test",
+    main = "tool/web_test.dart",
+)
+
+# The native (dylib/FFI) benchmark. A `dart_binary` for the reason that makes
+# it a benchmark at all: rules_dart defaults `compile_mode = "exe"`, so this is
+# AOT with asserts off, unlike `dart_test` (which the runner spawns
+# `checked: true` — JIT, asserts on).
+#
+#   bazel run //tests/dart_integration:native_bench
+#
+# It deliberately does NOT depend on //tests/test_api:test_api_shared. That
+# artifact is built at the invocation's --compilation_mode, and Bazel's default
+# `fastbuild` is -Copt-level=0 under rules_rust (opt levels are
+# {dbg: 0, fastbuild: 0, opt: 3}) — so depending on it would mean a plain
+# `bazel run` silently benchmarked unoptimized Rust. The driver runs
+# `cargo build --release -p test_api` itself and loads the path cargo reports.
+#
+# Not a `bazel test` target and asserts nothing about absolute time: an
+# absolute-timing bar in CI is a separate decision, to be made against the
+# numbers this produces.
+dart_binary(
+    name = "native_bench",
+    main = "tool/native_bench.dart",
+    # The harness (Cell, the calibrate/warmup/measure loop, the table renderer)
+    # is //tools/bench_harness, shared verbatim with the in-page web bench.
+    # It used to be `tool/bench_core.dart` listed in `srcs` here — which said
+    # in its own comment that it existed so the web bench would not grow "a
+    # second copy that drifts", and a byte-identical copy grew anyway in
+    # another package, because a `srcs` entry cannot cross a pub package
+    # boundary. A dep can, and cannot be satisfied by copying.
+    deps = [
+        "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
+        "//tools/bench_harness",
+    ],
+)
+
+# The release (-O2) web benchmark — the vehicle the browser suite cannot be.
+#
+#   bazel run //tests/dart_integration:web_bench                 # single-threaded
+#   bazel run //tests/dart_integration:web_bench -- --threaded   # threaded wasm
+#
+# `bazel run`, not `bazel test`, for three independent reasons, any one of
+# which would be sufficient:
+#
+#  - It drives system Chrome, which is not hermetic under Bazel — the same
+#    reason `web_test` above is a `bazel run`.
+#  - It owns both compiler invocations (`dart compile wasm -O2` for the Dart
+#    half, `cargo --release` via build_web_fixture for the Rust half) rather
+#    than depending on Bazel-built artifacts, because a Bazel target's
+#    optimization level silently follows `--compilation_mode` and the default
+#    `fastbuild` is unoptimized. A benchmark that cannot name its own build
+#    config is worse than no benchmark; see the driver's header.
+#  - It is a measurement instrument, and it asserts nothing about absolute
+#    time. Perf gates do not belong in CI, so this must not be able to fail a
+#    test run.
+#
+# `dart_binary` is `rule(..., executable = True)` with no `test = True`, so it
+# is not collected by `bazel test //...` and nothing new enters the default
+# suite by adding it. No deps: the driver is dart:io only, and the code it
+# measures is compiled from the source tree by the compilers it invokes.
+dart_binary(
+    name = "web_bench",
+    main = "tool/web_bench.dart",
+)
+
+dart_test(
+    name = "bridge_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/bridge_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The repeated-init contract (see Frustrate), against a REAL library — which is
+# what makes the disagreement case meaningful: something has to be installed
+# before a second init can name something else. A second init with the same
+# path is a no-op; one naming a different library, or arriving through the other
+# entry point, is refused rather than silently ignored. Web's half of the same
+# contract is init_contract_web_test.dart, which rides the browser runner
+# (`bazel run :web_test`) for the reason stated there.
+dart_test(
+    name = "init_contract_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/init_contract_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The wire-schema fingerprint guard: that the loaded library's
+# `frustrate_schema_hash` export and the bindings' `frustrateSchemaHash` agree,
+# and that a mismatch fails loudly at init instead of dispatching wrong fn_ids
+# into unsafe handle derefs. Depends on the shared library because the point of
+# the test is comparing against a REAL artifact's export — a fake transport
+# would be asserting the check against a number this test made up.
+dart_test(
+    name = "schema_hash_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/schema_hash_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# Whether a caller-supplied `Sink` implementation can run INSIDE the Rust call
+# that posts to it. On wasm `frustrate.post` is a synchronous import, so it
+# could — and a user `add` that called back into the same Confined handle got a
+# second `handle::confined_mut` aliasing the first (silent use-after-free on
+# both web configs; Miri calls the shape UB). Pinned on every fixture: this is
+# a native-passes/web-failed divergence, so the native run is the control.
+dart_test(
+    name = "sink_reentrancy_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/sink_reentrancy_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# Whether `dispose()` can abandon already-submitted work. Native drains its
+# FIFO to a Stop marker; web terminates the worker outright — this asserts a
+# caller cannot tell the difference, on every fixture.
+dart_test(
+    name = "actor_shutdown_drain_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/actor_shutdown_drain_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The ActorPool convenience layer: leases,
+# queueing, width-invariant panic respawns, dispose drain — and the
+# serial-vs-pooled parallelism bench.
+# Deferred<T>: an actor method that hands off its completion. The fence proves
+# the instance is released while the completion waits; the positive control
+# proves the same shape through a plain method still wedges (actor
+# serialization). Dispose-cancels,
+# out-of-order completions, typed errors and both panic halves ride along. On
+# web this is the first post an actor instance ever makes outside its dispatch
+# turn — browser-only coverage of the pump's microtask drain.
+dart_test(
+    name = "deferred_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/deferred_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# FrustrateCancelToken: cancelling an in-flight bridged `async fn`. The
+# assertion that matters is the Rust-side
+# drop sensor, not the rejected Dart future — a runtime that stopped listening
+# and leaked the task would pass the second and fail the first.
+dart_test(
+    name = "cancel_async_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/cancel_async_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The same token on a `Deferred` actor completion. Same bar as
+# cancel_async_test: the
+# assertion is the Rust-side drop, read back through an actor method because on
+# web the future lives in that actor's own worker instance.
+dart_test(
+    name = "cancel_deferred_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/cancel_deferred_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+dart_test(
+    name = "actor_pool_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/actor_pool_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: counts native allocations through an injected Allocator to pin the
+# request block's ownership — one alloc and one free per call, including when
+# the generated encoder throws mid-request. Native by construction: web has no
+# native allocation to count.
+dart_test(
+    name = "request_block_lifetime_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/request_block_lifetime_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:ffi",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: drives frustrate_call_sync directly over FFI to prove the Rust
+# body reads the caller's request buffer rather than a copy of it. Native by
+# construction — it names the C ABI, which on web is a wasm export reached
+# through the JS glue and has no Dart-visible pointer at all.
+dart_test(
+    name = "request_pointer_identity_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/request_pointer_identity_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:ffi",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# Synchronous access to a locked handle under the try-lock contract. Portable,
+# so it carries both init arms: this target is the VM half, and `bazel run
+# :web_test` (plus `-- --threaded`) is the half that matters most — the browser
+# main thread is where a release that reached a wait instruction would trap
+# rather than fail an expectation.
+dart_test(
+    name = "locked_sync_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/locked_sync_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: exercises the native-only blocking contract, which the web
+# surface omits by construction.
+dart_test(
+    name = "native_blocking_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/native_blocking_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: the "bring your own async runtime" worked example. A plain pool fn
+# drives a suspending future to completion on an external runtime (pollster)
+# via block_on; native-first
+# because block_on parks a thread (traps on the single-threaded-web main
+# thread), so there is no web arm.
+dart_test(
+    name = "external_runtime_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/external_runtime_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: the `resident` model end to end — a `!Send` object built, used and
+# freed on the caller, and named in the leak report when an isolate exits
+# holding one. Its own target because it kills an isolate and leans on GC
+# timing, neither of which may be able to destabilize a sibling suite; and
+# VM-only because the registry that answers `residentLeakReport` is native-only
+# (web has no isolates and no threads to migrate between).
+dart_test(
+    name = "resident_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/resident_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: a Rust producer whose consumer isolate is gone must be refused
+# rather than abort the process (runtime/rust/src/post.rs). Its own target for
+# the same reason as stream_shutdown_test, only more so: a regression here
+# aborts the whole runner and must not be able to mask sibling suites.
+dart_test(
+    name = "isolate_death_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/isolate_death_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: a blocking `DartFunction::call` must be bounded in LIVENESS — it
+# unparks when the isolate that owes the answer dies holding the invocation, and
+# never before (runtime/rust/src/post.rs `handle_exit`).
+#
+# Its own target, and `timeout = "short"`, because the pre-fix signature is a
+# hang, not a failed expectation: a parked pool worker leaves the caller's
+# `_pending` non-empty, which latches `keepIsolateAlive` on the test isolate, so
+# a regression can present as a target TIMEOUT rather than as this file's
+# `fail(...)` messages. Either way it must not be able to wedge a sibling suite.
+dart_test(
+    name = "callback_liveness_test",
+    timeout = "short",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/callback_liveness_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: the AWAITED twin. An `async fn` awaiting a `DartFunction` whose
+# owning isolate accepted the invocation and then died must still settle — the
+# executor task must not leak, the enclosing bridge call must complete, and the
+# caller isolate's `keepIsolateAlive` must unlatch so it can exit.
+#
+# Red from 2026-07-29 to 2026-07-30 as the pin for that defect; green since the
+# isolate started reporting its own death (post::handle_exit). Its two siblings
+# are the discriminators that stop a cheap fix passing: the slow-but-alive
+# negative, and the assertion that parked awaited calls hold no pool worker.
+#
+# Separate target from `callback_liveness_test` above: one parked awaited call
+# latches whichever isolate made it, so a regression here sharing that file
+# would drag its three tests into an empty-log TIMEOUT. `timeout = "short"` for
+# the same reason as its sibling — the natural signature of this family is a
+# hang, and it must never be able to wedge another suite.
+dart_test(
+    name = "callback_async_liveness_test",
+    timeout = "short",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/callback_async_liveness_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: an isolate opens a stream fed by a detached Rust thread and returns
+# from its entry. The open registration keeps it alive to consume, then it
+# exits cleanly. Its own target because a regression here can abort the process
+# instead of reporting an assertion, and that must not obscure the rest of the
+# suite. The other failure mode is a hang — a leaked pin — so the test bounds
+# every await.
+dart_test(
+    name = "stream_shutdown_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/stream_shutdown_test.dart",
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: a call that fails before Rust owns it must retire the channels it
+# registered during encoding. The half of the leak
+# story the GC finalizer cannot reach — no undisposed handle, no collection to
+# notice — so it is pinned separately from gc_finalizer_test.
+dart_test(
+    name = "failed_call_channels_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/failed_call_channels_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: does the GC finalizer actually run? Answers the question the
+# `LiveProbe` fixture was built for (tests/test_api/src/api.rs) and had no
+# caller for. Load-bearing for the GC-retire contract: how much a
+# collected-but-undisposed handle costs, and whether any diagnostic hung off
+# the finalizer would ever fire, both depend on how reliably the VM gets there.
+# Its own target because GC timing is the only genuinely nondeterministic thing
+# in this suite and must not destabilize suites that are deterministic.
+dart_test(
+    name = "gc_finalizer_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/gc_finalizer_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The actor twin of gc_finalizer_test, and separate from it for the same
+# reason it is separate from everything else: GC timing. It asserts three
+# things a host-count check alone cannot separate — the executor is released,
+# the channel terminal says *leaked* rather than closed, and a correct
+# dispose() under the same pressure does not race the reaper backing it up.
+# Rust `log` → a Dart stream. Runs on the VM here and
+# on web via web_test; both arms are in the file, because the one place the two
+# platforms differ — an actor's logger is its own on web and the process's
+# natively — is the thing most worth pinning on each.
+dart_test(
+    name = "logging_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/logging_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+dart_test(
+    name = "actor_reaper_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/actor_reaper_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# VM-only: two isolates init the same bridge and issue concurrent async
+# calls; pins that native completion routing is per-isolate, so a second
+# isolate never steals the first's completions.
+dart_test(
+    name = "multi_isolate_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/multi_isolate_test.dart",
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The wire encoding of a String, pinned against an independently built
+# reference and against the Rust peer, over the inputs where two conforming
+# UTF-8 encoders could legitimately disagree: unpaired surrogates (both must
+# substitute U+FFFD), a reversed surrogate pair, a leading and an interior BOM.
+#
+# Written to guard swapping the web encoder to TextEncoder; that swap did not
+# land (web_bench section E — it is a regression for multi-byte text until the
+# writer's buffer is JS-backed). Kept because it does not depend on the swap:
+# it is the only test of the BOM workaround in readString, and it is what any
+# future encoder change has to satisfy. Runs on the VM here and on web via
+# web_test; needs the shared library for the round-trip half.
+dart_test(
+    name = "utf8_equivalence_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/utf8_equivalence_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+dart_test(
+    name = "string_encoder_hook_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/string_encoder_hook_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# Platform-agnostic (pure-codec, no native library / bindings / init): crafts
+# malformed `Uint8List`s and drives the runtime decode path — BinaryReader and
+# the response-envelope split — asserting every corrupt input yields a loud,
+# attributable codec error, never a silent wrong value or an unnamed crash.
+# Runs on the VM here and on web via web_test.
+dart_test(
+    name = "corrupt_envelope_test",
+    main = "test/corrupt_envelope_test.dart",
+    deps = [
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# Corrupt-discriminant decode over the GENERATED bindings: installs a fake
+# transport (no native library, no init) that hands crafted response bytes to
+# a real generated function, asserting the generated decode fails loudly and
+# attributably on a corrupt option tag / out-of-range enum index / trailing
+# bytes — never a silent None or wrong variant.
+# Depends on the bindings but not the shared library (the fake stands in for
+# the transport). Runs on the VM here and on web via web_test.
+dart_test(
+    name = "corrupt_decode_test",
+    main = "test/corrupt_decode_test.dart",
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The trap-attribution seam: a Rust panic on a sync call reaches Dart as a
+# BridgePanicException carrying the Rust message. VM here (panic=unwind, the
+# envelope path) and on web via web_test, where it is the standing pin on the
+# JS-owned call frame in frustrate.js — that frame is on the hot path of every
+# bridge call and therefore a standing optimization target, so what may not be
+# traded away for speed needs a test that says so.
+dart_test(
+    name = "trap_attribution_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/trap_attribution_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# Declaring the Rust pool's width from Dart (`pool::declare_width`, pool.rs).
+# The refusals only, on all three fixtures: a suite that successfully declared a
+# width would resize the pool for every file after it, since `dart test` runs
+# them sequentially in one process. The positive half is
+# //runtime/rust:declared_pool_width_test, which gets its own process.
+dart_test(
+    name = "pool_width_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/pool_width_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The sync response slab (runtime/rust/src/envelope.rs, `respond_out`): the
+# transport hands `frustrate_call_sync` a buffer to answer into, and only a
+# response too large for it is leased back as a Rust `Vec`. That is a
+# size-dependent branch on the hottest path, invisible from the API — both
+# outcomes decode to the same value — so it is swept at every response size
+# across the boundary rather than spot-checked at a computed one. VM here and
+# on web via web_test; the web half additionally pins the wasm entry count
+# (test/call_entry_count_test.dart), which is browser-only.
+dart_test(
+    name = "response_slab_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/response_slab_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# A real handle after the bridge under it is swapped out: refused on use,
+# still disposable through the transport that minted it, valid again after a
+# reset. Against real Rust pointers and real drop exports, because the failure
+# this prevents is a dereference rather than a wrong answer — the stub-transport
+# enumeration is //runtime/dart:handle_bridge_identity_test.
+dart_test(
+    name = "reset_outstanding_handles_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/reset_outstanding_handles_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# "One place that sees every bridge call", enumerated against a real bridge:
+# sync and async free functions, a cancel token, both constructor shapes, typed
+# errors, object lifetime, streams with their pause/resume/cancel levers, void
+# callbacks, value-returning Dart functions, a dart_interface's three channels,
+# and every actor shape including the synthetic drop. The actor rows are the
+# ones with teeth — actors never touch the singleton.
+# Does a production build carry the generated fake harness? Compiles two probe
+# programs with dart2js and reads the compiler's own `--dump-info` retained set,
+# with the second (which builds a fake) as the control that proves the check can
+# see one at all.
+#
+#   bazel run //tests/dart_integration:fake_tree_shake_check
+#
+# A `dart_binary` rather than a `dart_test` for the reason `web_test` above is:
+# it drives a compiler over the real source tree, which is not hermetic under
+# Bazel, and rules_dart's `dart_test` has nowhere to put a dart2js invocation.
+dart_binary(
+    name = "fake_tree_shake_check",
+    main = "tool/fake_tree_shake_check.dart",
+)
+
+# What a build with asserts OFF carries for handle-bridge safety, and what it
+# refuses instead. Two halves, each with a positive control: dart2js
+# `--dump-info` says the per-handle stamp and the per-use lookup are not in the
+# release program, and two runs of a probe process say a release build refuses
+# the bridge swap that would have needed them.
+#
+#   bazel run //tests/dart_integration:handle_bridge_release_check
+#
+# A `dart_binary` for the reason `fake_tree_shake_check` above is, plus one of
+# its own: no test runner can produce the build under test. `dart test` is
+# asserts-on by definition and the browser vehicle hardcodes
+# `--enable-asserts`, so the claim is only reachable from something that
+# compiles and spawns its own programs.
+dart_binary(
+    name = "handle_bridge_release_check",
+    main = "tool/handle_bridge_release_check.dart",
+)
+
+# The generated typed harness, driven through the real bindings with no library
+# loaded: every call kind the codegen emits, answered by plain Dart objects.
+# No `data` and no init — that a bridge test needs neither is the point. The
+# byte-level transport under it is //runtime/dart:fake_runtime_test.
+dart_test(
+    name = "fake_harness_test",
+    main = "test/fake_harness_test.dart",
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# What a crash reporter is handed when a bridge call fails and nobody caught
+# it: that the failure reaches an installed zone guard at all, and — the part
+# that needed fixing — that its stack names the member. An async completion has
+# no stack of its own, so without the generated bindings' restacking every
+# async failure arrives with zero frames.
+dart_test(
+    name = "uncaught_error_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/uncaught_error_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+dart_test(
+    name = "intercept_every_kind_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/intercept_every_kind_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# Consuming a handle: `take()` hands the Rust object over and the handle is
+# spent. Every model, plus the container positions and the duplicate refusal.
+# A handle crossing a channel: delivered items are owned handles, absorbed ones
+# are reclaimed. Portable — the Rust-side refusal half (a dead consumer isolate)
+# has no web counterpart and lives in isolate_death_test.
+dart_test(
+    name = "channel_handle_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/channel_handle_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+dart_test(
+    name = "consume_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/consume_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The same locked handle twice inside one list. Its own target, holding one
+# call, for the reason locked_alias_test does: a refused call traps on web and
+# nothing may be asserted after it in the same page.
+dart_test(
+    name = "locked_container_alias_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/locked_container_alias_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# A borrow inside a type: several handles lent by one parameter, the value
+# borrows beside them, and the refusals that name an element.
+dart_test(
+    name = "nested_borrow_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/nested_borrow_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The one condition a consume carries, on the two shared models: a call still
+# running holds a clone the take can see. Its own target because it is the only
+# consume shape that reaches Rust's refusal rather than Dart's.
+dart_test(
+    name = "consume_contention_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/consume_contention_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# Background work with no call behind it (`frustrate::runtime::spawn`): that
+# this platform's Scheduler drives a detached task at all, and that a suspended
+# one is resumed by a wake arriving from outside the drain that spawned it. The
+# task lifecycle itself is unit-tested in runtime/rust/src/executor.rs; what
+# only a platform can say is what this covers. Runs in the browser too, through
+# `bazel run :web_test` — single-threaded web is where "a suspended task is heap
+# data, not a parked thread" stops being an optimisation and becomes the reason
+# it works at all.
+dart_test(
+    name = "spawn_detached_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/spawn_detached_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# `frustrate::runtime::sleep` and the timer slot behind it: that a sleeping task
+# is a suspended future and not a parked thread, and that the portable filling —
+# a request out on a DartCallback, `fire_timer` back in — works on each platform.
+# On single-threaded web that is the whole claim: there is one thread and no
+# clock, so a sleep that blocked would freeze the page rather than fail.
+dart_test(
+    name = "timer_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/timer_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# The manual scheduler's Dart drain. The first test loads the test API built
+# with the scheduler on and never names the ordinary build: both would claim the
+# same runfiles path. The second loads the ordinary build and checks that a
+# drain is refused there.
+frustrate_manual_scheduler_library(
+    name = "test_api_manual",
+    library = "//tests/test_api:test_api_shared",
+)
+
+dart_test(
+    name = "manual_scheduler_test",
+    data = [":test_api_manual"],
+    main = "test/manual_scheduler_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+dart_test(
+    name = "manual_scheduler_absent_test",
+    data = ["//tests/test_api:test_api_shared"],
+    main = "test/manual_scheduler_absent_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)

@@ -1,0 +1,4 @@
+# The binaryen fetch is an extension, not a target: see extensions.bzl. This
+# package exists so `@frustrate//bazel/wasm_opt:extensions.bzl` is loadable.
+
+exports_files(["extensions.bzl"])

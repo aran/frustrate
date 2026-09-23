@@ -1,0 +1,39 @@
+# Disable lockfile (local_path_override deps change frequently).
+common --lockfile_mode=off
+
+# The bridge crate's `log` calls expand against @iroh_crates//:log, so
+# frustrate's runtime must compile against that same rlib or the records go
+# into a slot nothing fills.
+common --@frustrate//runtime/rust:log=@iroh_crates//:log
+
+# macOS 26 is the floor for everything built for or on a Mac, build tools
+# included (the host_ pair). rustc takes its deployment target from
+# MACOSX_DEPLOYMENT_TARGET and the C toolchain from --macos_minimum_os; unless
+# they agree, every Rust link on macOS prints a linker_messages warning. The
+# macOS app's minimum_os_version in BUILD.bazel says the same.
+common --macos_minimum_os=26.0 --host_macos_minimum_os=26.0
+common --action_env=MACOSX_DEPLOYMENT_TARGET=26.0 --host_action_env=MACOSX_DEPLOYMENT_TARGET=26.0
+
+# ── Android (`bazel build --config=android //:app_android -c dbg`) ──
+#
+# The SDK and NDK toolchains are registered here rather than by
+# register_toolchains() in MODULE.bazel, because a registration there is
+# evaluated for every build and would demand ANDROID_NDK_HOME of all of them.
+# Repos are fetched lazily, so naming them only here keeps them opt-in.
+#
+# The paths to the SDK and NDK themselves are machine-local: .bazelrc.user.
+build:android --extra_toolchains=@androidsdk//:sdk-toolchain
+build:android --extra_toolchains=@androidsdk//:all
+build:android --extra_toolchains=@androidndk//:all
+
+# A remote JDK, so the Android build needs no local Java install.
+build:android --java_runtime_version=remotejdk_25
+build:android --tool_java_language_version=25
+build:android --tool_java_runtime_version=remotejdk_25
+
+# `dart analyze` runs as an aspect over every Dart target a `bazel test` names.
+test --aspects=@rules_dart//dart:analyze.bzl%dart_analyze
+test --output_groups=+dart_analyze
+common --@rules_dart//dart:analysis_config=//:analysis_config
+
+try-import %workspace%/.bazelrc.user

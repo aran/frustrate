@@ -1,0 +1,13 @@
+# `dart analyze` and the `dart format` check run as an aspect over every Dart
+# target a `bazel test` names. The config line is `common` because
+# `bazel run` of `dart_fix`/`dart_format` reads it too.
+test --aspects=@rules_dart//dart:analyze.bzl%dart_analyze
+test --output_groups=+dart_analyze
+test --output_groups=+dart_format
+common --@rules_dart//dart:analysis_config=//:analysis_config
+
+# Linux builds here use the `llvm` C toolchain (MODULE.bazel), whose libunwind
+# a Rust shared library has to link itself; see //runtime/rust:unwinder.
+common --//runtime/rust:unwinder=//toolchain/cc:libunwind
+
+try-import %workspace%/.bazelrc.user

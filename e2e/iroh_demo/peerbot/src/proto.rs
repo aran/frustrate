@@ -1,0 +1,1 @@
+../../bridge/src/proto.rs

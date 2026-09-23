@@ -1,0 +1,9 @@
+{
+  "name": "iroh-demo-playwright",
+  "version": "1.0.0",
+  "description": "Browser verification for the Tin Can web peer",
+  "type": "commonjs",
+  "dependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

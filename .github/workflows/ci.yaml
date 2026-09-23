@@ -1,0 +1,47 @@
+# `bazel test //...` in the root workspace and in bazel_frb, which is its own
+# module (it is in .bazelignore). The demos under e2e/ build whole Flutter apps
+# per platform and are not run here.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  test:
+    name: bazel test (${{ matrix.folder }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        folder: [".", "bazel_frb"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ matrix.os }}-${{ matrix.folder }}
+          repository-cache: true
+      # The root workspace's wasm toolchains link a patched std, built from the
+      # pinned nightly through the runner's rustup and never checked in, so
+      # stage both flavours first. bazel_frb has no wasm build.
+      - name: Cache the custom std
+        if: matrix.folder == '.'
+        id: custom-std
+        uses: actions/cache@v6
+        with:
+          path: toolchain/custom_std/dist
+          key: custom-std-${{ runner.os }}-${{ hashFiles('toolchain/custom_std/nightly-pin.txt', 'toolchain/custom_std/rustflags.txt', 'toolchain/custom_std/tool/*.dart', 'toolchain/custom_std/pal/*', 'toolchain/custom_std/stub/**') }}
+      - name: Build the custom std
+        if: matrix.folder == '.' && steps.custom-std.outputs.cache-hit != 'true'
+        run: |
+          bazel run //toolchain/custom_std:build -- --facilities=atomics
+          bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread
+      - name: bazel test //...
+        working-directory: ${{ matrix.folder }}
+        run: bazel test //... --test_output=errors --test_summary=terse

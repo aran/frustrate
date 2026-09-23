@@ -1,0 +1,80 @@
+load("@rules_dart//dart:defs.bzl", "dart_library")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_wasm_module")
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = [
+        "src/api.rs",
+        "src/cancel_api.rs",
+        "src/shapes.rs",
+    ],
+    crate_name = "test_api",
+    module_paths = [
+        "crate::api",
+        "crate::cancel_api",
+        "crate::shapes",
+    ],
+    visibility = ["//tests:__subpackages__"],
+)
+
+rust_shared_library(
+    name = "test_api_shared",
+    srcs = [
+        "src/api.rs",
+        "src/cancel_api.rs",
+        "src/lib.rs",
+        "src/shapes.rs",
+        ":bridge.rs",
+    ],
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    visibility = ["//tests:__subpackages__"],
+    deps = [
+        "//runtime/rust:frustrate",
+        "@crates//:anyhow",
+        # The logging fixture logs through the ordinary facade, exactly as a
+        # dependency that has never heard of frustrate would.
+        "@crates//:log",
+        # The bring-your-own-runtime worked example's external executor;
+        # wasm-safe, so the web fixture is unaffected.
+        "@crates//:pollster",
+    ],
+)
+
+# The threaded-wasm fixture: same crate, nightly + locally built
+# +atomics std (run `bazel run //toolchain/custom_std:build` first).
+# Tagged manual so wildcard builds stay green without the local artifacts.
+frustrate_wasm_module(
+    name = "test_api_threaded.wasm",
+    crate = ":test_api_shared",
+    platform = "//bazel:wasm32_threads",
+    tags = ["manual"],
+    visibility = ["//tests:__subpackages__"],
+)
+
+# The extern-type fixture's Dart class: one source of truth (the pub
+# package's lib/, where the cargo flow needs it), copied into this package
+# so the bindings dart_library serves it under the same package URI.
+genrule(
+    name = "fake_plan_dart",
+    srcs = ["//tests/dart_integration:lib/fake_plan.dart"],
+    outs = ["lib/fake_plan.dart"],
+    cmd = "cp $< $@",
+)
+
+# Same package URI as the cargo flow (tests/dart_integration/pubspec.yaml
+# names the package frustrate_integration), so one import works in both.
+dart_library(
+    name = "bindings",
+    srcs = [
+        ":bridge.dart",
+        ":fake_plan_dart",
+    ],
+    package_name = "frustrate_integration",
+    visibility = ["//tests:__subpackages__"],
+    deps = [
+        "//runtime/dart:frustrate",
+        "@pub_deps//:ffi",
+    ],
+)

@@ -1,0 +1,23 @@
+load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options", "dart_format")
+
+exports_files(
+    [
+        "Cargo.toml",
+        "Cargo.lock",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Every `analysis_options.yaml` here, for the `dart_analyze` aspect `.bazelrc`
+# enables under `bazel test`.
+dart_analysis_options(
+    name = "analysis_options",
+    src = "analysis_options.yaml",
+)
+
+dart_analysis_config(
+    name = "analysis_config",
+    options = [":analysis_options"],
+)
+
+dart_format(name = "format")

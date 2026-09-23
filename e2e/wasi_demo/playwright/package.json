@@ -1,0 +1,9 @@
+{
+  "name": "frustrate-wasi-demo-playwright",
+  "version": "1.0.0",
+  "description": "Browser verification for a frustrate bridge on wasm32-wasip1",
+  "type": "commonjs",
+  "dependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

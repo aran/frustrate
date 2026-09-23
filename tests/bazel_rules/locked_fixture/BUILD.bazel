@@ -1,0 +1,61 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs")
+
+# The **synchronous locked** half of frustrate_block_check's contract: a
+# `#[bridge(no_block)]` claim whose body takes and releases a lock guard in the
+# caller's own frame, so the root reaches that release and the scan decides it.
+# No other fixture here scans a lock. src/api.rs says why this is a crate of its
+# own rather than one more member in //tests/bazel_rules.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "locked_claim_fixture",
+    module_paths = ["crate::api"],
+)
+
+# Native, like the async fixture's crate, and for the same reason: it keeps the
+# generated glue compiling without pulling the +atomics check target in behind
+# it.
+#
+# `compile_data` is the declaration `frustrate_block_check` requires: the linker
+# it points `-Clinker=` at, which a transition cannot add as an action input.
+# rustc never opens the file.
+rust_shared_library(
+    name = "locked_fixture_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    compile_data = ["//bazel/wasm_block_check:link_export_filter.py"],
+    crate_name = "locked_claim_fixture",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+# The gate, reached through the parent package's `:block_check_build_test`.
+#
+# What it decides that no other block-check target does: whether releasing a
+# lock guard on the calling thread reaches a wait instruction. It is the
+# mechanical form of `runtime/rust/src/rwlock.rs`'s central claim, and a
+# regression there — a waiter list that parks, a wake moved inside the critical
+# section — turns this target red with the call trace that names it.
+#
+# The red direction cannot be a Bazel target (Bazel has no way to assert an
+# action fails), so it is demonstrated by hand: change `spin::Lock`'s
+# `+atomics` arm to `std::sync::Mutex` and build this target. The scan then
+# reports a chain from `frustrate_check_block_*_stamp` through
+# `locked_claim_fixture::api::Tally::peek` into `futex::Mutex::lock_contended`,
+# against `memory.atomic.wait32` as the wait site.
+#
+# The positive control is the member beside it: `bump` is dispatched, so no root
+# reaches its body and a wait there would stay green. That pair is the same one
+# `async_fixture` makes, over a lock instead of a `static`.
+frustrate_block_check(
+    name = "locked_block_check",
+    bridge = ":bridge",
+    crate = ":locked_fixture_shared",
+    visibility = ["//tests/bazel_rules:__pkg__"],
+)

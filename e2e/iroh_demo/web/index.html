@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!--
+  Checked in (rules_flutter would otherwise generate one), mirroring
+  e2e/flutter_demo/web/index.html. Three deliberate deltas from the generated
+  template, and one more that is this app's alone:
+
+  - The CSP meta, which bazel/web_csp.bzl substitutes at the FRUSTRATE_CSP
+    placeholder below, except in a -c dbg build (the dev loop's): no
+    'unsafe-inline'. 'wasm-unsafe-eval' is the unavoidable floor for
+    WebAssembly.compile; `worker-src blob:` is a Flutter-engine constraint, not
+    a frustrate one (flutter.js hardcodes a blob-URL bootstrap for skwasm's
+    threaded render worker). Requires use_local_canvaskit on the app target.
+  - <script src="frustrate.js">: the served glue (staged by //:frustrate.js).
+    Plain — no async/defer — so it runs at parse time, before init.
+  - No service-worker registration: the generated registration is an inline
+    script (a CSP violation).
+  - `connect-src`: this app is the first to need one. Its bridge fetches its
+    own .wasm from 'self', but the Rust inside it then talks to the network on
+    its own account — n0's relays over wss: and their pkarr HTTPS endpoints —
+    and those are cross-origin requests the page must permit. A frustrate app
+    whose Rust does I/O needs a connect-src that names what the *Rust* talks
+    to, which is not a thing the Dart or the HTML mentions anywhere. Getting
+    it wrong fails as silence: the peer binds, renders a ticket, and never
+    comes online.
+
+    One file serves two builds. //:app_web is the n0 case above; the browser
+    test's //:app_web_hermetic reaches only a relay on its own origin, which
+    'self' already covers — including the ws:// scheme, since 'self' matches
+    ws when the page is http (verified, not assumed). That is why the test
+    proxies its relay through its own origin rather than asking for a wider
+    connect-src: this policy is one of the things the test exists to prove, so
+    relaxing it to accommodate the test would hollow out the proof.
+-->
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  {{FRUSTRATE_CSP}}
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Tin Can — peer-to-peer chat over iroh">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Tin Can">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>Tin Can</title>
+</head>
+<body>
+  <script src="frustrate.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

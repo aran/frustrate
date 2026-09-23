@@ -1,0 +1,75 @@
+{
+  "$schema": "https://raw.githubusercontent.com/theoremlp/rules_multitool/main/lockfile.schema.json",
+  "git-cliff": {
+    "binaries": [
+      {
+        "kind": "archive",
+        "url": "https://github.com/orhun/git-cliff/releases/download/v2.14.2/git-cliff-2.14.2-x86_64-unknown-linux-gnu.tar.gz",
+        "file": "./git-cliff-2.14.2/git-cliff",
+        "sha256": "24f397c733add5390fdceee3a2088588ab0d5f944ce00d34cb7029b888cf2db4",
+        "os": "linux",
+        "cpu": "x86_64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/orhun/git-cliff/releases/download/v2.14.2/git-cliff-2.14.2-aarch64-unknown-linux-gnu.tar.gz",
+        "file": "./git-cliff-2.14.2/git-cliff",
+        "sha256": "69e208f6e4baef3a0f9b759d5f44223aa9336b86c691072a3d0c98d35a816e69",
+        "os": "linux",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/orhun/git-cliff/releases/download/v2.14.2/git-cliff-2.14.2-aarch64-apple-darwin.tar.gz",
+        "file": "./git-cliff-2.14.2/git-cliff",
+        "sha256": "a0be97e237d440d34c5e508ec21d070b2c85cbb8be48a46a56f9a4e8bd247f05",
+        "os": "macos",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/orhun/git-cliff/releases/download/v2.14.2/git-cliff-2.14.2-x86_64-apple-darwin.tar.gz",
+        "file": "./git-cliff-2.14.2/git-cliff",
+        "sha256": "4e647d2deb152aca1e987f225cf42b080b991dd98f3bce4027ef95446d982ac3",
+        "os": "macos",
+        "cpu": "x86_64"
+      }
+    ]
+  },
+  "prek": {
+    "binaries": [
+      {
+        "kind": "archive",
+        "url": "https://github.com/j178/prek/releases/download/v0.5.3/prek-aarch64-apple-darwin.tar.gz",
+        "file": "./prek-aarch64-apple-darwin/prek",
+        "sha256": "6006cc4e69cfc86d55f4e407ca60ba960a521befa54fece94038639b1f4de381",
+        "os": "macos",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/j178/prek/releases/download/v0.5.3/prek-x86_64-apple-darwin.tar.gz",
+        "file": "./prek-x86_64-apple-darwin/prek",
+        "sha256": "874f05d12e7cb672758295b5253dfd05aadad3c2bcaa42ae712b917294629b07",
+        "os": "macos",
+        "cpu": "x86_64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/j178/prek/releases/download/v0.5.3/prek-aarch64-unknown-linux-musl.tar.gz",
+        "file": "./prek-aarch64-unknown-linux-musl/prek",
+        "sha256": "ad3fe48802a02ec82286ab842c4a09a4e1db765e402f1fcc016f75b6929ec480",
+        "os": "linux",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/j178/prek/releases/download/v0.5.3/prek-x86_64-unknown-linux-musl.tar.gz",
+        "file": "./prek-x86_64-unknown-linux-musl/prek",
+        "sha256": "d4eae1f31c0817d0a9bfa532d4bb66df60a8b01f121def002021915e826c3d1f",
+        "os": "linux",
+        "cpu": "x86_64"
+      }
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+# The manifest the *relay* crate hub resolves. Like //bridge:Cargo.toml it
+# exists for crate_universe, not for cargo: nothing here is built by cargo.
+#
+# It is a second hub (`@relay_crates`) rather than a line added to
+# //bridge:Cargo.toml because the two graphs must not meet. `iroh-relay`'s
+# `server` feature drags in clap, rcgen, tokio-rustls-acme, tracing-subscriber,
+# a websocket server and a metrics HTTP service; cargo feature unification is
+# per-resolution, so putting the server in the app's manifest would link every
+# one of those into the phone.
+#
+# The package itself has no code. The binary we ship is upstream's own
+# `[[bin]] iroh-relay` (`required-features = ["server"]`), surfaced by a
+# `crate.annotation(gen_binaries = ["iroh-relay"])` in //:MODULE.bazel and
+# aliased as //relay:iroh_relay. Vendoring a copy of its 959-line main.rs to
+# have a "real" rust_binary of our own would buy nothing but drift.
+[package]
+name = "iroh_relay_server"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# The relay-protocol exchange shared by relay_smoke and relay_server_test.
+# Built by Bazel as //relay:relay_support.
+[lib]
+path = "src/lib.rs"
+
+# The health check that proves a *deployment* relays: a URL you supply.
+# Built by Bazel as //relay:relay_smoke.
+[[bin]]
+name = "relay_smoke"
+path = "src/bin/relay_smoke.rs"
+
+# The relay a test harness starts: loopback, ephemeral port, stdin-EOF
+# shutdown. Built by Bazel as //relay:relay_dev.
+[[bin]]
+name = "relay_dev"
+path = "src/bin/relay_dev.rs"
+
+[dependencies]
+# `server` is not reachable through the `iroh` facade — the server lives on
+# iroh-relay and is behind this feature. Default features (metrics, tls-ring)
+# stay on; `tls-aws-lc-rs` must never be enabled (cmake + bindgen).
+iroh-relay = { version = "1.0.3", features = ["server"] }
+
+# relay_smoke's deps. Every one of these is already in the graph as a
+# transitive dependency of iroh-relay; naming them here only makes them
+# nameable, and adds no package to the lockfile.
+iroh-base = { version = "1.0.3", default-features = false, features = ["key", "relay"] }
+iroh-dns = "1.0.3"
+n0-future = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+[workspace]

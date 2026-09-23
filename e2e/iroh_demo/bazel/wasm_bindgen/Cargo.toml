@@ -1,0 +1,33 @@
+# The wasm-bindgen CLI, as a build tool.
+#
+# A THIRD crate hub, for the same reason //relay has the second one:
+# cargo feature unification is per-resolution, and this tool's graph (walrus,
+# clap, an object-file rewriter) has nothing to do with the app's. Putting it
+# in //bridge:Cargo.toml would link a wasm post-processor's dependency tree
+# into the phone.
+#
+# The version is pinned exactly and MUST equal the `wasm-bindgen` pin in
+# //bridge:Cargo.toml. The CLI reads a schema version baked into the module by
+# the crate's proc-macro and refuses to proceed if they differ:
+#
+#   error: rust wasm file schema version: 0.2.126
+#          this binary schema version:    0.2.105
+#
+# That is a hard error, and it is the good outcome — the failure mode it
+# replaces is a silently mis-rewritten module.
+[package]
+name = "frustrate_wasm_bindgen_tool"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Resolution-only: cargo requires a target, Bazel never builds this. The
+# binary we ship is upstream's own `[[bin]] wasm-bindgen`, surfaced by a
+# `crate.annotation(gen_binaries = ["wasm-bindgen"])` in //:MODULE.bazel.
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+wasm-bindgen-cli = "=0.2.126"
+
+[workspace]

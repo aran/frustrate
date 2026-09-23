@@ -1,0 +1,56 @@
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
+load("@rules_flutter//flutter:defs.bzl", "flutter_plugin")
+
+exports_files([
+    "Cargo.toml",
+    "Cargo.lock",
+])
+
+frustrate_bridge_outputs(
+    name = "codegen",
+    srcs = ["src/api.rs"],
+    crate_name = "wasi_rust",
+    module_paths = ["crate::api"],
+)
+
+# libwasi_rust.dylib on macOS; the same target builds the wasm module under the
+# wasip1 platform transition applied by //:wasi_rust.wasm. One crate, one source
+# set, two platforms — which is the claim this example makes and the reason it
+# builds for macOS at all.
+frustrate_bridge_library(
+    name = "wasi_rust",
+    visibility = ["//:__pkg__"],
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":codegen.rs",
+    ],
+    edition = "2021",
+    proc_macro_deps = ["@frustrate//macros:frustrate_macros"],
+    deps = [
+        "@frustrate//runtime/rust:frustrate",
+        "@wasi_crates//:uuid",
+    ],
+)
+
+# The bindings package: generated Dart plus the platform-neutral init seam.
+flutter_plugin(
+    name = "wasi_bridge",
+    package_name = "wasi_bridge",
+    srcs = [
+        "lib/init.dart",
+        "lib/src/init_native.dart",
+        "lib/src/init_web.dart",
+        ":codegen.dart",
+    ],
+    native_deps = select({
+        "@platforms//os:macos": [":wasi_rust"],
+        "//conditions:default": [],
+    }),
+    platforms = [
+        "macos",
+        "web",
+    ],
+    visibility = ["//:__pkg__"],
+    deps = ["@frustrate//runtime/dart:frustrate"],
+)

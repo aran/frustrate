@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = [
+    # A workspace member so `cargo test` covers it and `tools/check_block.dart`
+    # runs the same binary the Bazel validation action does — one predicate, two
+    # drivers, no drift. Its siblings `bazel/wasm_std_check` and
+    # `bazel/wasm_import_check` have no second driver, so they are Bazel-only
+    # and deliberately stay out.
+    "bazel/wasm_block_check",
+    "codegen",
+    # ext/: glue for a third-party crate that cannot be expected to know about
+    # frustrate, kept out of the runtime so nobody pays for it who does not
+    # want it. See docs/ext.md.
+    "ext/getrandom",
+    # Builds patches for a running bridge library; the command a hot patch
+    # manifest names. See bazel/hot_patch.bzl.
+    "hotpatch",
+    "macros",
+    "runtime/rust",
+    "tests/test_api",
+    "tools/shape_coverage",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+frustrate-codegen = { path = "codegen" }
+frustrate-macros = { path = "macros" }
+frustrate = { path = "runtime/rust" }
+frustrate-getrandom = { path = "ext/getrandom" }

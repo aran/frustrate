@@ -1,0 +1,262 @@
+load("@rules_dart//dart:defs.bzl", "dart_binary", "dart_library", "dart_test")
+
+exports_files(["pubspec.lock"])
+
+# The served web glue (strict-CSP delivery); consumed by frustrate_web_glue
+# in bazel/defs.bzl. Embedded byte-identically in lib/src/glue_source.dart
+# for the no-CSP fallback (pinned by :glue_source_test).
+exports_files(["lib/src/js/frustrate.js"])
+
+dart_library(
+    name = "frustrate",
+    srcs = glob(["lib/**/*.dart"]),
+    package_name = "frustrate",
+    visibility = ["//visibility:public"],
+    deps = ["@pub_deps//:ffi"],
+)
+
+dart_test(
+    name = "glue_source_test",
+    data = [
+        "lib/src/js/frustrate.js",
+        "lib/src/runtime_web.dart",
+    ],
+    main = "test/glue_source_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# Reads the web transport's own source and requires every Dart-heap <-> JS byte
+# crossing to be marked and allowlisted. A source test because the cost is
+# invisible at runtime: nothing throws, and the browser suite runs at -O0 where
+# the 18x ratio is muddied. Fail-closed by design — it recognises the *scalar*
+# `.toJS` receivers and treats every other one as a suspected crossing.
+dart_test(
+    name = "no_per_byte_crossing_test",
+    data = [
+        "lib/src/binary_codec.dart",
+        "lib/src/runtime_web.dart",
+    ],
+    main = "test/no_per_byte_crossing_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+dart_test(
+    name = "segment_snapshot_test",
+    main = "test/segment_snapshot_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# Directly pins the returning-callback deferral seam in StreamRouter: web defers
+# the closure to a microtask (never synchronous during a poll), native runs it
+# synchronously to answer a parked worker.
+dart_test(
+    name = "stream_router_test",
+    main = "test/stream_router_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The repeated-init contract both transports share (see Frustrate): naming the
+# same bridge again is a declared no-op, naming a different one is a StateError.
+# Here for the two properties a real bridge cannot show — that a second init
+# constructs nothing (proved by a library that could not be opened), and that a
+# failed init records nothing, so a retry is a first init rather than a
+# disagreement. The end-to-end pins are //tests/dart_integration.
+dart_test(
+    name = "init_contract_test",
+    main = "test/init_contract_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# Pins the async issue-path contract both transports share through PendingCalls:
+# a Future-returning bridge API never throws synchronously, and a failed issue
+# leaves nothing pending (on native, nothing pinning the isolate alive).
+dart_test(
+    name = "pending_calls_test",
+    main = "test/pending_calls_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# Pins the threaded-wasm pool's spawn-failure contract: a failed spawn is never
+# retried, the pool stays up while anything can still drain the queue, and the
+# last one leaving latches so the issue path rejects instead of hanging. The
+# browser can only produce all-or-nothing spawn failures, so the partial-loss
+# sequencing has no other precise pin.
+dart_test(
+    name = "pool_workers_test",
+    main = "test/pool_workers_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The trap-explanation heuristic. Reaching its real branch means causing a real
+# trap — a threaded build with cross-thread contention, or an `rtabort!` that
+# would take a native test process down — so the mapping and the never-replace
+# property are pinned here instead, where they cost nothing to run.
+dart_test(
+    name = "trap_explain_test",
+    main = "test/trap_explain_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The JS-number codec arm (dart2js/DDC), checked against the 64-bit accessors
+# it replaces. VM-only on purpose and explained at length in the file: the arm
+# runs on no backend CI exercises, so without this the one branch whose failure
+# mode is silently wrong bytes would be the one branch nothing ever ran.
+dart_test(
+    name = "js_numbers_test",
+    srcs = ["test/js_numbers_goldens.dart"],
+    main = "test/js_numbers_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The other half, under real dart2js in Chrome — the one backend the automatic
+# suite never runs. `bazel run`, not `bazel test`, for the same reason as
+# //tests/dart_integration:web_test: rules_dart's dart_test has no browser
+# launcher and a Chrome run is not hermetic.
+#
+#   bazel run //runtime/dart:js_arm_web_test
+#   bazel run //runtime/dart:js_arm_web_test -- --goldens
+dart_binary(
+    name = "js_arm_web_test",
+    main = "tool/js_arm_web_test.dart",
+)
+
+# Pins the BinaryWriter size-hint contract: the hint generated encoders pass is
+# a lower bound on the request, never an assertion about it, so the bytes a
+# writer produces are identical whether the hint is far too small, far too
+# large, exact, or absent. The hint exists for allocation cost; this is the
+# pin that it can never cost correctness.
+dart_test(
+    name = "binary_writer_hint_test",
+    main = "test/binary_writer_hint_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The externally-backed writer: an encoder writing straight into memory the
+# caller owns, which on native is the FFI block the call is about to hand Rust.
+# Two of its contracts are about lifetime rather than bytes — growth is the
+# owner's job (it has to free the old block), and a writer that outlives its
+# memory must be a named error at the first byte, never a heap stomp.
+dart_test(
+    name = "binary_writer_external_test",
+    main = "test/binary_writer_external_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The bulk typed-list codec path (`readF64List`/`writeF64List` and friends): one
+# memcpy per list in place of a per-element loop through a boxed, growable
+# intermediate. Every assertion is either "the bulk form equals the element
+# form" or a pinned golden vector, because the change is a performance change
+# and its only possible defect is a moved wire. Also the sole guard on the gate
+# table — a wrong gate for dart2wasm is invisible to every other test, since
+# `SlowF64List` is slow but correct.
+dart_test(
+    name = "binary_codec_bulk_test",
+    main = "test/binary_codec_bulk_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The installed/active split and the quiescence rule that keeps a bridge swap
+# from stranding work. The empty-slot cases run in fresh isolates, because
+# `install` is deliberately irreversible: there is no way back to "nothing
+# installed" inside an isolate that has one, and a teardown hook whose only
+# caller is a test would be worse than the isolate.
+dart_test(
+    name = "activate_reset_test",
+    main = "test/activate_reset_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# A handle carries the bridge that issued its raw, and refuses to reach the
+# wire under a different one. Here against stub transports, where the
+# combinations are cheap to enumerate — decorator on and off, A to B and back,
+# stranded but still disposable. The real-pointer version is
+# //tests/dart_integration:reset_outstanding_handles_test.
+dart_test(
+    name = "handle_bridge_identity_test",
+    main = "test/handle_bridge_identity_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The delegating bases behind package:frustrate/intercept.dart: what forwards,
+# what funnels, and that a decorator is the same bridge as what it wraps. The
+# every-call-kind proof against a real bridge is
+# //tests/dart_integration:intercept_every_kind_test.
+dart_test(
+    name = "delegating_runtime_test",
+    main = "test/delegating_runtime_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# The byte-level fake transport, against hand-encoded requests: the
+# never-throw-synchronously rule, cancel claiming, actor FIFO ordering and
+# deferred release, stream backpressure and cancel, the callback round trip,
+# and the handle registry. The generated typed harness that normally sits in
+# the FakeBridge slot is exercised in //tests/dart_integration:fake_harness_test.
+dart_test(
+    name = "fake_runtime_test",
+    main = "test/fake_runtime_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# One raw, several Dart handle objects — the case a fake meets and a real
+# transport cannot, because a harness decodes requests. Its own target, and
+# VM-only, because GC timing is the one genuinely non-deterministic thing here
+# and must not be able to destabilize a suite that is not.
+dart_test(
+    name = "fake_handle_alias_test",
+    main = "test/fake_handle_alias_test.dart",
+    deps = [
+        ":frustrate",
+        "@pub_deps//:test",
+    ],
+)

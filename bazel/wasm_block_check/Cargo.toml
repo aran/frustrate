@@ -1,0 +1,14 @@
+[package]
+name = "wasm-block-check"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Scans a --cfg frustrate_block_check wasm module for reachable memory.atomic.wait"
+
+# The source sits at the package root rather than in `src/`, so the Bazel
+# `rust_binary` and this manifest name the same file. Dependencies are
+# deliberately absent; see main.rs.
+[[bin]]
+name = "wasm_block_check"
+path = "main.rs"

@@ -1,0 +1,9 @@
+{
+  "name": "frustrate-actor-spike",
+  "version": "1.0.0",
+  "description": "Chrome benchmark driver for the Actor SAB channel spike",
+  "type": "commonjs",
+  "dependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

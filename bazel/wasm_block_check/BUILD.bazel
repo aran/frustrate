@@ -1,0 +1,42 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+# The check configuration's linker: rust-lld with the export list cut back to
+# the check roots, so "the only exports are the roots" survives a crate graph
+# whose dependency rlibs carry `#[wasm_bindgen]` exports. `frustrate_block_check`'s
+# transition points `-Clinker=` at this path; each checked crate names it in
+# `compile_data`, because a transition cannot add an action input.
+#
+# A source file rather than a target, and that is forced rather than lazy: the
+# transition returns strings before analysis, so it can only name a path it can
+# compose from a label — never a built binary's configuration-dependent
+# execpath. It self-tests on every invocation for the same reason the scanner
+# does; there is no test target here because the repo registers no Python
+# toolchain, and one that ran less often than the filter itself would be worth
+# less.
+exports_files(
+    ["link_export_filter.py"],
+    visibility = ["//visibility:public"],
+)
+
+# The `#[bridge(no_block)]` gate: it decodes a check artifact's code section and
+# fails if a claimed body can reach `memory.atomic.wait`. See main.rs for the
+# decision procedure, the panic-path exemption and what green does not claim.
+#
+# Zero dependencies, matching //bazel/wasm_std_check and
+# //codegen:frustrate_codegen_bin as exec tools: a crate would drag the @crates
+# hub into every consumer's exec configuration. It is also a cargo workspace
+# member, so `tools/check_block.dart` and the Bazel validation action run the
+# identical binary.
+rust_binary(
+    name = "wasm_block_check",
+    srcs = ["main.rs"],
+    edition = "2021",
+    rustc_flags = ["-Dwarnings"],
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "wasm_block_check_test",
+    crate = ":wasm_block_check",
+    edition = "2021",
+)

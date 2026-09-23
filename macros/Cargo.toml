@@ -1,0 +1,9 @@
+[package]
+name = "frustrate-macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Inert bridge attributes for frustrate. These attributes carry metadata for the frustrate source parser; the macros themselves re-emit the item unchanged."
+
+[lib]
+proc-macro = true

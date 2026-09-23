@@ -1,0 +1,8 @@
+# Copied into the action's scratch dir as `.cargo/config.toml` (rung 4/5).
+# `directory = "vendor"` is relative to the scratch root, where the prelude
+# copies the vendor tree.
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"

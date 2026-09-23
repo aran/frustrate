@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  KEEP IN SYNC WITH Release.entitlements.
+
+  iroh binds a raw UDP socket and both dials out and accepts in, so the
+  sandbox needs BOTH network.client and network.server. `flutter create`
+  grants only network.server, and only here in the debug file.
+  flutter_macos_app picks this file for
+  `-c dbg` and Release.entitlements for everything else, so a key that is
+  only here is a key the shipped app does not have.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+</dict>
+</plist>

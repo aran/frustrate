@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+# The std-facility tripwire `frustrate_wasm_module` runs over every module it
+# builds. See main.rs for what it decides and what it deliberately does not
+# claim.
+#
+# Zero dependencies, matching //codegen:frustrate_codegen_bin as an exec tool:
+# it reads two wasm sections that have been frozen since the MVP, so a crate
+# would buy nothing and would drag the @crates hub into every consumer's exec
+# configuration.
+rust_binary(
+    name = "wasm_std_check",
+    srcs = ["main.rs"],
+    edition = "2021",
+    rustc_flags = ["-Dwarnings"],
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "wasm_std_check_test",
+    crate = ":wasm_std_check",
+    edition = "2021",
+)

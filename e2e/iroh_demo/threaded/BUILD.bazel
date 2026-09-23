@@ -1,0 +1,88 @@
+# Tin Can's web peer on threaded wasm: the SAME bridge crate and the SAME
+# lib/main.dart as //:app_web_hermetic, with only the wasm module built
+# differently.
+#
+# This is the one target anywhere that builds a wasm-bindgen crate graph and
+# `+atomics` together — the configuration frustrate's main-thread guarantee
+# matters most in, and the one wasm-bindgen's thread transform rewrites.
+#
+# What it covers and what it does not. Every `#[bridge]` member in
+# //bridge:src/api.rs is a member of the `Node` actor, so this app dispatches
+# through the *actor* pump — its own instance, its own memory, thread 0 of it —
+# and never reaches the pool. So this proves the post-passed module boots, that
+# the namespace copy carrying frustrate's memory instantiates, and that a full
+# bridge round trip works through a hundred-odd wasm-bindgen shims; it does not
+# and cannot prove the shared-memory pool. //playwright/threads_mechanism.spec.js
+# is what covers that half.
+#
+# Its own package because the module must be named iroh_rust.wasm and the
+# sidecar iroh_rust_bg.js (the URLs //bridge/lib/src/init_web.dart fetches;
+# asset staging strips this package's prefix, so they land at the site root),
+# and output names are target names — two targets named iroh_rust.wasm cannot
+# share a package.
+#
+# Tagged manual throughout: threaded wasm needs the locally built +atomics std
+# (run `bazel run //toolchain/custom_std:build` in the frustrate repo first),
+# so a wildcard build stays green without it.
+load("@frustrate//bazel:defs.bzl", "frustrate_wasm_module", "frustrate_web_glue")
+load("@rules_flutter//flutter:web.bzl", "flutter_web_app")
+load("//bazel:web_csp.bzl", "csp_web_defines")
+
+frustrate_wasm_module(
+    name = "iroh_rust.wasm",
+    # Same CLI, same pin, same reason as //:iroh_rust.wasm — and here the
+    # post-pass additionally runs its thread transform, because the module's
+    # memory is shared. //bazel/wasm_import_check's `--post-pass` mode is the
+    # gate on what that transform left behind.
+    bindgen = "@wasm_bindgen_crates//:wasm-bindgen-cli__wasm-bindgen",
+    crate = "//bridge:iroh_rust",
+    platform = "@frustrate//bazel:wasm32_threads",
+    tags = ["manual"],
+    # The same waiver //:iroh_rust.wasm carries, for the same four unreachable
+    # call sites; read the long note there rather than duplicating it. Threads
+    # change nothing about it — it is a symbol-level fact about noq's default
+    # `TimeSource`, not about which thread runs.
+    std_check_allow = ["std::time::SystemTime::now"],
+)
+
+filegroup(
+    name = "iroh_rust_bg_js",
+    srcs = [":iroh_rust.wasm"],
+    output_group = "bindgen_js",
+    tags = ["manual"],
+)
+
+frustrate_web_glue(
+    name = "frustrate.js",
+    tags = ["manual"],
+)
+
+# `PRESET=minimal` plus a relay on this harness's own origin, exactly like
+# //:app_web_hermetic — no third party anywhere. The port differs from that
+# target's so the two playwright specs can run in the same worker pool without
+# fighting over a listener; playwright/threads_app.spec.js must agree with this
+# number, and a mismatch fails loudly as an unreachable relay.
+flutter_web_app(
+    name = "app_web_threaded",
+    package_name = "iroh_demo",
+    main = "//:lib/main.dart",
+    defines = [
+        "PRESET=minimal",
+        "RELAY_URL=http://127.0.0.1:3342",
+    ],
+    extra_web_assets = [
+        ":iroh_rust.wasm",
+        ":iroh_rust_bg_js",
+        ":frustrate.js",
+    ],
+    tags = ["manual"],
+    use_local_canvaskit = True,
+    web_defines = csp_web_defines(),
+    deps = [
+        "//bridge:iroh_bridge",
+        "@frustrate//runtime/dart:frustrate",
+        "@deps//:flutter",
+        "@deps//:qr",
+        "@rules_flutter//flutter:material_icons",
+    ],
+)

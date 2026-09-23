@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = ["bridge"]
+
+# Its own cargo workspace: nothing about this experiment may leak into the
+# repo root's Cargo.lock. `bazel_frb` is in .bazelignore, so this directory is
+# also invisible to the root Bazel module — it is its own Bazel workspace root
+# (see MODULE.bazel).

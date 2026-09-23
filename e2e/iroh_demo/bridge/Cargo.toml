@@ -1,0 +1,127 @@
+# The manifest the crate hub resolves. It exists for crate_universe, not for
+# cargo: the crate is built by Bazel (//bridge:iroh_rust), which supplies
+# `frustrate` as a Bazel label rather than a cargo dependency. Keeping
+# frustrate out of this file keeps the lockfile free of path dependencies.
+#
+# Features: `default-features = false, features = ["tls-ring"]` is the verified
+# mobile-safe configuration. Dropping the defaults removes `portmapper`
+# entirely (UPnP/NAT-PMP is useless behind cellular CGNAT and its SSDP
+# multicast is restricted on iOS) and `fast-apple-datapath`; one uniform
+# feature set across every triple is the simplest thing that works, since
+# crate_universe cannot express per-triple features cleanly.
+#
+# NEVER enable `tls-aws-lc-rs`: it pulls cmake and bindgen, and `aws-lc-rs` is
+# not otherwise in the graph.
+[package]
+name = "iroh_rust"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Unconditional, and identically configured on every triple including wasm32.
+# `tls-ring` is what makes an Endpoint bindable at all: iroh's build.rs gates
+# `presets::{N0, Minimal, N0DisableRelay}` behind `with_crypto_provider =
+# any(feature = "tls-ring", feature = "tls-aws-lc-rs")`, so a
+# `default-features = false` build without it *compiles* and then fails at
+# `bind()` with "Missing or incompatible rustls crypto provider configured".
+# That is why `ring` — and therefore a wasm C toolchain — is unavoidable for
+# web.
+iroh = { version = "1.0.3", default-features = false, features = ["tls-ring"] }
+
+# The pairing artifact. `EndpointTicket` is `Display` + `FromStr` over a full
+# `EndpointAddr`, which is what makes M3's self-hosted relay a node.rs-only
+# change: an id-only ticket needs pkarr discovery, which `presets::Empty`
+# drops.
+iroh-tickets = "1.0.0"
+
+# `Connection::path_events()` returns a `tokio_stream::Stream`; this is the
+# `StreamExt::next` that consumes it. One trait, no runtime of its own, and
+# wasm-clean.
+tokio-stream = { version = "0.1", default-features = false }
+
+# The `log` facade, and the reason it is a *direct* dependency of a crate that
+# raises no records of its own: this hub already resolves `log` transitively —
+# `tracing`, `rustls` and `reqwest` all want it — but a crate_universe hub
+# exposes an alias only for a manifest's direct dependencies, so
+# `@iroh_crates//:log` does not exist until this line does. `api.rs` needs it
+# for `install_logging`, and `.bazelrc` points frustrate's `log` build setting
+# at the same alias, which is what puts iroh's records and this app's logger in
+# one slot.
+log = { version = "0.4", default-features = false }
+
+# tokio is target-gated, and this is not tidiness: `rt-multi-thread` does not
+# exist on wasm32, and asking for it there is a `compile_error!`, not a
+# no-op —
+#
+#   error: Only features sync,macros,io-util,rt,time are supported on wasm.
+#     --> tokio-1.53.1/src/lib.rs:479:1
+#
+# — raised while building tokio *itself*, because cargo unifies the features
+# every crate in the graph asks for. A `select()` in BUILD.bazel cannot fix
+# this: by the time Bazel selects deps, the hub has already resolved tokio with
+# the union of requested features for the triple. The per-target dependency
+# table is the only seam, and it works precisely because edition 2021 implies
+# feature resolver v2, which does *not* unify features from a platform-specific
+# dependency into platforms where that dependency does not apply.
+
+# Native: the actor owns its runtime outright, so tokio is a direct dependency
+# rather than something inherited from iroh. `rt-multi-thread` is load-bearing
+# and not a preference — see the comment on `Node::open`.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+tokio = { version = "1", default-features = false, features = [
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+
+# Web: there is no runtime to own. A browser wasm instance has exactly one
+# thread and its executor is the JS event loop, so the web transport spawns on
+# `wasm_bindgen_futures::spawn_local` and tokio is present only for `sync`
+# (the mpsc the writer task drains, shared with node.rs's design).
+[target.'cfg(target_family = "wasm")'.dependencies]
+tokio = { version = "1", default-features = false, features = [
+    "macros",
+    "rt",
+    "sync",
+    "time",
+] }
+wasm-bindgen-futures = "0.4"
+
+# For `Date.now()`, and for nothing else. `std::time::SystemTime::now()` does
+# not work on wasm32-unknown-unknown: std has no clock for this target and the
+# call aborts the module. `PeerEvent::Message` carries a `SystemTime`, so the
+# web transport has to get the wall clock from JS.
+js-sys = "0.3"
+
+# Pinned exactly, and the pin is the whole reason the web build has a
+# post-pass at all.
+#
+# iroh depends on wasm-bindgen *structurally* — `[target.'cfg(wasm)'.
+# dependencies]` in its own manifest, not behind a feature — so no flag
+# escapes it, and the wasm module comes out of rustc with ~33 imports in a
+# namespace called `__wbindgen_placeholder__` that `WebAssembly.instantiate`
+# cannot satisfy. Only the `wasm-bindgen` CLI can rewrite those into a real
+# namespace, and **the CLI's version must equal the crate's exactly** — a
+# mismatch is a hard error, not a warning:
+#
+#   error: rust wasm file schema version: 0.2.126
+#          this binary schema version:    0.2.105
+#
+# So the crate version is not a free choice: it is a handshake, and this pin
+# is one half of it. The other half is //bazel/wasm_bindgen:Cargo.toml, which
+# pins `wasm-bindgen-cli` to the SAME version. **Change both or neither.**
+#
+# The off-the-shelf answer does not fit: `rules_rust_wasm_bindgen` 0.70.0
+# ships 0.2.105 (`repositories.bzl:20`), and this graph's floor is 0.2.106 —
+# `netwatch 0.19.1` wants `js-sys ^0.3.83`, and `js-sys 0.3.83` requires
+# `wasm-bindgen "=0.2.106"`. One patch release short, so the CLI is built from
+# source here instead.
+wasm-bindgen = "=0.2.126"
+
+[workspace]

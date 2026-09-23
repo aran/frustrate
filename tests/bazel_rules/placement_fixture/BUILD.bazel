@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs")
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+
+# The claims-only half of frustrate_block_check's contract: a bridge whose every
+# `#[bridge(no_block)]` claim is settled by placement. src/api.rs says why it is
+# a crate of its own and why it is the one block-check target in the wildcard.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "placement_claim_fixture",
+    module_paths = ["crate::api"],
+)
+
+# Native, like the async fixture's crate: it keeps the generated glue compiling
+# without pulling any wasm configuration in behind it. The block check below
+# does not name it at all.
+rust_shared_library(
+    name = "placement_fixture_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "placement_claim_fixture",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+# No `crate`, and that is the assertion: every claim is placed, so there is
+# nothing to build and nothing to scan. Untagged, because nothing +atomics is
+# reached — the census is a codegen output, and the scanner reads it.
+frustrate_block_check(
+    name = "placement_block_check",
+    bridge = ":bridge",
+)
+
+build_test(
+    name = "placement_block_check_build_test",
+    targets = [
+        ":placement_block_check",
+        ":placement_fixture_shared",
+    ],
+)

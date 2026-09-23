@@ -1,0 +1,127 @@
+"""The "can flutter_rust_bridge be built by Bazel?" experiment.
+
+Its own Bazel workspace root, for the same reason e2e/flutter_demo is one:
+`bazel_frb` is listed in the repo root's `.bazelignore`, so nothing under it
+is visible to `//...` at the root. Run every command in README.md from THIS
+directory.
+
+It deliberately does NOT `bazel_dep` on frustrate. The question is what
+rules_rust and rules_dart alone can do with FRB's crate, FRB's generated Rust
+and FRB's generated Dart, and a frustrate dep would only add noise.
+
+NO .bazelrc, by repo rule: every diagnostic flag is passed on the command
+line so that the command is the reproduction.
+"""
+
+module(
+    name = "bazel_frb_experiment",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "rules_rust", version = "0.74.0")
+bazel_dep(name = "rules_dart", version = "0.7.1")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2021",
+    versions = ["1.98.1"],
+    # rules_rust has no checksums for 1.98.1; without these the toolchain
+    # downloads unverified. Same provenance and coverage as frustrate's
+    # MODULE.bazel, plus rust-std for this module's target triples.
+    sha256s = {
+        "cargo-1.98.1-aarch64-apple-darwin.tar.xz": "de51d4fade4f31ad8ec405261cc96bedc000d905f98980027610d6e288dbe21b",
+        "cargo-1.98.1-aarch64-pc-windows-msvc.tar.xz": "230364e5f833a273f8e4215d05e32083ae58dabf08daa2a57f77928e23b952ff",
+        "cargo-1.98.1-aarch64-unknown-linux-gnu.tar.xz": "c09425a7f300af148c0bdfded0e7d5f1fe7c075b2b9674e8935afa769297b2f6",
+        "cargo-1.98.1-powerpc64le-unknown-linux-gnu.tar.xz": "2f17ee0c5aef9022e3dc951b701f5bb7e8c23fd91ead18e41d29c1ccbb213fd7",
+        "cargo-1.98.1-s390x-unknown-linux-gnu.tar.xz": "d2f14f9644f0faf00d2baffbb76ab9aade8cab403d5e03e1d8065f39b95bd961",
+        "cargo-1.98.1-x86_64-apple-darwin.tar.xz": "74b1282253c31fb89926d51d57e47a06c6cd26c93657de72edf622a4ab66396f",
+        "cargo-1.98.1-x86_64-pc-windows-msvc.tar.xz": "d6e8c738a0503b16b04db3838a38769620d553e436f632d2ebf667f793b2d44d",
+        "cargo-1.98.1-x86_64-unknown-freebsd.tar.xz": "0cd0e5d99d154c1f068513df9f91746269267b888501ea8e74e681b4b424f5e7",
+        "cargo-1.98.1-x86_64-unknown-linux-gnu.tar.xz": "ea1de9f9e23107d97ee2b41a72c552f34064a593da503789218387aee59f3ba4",
+        "clippy-1.98.1-aarch64-apple-darwin.tar.xz": "1ad080040ff0f4f8af0751bd7fa1fb1901212f8d164cecaa3c47b0654e0916f2",
+        "clippy-1.98.1-aarch64-pc-windows-msvc.tar.xz": "f83f0c1ab53f3c92ff74e1be0b1a115a3d816c2212c763c2088de94bca76d909",
+        "clippy-1.98.1-aarch64-unknown-linux-gnu.tar.xz": "396e17c0a669399823d0e59073686a4e5f50b2d41f062f1d3afc9210f9d3553d",
+        "clippy-1.98.1-powerpc64le-unknown-linux-gnu.tar.xz": "9e488807824f9cb604a609f2b27de53b155d614a29facafea2d594f6e215d5d4",
+        "clippy-1.98.1-s390x-unknown-linux-gnu.tar.xz": "b25eb8ac2c35e313a8f95224ad5d94c92d02fdf8668431c76e845249797cab23",
+        "clippy-1.98.1-x86_64-apple-darwin.tar.xz": "f0fdf89c5f4a9f05fa893a75791d274799989371655985bce34358b5e8b1d231",
+        "clippy-1.98.1-x86_64-pc-windows-msvc.tar.xz": "12d0b3606a66d01aebaf7fa282e2164779150dec52935ca3d07fa6fd3ec776fd",
+        "clippy-1.98.1-x86_64-unknown-freebsd.tar.xz": "9d386f65e91bbef9266cfee27c68a5ee1358efcbd6935ababb8f9df8addf6063",
+        "clippy-1.98.1-x86_64-unknown-linux-gnu.tar.xz": "e167f333be24e1d5eea56ea563c7def0aa0bd613f5ce3445976c93b0288799d1",
+        "llvm-tools-1.98.1-aarch64-apple-darwin.tar.xz": "9b68ac31be7c6d25a08ce34dbd2c1d026b8006905e74415b6d9576678379ecbc",
+        "llvm-tools-1.98.1-aarch64-pc-windows-msvc.tar.xz": "24d5249388f47bbd39a4706cc2b44a117f33053beab01cb71b6167ee3c9b82da",
+        "llvm-tools-1.98.1-aarch64-unknown-linux-gnu.tar.xz": "caaf950c65f3e428247dbe9c173d142b7072b2134962a61924c01e39f6b6dc1e",
+        "llvm-tools-1.98.1-powerpc64le-unknown-linux-gnu.tar.xz": "d84d294da95db8fc46fcce694e4909b13efd96814e9ddd70f997f8bc3a915ec7",
+        "llvm-tools-1.98.1-s390x-unknown-linux-gnu.tar.xz": "608e6022971bc7387d0d372b34cedf80f4813396d11583165ce3533b3b932ea9",
+        "llvm-tools-1.98.1-x86_64-apple-darwin.tar.xz": "3e2649efa7ebd72b96ba23aef4a301dbf9049ce29fb81f6f459772b73451306c",
+        "llvm-tools-1.98.1-x86_64-pc-windows-msvc.tar.xz": "ea97a7c5d455eaac0753610c1321e7e8654d78a178253f9b044b92f69af41fb7",
+        "llvm-tools-1.98.1-x86_64-unknown-freebsd.tar.xz": "4e6bdef33d991f66e2fdd5b3924fc669548cd82f1a34abb8f6c0f3c78d884577",
+        "llvm-tools-1.98.1-x86_64-unknown-linux-gnu.tar.xz": "56d58ca2dfa848359ab23c872791509c6f592448d2f6c146ed530ec50ee45371",
+        "rust-analyzer-1.98.1-aarch64-apple-darwin.tar.xz": "e79c1c2f2cef01e3f6044e9e9e46b9963ac7c664f681d935ef900fb33828af9a",
+        "rust-analyzer-1.98.1-aarch64-pc-windows-msvc.tar.xz": "0dc7d02c58c91c273add2099a0fc883a5477fceee43a9a2fa71cc016f3e50b5c",
+        "rust-analyzer-1.98.1-aarch64-unknown-linux-gnu.tar.xz": "a0fd960a9ab36193ae9ba4310e5f780f6ca38fa86160fae739be4ac541b6d10c",
+        "rust-analyzer-1.98.1-powerpc64le-unknown-linux-gnu.tar.xz": "61c26fb4fe990cea265d1d9f72c3d8c76b3128b70d15d15929fade6b772df282",
+        "rust-analyzer-1.98.1-s390x-unknown-linux-gnu.tar.xz": "458adef2a4e545836e040b69a0bc193a1173dcc442c91dae1ef23bfcd5d2025c",
+        "rust-analyzer-1.98.1-x86_64-apple-darwin.tar.xz": "25043ec861d7dcda87e9a96aacbdec6dd3b3909d1d13140563d21933a0d459d6",
+        "rust-analyzer-1.98.1-x86_64-pc-windows-msvc.tar.xz": "ed342d98a7dc30f5bd931f435d22e32f7fab8e73c0648ac71fb2bcb0d3f2039c",
+        "rust-analyzer-1.98.1-x86_64-unknown-freebsd.tar.xz": "8c3f35b7d974acddf0065d012c9e79b5555e793a4df00eed57dee2d755b84d21",
+        "rust-analyzer-1.98.1-x86_64-unknown-linux-gnu.tar.xz": "19beefa939b986be0086a36a24c540801ce849ee74f39ee933b60f947b0d4431",
+        "rust-src-1.98.1.tar.xz": "5c846ebcebcc7e2e0777a4cdaa12051691593f16a7e94edbae5e6241cc62d98c",
+        "rust-std-1.98.1-aarch64-apple-darwin.tar.xz": "2de831ef563ce772519a4d18ba2659f0f7428d497ef66dad24b5a35e8f8cd177",
+        "rust-std-1.98.1-aarch64-pc-windows-msvc.tar.xz": "5b7d0513911a10d4fb2e8a57f98a860e693da0465725d0ef6fd9843c1899bf59",
+        "rust-std-1.98.1-aarch64-unknown-linux-gnu.tar.xz": "9bf796a6ec5b004813ebd0b650775a7c6a4f3aae97ad362ae294798dca4f3b23",
+        "rust-std-1.98.1-powerpc64le-unknown-linux-gnu.tar.xz": "8353a10f4195abdcff6391ca5af8add6bf699f872efe0b289932613405fa62b6",
+        "rust-std-1.98.1-s390x-unknown-linux-gnu.tar.xz": "2b17f570083cc6dac5c3bdb762e64f75813f62e3668c5dfaefee546d10380d4b",
+        "rust-std-1.98.1-wasm32-unknown-unknown.tar.xz": "cf1fcf68880d8b2b90128cede7416cfb82ad3584357ce9fb668f2b6244c26e55",
+        "rust-std-1.98.1-wasm32-wasip1.tar.xz": "b5e91be9ed75c632a4c576d3c4c725ab143cd48c27c345133b97ccdf217b23e7",
+        "rust-std-1.98.1-x86_64-apple-darwin.tar.xz": "48b9835058a8baa4ff5e4387f3772c572a017a2b13393c46e151615c54e322e9",
+        "rust-std-1.98.1-x86_64-pc-windows-msvc.tar.xz": "42727764a01a54db7423e43db08a9c818405679af6a9a677068e8cd4b8361242",
+        "rust-std-1.98.1-x86_64-unknown-freebsd.tar.xz": "f34f94245be77ce446c20644cb516178159bb516971c4bf8bbd94fa3626541cd",
+        "rust-std-1.98.1-x86_64-unknown-linux-gnu.tar.xz": "fa3ff450172a16c026944030230c5069947af93c728d9179971d44e5e0cfb561",
+        "rustc-1.98.1-aarch64-apple-darwin.tar.xz": "738e3f60114b20550fcf4f8a57c9cea0544239f214709f45594ff3fde327f577",
+        "rustc-1.98.1-aarch64-pc-windows-msvc.tar.xz": "1beca996ad1072b1b8184d53f7ab7d0864f291cebd3464fb5dd48523004636f0",
+        "rustc-1.98.1-aarch64-unknown-linux-gnu.tar.xz": "89fb83041993b48816514815606f53a5264729b8b449671a6b291e6f0ae74f40",
+        "rustc-1.98.1-powerpc64le-unknown-linux-gnu.tar.xz": "a6a2dc97336fb1b96a546537e9d1ae8dfb9a40822fac1e22f6c7785f25ab333b",
+        "rustc-1.98.1-s390x-unknown-linux-gnu.tar.xz": "1c210e03d56224003b3c500dc235881f4b14ef3735a7a2417eadd2826814c57f",
+        "rustc-1.98.1-x86_64-apple-darwin.tar.xz": "641c301bd19c3cead114cbb61919c5ed2475ce53e2d011fe0c990e16c5a1b04b",
+        "rustc-1.98.1-x86_64-pc-windows-msvc.tar.xz": "cb5370843a9d15ce6e6cf6461b4c997722220d268d0d813c2b2b86f3ed59ac24",
+        "rustc-1.98.1-x86_64-unknown-freebsd.tar.xz": "1a47ac36f080c1632cc7bd93b6444776feaeeeb4de36f0a75e7c46777212b314",
+        "rustc-1.98.1-x86_64-unknown-linux-gnu.tar.xz": "e974f036b28565f37c0f3bd92ddefa809bee16c04f9dcf07b9ed96e05aaaf7c4",
+    },
+)
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+
+# The FRB crate graph. A hub of its own: hub repos are not re-exported to
+# other modules and one hub is one feature-unified graph, so FRB's 60-odd
+# crates cannot ride in frustrate's `@crates` even if this were in the same
+# workspace. `flutter_rust_bridge` is a plain crates.io dependency, so
+# crate_universe resolves it exactly like any other.
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "frb_crates",
+    cargo_lockfile = "//:Cargo.lock",
+    manifests = [
+        "//:Cargo.toml",
+        "//bridge:Cargo.toml",
+    ],
+)
+use_repo(crate, "frb_crates")
+
+dart = use_extension("@rules_dart//dart:extensions.bzl", "dart")
+dart.toolchain(dart_version = "3.13.2")
+use_repo(dart, "dart_toolchains")
+
+register_toolchains("@dart_toolchains//:all")
+
+# The Dart half: package:flutter_rust_bridge and its transitive pub deps,
+# resolved from the same pubspec.lock `dart pub get` wrote.
+pub = use_extension("@rules_dart//dart/pub:extensions.bzl", "pub")
+pub.from_lock(
+    name = "pub_deps",
+    lock = "//:pubspec.lock",
+    on_version_conflict = "upgrade",
+)
+use_repo(pub, "pub_deps")

@@ -1,0 +1,14 @@
+load("@rules_cc//cc:defs.bzl", "cc_import")
+
+# The `llvm` C toolchain's static libunwind, for //runtime/rust:unwinder (see
+# .bazelrc). `libunwind.static` is built by the toolchain's own rule, which a
+# cc_library cannot depend on directly, so it comes in as an archive.
+#
+# Its own package because it names the dev-only `llvm` module: only a build
+# with frustrate as the root ever loads it.
+cc_import(
+    name = "libunwind",
+    static_library = "@llvm//runtimes/libunwind:libunwind.static",
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)

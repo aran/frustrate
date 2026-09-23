@@ -1,0 +1,31 @@
+# The bindings package, as pub sees it.
+#
+# Bazel builds this directory through //bridge:demo_bridge (a flutter_plugin),
+# which needs no pubspec at all — it takes its sources and its dependency on
+# package:frustrate from BUILD.bazel. This file exists so the same directory is
+# *also* a resolvable pub package, which is what lets `flutter run` and
+# `dart analyze` see `package:demo_bridge/...` outside Bazel. Keep the
+# dependency set here in step with //bridge:demo_bridge's `deps`.
+#
+# Deliberately not a Flutter plugin in pub's sense (no `flutter:` section):
+# nothing here imports package:flutter, and the native library is loaded by
+# dlopen in lib/src/init_native.dart rather than by plugin registration, so
+# there is no platform channel for pub to register.
+#
+# The generated bindings (lib/demo_rust.frustrate.dart and the two files under
+# lib/src/) are build outputs of //bridge:codegen, not checked in and not
+# present in the source tree at all — every build and the dev loop read them
+# from bazel-bin. See ../README.md.
+name: demo_bridge
+description: >-
+  Generated frustrate bindings for the demo's Rust crate, plus the
+  platform-neutral init seam the app calls instead of touching a transport.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  frustrate:
+    path: ../../../runtime/dart

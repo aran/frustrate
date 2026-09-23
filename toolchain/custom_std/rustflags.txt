@@ -1,0 +1,27 @@
+# Threaded wasm target flags: every crate in the wasm32_threads
+# configuration is compiled with these (the Bazel toolchain injects them as extra_rustc_flags;
+# tool/build.dart joins them into RUSTFLAGS for the std build — std and app
+# code must agree on +atomics or the module fails to link).
+#
+# --max-memory must stay in sync with the Dart runtime's
+# _sharedMemoryMaxPages (16384 pages = 1 GiB) — the shared memory the host
+# creates may not exceed the module's link-time maximum.
+#
+# One flag per line; lines starting with # and blank lines are ignored.
+-C target-feature=+atomics,+bulk-memory,+mutable-globals
+-C link-arg=--import-memory
+-C link-arg=--shared-memory
+-C link-arg=--max-memory=1073741824
+-C link-arg=--export=__stack_pointer
+-C link-arg=--export=__wasm_init_tls
+-C link-arg=--export=__tls_size
+-C link-arg=--export=__tls_align
+# For wasm-bindgen's thread transform, which does the per-thread bootstrap
+# itself on a post-passed module and refuses to run without this one ("failed to
+# find tls base"). Inert on the path that bootstraps by hand: the runtime never
+# reads it, and it is a global, so exporting it keeps no code alive.
+-C link-arg=--export=__tls_base
+# The same transform places each thread's id past this ("failed to find
+# `__heap_base`"). rustc used to export it for every wasm32-unknown-unknown
+# cdylib; the pinned nightly no longer does. Inert for the same reason.
+-C link-arg=--export=__heap_base

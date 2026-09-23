@@ -1,0 +1,23 @@
+bazel-*
+.bazelrc.user
+target/
+.dart_tool/
+*.frustrate.dart
+*.frustrate.native.dart
+*.frustrate.web.dart
+frustrate_generated.rs
+frustrate_claims.txt
+frustrate_ir.json
+tests/dart_integration/build/
+node_modules/
+test-results/
+toolchain/custom_std/dist/
+toolchain/custom_std/stub/work/
+
+# Per-developer iOS device signing. `device/` holds a local_provisioning_profile
+# pointing at a credential minted against someone's Apple Developer account, so
+# the directory is created from the committed device.example/ template and never
+# checked in. See e2e/iroh_demo/device.example/BUILD.bazel.example.
+e2e/*/device/
+
+.DS_Store

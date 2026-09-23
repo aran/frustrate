@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!--
+  Checked in (rules_flutter would otherwise generate one).
+
+  Deliberately plainer than e2e/flutter_demo's page: no Content-Security-Policy
+  machinery. That app is frustrate's standing proof that the bridge runs under a
+  strict policy with no inline scripts; repeating it here would only make this
+  example about two things. What matters here is the one <script> below.
+
+  <script src="frustrate.js"> is the served glue (staged by //:frustrate.js).
+  Plain — no async/defer — so it runs at parse time, before init. On this
+  platform it carries something the plain-wasm32 page does not need: the
+  `wasi_snapshot_preview1` host ($frustrateWasi), which is what makes
+  SystemTime, Instant, getrandom and println! work inside the module. It is
+  the same file either way — the host is supplied unconditionally, because
+  instantiation only looks up what a module declares, so there is no detection
+  branch and no way to get the choice wrong.
+-->
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A frustrate bridge on wasm32-wasip1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Frustrate wasi Demo">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>Frustrate wasi Demo</title>
+</head>
+<body>
+  <script src="frustrate.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

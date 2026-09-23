@@ -1,0 +1,58 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+# `peerbot` — a headless Tin Can peer, the fixed half of the driven two-peer
+# test (../README.md, "How it is tested").
+#
+# No Cargo.toml and no crate hub of its own. It needs exactly the three crates
+# //bridge already resolves — iroh, iroh-tickets, tokio — with exactly the same
+# features, so it borrows `@iroh_crates` rather than adding a second hub. That
+# is the opposite call from //relay, and for the opposite reason: the relay's
+# `server` feature would have contaminated the phone binary, while peerbot adds
+# nothing. The cost is that a hub resolves ONE feature-unified graph, so peerbot
+# is *stuck* with the app's feature closure and cannot add to it — no
+# `tokio/signal` here.
+#
+# `src/proto.rs` is a symlink to `../../bridge/src/proto.rs`: one inode, so the
+# app and the thing that tests the app cannot disagree about the wire. A label
+# would have been the obvious way to say that, but a file in another package is
+# not usable as a source without an `exports_files` there, and //bridge does not
+# export this one.
+
+_DEPS = [
+    "@iroh_crates//:iroh",
+    "@iroh_crates//:iroh-tickets",
+    "@iroh_crates//:tokio",
+]
+
+# Hosts only. peerbot is a test fixture that runs beside the driver, so the
+# phone triples are not just unnecessary, they are wrong: without this the
+# target is analysed for iOS by any `bazel build //...` under an Apple
+# platform transition.
+_HOSTS = select({
+    "@platforms//os:macos": [],
+    "@platforms//os:linux": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
+rust_binary(
+    name = "peerbot",
+    srcs = [
+        "src/main.rs",
+        "src/proto.rs",
+    ],
+    edition = "2021",
+    target_compatible_with = _HOSTS,
+    visibility = ["//visibility:public"],
+    deps = _DEPS,
+)
+
+# peerbot's own unit tests: the escaping that keeps one message on one line,
+# the ticket round trip, and the copied ALPN. Unlike //bridge:iroh_rust_test
+# this is an ordinary `rust_test(crate = ...)` on an ordinary binary — nothing
+# here is a cdylib, so none of the bridge crate's linking constraints apply.
+rust_test(
+    name = "peerbot_test",
+    crate = ":peerbot",
+    edition = "2021",
+    target_compatible_with = _HOSTS,
+)

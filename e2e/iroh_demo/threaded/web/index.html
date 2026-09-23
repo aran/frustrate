@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<!--
+  The threaded peer's copy of ../../web/index.html — read the comments there
+  for the CSP, the served glue and the connect-src, all of which are identical
+  here. Keep in sync.
+
+  One delta, and it is what this build is: the page must be cross-origin
+  isolated, because a threaded module's memory is a SharedArrayBuffer. That
+  cannot be asked for from a meta tag — COOP and COEP are *served headers* — so
+  the requirement lands on whoever serves this bundle, and
+  playwright/threads_app.spec.js asserts `crossOriginIsolated === true` from
+  headers alone rather than from a browser flag.
+
+  `connect-src` still names https:/wss: for the n0 preset, and this bundle is
+  built `minimal` + a loopback relay, so nothing here reaches a third party.
+  COEP `require-corp` governs *subresources* (scripts, wasm, images), all of
+  which are same-origin here; the relay leg is a WebSocket, which it does not
+  gate.
+-->
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  {{FRUSTRATE_CSP}}
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Tin Can — peer-to-peer chat over iroh (threaded)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Tin Can">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>Tin Can (threaded)</title>
+</head>
+<body>
+  <script src="frustrate.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

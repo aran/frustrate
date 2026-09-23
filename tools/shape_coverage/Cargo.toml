@@ -1,0 +1,18 @@
+[package]
+name = "shape-coverage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Reports member shapes the checker accepts and the repo's bridge sources never instantiate"
+
+# The source sits at the package root rather than in `src/`, matching
+# `bazel/wasm_block_check`. Unlike that one this has dependencies: it is
+# cargo-only and never enters a Bazel exec configuration, so the `@crates` hub
+# argument for zero dependencies does not apply.
+[[bin]]
+name = "shape_coverage"
+path = "main.rs"
+
+[dependencies]
+frustrate-codegen = { workspace = true }

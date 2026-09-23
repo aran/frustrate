@@ -1,0 +1,74 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+# getrandom's custom backend, over frustrate's host CSPRNG. See src/lib.rs for
+# what it is for and docs/ext.md for why it is here rather than in the runtime.
+
+rust_library(
+    name = "frustrate_getrandom",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2021",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":getrandom",
+        "//runtime/rust:frustrate",
+    ],
+)
+
+# Which `getrandom` this crate's backend is typed against — a build setting for
+# the same reason `//runtime/rust:log` is one, and with a sharper failure if it
+# is wrong.
+#
+# The backend is one `#[no_mangle]` symbol, so *linking* works whatever hub
+# provides the `getrandom` whose `Error` spells the signature: a symbol is
+# matched by name. What the name does not check is the layout of
+# `Result<(), Error>` on either side of the call. Compiling this crate against
+# the same rlib the consumer's own crates linked is what makes that question
+# not arise, instead of making it a bet — and it keeps a second `getrandom`
+# rlib out of the module.
+#
+# A module with a hub of its own points this at it, in its own `.bazelrc`:
+#
+#     common --@frustrate//ext/getrandom:getrandom=@my_crates//:getrandom
+#
+# Private, like its `log` twin: with nothing to name, a consumer takes
+# `getrandom` from their own hub and the two rlibs are visibly two. Setting a
+# build setting from the command line does not consult visibility, so a
+# dependent module can still steer it.
+label_flag(
+    name = "getrandom",
+    build_setting_default = "@crates//:getrandom",
+    visibility = ["//visibility:private"],
+)
+
+# The platforms that carry the `cfg`, one per wasm column where `getrandom` has
+# no backend of its own (docs/design/wasm_platforms.md, "What each target
+# supports"). Deliberately *not* the wasi or wasm-bindgen columns: there
+# getrandom has a working backend already, and `getrandom_backend = "custom"` is
+# the first arm of its `cfg_if`, so setting it would silently displace the
+# backend a build on those columns chose on purpose.
+#
+# A platform rather than a `crate.annotation(crate = "getrandom", ...)`: one hub
+# is one feature-unified graph with no per-triple expression, so an annotation
+# would put the *native* build on the custom backend too, where this crate's
+# `cfg(target_family = "wasm")` body does not exist and the link fails on a
+# missing `__getrandom_v03_custom`.
+#
+# `flags` is inherited from `parents`, so `:wasm32_threads` keeps the nightly
+# channel `//bazel:wasm32_threads` declares without restating it. Pinned by
+# //tests/bazel_rules:wasm_platform_flag_test, which would otherwise be the
+# thing nothing checks.
+_GETRANDOM_CUSTOM = '--@rules_rust//rust/settings:extra_rustc_flags=--cfg=getrandom_backend="custom"'
+
+platform(
+    name = "wasm32",
+    flags = [_GETRANDOM_CUSTOM],
+    parents = ["//bazel:wasm32"],
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "wasm32_threads",
+    flags = [_GETRANDOM_CUSTOM],
+    parents = ["//bazel:wasm32_threads"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,54 @@
+# iOS *device* signing — per-developer, and deliberately not in version control.
+#
+# The simulator needs none of this: `flutter_bazel run -t //:app_ios
+# -d ios-simulator` builds `-c dbg` for sim_arm64 and rules_apple ad-hoc signs
+# it. A physical iPhone needs a provisioning profile, which is minted against an
+# Apple Developer account and is therefore a credential — so `device/` is
+# gitignored and only this template is committed.
+#
+# Setup:
+#   1. cp -r device.example device && mv device/BUILD.bazel.example device/BUILD.bazel
+#   2. Connect the iPhone and let Xcode register it with your team. Opening any
+#      Xcode project with "Automatically manage signing" on, or running
+#      `xcodebuild -allowProvisioningUpdates`, installs a team profile into
+#      ~/Library/Developer/Xcode/UserData/Provisioning Profiles/. The profile
+#      must list the iPhone's UDID in its ProvisionedDevices, which is what
+#      registering the device does.
+#   3. Check PROFILE_NAME below against what was installed:
+#        for p in ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision; do
+#          security cms -D -i "$p" | plutil -extract Name raw -
+#        done
+#      `local_provisioning_profile` looks the profile up by this *display* name
+#      at build time; nothing is copied into the repo.
+#   4. Run it:
+#        bazel run @rules_flutter//tools/dev_tool:flutter_bazel -- \
+#          run -t //:app_ios_device -d ios
+#      or build the AOT bundle:
+#        bazel build //:app_ios_device -c opt --ios_multi_cpus=arm64
+#
+# Free ("Personal Team") profiles expire after ~7 days. When the build fails
+# with "Could not find provisioning profile", re-mint and re-install it; no
+# Bazel change is needed.
+
+load("@rules_apple//apple:apple.bzl", "local_provisioning_profile")
+
+# A team *wildcard* profile, which is what Xcode's automatic signing installs
+# and which covers any bundle id under the team prefix — including this app's
+# `dev.frustrate.demo`, with no App ID registration and no portal work.
+#
+# Naming a per-App-ID profile here instead ("iOS Team Provisioning Profile:
+# dev.frustrate.demo") is the trap: that name only exists if someone registered
+# that exact App ID, and when it does not exist rules_apple fails with "could
+# not find provisioning profile" — which reads as a signing problem rather than
+# a name that was never minted.
+PROFILE_NAME = "iOS Team Provisioning Profile: *"
+
+local_provisioning_profile(
+    name = "profile",
+    profile_name = PROFILE_NAME,
+    tags = ["manual"],
+    # //:app_ios_device is the only consumer. Package-scoped rather than
+    # public: a signing credential should not be reachable from anywhere else
+    # in the module.
+    visibility = ["//:__pkg__"],
+)

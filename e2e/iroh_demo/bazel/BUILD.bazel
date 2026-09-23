@@ -1,0 +1,10 @@
+# Build helpers owned by this app: linux.bzl's transition rule and
+# web_csp.bzl's policy; everything else this module needs comes from frustrate
+# or rules_flutter.
+
+# The mode `flutter_bazel run` builds, whose web page must go without the
+# policy — see web_csp.bzl.
+config_setting(
+    name = "dbg",
+    values = {"compilation_mode": "dbg"},
+)

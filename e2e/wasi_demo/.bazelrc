@@ -1,0 +1,17 @@
+# Disable lockfile (local_path_override deps change frequently).
+common --lockfile_mode=off
+
+# macOS 26 is the floor for everything built for or on a Mac, build tools
+# included (the host_ pair). rustc takes its deployment target from
+# MACOSX_DEPLOYMENT_TARGET and the C toolchain from --macos_minimum_os; unless
+# they agree, every Rust link on macOS prints a linker_messages warning. The
+# macOS app's minimum_os_version in BUILD.bazel says the same.
+common --macos_minimum_os=26.0 --host_macos_minimum_os=26.0
+common --action_env=MACOSX_DEPLOYMENT_TARGET=26.0 --host_action_env=MACOSX_DEPLOYMENT_TARGET=26.0
+
+# `dart analyze` runs as an aspect over every Dart target a `bazel test` names.
+test --aspects=@rules_dart//dart:analyze.bzl%dart_analyze
+test --output_groups=+dart_analyze
+common --@rules_dart//dart:analysis_config=//:analysis_config
+
+try-import %workspace%/.bazelrc.user

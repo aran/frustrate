@@ -1,0 +1,26 @@
+load("@rules_dart//dart:defs.bzl", "dart_binary")
+
+# The driven two-peer test.
+#
+#     bazel run //tools:two_peers
+#
+# One command, from a clean checkout: it builds both halves, starts //peerbot,
+# launches //:app under `flutter_bazel run --machine`, drives the UI over the
+# dev tool's HTTP control channel, and asserts a real message crossed in both
+# directions. Exits 0 on pass, 1 with diagnostics on failure. `--screenshot
+# PATH` moves the PNG; `--no-shutdown` leaves the app and the bot running.
+#
+# `bazel run` and not `bazel test`: the driver invokes bazel (the dev tool
+# builds and installs the app), and a test action holds the workspace lock that
+# inner build needs, so as a test it would deadlock against itself. There is
+# therefore no target here for `bazel test //...` to pick up, which is also why
+# nothing is tagged `manual`.
+#
+# `dart:io` and `dart:convert` only, so no pub dependencies and no `deps`.
+dart_binary(
+    name = "two_peers",
+    srcs = ["two_peers.dart"],
+    compile_mode = "exe",
+    main = "two_peers.dart",
+    visibility = ["//visibility:public"],
+)

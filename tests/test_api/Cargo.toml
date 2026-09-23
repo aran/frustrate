@@ -1,0 +1,50 @@
+[package]
+name = "test_api"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# Forwarded to the runtime: the threaded web transport. The fixture is
+# built with this by `dart run tool/build_web_fixture.dart --threaded`.
+wasm-threads = ["frustrate/wasm-threads"]
+
+# The std facilities a custom_std provides. Purely
+# a *probe* switch: it adds no dependency and changes no bridged surface, it
+# only flips the std-facility probes below from their sentinel branch to the
+# real call. Set when the fixture is built against a facility std, by
+# `dart run tool/build_web_fixture.dart --facilities`.
+#
+# It has to be a feature rather than a cfg on the target, because the target
+# is the same one either way: wasm32-unknown-unknown with a stock std and
+# wasm32-unknown-unknown with a patched std are indistinguishable to `cfg`.
+wasm-std-facilities = []
+
+[dependencies]
+anyhow = "1"
+frustrate = { workspace = true }
+# The `frustrate::logging` fixture logs through the ordinary facade, from an
+# ordinary dependency's point of view — which is the property under test, so it
+# has to be the real `log` and not a re-export. Zero transitive dependencies;
+# see runtime/rust/Cargo.toml.
+log = { version = "0.4", default-features = false }
+# The "bring your own async runtime" worked example: a tiny, dependency-free
+# external `block_on` executor standing in for tokio/async-std. It compiles to
+# wasm, so the fixture stays in the web surface without codegen gating. Driven
+# by tests/dart_integration/test/external_runtime_test.dart.
+pollster = "1"
+
+[build-dependencies]
+frustrate-codegen = { workspace = true }
+
+# `src/hostile.rs` only. It reads the interface build.rs wrote, so it needs the
+# IR types and the schema-hash function; `serde_json` turns the file back into
+# them. Both are already in this crate's build graph — nothing new is
+# downloaded, and neither reaches the shipped library, which has no
+# dev-dependencies at runtime.
+[dev-dependencies]
+frustrate-codegen = { workspace = true }
+serde_json = "1"

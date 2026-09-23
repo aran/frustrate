@@ -1,0 +1,126 @@
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs")
+load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
+load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+
+# Capability enforcement is structural: codegen always checks native and web
+# facts and emits both Dart surfaces behind one conditional-export URI.
+frustrate_bridge_outputs(
+    name = "codegen",
+    srcs = ["src/api.rs"],
+    crate_name = "demo_rust",
+    module_paths = ["crate::api"],
+    # `codegen.ir` is each web bundle's `binding_contract` as well as this
+    # package's: the three wasm modules must each be named demo_rust.wasm, so
+    # they live one per package and their flutter_native_library wrappers do
+    # too. Same three packages the library and bindings are visible to.
+    visibility = [
+        "//:__pkg__",
+        "//custom_std:__pkg__",
+        "//threaded:__pkg__",
+    ],
+)
+
+# libdemo_rust.dylib on macOS; the same target builds the wasm module under
+# a wasm32 platform transition.
+rust_shared_library(
+    name = "demo_rust",
+    visibility = [
+        "//:__pkg__",
+        "//custom_std:__pkg__",
+        "//threaded:__pkg__",
+    ],
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":codegen.rs",
+    ],
+    # The std-facility card's probes (api.rs, "the standard library on web")
+    # need to know whether the std being linked has the stubs replaced, and the
+    # *target* cannot tell them apart: stock and patched are both
+    # wasm32-unknown-unknown. Deriving the feature from the same constraints the
+    # toolchain resolves on means the two cannot disagree — a module built
+    # against a facility std always has the feature, and one built against
+    # either stock or the +atomics flavour never does. Native needs no feature;
+    # its cfg arm is `not(wasm)`.
+    crate_features = select({
+        "@frustrate//bazel:wasm_facility_std_build": ["std-facilities"],
+        "//conditions:default": [],
+    }),
+    edition = "2021",
+    proc_macro_deps = ["@frustrate//macros:frustrate_macros"],
+    deps = [
+        "@demo_crates//:log",
+        "@frustrate//runtime/rust:frustrate",
+    ],
+)
+
+# The same library, told apart from its bindings.
+#
+# Bundling sees no difference — the wrapper forwards the library's DefaultInfo
+# whole. What it adds is a statement the dev tool cannot infer: `codegen.ir` is
+# the interface both halves are generated from, so equal bytes mean the
+# bindings are unchanged. That is the difference between a Rust edit that
+# rewrote a function body and one that changed the wire, and it decides whether
+# a hot reload may deliver a Dart edit made alongside it. Without the wrapper
+# any rebuild of the library withholds the reload, which is correct and blunt.
+#
+# Native only, because it answers a question only a native device asks: the
+# process cannot replace a library it has `dlopen`ed. Web has no `native_deps`
+# entry at all — its module is a served file — so the loop there still reloads
+# Dart over the wasm instance the page already has. See the README.
+#
+# `hot_patch` goes further on a -c dbg build: a Rust edit that leaves the
+# contract alone is compiled into a patch and loaded into the running app, so
+# `r` delivers it with state kept. frustrate_hot_patchable builds the library
+# in the configuration that can take patches and says how to build them.
+frustrate_hot_patchable(
+    name = "demo_rust_hot",
+    binding_contract = ":codegen.ir",
+    library = ":demo_rust",
+)
+
+flutter_native_library(
+    name = "demo_rust_native",
+    binding_contract = [":codegen.ir"],
+    hot_patch = ":demo_rust_hot.hot_patch",
+    library = ":demo_rust_hot",
+)
+
+# The bindings package: generated Dart plus the platform-neutral init seam.
+# App code imports package:demo_bridge/... and never touches a platform
+# transport directly.
+flutter_plugin(
+    name = "demo_bridge",
+    package_name = "demo_bridge",
+    srcs = [
+        "lib/fake_plan.dart",
+        "lib/init.dart",
+        "lib/native_features.dart",
+        "lib/src/init_native.dart",
+        "lib/src/init_web.dart",
+        "lib/src/native_features_io.dart",
+        "lib/src/native_features_web.dart",
+        ":codegen.dart",
+    ],
+    native_deps = select({
+        "@platforms//os:macos": [":demo_rust_native"],
+        "@platforms//os:ios": [":demo_rust_native"],
+        "@platforms//os:android": [":demo_rust_native"],
+        "@platforms//os:linux": [":demo_rust_native"],
+        "//conditions:default": [],
+    }),
+    platforms = [
+        "macos",
+        "ios",
+        "android",
+        "linux",
+        "web",
+    ],
+    visibility = [
+        "//:__pkg__",
+        "//custom_std:__pkg__",
+        "//threaded:__pkg__",
+    ],
+    deps = ["@frustrate//runtime/dart:frustrate"],
+)

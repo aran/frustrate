@@ -1,0 +1,5 @@
+e2e
+bazel_frb
+toolchain/custom_std/dist
+toolchain/custom_std/stub
+.claude

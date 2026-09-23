@@ -1,0 +1,31 @@
+<!--
+  The release web bench page. Served from build/ by tool/web_bench.dart.
+
+  The CSP is strict on purpose, and it is load-bearing rather than decorative:
+  no 'unsafe-inline', so there is no inline <script> anywhere here (hence the
+  separate bootstrap.js), and no blob: in worker-src, so the runtime CANNOT
+  fall back to blob: workers. That forces the strict-CSP glue delivery path —
+  frustrate.js below is a plain <script src> (no async/defer, so it runs at
+  parse time, before the module), and it records its own URL in
+  $frustrateGlueUrl, which is where the runtime then creates its Workers from.
+  If that path ever regressed, this page would fail loudly instead of quietly
+  benchmarking a configuration real CSP apps cannot run.
+
+  'wasm-unsafe-eval' is required by both wasm modules (the dart2wasm output and
+  the Rust bridge); it does not permit eval() or new Function().
+-->
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'self' 'wasm-unsafe-eval';
+  worker-src 'self';
+  connect-src 'self';
+  object-src 'none';
+  base-uri 'none';
+">
+<title>frustrate web bench</title>
+
+<script src="frustrate.js"></script>
+<script type="module" src="bootstrap.js"></script>
+
+<pre id="status">running — results POST to /results; the driver prints them.</pre>

@@ -1,0 +1,17 @@
+# Threaded wasm spike: a +atomics threaded-wasm module with no wasm-bindgen.
+# Built by tool/build.dart (nightly -Zbuild-std).
+[package]
+name = "threaded_wasm_spike"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+# Opt out of any enclosing cargo workspace: this is a throwaway spike with
+# its own nightly toolchain requirements.
+[workspace]
+
+[profile.release]
+debug = false

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<!--
+  The threaded app's copy of ../web/index.html — see the comments there.
+  Identical posture: no policy in the source page (dwds needs an inline
+  script for hot restart), the strict policy substituted into the bundle at
+  the $FRUSTRATE_CSP marker by //threaded:index_html. Under that policy the
+  threaded pool workers must come from the served frustrate.js, not blob:
+  URLs, which is what web_threaded.spec.js pins. Keep in sync.
+-->
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <!-- $FRUSTRATE_CSP -->
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A Flutter web application built with Bazel">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Frustrate Demo (threaded)">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>Frustrate Demo (threaded)</title>
+</head>
+<body>
+  <script src="frustrate.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

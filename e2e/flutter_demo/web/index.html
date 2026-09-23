@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!--
+  Checked in (rules_flutter would otherwise generate one). The source form of
+  this page deliberately carries no Content-Security-Policy; the bundled copy
+  has a strict one substituted in at the marker below, except in a -c dbg
+  build, which is what `flutter_bazel run` builds and serves.
+
+  That split exists because this is also the page `flutter run -d chrome`
+  serves, and dwds — the hot-restart channel — injects an inline <script>, so
+  any policy without 'unsafe-inline' kills the development loop before the
+  engine boots. The injection is //:index_html, defined in web_csp.bzl, which
+  is where the policy and the reasoning behind each source expression live.
+  Both Playwright specs assert it arrived and is enforced, so a bundle that
+  lost it fails rather than passing vacuously.
+
+  Two deliberate deltas from the generated template remain:
+
+  - <script src="frustrate.js">: the served glue (staged by the
+    //:frustrate.js target). Plain — no async/defer — so it runs at parse
+    time, before init; it defines $frustrateTry and records its own URL so
+    the runtime creates workers from it instead of blob: URLs. It is what
+    makes the bundle's no-'unsafe-inline' policy satisfiable at all.
+  - No service-worker registration: the generated registration is an inline
+    script, which the bundle's policy would block; the unregistered
+    flutter_service_worker.js asset is inert.
+
+  Keep in sync with threaded/web/index.html (the glob that discovers this
+  file is per-package, so the threaded app carries its own copy).
+-->
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <!-- $FRUSTRATE_CSP -->
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A Flutter web application built with Bazel">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Frustrate Demo">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>Frustrate Demo</title>
+</head>
+<body>
+  <script src="frustrate.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

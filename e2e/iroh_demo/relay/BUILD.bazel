@@ -1,0 +1,155 @@
+"""The relay server: `iroh-relay` built with `features = ["server"]`.
+
+Nothing here is Flutter, Dart, or frustrate. It is one Rust binary and the
+scripts that put it on a VM. The app does not need it to work — dialing by
+ticket over n0's public relays connects across networks with no configuration
+— so this package exists to own the whole stack for M3, not to unblock
+anything.
+"""
+
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+# Cargo.toml/Cargo.lock exist for the crate hub (//:MODULE.bazel's
+# `crate.from_cargo(name = "relay_crates")`), not for cargo.
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])
+
+# The relay server binary.
+#
+# This is upstream's `iroh-relay` bin, surfaced by
+# `crate.annotation(gen_binaries = ["iroh-relay"])` in //:MODULE.bazel. It is
+# an alias rather than a rust_binary of our own on purpose: main.rs is 959
+# lines of CLI and TOML config handling, and a vendored copy would drift from
+# the config schema this package's README documents. What we own is the
+# configuration and the deployment, not the server.
+#
+#   bazel run //relay:iroh_relay -- --dev
+#     serves plain HTTP on http://localhost:3340, no TLS, no certificate.
+#   bazel run //relay:iroh_relay -- --config-path=relay.toml
+#     the production shape; see relay.toml and README.md.
+alias(
+    name = "iroh_relay",
+    actual = "@relay_crates//:iroh-relay__iroh-relay",
+    visibility = ["//visibility:public"],
+)
+
+# The relay-protocol exchange — two clients, one datagram, checked at the far
+# end — plus the loopback spawn helper. Shared so the deployment health check
+# and the hermetic test verify a relay the same way.
+rust_library(
+    name = "relay_support",
+    srcs = ["src/lib.rs"],
+    crate_name = "iroh_relay_server",
+    edition = "2021",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@relay_crates//:iroh-base",
+        "@relay_crates//:iroh-dns",
+        "@relay_crates//:iroh-relay",
+        "@relay_crates//:n0-future",
+        "@relay_crates//:tokio",
+    ],
+)
+
+# The relay path's first automated coverage. Spawns a server in-process on an
+# ephemeral loopback port and relays a datagram through it, so this is a real
+# `bazel test` target and not a tool: nothing external has to be listening,
+# nothing is fixed-port, and it passes with the network sandboxed off.
+#
+# This is what the second crate hub had cost — coverage of the relay path,
+# which no test in this module used to exercise. `iroh_relay::server` is
+# behind the `server` feature @relay_crates already enables, so closing it adds
+# no package to either lockfile.
+rust_test(
+    name = "relay_server_test",
+    crate = ":relay_support",
+)
+
+# Proves a *deployment* relays. Same exchange as the test above, against a URL
+# you supply — so it exercises the TLS path, the certificate, and the access
+# control that a loopback test by construction cannot.
+#
+#   bazel run //relay:relay_smoke                       # http://localhost:3340
+#   bazel run //relay:relay_smoke -- https://relay.example.com
+#
+# Still not a rust_test: it needs a server someone else started, and a bazel
+# test that reaches out to one is a flake generator.
+rust_binary(
+    name = "relay_smoke",
+    srcs = ["src/bin/relay_smoke.rs"],
+    edition = "2021",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":relay_support",
+        "@relay_crates//:iroh-base",
+        "@relay_crates//:tokio",
+    ],
+)
+
+# The relay a test harness starts. Binds loopback on an ephemeral port, prints
+# `relay: url <url>` then `relay: ready`, and shuts down on stdin EOF — the
+# same contract //peerbot:peerbot has, so the browser harness supervises both
+# identically.
+#
+#   bazel run //relay:relay_dev
+#
+# Not `iroh_relay --dev`, which hardcodes 3340 *and* a metrics listener on 9090
+# and prints no parseable readiness line. See src/bin/relay_dev.rs.
+rust_binary(
+    name = "relay_dev",
+    srcs = ["src/bin/relay_dev.rs"],
+    edition = "2021",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":relay_support",
+        "@relay_crates//:tokio",
+    ],
+)
+
+# The guard for `supported_platform_triples` in //:MODULE.bazel: a triple
+# missing from that list makes every crate resolve to `//:incompatible`, which
+# surfaces as a silent `target_compatible_with` skip rather than an error. A
+# build_test turns it red.
+build_test(
+    name = "relay_build_test",
+    targets = [
+        ":iroh_relay",
+        ":relay_dev",
+        ":relay_smoke",
+    ],
+)
+
+# The deployment target. `@rules_rust//rust/platform:x86_64-unknown-linux-gnu`
+# looks like the obvious label and is not a platform at all — it is a
+# constraint bundle, and passing it to --platforms fails with "does not provide
+# PlatformInfo".
+#
+#   bazel build //relay:iroh_relay --platforms=//relay:linux_x86_64
+#
+# On a Linux x86_64 host that is a plain native build. From macOS it is a
+# cross-compile, and it works: //:MODULE.bazel registers a Linux cc_toolchain
+# (@llvm, zero-sysroot) for the app's sake, and the relay gets it for free —
+# see README.md §"Building for the VM". The cross-built binary is verified to
+# run: it binds and reports ready on Debian 12.
+platform(
+    name = "linux_x86_64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# The files a human copies to the VM. Grouped so the deploy script has a single
+# thing to name.
+filegroup(
+    name = "deploy_files",
+    srcs = [
+        "iroh-relay.service",
+        "relay.toml",
+    ],
+    visibility = ["//visibility:public"],
+)

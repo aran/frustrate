@@ -1,0 +1,59 @@
+[package]
+name = "frustrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "frustrate runtime: codec, handle helpers, thread pool, and FFI plumbing for frustrate-generated bridges"
+
+[lib]
+path = "src/lib.rs"
+
+[lints.rust]
+# These are build-mode cfgs, not features, and all default off.
+# `frustrate_block_check` is set only by `tools/check_block.dart` and the
+# `frustrate_block_check` Bazel rule, which build a module to scan and throw
+# away. `frustrate_manual_scheduler` is set only by `--//bazel:manual_scheduler`
+# and makes the executor's Scheduler enqueue-only so a host drives the drains
+# (executor.rs, `arrange_drain`); it is native-only and a wasm build carrying it
+# is a compile error. `frustrate_hot_patch` is set only by
+# `frustrate_hot_patchable`, for `-c dbg`, and compiles in `hot_patch`.
+# Declaring them keeps cargo's default `--check-cfg` from calling this crate's
+# own hand-written gates an unexpected cfg. (Bazel passes no `--check-cfg` at
+# all, so the lint is inert there.)
+#
+# Only this crate needs the stanza. A crate whose gates come from codegen gets
+# the same declaration from its build script, which `frustrate_codegen::generate`
+# prints as `cargo::rustc-check-cfg=…` — see `CHECK_CFG_DIRECTIVE` in
+# codegen/src/lib.rs. The runtime has no build script to print it from.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frustrate_block_check)', 'cfg(frustrate_manual_scheduler)', 'cfg(frustrate_hot_patch)'] }
+
+[features]
+# Threaded web: real worker threads on one shared linear memory. Requires a
+# nightly +atomics build with an imported shared memory and the embedder's
+# spawn_worker glue. No effect off wasm.
+wasm-threads = []
+
+[dependencies]
+async-task = "4.7.1"
+# Trait only (default-features off drops the `std`/`alloc` cruft): lets the
+# StreamController-shaped `StreamSink` implement `futures::Sink`, so an async
+# producer can drive it through `forward`/`send_all` with backpressure. The
+# `Sink`/`EventSink` mirrors have no pause seam and get no impl.
+futures-sink = { version = "0.3", default-features = false }
+# The `log` facade itself, for `logging::install`. A dependency this crate
+# would not take to *reuse* something — but the whole
+# point of the module is that a bridge's dependencies, which have never heard
+# of frustrate, log through `log`, and that only works if this is the same
+# `log` they compile against. Reimplementing `Record`/`Level` here would make
+# the facility work for nobody's dependencies, which is the facility.
+#
+# Zero transitive dependencies, and `default-features = false` keeps it that
+# way permanently: every `kv_*` feature is what pulls `value-bag`, `serde` or
+# `sval` in, and `std` only adds `impl Error`.
+#
+# Under Bazel this line is only the *default* of a redirectable dependency
+# (`//runtime/rust:log`, a label_flag): a consuming module points it at its own
+# crate hub's `log`, because that is the rlib its own dependencies linked. This
+# manifest is what cargo and frustrate's own targets resolve.
+log = { version = "0.4", default-features = false }
+frustrate-macros = { workspace = true }

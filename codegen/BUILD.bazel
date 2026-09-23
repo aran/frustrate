@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+rust_library(
+    name = "frustrate_codegen",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    edition = "2021",
+    deps = [
+        "@crates//:anyhow",
+        "@crates//:heck",
+        "@crates//:proc-macro2",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:syn",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+rust_binary(
+    name = "frustrate_codegen_bin",
+    srcs = ["src/main.rs"],
+    edition = "2021",
+    deps = [
+        ":frustrate_codegen",
+        "@crates//:anyhow",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "frustrate_codegen_test",
+    crate = ":frustrate_codegen",
+    edition = "2021",
+    deps = ["@crates//:pretty_assertions"],
+)

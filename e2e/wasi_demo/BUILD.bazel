@@ -1,0 +1,121 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@frustrate//bazel:defs.bzl", "frustrate_wasm_module", "frustrate_web_glue")
+load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options")
+load("@rules_flutter//flutter:defs.bzl", "flutter_application", "flutter_library")
+load("@rules_flutter//flutter:macos.bzl", "flutter_macos_app")
+load("@rules_flutter//flutter:web.bzl", "flutter_web_app")
+
+exports_files(["pubspec.lock"])
+
+APP_DEPS = [
+    "//bridge:wasi_bridge",
+    "@deps//:flutter",
+    "@rules_flutter//flutter:material_icons",
+]
+
+flutter_application(
+    name = "app_flutter",
+    package_name = "frustrate_wasi_demo",
+    main = "lib/main.dart",
+    deps = APP_DEPS,
+)
+
+# The app's sources as a library: flutter_application propagates
+# FlutterApplicationInfo, not the DartInfo the analyzer needs. Same srcs and the
+# same APP_DEPS, so the two cannot drift.
+flutter_library(
+    name = "app_lib",
+    srcs = ["lib/main.dart"],
+    package_name = "frustrate_wasi_demo",
+    deps = APP_DEPS,
+)
+
+# Every `analysis_options.yaml` here, for the `dart_analyze` aspect `.bazelrc`
+# enables under `bazel test`.
+dart_analysis_options(
+    name = "analysis_options",
+    src = "analysis_options.yaml",
+)
+
+dart_analysis_config(
+    name = "analysis_config",
+    options = [":analysis_options"],
+)
+
+flutter_macos_app(
+    name = "app",
+    app_name = "Frustrate wasi Demo",
+    application = ":app_flutter",
+    bundle_id = "dev.frustrate.wasidemo",
+    minimum_os_version = "26.0",  # .bazelrc sets the toolchains to match
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+# ============================================================ the wasi bit ==
+#
+# THE LINE THIS EXAMPLE IS ABOUT. Everything else in this module is ordinary
+# Flutter-under-Bazel; this attribute is the whole platform choice.
+frustrate_wasm_module(
+    name = "wasi_rust.wasm",
+    crate = "//bridge:wasi_rust",
+    platform = "@frustrate//bazel:wasm32_wasi",
+)
+
+# The served glue. Same file on every platform — it carries frustrate's four
+# bridge imports AND the `wasi_snapshot_preview1` host, unconditionally, because
+# instantiation only looks up what a module declares. There is no wasi-specific
+# variant to select and no way to select the wrong one.
+frustrate_web_glue(
+    name = "frustrate.js",
+)
+
+flutter_web_app(
+    name = "app_web",
+    package_name = "frustrate_wasi_demo",
+    app_name = "Frustrate wasi Demo",
+    main = "lib/main.dart",
+    use_local_canvaskit = True,
+    # Tier 1 (the macro) rather than flutter_demo's hand-composed Tier 2: this
+    # app has no CSP substitution to inject, so the macro's own index.html
+    # discovery is exactly right and the extra targets would be noise.
+    extra_web_assets = [
+        ":wasi_rust.wasm",
+        ":frustrate.js",
+    ],
+    deps = [
+        "//bridge:wasi_bridge",
+        "@deps//:flutter",
+        "@rules_flutter//flutter:material_icons",
+    ],
+)
+
+# ================================================================= guards ==
+#
+# One build_test per platform this app ships. These are the guard the module's
+# two triple lists need: nothing checks that `extra_target_triples` and
+# `supported_platform_triples` agree, and a triple missing from the second does
+# not fail to fetch — the crate resolves to `//:incompatible` and vanishes as an
+# analysis-time skip. A per-platform build_test turns that into a red target.
+
+build_test(
+    name = "macos_app_build_test",
+    target_compatible_with = ["@platforms//os:macos"],
+    targets = [":app"],
+)
+
+# The web app compiles to wasm (dart2wasm) against the regenerated bridge
+# bindings, and the bridge itself compiles to wasm32-wasip1. NOTE: this demo is
+# a separate Bazel module, so it is NOT part of frustrate's `bazel test //...`;
+# run `bazel test //...` from this directory after any frustrate codegen change.
+build_test(
+    name = "web_app_build_test",
+    targets = [":app_web"],
+)
+
+# The wasm module on its own, so a break in the wasip1 half is attributable
+# without reading a dart2wasm failure. This is the target whose imports
+# frustrate's own //tests/bazel_rules:wasm_imports_test pins the shape of.
+build_test(
+    name = "wasm_module_build_test",
+    targets = [":wasi_rust.wasm"],
+)

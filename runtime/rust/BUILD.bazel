@@ -1,0 +1,178 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:rust_lld.bzl", "rust_lld_link_flags")
+
+# The link flags a patchable library needs, carried by the one dependency every
+# bridge crate has. A patch binds what it does not carry to the running image by
+# symbol, so the image has to hold every function its crates compiled — and an
+# archive member nothing referenced is never pulled in. These say "pull them
+# all", which the linkers spell differently, hence a target per linker and a
+# select() on the dependency: frustrate_hot_patchable's transition cannot see
+# the target platform, and a configuration with no C toolchain (a wasm build)
+# must not analyse a cc_library at all.
+#
+# `--build-id` is needed for a second reason: an ELF image without one has no
+# identity, and a patch refuses to load where it cannot tell the image it was
+# built for from another build.
+#
+# Depended on only when //bazel:hot_patch is set, which a -c dbg build through
+# frustrate_hot_patchable does and nothing else; a release link is untouched.
+cc_library(
+    name = "hot_patch_link_macho",
+    linkopts = ["-Wl,-all_load"],
+)
+
+cc_library(
+    name = "hot_patch_link_elf",
+    linkopts = [
+        "-Wl,--undefined-glob=*",
+        "-Wl,--build-id=sha1",
+    ],
+)
+
+# Linux links through whatever `-fuse-ld` Bazel's C toolchain chose, gold or
+# GNU ld, and neither has `--undefined-glob`; lld does. The lld comes from the
+# Rust toolchain, so the host needs none.
+rust_lld_link_flags(
+    name = "hot_patch_link_elf_rust_lld",
+    linkopts = [
+        "-Wl,--undefined-glob=*",
+        "-Wl,--build-id=sha1",
+    ],
+)
+
+rust_library(
+    name = "frustrate",
+    srcs = glob(["src/**/*.rs"]),
+    # The wasm-threads feature rides the platform:
+    # frustrate_wasm_module(platform = "//bazel:wasm32_threads") transitions to
+    # it, and this select is how the whole runtime follows. User bridge crates
+    # need nothing — this is the only place the feature exists under Bazel.
+    #
+    # :wasm_threads_feature_build, not :wasm_threads_build, and the two differ
+    # in exactly one configuration: frustrate_block_check's, which builds ON the
+    # threaded platform (it needs the +atomics std, or there is no wait
+    # instruction to find) with the feature OFF (so the artifact's only exports
+    # are the check roots and the only waits are ones a claimed body reaches).
+    # //bazel:BUILD.bazel states the split; production configurations are
+    # unchanged, since //bazel:block_check defaults False.
+    crate_features = select({
+        "//bazel:wasm_threads_feature_build": ["wasm-threads"],
+        "//conditions:default": [],
+    }),
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    # Enqueue-only Scheduler for a host that drives its own drains
+    # (//bazel:manual_scheduler, defaults off). On the crate's own rustc_flags
+    # rather than the global extra_rustc_flags setting, because it belongs to
+    # this crate's compilation and nothing else's — see the note at the top of
+    # frustrate_bridge in //bazel:defs.bzl.
+    rustc_flags = select({
+        "//bazel:manual_scheduler_build": ["--cfg=frustrate_manual_scheduler"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    deps = [
+        ":log",
+        "@crates//:async-task",
+        "@crates//:futures-sink",
+    ],
+    link_deps = select({
+        "//bazel:hot_patch_apple": [":hot_patch_link_macho"],
+        "//bazel:hot_patch_ios": [":hot_patch_link_macho"],
+        "//bazel:hot_patch_android": [":hot_patch_link_elf"],
+        "//bazel:hot_patch_linux": [":hot_patch_link_elf_rust_lld"],
+        "//conditions:default": [],
+    }) + select({
+        "@platforms//os:linux": [":unwinder"],
+        "//conditions:default": [],
+    }),
+)
+
+# The unwinder a Linux link takes — a build setting, like `log` below, because
+# the answer belongs to whoever chose the C toolchain. Rust's std for
+# `*-linux-gnu` takes `_Unwind_*` from `libgcc_s`. A toolchain that answers
+# `-lgcc_s` with an empty stub and supplies a static libunwind instead (the
+# `llvm` module's does) leaves a Rust shared library with those symbols
+# undefined, and it fails to load into a host that has no unwinder of its own,
+# the Dart VM among them. A module building with such a toolchain points this
+# flag at its libunwind, in its own `.bazelrc`:
+#
+#     common --@frustrate//runtime/rust:unwinder=//my/cc:libunwind
+#
+# The default links nothing, which is right for a toolchain whose `libgcc_s`
+# is real.
+label_flag(
+    name = "unwinder",
+    build_setting_default = ":no_unwinder",
+)
+
+cc_library(name = "no_unwinder")
+
+# Which `log` this runtime's `logging` module forwards — a build setting, not a
+# fixed dependency, because the answer belongs to whoever is building.
+#
+# `log`'s logger is a `static` inside whichever `log` rlib the `info!`/`warn!`
+# macros expanded against, and every `crate_universe` hub resolves a `log` of
+# its own: a different rlib, a different `static`. A dependent module's crates
+# — including the dependencies this whole facility exists to hear — link *their*
+# hub's. So there is exactly one wiring that delivers anything, and it is that
+# this runtime compile against the same rlib they did. A module that has a hub
+# points this flag at it, in its own `.bazelrc`:
+#
+#     common --@frustrate//runtime/rust:log=@my_crates//:log
+#
+# Deliberately not `//visibility:public`, and that is the loudness. A public
+# alias here would let a dependent crate name *frustrate's* `log`, which
+# compiles, matches this runtime's types, and drops every record its own
+# dependencies raise — the silent failure the charter forbids. With nothing to
+# name, a bridge crate must take `log` from its own hub, and then a missing (or
+# wrong) flag is rustc's E0308: "two different versions of crate `log` are being
+# used", naming both hubs' paths, at the `frustrate::logging::install` call.
+# Setting a build setting from the command line does not consult visibility, so
+# a dependent module can still steer it.
+#
+# The default is frustrate's own hub, which is what this repo's targets and the
+# cargo build both resolve.
+label_flag(
+    name = "log",
+    build_setting_default = "@crates//:log",
+    visibility = ["//visibility:private"],
+)
+
+rust_test(
+    name = "frustrate_test",
+    crate = ":frustrate",
+    edition = "2021",
+)
+
+# The same crate under the manual Scheduler, because a build flag that nothing
+# runs against is a claim rather than a feature. Two tests differ between the
+# configurations — the global seam is pool-driven in one and host-driven in the
+# other — and each is `#[cfg]`d to the build that can pass it.
+#
+# A `rust_test` cannot select its own `--cfg` independently of the crate it
+# tests, so this target carries the flag on the *test* compilation and takes
+# `crate = ":frustrate"`, which rules_rust compiles afresh with these flags
+# rather than reusing the rlib above.
+rust_test(
+    name = "frustrate_manual_scheduler_test",
+    crate = ":frustrate",
+    edition = "2021",
+    rustc_flags = ["--cfg=frustrate_manual_scheduler"],
+    target_compatible_with = select({
+        "@platforms//os:wasi": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
+
+# The pool's width is fixed once per process, so "a declaration made before the
+# pool exists is the width it is built at" is only observable in a process that
+# has not touched the pool — which the unit-test binary above has, from its own
+# pool tests. Hence a separate binary, here as under cargo (`tests/*.rs`).
+rust_test(
+    name = "declared_pool_width_test",
+    srcs = ["tests/declared_pool_width.rs"],
+    edition = "2021",
+    deps = [":frustrate"],
+)

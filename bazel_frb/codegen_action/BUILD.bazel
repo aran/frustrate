@@ -1,0 +1,149 @@
+"""The ladder: can `flutter_rust_bridge_codegen generate` be a Bazel action?
+
+Every target here is `manual`, because most of them are supposed to fail —
+`bazel test //...` must stay green. Run them one at a time, by label; each
+rung's declared output holds the codegen's own stdout/stderr. ../README.md
+names the decisive rung and the command that runs it.
+
+NO flags are baked in anywhere (there is no .bazelrc in this module, by repo
+rule). Every diagnostic flag appears on the command line.
+
+Each rung captures the codegen's own stdout/stderr into its declared output
+and then exits 0, so that a *failed* rung still leaves readable evidence
+instead of a Bazel action failure with truncated output. `grep -c 'Done!'`
+on the log is the pass/fail signal.
+"""
+
+load(":frb_codegen.bzl", "frb_codegen_rung")
+
+# ---------------------------------------------------------------------------
+# Rung 0: controls. Establish what Bazel's *default* local sandbox on this
+# machine actually denies, before FRB is in the picture at all.
+# ---------------------------------------------------------------------------
+
+# Does a sandboxed action have network? `--sandbox_default_allow_network`
+# defaults to true (`bazel help build`), so the expectation is yes — which
+# would make the widely repeated "Bazel's default sandbox has no network"
+# wrong as written.
+genrule(
+    name = "network_control",
+    outs = ["network_control.txt"],
+    cmd = "/usr/bin/curl -sS -o /dev/null -w 'HTTP %{http_code}\\n' " +
+          "https://index.crates.io/config.json > $@ 2>&1 || " +
+          "echo \"curl failed: $$?\" >> $@",
+    tags = ["manual"],
+)
+
+# The same action with network explicitly denied. This is the shape a
+# hermeticity-minded build (and remote execution) actually has.
+genrule(
+    name = "network_control_blocked",
+    outs = ["network_control_blocked.txt"],
+    cmd = "/usr/bin/curl -sS -o /dev/null -w 'HTTP %{http_code}\\n' " +
+          "https://index.crates.io/config.json > $@ 2>&1 || " +
+          "echo \"curl failed: $$?\" >> $@",
+    tags = [
+        "block-network",
+        "manual",
+    ],
+)
+
+# Is the host's cargo/rustc/FRB toolchain reachable from inside an action?
+genrule(
+    name = "env_control",
+    outs = ["env_control.txt"],
+    cmd = "{ echo '--- PATH ---'; echo \"$$PATH\"; " +
+          "echo '--- HOME ---'; echo \"$${HOME:-<unset>}\"; " +
+          "echo '--- CARGO_HOME ---'; echo \"$${CARGO_HOME:-<unset>}\"; " +
+          "echo '--- cargo ---'; command -v cargo || echo '<not on PATH>'; " +
+          "echo '--- rustc ---'; command -v rustc || echo '<not on PATH>'; " +
+          "echo '--- flutter_rust_bridge_codegen ---'; " +
+          "command -v flutter_rust_bridge_codegen || echo '<not on PATH>'; " +
+          "echo '--- dart ---'; command -v dart || echo '<not on PATH>'; " +
+          "} > $@ 2>&1",
+    tags = ["manual"],
+)
+
+# ---------------------------------------------------------------------------
+# Rungs 1-4: FRB's codegen, with progressively more of the hermeticity
+# constraint relaxed. See frb_codegen.bzl for the shared body.
+# ---------------------------------------------------------------------------
+
+# Rung 1: bare `flutter_rust_bridge_codegen generate`, nothing handed to it.
+frb_codegen_rung(
+    name = "codegen_naive",
+    prelude = "",
+)
+
+# Rung 2: the host toolchain by absolute path, plus HOME/CARGO_HOME/PATH.
+# The clean test of whether the *sandbox* is the obstacle once the scrubbed
+# environment is not. FRB_HOST_HOME comes in via --action_env (../README.md).
+frb_codegen_rung(
+    name = "codegen_host_env",
+    prelude = "host_env",
+)
+
+# Rung 2b: rung 2 with the network explicitly denied — the shape a remote
+# executor has. Answers "does FRB's codegen actually need the network, or
+# only a warm ~/.cargo?"
+frb_codegen_rung(
+    name = "codegen_host_env_blocked",
+    extra_tags = ["block-network"],
+    prelude = "host_env",
+)
+
+# Rung 2c: rung 2 with a COLD cargo registry (CARGO_HOME points at an empty
+# scratch dir). ~/.cargo is an undeclared input to rung 2; this is what the
+# action does on a machine that has not built this crate before.
+frb_codegen_rung(
+    name = "codegen_cold_cargo_home",
+    prelude = "empty_cargo_home",
+)
+
+# Rung 2d: cold registry AND no network. Neither undeclared input available.
+frb_codegen_rung(
+    name = "codegen_cold_cargo_home_blocked",
+    extra_tags = ["block-network"],
+    prelude = "empty_cargo_home",
+)
+
+# Rung 3: identical to rung 2, unsandboxed. If rung 2 fails and this passes,
+# the sandbox is the obstacle; if both fail identically, it is not.
+frb_codegen_rung(
+    name = "codegen_no_sandbox",
+    extra_tags = [
+        "local",
+        "no-sandbox",
+    ],
+    prelude = "host_env",
+)
+
+# Rung 4: the hermetic frontier. Rung 2 plus the crate's cargo dependencies
+# VENDORED into this package and declared as action inputs, a
+# .cargo/config.toml that replaces crates.io with them, and
+# CARGO_NET_OFFLINE=true. If this succeeds, "FRB's codegen structurally
+# cannot be a Bazel action" is refuted and becomes a claim about cost.
+# `vendor/` is produced by `cargo vendor` from the directory above; see the
+# note on it in ../.gitignore.
+frb_codegen_rung(
+    name = "codegen_offline_vendored",
+    extra_srcs = [":vendor_files"],
+    prelude = "offline_vendored",
+)
+
+# Rung 5: rung 4 with network explicitly denied, which is the shape remote
+# execution has. The real hermeticity question.
+frb_codegen_rung(
+    name = "codegen_offline_vendored_blocked",
+    extra_srcs = [":vendor_files"],
+    extra_tags = ["block-network"],
+    prelude = "offline_vendored",
+)
+
+filegroup(
+    name = "vendor_files",
+    srcs = glob(
+        ["vendor/**"],
+        allow_empty = True,
+    ) + ["vendor_config.toml"],
+)

@@ -1,0 +1,30 @@
+# The manifest exists to feed `crate.from_cargo` in ../MODULE.bazel — it
+# resolves the dependency graph and produces the lockfile. It is NOT buildable
+# by cargo: `frustrate` is a Bazel label and `frustrate_generated.rs` is a build
+# artifact. That is by design and not a gap — see `frustrate_bridge_library` in
+# @frustrate//bazel:defs.bzl, which says what a bridge crate can be tested by
+# instead. Build with
+# `bazel build //bridge:wasi_rust`.
+[package]
+name = "wasi_rust"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# The whole reason this example exists. `uuid`'s v4 constructor needs a CSPRNG,
+# which it reaches through `getrandom`; on wasm32-wasip1 that is the
+# `random_get` import frustrate's JS runtime supplies, and on
+# wasm32-unknown-unknown it does not compile at all.
+#
+# Note what is NOT here: uuid's `js` feature, which routes entropy through
+# wasm-bindgen instead. Taking it would make this crate fail to build for the
+# wasi target it exists to demonstrate.
+uuid = { version = "1", features = ["v4"] }
+
+# Not a member of frustrate's own cargo workspace: this manifest exists only
+# to resolve a dependency graph for crate_universe.
+[workspace]

@@ -1,0 +1,6 @@
+# The manifest for the wasm-bindgen CLI hub (//:MODULE.bazel's third
+# `crate.from_cargo`). Exists for crate_universe, not for cargo.
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])

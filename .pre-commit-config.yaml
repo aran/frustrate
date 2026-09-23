@@ -1,0 +1,12 @@
+# Hooks run with prek (https://github.com/j178/prek), which reads this
+# pre-commit format.
+# One `prek install` sets up both stages
+default_install_hook_types: [pre-commit, commit-msg]
+repos:
+  - repo: local
+    hooks:
+      - id: commit-message
+        name: commit message policy
+        entry: bazel run --ui_event_filters=-info --noshow_progress --show_result=0 //tools/changelog:check --
+        language: system
+        stages: [commit-msg]

@@ -1,0 +1,19 @@
+name: frustrate_integration
+description: Cross-language integration tests driving test_api over real FFI.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  ffi: ^2.1.0
+  bench_harness:
+    path: ../../tools/bench_harness
+  frustrate:
+    path: ../../runtime/dart
+  runfiles:
+    path: ../../../rules_dart/dart/runfiles
+
+dev_dependencies:
+  test: ^1.25.0

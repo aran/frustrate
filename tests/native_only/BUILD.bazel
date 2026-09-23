@@ -1,0 +1,67 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_wasm_module")
+
+# `#[bridge(native_only)]` means a member or type is absent from the web
+# Dart surface AND from the wasm module. The Dart half is asserted by codegen's
+# unit tests, which read the emitted string. The Rust half cannot be: "the
+# dispatch table no longer names `crate::api::platform_tag`" is not a substring
+# claim, it is a linking claim, and a gate applied to a glue fn but not to its
+# dispatch arm produces output that still contains the right text and does not
+# build.
+#
+# So the fence is a compile. `src/api.rs` gates its native-only items out for
+# wasm32 with `#[cfg]`, exactly as an app whose dependency does not build for
+# wasm would. Codegen never evaluates that cfg — it parses the file once and
+# emits both surfaces — so if the declaration did not reach the emitters, the
+# wasm module would name items that were configured out and the build would die
+# at `E0425` inside `frustrate_generated.rs`. That is the original failure this
+# attribute was added to prevent, and `:native_only_wasm_test` passing is the
+# statement that it is gone.
+#
+# The native build_test is the other half of the claim: the same file, with the
+# gates open, must still compile and still export everything. A fixture that
+# passed the wasm test by emitting nothing would fail here.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "native_only_fixture",
+    module_paths = ["crate::api"],
+)
+
+rust_shared_library(
+    name = "native_only_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    # The generated glue must be warning-free here too: a native-only member
+    # removes dispatch arms, which is precisely the shape that leaves a
+    # dispatch entry point's reader dead (see tests/lint_clean).
+    rustc_flags = ["-Dwarnings"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+# Everything present: the gates are open, so the native module carries the
+# native-only members, the type, and its drop/finalize exports.
+build_test(
+    name = "native_only_test",
+    targets = [":native_only_shared"],
+)
+
+# The decisive one. Nothing gated survives, so the module must reference none
+# of it. Default platform only (//bazel:wasm32): what is being fenced is which
+# items the emitters produced, which does not vary with the wasm std flavour.
+frustrate_wasm_module(
+    name = "native_only.wasm",
+    crate = ":native_only_shared",
+)
+
+build_test(
+    name = "native_only_wasm_test",
+    targets = [":native_only.wasm"],
+)

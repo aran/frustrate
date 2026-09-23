@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+# The unsatisfiable-import gate `frustrate_wasm_module` runs over every module
+# it builds *without* the wasm-bindgen post-pass. See main.rs for what it
+# decides and why it has no off switch.
+#
+# Zero dependencies, matching //bazel/wasm_std_check and
+# //codegen:frustrate_codegen_bin as exec tools: it reads one wasm section that
+# has been frozen since the MVP, so a crate would buy nothing and would drag the
+# @crates hub into every consumer's exec configuration.
+rust_binary(
+    name = "wasm_import_check",
+    srcs = ["main.rs"],
+    edition = "2021",
+    rustc_flags = ["-Dwarnings"],
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "wasm_import_check_test",
+    crate = ":wasm_import_check",
+    edition = "2021",
+)

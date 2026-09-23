@@ -1,0 +1,628 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@rules_dart//dart:defs.bzl", "dart_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_shared_library", "rust_test")
+load(
+    "//bazel:defs.bzl",
+    "frustrate_block_check",
+    "frustrate_bridge_library",
+    "frustrate_bridge_outputs",
+    "frustrate_wasm_module",
+    "frustrate_wasm_opt",
+)
+
+# Dedicated rule tests for the frustrate Bazel rules: before this package
+# the rules were proven only by `bazel test //...` happening to build the
+# real targets. These tests assert the rule
+# *contracts* directly, against a tiny self-contained bridge fixture so they
+# never depend on tests/test_api.
+#
+# v1 bar: build_test. Each rule's contract is "an action produces these
+# declared outputs" / "this transition makes the crate build under that
+# platform" — both of which a build_test proves by forcing the outputs to
+# build. The threads transition would ideally be asserted at analysis (no
+# toolchain needed), but its transition is private to //bazel:defs.bzl and
+# can't be probed without duplicating it or editing that shared file, so the
+# threaded case is a build_test gated on the local +atomics std (below).
+
+# The fixture: one #[bridge(sync)] fn. frustrate_bridge_outputs declares the
+# `:bridge` action plus the `:bridge.rs` / `:bridge.dart` output-group
+# filegroups.
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "rule_test_fixture",
+    module_paths = ["crate::api"],
+)
+
+# The bridge crate: checked-in src/ unified with the generated glue
+# (:bridge.rs = src/frustrate_generated.rs). frustrate_wasm_module transitions
+# `:fixture_shared` (the cdylib half) to a wasm platform.
+#
+# frustrate_bridge_library rather than a bare rust_shared_library, and that IS
+# the contract this package now also fences: it declares `:fixture_shared`
+# (cdylib, what ships) *and* `:fixture_shared_lib` (rlib, the same crate in the
+# one form another crate can link), so the crate has both ordinary Rust test
+# forms instead of unit tests only. `:fixture_integration_test` below is the
+# half that could not be written before.
+#
+# `crate_name` matches what frustrate_bridge_outputs was told above, so the
+# generated glue, the Dart bindings and the Rust crate all agree on one name —
+# and it is the name a test's `use` line spells.
+#
+# `-Dwarnings` carries a second contract on this same fixture, documented in
+# //tests/lint_clean: the generated file promises in its own header to be
+# lint-clean, and this crate is the shape that promise is hardest to keep —
+# sync-only and handle-free, so the emitted `frustrate::handle` and
+# `ContentionError` imports are unused and frustrate_call_async's reader is
+# dead. rustc_flags is per-target and never reaches deps, so this fences the
+# emitted glue (and this fixture's own two files), not the runtime. The macro
+# forwards it to both halves, so neither crate type can carry a warning the
+# other would have caught.
+#
+# `compile_data` is the declaration `frustrate_block_check` requires: the linker
+# it points `-Clinker=` at, which a transition cannot add as an action input.
+# rustc never opens the file.
+frustrate_bridge_library(
+    name = "fixture_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    compile_data = ["//bazel/wasm_block_check:link_export_filter.py"],
+    crate_name = "rule_test_fixture",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    rustc_flags = ["-Dwarnings"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+# Default frustrate_wasm_module: stable Rust, single-threaded — the charter's
+# default web path. Transitions the crate to the default platform,
+# //bazel:wasm32.
+frustrate_wasm_module(
+    name = "fixture.wasm",
+    crate = ":fixture_shared",
+)
+
+# The wasip1 platform: the same crate, built against a std that works.
+# Unlike the threaded fixture this needs no local
+# artifacts — rules_rust registers the wasip1 toolchain by default — so it
+# stays in the wildcard, and the platform's breakage is loud in
+# `bazel test //...` rather than discovered by an app.
+frustrate_wasm_module(
+    name = "fixture_wasi.wasm",
+    crate = ":fixture_shared",
+    platform = "//bazel:wasm32_wasi",
+)
+
+# The wasm-opt pass, integrated. Same crate and same platform as
+# :fixture.wasm above, so the pair is a controlled comparison: the only
+# difference is the optimizer, which is what makes `:wasm_opt_shrinks_the
+# _module` able to attribute a size change to it.
+frustrate_wasm_module(
+    name = "fixture_opt.wasm",
+    crate = ":fixture_shared",
+    wasm_opt = "@binaryen//:wasm-opt",
+)
+
+# The standalone spelling, over the module :fixture.wasm already produced —
+# the "take your generated wasm and optimize it" path from the rule's docs,
+# built here so that path cannot rot while the integrated one keeps working.
+frustrate_wasm_opt(
+    name = "fixture_standalone_opt.wasm",
+    module = ":fixture.wasm",
+    opt_level = "-Oz",
+    wasm_opt = "@binaryen//:wasm-opt",
+)
+
+# ------------------------------------------------------------ rule tests --
+
+# The wasm-opt contract, asserted rather than assumed: the optimized module
+# must be materially smaller than the same crate built without the pass.
+#
+# A build_test over :fixture_opt.wasm alone would not catch the failure that
+# matters. Dropping the `wasm_opt` attribute still builds, still passes every
+# other check here, and silently ships an unoptimized module — the pass is
+# invisible in the output's name, its path and its ABI (deliberately: the
+# exports and imports are identical by design, which is the property that makes
+# the pass safe and also the property that makes its absence undetectable).
+# Size is the only observable it has.
+#
+# The 5% floor is far below what the pass delivers on this fixture, and that is
+# the point: the test tracks "did the optimizer run", not "does this binaryen
+# release compress as well as the one before it". A new binaryen that shrinks
+# the module less is not a regression this package should report. The actual
+# pair is written to the output file rather than asserted against, so the live
+# numbers are readable without any figure being copied into the tree.
+genrule(
+    name = "wasm_opt_shrinks_the_module",
+    srcs = [
+        ":fixture.wasm",
+        ":fixture_opt.wasm",
+    ],
+    outs = ["wasm_opt_shrinks_the_module.txt"],
+    cmd = """
+raw=$$(wc -c < $(location :fixture.wasm))
+opt=$$(wc -c < $(location :fixture_opt.wasm))
+if [ "$$opt" -ge "$$raw" ] || [ $$(( (raw - opt) * 100 / raw )) -lt 5 ]; then
+  echo "wasm-opt did not shrink the module: $$raw B raw, $$opt B optimized." >&2
+  echo "Either the pass stopped running (check the wasm_opt attribute on" >&2
+  echo ":fixture_opt.wasm) or binaryen stopped optimizing this shape." >&2
+  exit 1
+fi
+echo "raw=$$raw opt=$$opt saved=$$(( (raw - opt) * 100 / raw ))%" > $@
+""",
+)
+
+build_test(
+    name = "wasm_opt_build_test",
+    targets = [
+        ":fixture_opt.wasm",
+        ":fixture_standalone_opt.wasm",
+        ":wasm_opt_shrinks_the_module",
+    ],
+)
+
+
+# frustrate_bridge_outputs contract: the FrustrateCodegen action runs over
+# the bridge source and its declared Rust-glue, Dart-bindings and interface-IR
+# output groups build. Regression net for the codegen wiring, the declared
+# output paths, and the output_group filegroups — no Rust compile involved.
+#
+# `.ir` is here because something outside this repo depends on it as a label:
+# a build tool pairs the interface JSON with the shared library so it can tell
+# a rebuilt library whose wire schema moved from one whose code merely
+# changed. Losing the label breaks that consumer silently, since
+# `--output_groups=ir` would still work.
+build_test(
+    name = "bridge_outputs_build_test",
+    targets = [
+        ":bridge.rs",
+        ":bridge.dart",
+        ":bridge.ir",
+    ],
+)
+
+# The fixture crate in the *native* configuration. Without this nothing builds
+# it unturned: every other target here reaches it through a wasm transition, so
+# the `-Dwarnings` fence above would hold only for wasm and a native-only
+# warning in the generated glue would go unnoticed. Both crate types, because
+# frustrate_bridge_library's whole premise is that they are the same crate
+# compiled twice — a warning only one of them provokes is exactly the drift the
+# macro claims cannot happen.
+build_test(
+    name = "fixture_native_build_test",
+    targets = [
+        ":fixture_shared",
+        ":fixture_shared_lib",
+    ],
+)
+
+# frustrate_bridge_library contract: a bridge crate has BOTH ordinary Rust test
+# forms, not just the one.
+#
+# `crate = ` is the form that always worked, and until the rlib existed it was
+# the only one — it recompiles the crate's sources under `--test`, and rules_rust
+# forbids it from carrying `srcs` of its own, so anything under `tests/` had to
+# be `#[path]`-smuggled into a module of the crate to run at all.
+# This target is here as the control: the
+# unit-test form must keep working against the rlib half.
+rust_test(
+    name = "fixture_unit_test",
+    crate = ":fixture_shared_lib",
+    edition = "2021",
+)
+
+# ...and the form that could not be declared at all before, because rustc cannot
+# `extern crate` a cdylib. `srcs` + `deps` — an ordinary Rust integration test,
+# compiled as its own crate, linking the bridge crate from outside.
+#
+# Proven by *linking and running*, not by asserting a rule attribute: the test
+# calls the crate's public API and then drives one bridge call through the
+# generated glue's exported C ABI, which is reachable from out here only as a
+# symbol (`mod frustrate_generated` is private). If the rlib half stopped being
+# declared, or stopped carrying the generated glue, or the exports stopped
+# surviving into a linked binary, this goes red.
+#
+# Verified red by hand at landing: pointing the dep at `:fixture_shared` — the
+# cdylib, i.e. what a bridge crate was before this macro — fails with
+# `error[E0433]: failed to resolve: use of unresolved module or unlinked crate
+# 'rule_test_fixture'`. rules_rust accepts a cdylib in `deps` (it carries
+# CcInfo) and simply never emits an `--extern` for it, because there is no rlib
+# to name — the old limitation, stated in rustc's own words.
+rust_test(
+    name = "fixture_integration_test",
+    srcs = ["tests/exported_abi.rs"],
+    edition = "2021",
+    deps = [
+        ":fixture_shared_lib",
+        "//runtime/rust:frustrate",
+    ],
+)
+
+# frustrate_wasm_module (default platform) contract: the crate builds
+# under the //bazel:wasm32 stable transition and the single-.wasm extraction
+# produces the module. This is the default web path — no nightly std needed,
+# so it runs in the default wildcard.
+build_test(
+    name = "wasm_module_build_test",
+    targets = [":fixture.wasm"],
+)
+
+# platform = //bazel:wasm32_wasi contract: the same crate builds for
+# wasm32-wasip1 and the single-.wasm extraction still produces the module —
+# i.e. the platform resolves a toolchain, the crate universe resolves the
+# triple (a triple missing from supported_platform_triples would surface here
+# as a missing .wasm), and the rule's platform attribute is wired to something
+# real. What
+# this does NOT assert is that the emitted wasi imports are the ones
+# frustrate's host implements; that needs the module loaded in a browser,
+# and lands with the wasi example.
+build_test(
+    name = "wasm_module_wasi_build_test",
+    targets = [":fixture_wasi.wasm"],
+)
+
+# The other half of that contract: the imports a built module declares are ones
+# the runtime actually supplies. A module's import list is emitted by rustc from
+# whatever std paths the crate graph reaches, so it moves on a dependency bump
+# with no source change — and on the wasi platform an unsupplied call
+# instantiates fine and throws later, inside a browser. The allowlist is read
+# out of the shim itself rather than restated here, so the two cannot drift.
+dart_test(
+    name = "wasm_imports_test",
+    data = [
+        ":fixture.wasm",
+        ":fixture_wasi.wasm",
+        "//runtime/dart:lib/src/js/frustrate.js",
+        "//toolchain/custom_std:tool/patch.dart",
+    ],
+    main = "wasm_imports_test.dart",
+    deps = [
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# platform = //bazel:wasm32_threads / the bazel/threads.bzl transition: that
+# platform selects the pinned-nightly + +atomics-std toolchain, and carries
+# the rules_rust channel on its own `flags` attribute. Asserting that cleanly
+# at analysis is blocked (the transition is private to //bazel:defs.bzl), so
+# the contract is proven by building — which needs the locally built +atomics
+# std in toolchain/custom_std/dist/ (run `bazel run
+# //toolchain/custom_std:build` first). Those artifacts are never checked in,
+# so both this module and its build_test are tagged manual and stay out of
+# the `bazel test //...` wildcard.
+frustrate_wasm_module(
+    name = "fixture_threaded.wasm",
+    crate = ":fixture_shared",
+    platform = "//bazel:wasm32_threads",
+    tags = ["manual"],
+)
+
+build_test(
+    name = "wasm_module_threads_build_test",
+    tags = ["manual"],
+    targets = [":fixture_threaded.wasm"],
+)
+
+# platform = //bazel:wasm32_custom: stock single-threaded wasm32, but linking a
+# std whose stubs have been replaced by host-backed implementations. Same
+# manual/never-checked-in reasoning as the
+# threaded fixture above -- the artifacts come from
+# `bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread`.
+#
+# What this proves that the threaded target cannot: that the three
+# wasm32-unknown-unknown toolchains are actually distinguishable. It requires
+# wasm_std_custom and wasm_threads *disabled*, a combination neither of the
+# other two platforms offers, so if constraint resolution were ambiguous this
+# would build against the wrong std and fail to link.
+frustrate_wasm_module(
+    name = "fixture_custom.wasm",
+    crate = ":fixture_shared",
+    platform = "//bazel:wasm32_custom",
+    tags = ["manual"],
+)
+
+build_test(
+    name = "wasm_module_custom_build_test",
+    tags = ["manual"],
+    targets = [":fixture_custom.wasm"],
+)
+
+# frustrate_block_check contract: the same crate again, under a transition that
+# keeps //bazel:wasm32_threads' +atomics std but turns frustrate's own
+# `wasm-threads` feature off (//bazel:block_check), builds a module whose only
+# exports are the `#[bridge(no_block)]` roots — and the scanner runs over it as
+# a validation action and passes. `src/api.rs`'s `add` carries the claim.
+#
+# In the wildcard, deliberately, unlike the threaded fixture above. It needs the
+# locally built +atomics std, so a machine that has never run
+# `bazel run //toolchain/custom_std:build` fails here — with that command in
+# the error. That is the trade: a loud, instructive failure on a fresh checkout
+# beats a `manual` tag that silently covers nothing on every checkout.
+#
+# What this cannot assert is the *red* direction, for the reason
+# `wasm_std_check_test` gives above: Bazel has no way to assert that an action
+# fails, so a target that genuinely fails cannot live in the wildcard. Unlike
+# the std check there is no `off` switch to build one anyway with — the rule's
+# whole surface is "prove the claims" — so the red path is demonstrated by hand
+# (put a `Mutex::lock` in `add`'s body and build this target) rather than
+# fenced. The scanner's own unit tests in //bazel/wasm_block_check cover the
+# decision procedure against hand-built modules.
+frustrate_block_check(
+    name = "fixture_block_check",
+    bridge = ":bridge",
+    crate = ":fixture_shared",
+)
+
+# Every half of the rule's contract, under one label: the caller-run claim
+# above, whose root reaches a whole body; the **dispatched** ones in
+# `async_fixture/`, whose bodies are settled by placement and whose roots hold
+# only what the caller is left running; and the **synchronous locked** one in
+# `locked_fixture/`, the only root that scans a lock guard's release. Each
+# subpackage says why it is a separate crate.
+#
+# Manual for the usual reason (the +atomics std is built locally and never
+# checked in), so "reached by the ordinary flow" means this one label builds
+# every block-check target there is — not that any of them joins the wildcard.
+build_test(
+    name = "block_check_build_test",
+    targets = [
+        ":fixture_block_check",
+        "//tests/bazel_rules/async_fixture:async_block_check",
+        "//tests/bazel_rules/locked_fixture:locked_block_check",
+    ],
+)
+
+# ----------------------------------------- the std-facility check's fence --
+
+# A crate that reaches SystemTime::now and println! (probe/probe.rs). Its whole
+# job is to be caught: the modules below carry `std_check = "off"` so they can
+# be built and handed to the scanner as data, and wasm_std_check_test asserts
+# what the scanner says about each.
+#
+# Why the modules are built with the check off rather than left to fail the
+# build: Bazel has no way to assert that an action fails, so a target that
+# genuinely fails cannot live in `bazel test //...`. Running the scanner from a
+# test over a built module asserts the same thing — the same binary, the same
+# bytes, the same verdict — and stays green. The wired-red path (`std_check` on
+# and the build failing with this message) is demonstrated by hand at landing
+# and recorded in the commit message.
+rust_shared_library(
+    name = "probe_shared",
+    srcs = ["probe/probe.rs"],
+    crate_root = "probe/probe.rs",
+    edition = "2021",
+)
+
+# The default platform: no wasi host, so both facilities are unserved and the
+# scanner must name both.
+frustrate_wasm_module(
+    name = "probe.wasm",
+    crate = ":probe_shared",
+    std_check = "off",
+)
+
+# The positive control, and the half that keeps the check honest: the very same
+# source on //bazel:wasm32_wasi, where std is served. This one is left with the
+# check ON, so if the import-keyed logic ever stopped recognising a served
+# platform, `bazel build //...` would go red here rather than in an app.
+frustrate_wasm_module(
+    name = "probe_wasi.wasm",
+    crate = ":probe_shared",
+    platform = "//bazel:wasm32_wasi",
+)
+
+# The same crate with its symbols stripped — the module the scanner must refuse
+# to judge. Without the sentinel check this builds a module the scan finds
+# nothing in, which is indistinguishable from a clean one.
+# The same crate under v0 symbol mangling. Today this exercises a *mixed*
+# module — std ships precompiled and stays legacy-mangled whatever the
+# consumer asks for, measured — so what it pins is that the scan is not
+# confused by the mixture. If a future Rust distribution ships a v0-mangled
+# std, this is the target that notices: the facilities must still be caught,
+# and a silent miss would be exactly the failure this tool exists to remove.
+rust_shared_library(
+    name = "probe_v0_shared",
+    srcs = ["probe/probe.rs"],
+    crate_root = "probe/probe.rs",
+    edition = "2021",
+    rustc_flags = ["-Csymbol-mangling-version=v0"],
+)
+
+frustrate_wasm_module(
+    name = "probe_v0.wasm",
+    crate = ":probe_v0_shared",
+    std_check = "off",
+)
+
+rust_shared_library(
+    name = "probe_stripped_shared",
+    srcs = ["probe/probe.rs"],
+    crate_root = "probe/probe.rs",
+    edition = "2021",
+    rustc_flags = ["-Cstrip=symbols"],
+)
+
+frustrate_wasm_module(
+    name = "probe_stripped.wasm",
+    crate = ":probe_stripped_shared",
+    std_check = "off",
+)
+
+# Runs the real scanner binary over the three real modules. The unit tests in
+# //bazel/wasm_std_check cover the decision logic against hand-built modules;
+# this covers the half they cannot — that a real rustc, at the optimization
+# level this repo builds at, still emits the symbols being looked for.
+dart_test(
+    name = "wasm_std_check_test",
+    data = [
+        ":probe.wasm",
+        ":probe_stripped.wasm",
+        ":probe_v0.wasm",
+        ":probe_wasi.wasm",
+        "//bazel/wasm_std_check",
+    ],
+    main = "wasm_std_check_test.dart",
+    deps = [
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+# ------------------------------------------- the wasm config_setting's fence --
+
+# //bazel:wasm_build must actually flip under frustrate_wasm_module's
+# transition — the whole point is that a consumer can select() on "am I being
+# built for wasm" without re-deriving the constraint frustrate already chose.
+#
+# Proven by compiling: the crate reads a `cfg` that only exists on one branch of
+# a select, and each target below asserts the branch it got. A setting that
+# never matched would leave `expect_wasm` undefined and fail to compile — which
+# is a better fence than asserting the select's *value*, because that can be
+# right for the wrong reason.
+rust_shared_library(
+    name = "select_probe_shared",
+    srcs = ["probe/select_probe.rs"],
+    crate_root = "probe/select_probe.rs",
+    edition = "2021",
+    rustc_flags = select({
+        "//bazel:wasm_build": ["--cfg=expect_wasm"],
+        "//conditions:default": ["--cfg=expect_native"],
+    }),
+)
+
+frustrate_wasm_module(
+    name = "select_probe.wasm",
+    crate = ":select_probe_shared",
+    std_check = "off",
+)
+
+build_test(
+    name = "wasm_config_setting_test",
+    targets = [
+        # Transitioned: the select must take the wasm branch.
+        ":select_probe.wasm",
+        # ...and untransitioned, the default branch. Without this half a
+        # setting that matched *everything* would pass.
+        ":select_probe_shared",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# A consumer platform's `flags` reach a *dependency*'s rustc.
+#
+# `frustrate_wasm_module`'s transition sets `--command_line_option:platforms`
+# and nothing else (bazel/defs.bzl), so everything else a build needs rides on
+# the platform() itself. `ext/getrandom` spends that on its
+# entropy recipe: getrandom's `custom` backend has to be selected by a `--cfg`
+# that lands on the getrandom crate in the wasm configuration and nowhere else,
+# because on native getrandom's own OS backend is the one you want.
+#
+# So this pins the mechanism `//ext/getrandom:wasm32` rests on, in both
+# directions — see probe/platform_flag_probe.rs for why the fence is on a
+# dependency — and then the chain that platform exists to complete.
+
+rust_library(
+    name = "flag_probe_dep_present",
+    # Reached only through the wasm module below: built bare by a
+    # `bazel test //...` wildcard, the fence would be judging a
+    # configuration it says nothing about.
+    tags = ["manual"],
+    srcs = ["probe/platform_flag_probe.rs"],
+    crate_name = "platform_flag_probe",
+    crate_root = "probe/platform_flag_probe.rs",
+    edition = "2021",
+    rustc_flags = ["--cfg=expect_flag"],
+)
+
+rust_library(
+    name = "flag_probe_dep_absent",
+    # Reached only through the wasm module below: built bare by a
+    # `bazel test //...` wildcard, the fence would be judging a
+    # configuration it says nothing about.
+    tags = ["manual"],
+    srcs = ["probe/platform_flag_probe.rs"],
+    crate_name = "platform_flag_probe",
+    crate_root = "probe/platform_flag_probe.rs",
+    edition = "2021",
+    rustc_flags = ["--cfg=expect_no_flag"],
+)
+
+rust_shared_library(
+    name = "flag_probe_present_shared",
+    # Reached only through the wasm module below: built bare by a
+    # `bazel test //...` wildcard, the fence would be judging a
+    # configuration it says nothing about.
+    tags = ["manual"],
+    srcs = ["probe/platform_flag_root.rs"],
+    crate_root = "probe/platform_flag_root.rs",
+    edition = "2021",
+    deps = [":flag_probe_dep_present"],
+)
+
+rust_shared_library(
+    name = "flag_probe_absent_shared",
+    # Reached only through the wasm module below: built bare by a
+    # `bazel test //...` wildcard, the fence would be judging a
+    # configuration it says nothing about.
+    tags = ["manual"],
+    srcs = ["probe/platform_flag_root.rs"],
+    crate_root = "probe/platform_flag_root.rs",
+    edition = "2021",
+    deps = [":flag_probe_dep_absent"],
+)
+
+frustrate_wasm_module(
+    name = "flag_probe_present.wasm",
+    crate = ":flag_probe_present_shared",
+    platform = "//ext/getrandom:wasm32",
+    std_check = "off",
+)
+
+frustrate_wasm_module(
+    name = "flag_probe_absent.wasm",
+    crate = ":flag_probe_absent_shared",
+    std_check = "off",
+)
+
+build_test(
+    name = "wasm_platform_flag_test",
+    targets = [
+        # The flag reaches a dep under the platform that declares it...
+        ":flag_probe_present.wasm",
+        # ...and does not reach the stock platform. Without this half, a
+        # setting that applied everywhere would pass.
+        ":flag_probe_absent.wasm",
+    ],
+)
+
+rust_shared_library(
+    name = "getrandom_probe_shared",
+    srcs = ["probe/getrandom_probe.rs"],
+    crate_root = "probe/getrandom_probe.rs",
+    edition = "2021",
+    # Built only under the platform below, where getrandom has a backend.
+    tags = ["manual"],
+    deps = [
+        "//ext/getrandom:frustrate_getrandom",
+        "@crates//:getrandom",
+    ],
+)
+
+frustrate_wasm_module(
+    name = "getrandom_probe.wasm",
+    crate = ":getrandom_probe_shared",
+    platform = "//ext/getrandom:wasm32",
+    # `getrandom::fill` is reached from a symbol nothing calls, so the module
+    # carries no clock or stdio; the facility check has nothing to say and its
+    # sibling `wasm_std_check_test` is what covers the check itself.
+    std_check = "off",
+)
+
+build_test(
+    name = "ext_getrandom_test",
+    targets = [":getrandom_probe.wasm"],
+)

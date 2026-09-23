@@ -1,0 +1,11 @@
+name: bench_harness
+description: >-
+  The measurement harness shared by every benchmark in this repo: calibrated
+  iteration counts, warmup, the Cell record and the table renderer. Pure
+  dart:core — no FFI, no bridge, nothing platform-specific — so the same code
+  runs in a VM driver and inside a browser page.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0

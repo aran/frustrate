@@ -1,0 +1,22 @@
+load("@rules_dart//dart:defs.bzl", "dart_library")
+
+# The measurement harness, shared by //tests/dart_integration's native and web
+# benches.
+#
+# It is a PACKAGE rather than a file listed in each consumer's `srcs` because
+# the file-listing arrangement is what let it drift: `tool/bench_core.dart`
+# said in its own comment that it existed "so the in-page web bench can share
+# it verbatim rather than growing a second copy", and a byte-identical second
+# copy grew anyway in another pub package, because a `srcs` entry cannot reach
+# across a package boundary. A package dependency can, and cannot be satisfied
+# by copying.
+#
+# No deps, and that is a property worth keeping: the harness is pure dart:core,
+# which is what lets the same source run in a VM driver and inside a browser
+# page under dart2wasm.
+dart_library(
+    name = "bench_harness",
+    srcs = glob(["lib/**/*.dart"]),
+    package_name = "bench_harness",
+    visibility = ["//visibility:public"],
+)

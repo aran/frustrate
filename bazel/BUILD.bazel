@@ -1,0 +1,294 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+
+# frustrate_wasm_module's default platform. Stable Rust, single-threaded
+# wasm — the charter's default web execution model. Needs no `flags`: the
+# rules_rust channel already defaults to stable.
+platform(
+    name = "wasm32",
+    constraint_values = [
+        "@platforms//cpu:wasm32",
+        "@platforms//os:none",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Threaded wasm is a distinct target platform, expressed as a
+# frustrate-owned constraint. Default disabled: the plain :wasm32 platform
+# can never match the threaded toolchain, so the default single-threaded
+# build stays byte-identical.
+constraint_setting(
+    name = "wasm_threads",
+    default_constraint_value = ":wasm_threads_disabled",
+)
+
+constraint_value(
+    name = "wasm_threads_disabled",
+    constraint_setting = ":wasm_threads",
+    visibility = ["//visibility:public"],
+)
+
+constraint_value(
+    name = "wasm_threads_enabled",
+    constraint_setting = ":wasm_threads",
+    visibility = ["//visibility:public"],
+)
+
+# Threaded wasm: nightly Rust + a locally built +atomics std
+# (toolchain/custom_std), real pool worker threads on one shared memory. Pass
+# it as frustrate_wasm_module(platform = "//bazel:wasm32_threads").
+#
+# The channel rides here rather than in the rule's transition, so the rule
+# holds no platform table and a consumer's own platform() can carry whatever
+# settings it needs. `flags` propagates into exec configurations too, which
+# is the load-bearing part: the pinned nightly HOST toolchain builds the
+# proc-macros, because a stable-built proc-macro dylib cannot be loaded by
+# nightly rustc.
+platform(
+    name = "wasm32_threads",
+    constraint_values = [
+        "@platforms//cpu:wasm32",
+        "@platforms//os:none",
+        ":wasm_threads_enabled",
+        # +atomics std is a *built* std, so this platform has always been a
+        # custom-std one; saying so is what lets the stock toolchain be
+        # excluded by constraint rather than by channel alone.
+        ":wasm_std_custom",
+    ],
+    flags = ["--@rules_rust//rust/toolchain/channel=nightly"],
+    visibility = ["//visibility:public"],
+)
+
+# Stock wasm32 plus a locally built std whose stubs have been replaced by
+# implementations that ask the host: a clock, entropy, console stdio,
+# available_parallelism and sleep.
+#
+# Single-threaded, so it keeps everything the default platform has -- module
+# size, no shared memory, no COOP/COEP requirement -- and adds the std
+# facilities. It costs a local build step and the pinned nightly.
+#
+# The nightly channel flag is not optional: rustc rejects an rlib built by a
+# different compiler (E0514), so the std and the app must share one, and the
+# flag propagates into exec configurations so proc-macros are nightly-built
+# too.
+platform(
+    name = "wasm32_custom",
+    constraint_values = [
+        "@platforms//cpu:wasm32",
+        "@platforms//os:none",
+        ":wasm_std_custom",
+    ],
+    flags = ["--@rules_rust//rust/toolchain/channel=nightly"],
+    visibility = ["//visibility:public"],
+)
+
+# For select()s that must react to which std a wasm platform links (e.g.
+# :wasm_facility_std_build below, the one platform whose std has a clock and
+# entropy behind it).
+# frustrate-owned constraint: which std a wasm platform links. Default
+# `stock` so the plain :wasm32 platform -- and any platform() a consumer
+# declares without thinking about this -- keeps the downloaded stable std and
+# never reaches a locally built one. `custom` selects a toolchain from
+# //bazel:custom_std.bzl, which requires artifacts that may not be staged.
+#
+# This exists so all three toolchains for wasm32-unknown-unknown are mutually
+# exclusive on constraints alone: stock is channel-gated to stable, threads
+# needs wasm_threads_enabled, custom needs wasm_threads_disabled. Registration
+# order then decides nothing, which matters because the three differ in
+# extra_rustc_flags and the wrong pick is a link error far from its cause.
+constraint_setting(
+    name = "wasm_std",
+    default_constraint_value = ":wasm_std_stock",
+    visibility = ["//visibility:public"],
+)
+
+constraint_value(
+    name = "wasm_std_stock",
+    constraint_setting = ":wasm_std",
+    visibility = ["//visibility:public"],
+)
+
+constraint_value(
+    name = "wasm_std_custom",
+    constraint_setting = ":wasm_std",
+    visibility = ["//visibility:public"],
+)
+
+# For a dependency or feature that differs when the std is the *facility* one:
+# a clock, entropy, console stdio, available_parallelism and sleep, all backed
+# by host calls. Composes with :wasm_build and :wasm_threads_build the same way.
+#
+# **Both constraints are load-bearing, and `wasm_std_custom` alone would be a
+# trap.** :wasm32_threads is also a custom-std platform -- its +atomics std is
+# built the same way -- but the flavour it links is `atomics`, which replaces no
+# stubs at all. A select keyed on `wasm_std_custom` alone therefore fires on the
+# threaded build and tells it the facilities are present, and the failure lands
+# far away: the code takes its real arm and `Instant::now()` panics inside std,
+# at runtime, in a Worker. Pinning threads *off* makes this match exactly the
+# one platform whose std actually has the facilities.
+config_setting(
+    name = "wasm_facility_std_build",
+    constraint_values = [
+        ":wasm_std_custom",
+        ":wasm_threads_disabled",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# "is this the threaded platform" — a pure constraint question, and the one a
+# consumer's own select() usually wants. frustrate's own two selects moved off
+# it to :wasm_threads_feature_build below, which asks the *other* question
+# ("is frustrate's threaded runtime compiled in"); the two differ only in the
+# block-check configuration. Kept public and unchanged: a consumer whose
+# dependency differs because the target is +atomics is asking this one.
+config_setting(
+    name = "wasm_threads_build",
+    constraint_values = [":wasm_threads_enabled"],
+    visibility = ["//visibility:public"],
+)
+
+# Set only under frustrate_block_check's transition (//bazel:defs.bzl): this
+# build is the throwaway `--cfg frustrate_block_check` artifact whose only
+# exports are the `#[bridge(no_block)]` check roots, never something that ships.
+#
+# It exists for exactly one select — :wasm_threads_feature_build below — and
+# defaults False, so every production configuration is the configuration it was
+# before this flag existed. Nothing else should read it: it is not a "diagnostic
+# build" knob in general, and a second reader would make it one.
+# Whether this configuration builds a library that can take patches
+# (bazel/hot_patch.bzl sets it for a -c dbg build through
+# frustrate_hot_patchable). What it selects is //runtime/rust's hot patch link
+# flags, which differ per object format and so cannot ride the transition.
+bool_flag(
+    name = "hot_patch",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "hot_patch_apple",
+    constraint_values = ["@platforms//os:macos"],
+    flag_values = {":hot_patch": "True"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "hot_patch_ios",
+    constraint_values = ["@platforms//os:ios"],
+    flag_values = {":hot_patch": "True"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "hot_patch_android",
+    constraint_values = ["@platforms//os:android"],
+    flag_values = {":hot_patch": "True"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "hot_patch_linux",
+    constraint_values = ["@platforms//os:linux"],
+    flag_values = {":hot_patch": "True"},
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
+    name = "block_check",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+# Build the runtime with an enqueue-only Scheduler, so a host owns when Rust
+# tasks poll (`--cfg frustrate_manual_scheduler`; executor.rs, `arrange_drain`).
+# For a test harness that needs a seeded run to replay exactly: with the pool
+# out of the loop, the interleaving of Rust tasks against host events is the
+# harness's to choose rather than the OS scheduler's.
+#
+# Defaults False, and the arm it selects is `#[cfg]`-gated rather than branched
+# at runtime, so a production build does not contain it — `arrange_drain` runs
+# on every spawn and every wake, and this repo does not pay for a test
+# affordance on that path. Native-only: a wasm build carrying the cfg is a
+# compile error, because on web the host already drives the drain.
+bool_flag(
+    name = "manual_scheduler",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "manual_scheduler_build",
+    flag_values = {":manual_scheduler": "True"},
+    visibility = ["//visibility:public"],
+)
+
+# "frustrate's `wasm-threads` cargo feature is on" — which is *not* the same
+# question as :wasm_threads_build above, and the difference is the whole reason
+# the block-check flow needs no platform of its own.
+#
+# A block-check artifact must be built on //bazel:wasm32_threads, because only
+# that platform resolves the +atomics std whose `Mutex`/`Once`/`park` lower to
+# the `memory.atomic.wait32` this is all looking for. So it carries
+# :wasm_threads_enabled, and :wasm_threads_build matches it.
+#
+# But it must *not* get frustrate's threaded pool/executor/allocator: with the
+# feature off, `pool::spawn_call` is the inline implementation and `mod threaded`
+# emits no exports, so the artifact's export whitelist stays exactly the check
+# roots and the only wait sites left are ones a claimed body genuinely reaches
+# (bazel/wasm_block_check/main.rs). That is the split: +atomics from the
+# platform, feature from the flag.
+#
+# Keying the runtime's feature select here rather than on :wasm_threads_build
+# alone is what makes a *second* threaded platform unnecessary — and a second
+# `threads = "enabled"` custom_std flavour would be constraint-ambiguous
+# (custom_std.bzl's _FLAVOURS comment), so there is no other shape available.
+config_setting(
+    name = "wasm_threads_feature_build",
+    constraint_values = [":wasm_threads_enabled"],
+    flag_values = {":block_check": "False"},
+    visibility = ["//visibility:public"],
+)
+
+# For select()s that must react to "is this the wasm transition at all",
+# whichever wasm platform it is.
+#
+# A bridge crate whose dependencies differ under the transition had to re-derive
+# this from @platforms//cpu:wasm32 itself — a constraint frustrate already
+# chose, restated in every consumer that needed it, with a mistake looking like
+# a crate that resolves to //:incompatible rather than an error. The threaded
+# variant has had :wasm_threads_build since it existed; this is the plain case
+# it was missing.
+#
+# Matches every wasm platform frustrate ships (:wasm32, :wasm32_wasi,
+# :wasm32_threads) and any a consumer declares, because it keys on the cpu
+# constraint alone — the same open-vocabulary reasoning that keeps
+# frustrate_wasm_module free of a platform table. For "which wasm", compose:
+# :wasm_build plus :wasm_threads_build is the threaded one.
+config_setting(
+    name = "wasm_build",
+    constraint_values = ["@platforms//cpu:wasm32"],
+    visibility = ["//visibility:public"],
+)
+
+# wasm32-wasip1: a std that works. SystemTime/Instant, getrandom (hence
+# rand/uuid/ahash) and println! all function, because std reaches them
+# through `wasi_snapshot_preview1` imports the frustrate runtime supplies
+# itself (runtime/dart/lib/src/js/frustrate.js). On the default :wasm32
+# platform those are a link error or an abort.
+#
+# The constraint set is rules_rust's, from its triple_mappings.bzl; the
+# toolchain needs no MODULE.bazel change, since rules_rust registers wasip1
+# by default alongside wasm32-unknown-unknown.
+#
+# wasm-bindgen cannot compile for a wasi target ("`wasm_js` backend can be
+# enabled only for OS-less WASM targets"), so choosing this platform makes
+# the charter's no-wasm-bindgen rule a compile error rather than a policy —
+# and forecloses web-sys, which is the trade.
+platform(
+    name = "wasm32_wasi",
+    constraint_values = [
+        "@platforms//cpu:wasm32",
+        "@platforms//os:wasi",
+        "@rules_rust//rust/platform:wasi_preview_1",
+    ],
+    visibility = ["//visibility:public"],
+)

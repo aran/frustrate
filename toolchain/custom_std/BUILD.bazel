@@ -1,0 +1,31 @@
+load("@rules_dart//dart:defs.bzl", "dart_binary", "dart_test")
+
+# The custom-std builder. The module extension in bazel/custom_std.bzl reads
+# the pin and flags; `bazel run :build` builds the std into the gitignored
+# dist/. It runs only when asked, never as part of a build.
+dart_binary(
+    name = "build",
+    main = "tool/build.dart",
+    srcs = ["tool/patch.dart"],
+)
+
+exports_files([
+    "nightly-pin.txt",
+    "rustflags.txt",
+    # The facility table is the authority on what host imports a std built
+    # here will require. //tests/bazel_rules:wasm_imports_test reads it to
+    # check the glue serves every one of them.
+    "tool/patch.dart",
+])
+
+# The patcher is the one part of the builder that is hermetic: it rewrites a
+# rust-src tree and needs no toolchain, no network and no browser, so it is a
+# real `bazel test` rather than a manual run. It is also where std source drift
+# lands, which is exactly the failure worth having a fast test for.
+dart_test(
+    name = "patch_test",
+    size = "small",
+    main = "tool/patch_test.dart",
+    srcs = ["tool/patch.dart"],
+    deps = ["@pub_deps//:test"],
+)

@@ -1,0 +1,81 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs")
+
+# The dispatched half of frustrate_block_check's contract: two
+# `#[bridge(no_block)]` `async fn`s whose bodies are settled by *placement*, one
+# with a caller-side residue and one without — so this package's census carries
+# both `placement-dispatch` and `artifact-residue`, and its root set is neither
+# empty nor a body. The parent package's `:fixture_block_check` proves the
+# caller-run half, where a root reaches a whole body. src/api.rs has why this is
+# a crate of its own rather than one more member in //tests/bazel_rules.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "async_claim_fixture",
+    module_paths = ["crate::api"],
+)
+
+# Not tagged manual, and that is the point of splitting the crate from the check:
+# a native compile needs nothing staged locally, so `bazel build //...` keeps
+# this fixture and its generated glue compiling without pulling the +atomics
+# check target in behind it.
+#
+# No `-Dwarnings` here, unlike the two lint fixtures. An async-only bridge is a
+# third emitted shape (`frustrate_call_sync`'s reader dead, the async one live)
+# and it is warning-free — measured — but fencing that here would declare
+# //tests/lint_clean's contract in the wrong package. If the shape is worth a
+# fence it belongs beside the other two.
+#
+# `compile_data` is the declaration `frustrate_block_check` requires: the linker
+# it points `-Clinker=` at, which a transition cannot add as an action input.
+# rustc never opens the file.
+rust_shared_library(
+    name = "async_fixture_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    compile_data = ["//bazel/wasm_block_check:link_export_filter.py"],
+    # Spelled the same as frustrate_bridge_outputs was told above: it is the name
+    # the block check's witness chain prints.
+    crate_name = "async_claim_fixture",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+# The gate. In the wildcard: it needs the locally built atomics std (`bazel run
+# //toolchain/custom_std:build` first), and a machine without one fails
+# here with that command in the error rather than passing over an unchecked
+# claim.
+#
+# Reached by the ordinary flow through the parent package's
+# `:block_check_build_test`, which names it alongside the sync fixture — one
+# label for "prove the block-check surface", rather than a second one anybody
+# has to discover. Hence the visibility.
+#
+# The red direction cannot be a Bazel target (Bazel has no way to assert an
+# action fails), so it is demonstrated by hand. Take a `static RwLock`'s write
+# inside `PlanMsg::from_bytes` and build this target; the scan reports
+#
+#   from a claimed root:
+#     frustrate_check_block_1_stamp
+#       async_claim_fixture::api::PlanMsg::from_bytes
+#         std::sync::poison::rwlock::RwLock::write::async_claim_fixture
+#           std::sys::sync::rwlock::futex::RwLock::write_contended
+#
+# ...against `write_contended — memory.atomic.wait32` as the wait site.
+#
+# The positive control is the other member: put the same `RwLock` write in
+# `tick`'s body and this target stays **green**, because a dispatched body is
+# settled by placement and no root reaches it. That pair — user code on the
+# caller is scanned, the body is not — is the whole assertion of this package,
+# and either half alone would pass a rule that had collapsed into the other.
+frustrate_block_check(
+    name = "async_block_check",
+    bridge = ":bridge",
+    crate = ":async_fixture_shared",
+    visibility = ["//tests/bazel_rules:__pkg__"],
+)

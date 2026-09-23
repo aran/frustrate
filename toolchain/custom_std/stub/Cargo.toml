@@ -1,0 +1,12 @@
+# An intentionally empty crate whose only job is to make
+# `cargo -Zbuild-std` compile std for wasm32 +atomics; tool/build.dart
+# harvests the std rlibs from its deps dir and stages them for the Bazel
+# toolchain (bazel/threads.bzl).
+[package]
+name = "custom-std-stub"
+version = "0.0.0"
+edition = "2021"
+
+# Detached from the repo's cargo workspace: this crate is only ever built
+# by tool/build.dart with the pinned nightly, never by the workspace build.
+[workspace]

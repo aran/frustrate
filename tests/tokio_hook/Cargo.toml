@@ -1,0 +1,42 @@
+# The async-runtime hook (`frustrate::runtime::register`) against a REAL tokio.
+#
+# Deliberately its own workspace, excluded from the repo root's — the same
+# stance `bazel_frb/` takes, and for a sharper reason. tokio must not enter the
+# root `Cargo.lock`, because that lockfile is what `crate.from_cargo` resolves
+# the crate_universe hub from (//MODULE.bazel), across eleven triples including
+# wasm32 and four mobile ones. runtime/rust/src/testing.rs records the measured
+# cost of the shortcut this avoids: one line in `[dev-dependencies]` took a
+# lockfile from 379 to 427 packages, into the manifest that produces an iPhone
+# dylib. A dev-dependency is not separable there.
+#
+# So `frustrate` itself is tested with a hand-rolled reactor (runtime.rs's unit
+# tests, which cover the whole contract with no deps at all), and this
+# workspace covers the one thing that cannot: that the recipe `register`'s
+# rustdoc gives an
+# app — `move |poll| { let _guard = handle.enter(); poll.run(); }` — actually makes
+# tokio's reactor drive a leaf on frustrate's executor.
+#
+# It is not in `bazel test //...` (nothing here has a BUILD file, and it must
+# not join the hub). Run it directly:
+#
+#     (cd tests/tokio_hook && cargo test)
+[workspace]
+
+[package]
+name = "tokio_hook"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+frustrate = { path = "../../runtime/rust" }
+
+[dev-dependencies]
+# The same task primitive `frustrate::executor` is built on. The gate tests
+# need it directly because they must be a cooperative executor that is
+# *not* frustrate's, reduced to the property under test.
+async-task = "4.7.1"
+# `rt-multi-thread` is load-bearing, not a preference: a `new_current_thread`
+# runtime that nobody is `block_on`-ing has a timer wheel nothing turns, which
+# is the silent-stall hazard `current_thread_handle_never_fires` pins.
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }

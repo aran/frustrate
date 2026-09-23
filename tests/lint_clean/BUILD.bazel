@@ -1,0 +1,78 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_wasm_module")
+
+# The generated Rust glue promises, in its own header, to be lint-clean:
+#
+#   // This file is included into a module; item-level allow attributes keep
+#   // it lint-clean without an inner attribute (which include! forbids).
+#
+# That promise is load-bearing. The file is a build artifact the app cannot
+# edit, `include!` forbids the inner attribute that would blanket it, and a
+# crate-level `-Aunused` would swallow the app's own warnings too — so a
+# single warning out of this file costs a frustrate app `-D warnings` in CI
+# outright. Nothing asserted the promise until this package: the warnings were
+# found by an app developer reading their first build's output.
+#
+# The fence is `rustc_flags` on the fixture crates, never a .bazelrc entry: a
+# committed non-default flag would make every local build diverge from what
+# Bazel ships, and the property is meant to be held by the emitted code being
+# genuinely warning-free, not by how anyone invokes the build.
+#
+# Two shapes are needed, and they are complementary rather than redundant:
+#
+#   * sync-only, no opaque types — //tests/bazel_rules:fixture_shared, fenced
+#     in place. This is anyone's first bridge, and the shape whose emitted
+#     `use frustrate::handle;` / `ContentionError` are unused.
+#   * actor-only — here. Both dispatch entry points' `ByteReader` is dead on
+#     native; on wasm the async one comes alive because the actor arms are
+#     `#[cfg(target_family = "wasm")]`. One emitted file, opposite liveness by
+#     target, which is why the emitted `#[allow]` is unconditional: anything
+#     that reasoned about the interface shape at codegen time would be right
+#     on one target and wrong on the other.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "lint_actor_fixture",
+    module_paths = ["crate::api"],
+)
+
+# `-Dwarnings` is the whole point of the target: any warning out of the
+# generated glue (or out of this fixture's own two files) fails the build.
+# rustc_flags is per-target and never reaches deps, so this fences the emitted
+# file and nothing else.
+rust_shared_library(
+    name = "actor_only_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    rustc_flags = ["-Dwarnings"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+# The native half: actor calls route through frustrate_actor_call, so
+# frustrate_call_async's match is empty here and its reader is dead.
+build_test(
+    name = "actor_only_lint_test",
+    targets = [":actor_only_shared"],
+)
+
+# The wasm half, from the same emitted file: the actor arms are compiled in,
+# so frustrate_call_async's reader is live while frustrate_call_sync's is
+# still dead. Default platform only (//bazel:wasm32) — the wasi and threaded
+# platforms differ in std, not in which dispatch arms exist, so they would
+# re-assert the same fact at the cost of another build.
+frustrate_wasm_module(
+    name = "actor_only.wasm",
+    crate = ":actor_only_shared",
+)
+
+build_test(
+    name = "actor_only_wasm_lint_test",
+    targets = [":actor_only.wasm"],
+)

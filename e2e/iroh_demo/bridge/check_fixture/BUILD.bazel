@@ -1,0 +1,99 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@frustrate//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+
+# The `#[bridge(no_block)]` gate over the iroh crate graph. src/api.rs says why
+# the claim lives in a crate of its own. Nothing here ships.
+
+frustrate_bridge_outputs(
+    name = "codegen",
+    srcs = ["src/api.rs"],
+    crate_name = "iroh_check_fixture",
+    module_paths = ["crate::api"],
+)
+
+# The wasm dependency set `//bridge` uses on web. That is what this fixture is
+# for: the link carries wasm-bindgen's exports out of dependency rlibs, and the
+# check configuration's linker is what cuts them back to the roots. Measured
+# here by dropping `-Clinker=` from the rule's transition and rebuilding: 1385
+# function exports and 6141 code-section functions, against 2 and 825 with it.
+# The 2 are the check root and `__wasm_init_tls`.
+#
+# `manual`, unlike frustrate's own check fixtures: a host build would drag the
+# native iroh graph in to prove nothing. It is reached only through
+# `frustrate_block_check`'s transition, which builds it for
+# `@frustrate//bazel:wasm32_threads`.
+#
+# `compile_data` is the declaration that rule requires — the linker it points
+# `-Clinker=` at, which a transition cannot add as an action input. rustc never
+# opens the file.
+rust_shared_library(
+    name = "check_fixture",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":codegen.rs",
+    ],
+    compile_data = ["@frustrate//bazel/wasm_block_check:link_export_filter.py"],
+    edition = "2021",
+    proc_macro_deps = ["@frustrate//macros:frustrate_macros"],
+    tags = ["manual"],
+    deps = [
+        "@frustrate//runtime/rust:frustrate",
+        "@iroh_crates//:iroh",
+        "@iroh_crates//:iroh-tickets",
+        "@iroh_crates//:js-sys",
+        "@iroh_crates//:tokio",
+        "@iroh_crates//:wasm-bindgen-futures",
+    ],
+)
+
+# In the wildcard, on the same trade `@frustrate//tests/bazel_rules` takes: it
+# needs the locally built +atomics std, so a machine that has never run
+# `bazel run //toolchain/custom_std:build` fails here with that command in
+# the error rather than skipping a gate. It also needs the getrandom annotation
+# in //:MODULE.bazel, without which the graph fails to build under `+atomics`
+# with an E0433 naming neither frustrate nor this package.
+#
+# The red direction cannot be a Bazel target — Bazel has no way to assert that
+# an action fails — so it is run by hand, and iroh supplies it. Give the claimed
+# member the body
+#
+#     use iroh_tickets::endpoint::EndpointTicket;
+#     use std::str::FromStr;
+#     match EndpointTicket::from_str(&ticket) {
+#         Ok(t) => t.endpoint_addr().id.to_string(),
+#         Err(_) => String::new(),
+#     }
+#
+# and the scan reports
+#
+#   frustrate_check_block_0_… → api::… → EndpointTicket::from_str
+#     → Ticket::decode_string → n0_error::meta::Meta::default
+#       → n0_error::meta::backtrace_enabled
+#         → OnceLock::get_or_init → Once::call_once_force
+#           → std::sys::sync::once::futex::Once::call — memory.atomic.wait32
+#
+# That is a finding rather than a prop: any fallible iroh call can build an
+# `n0_error` error, whose `Meta` asks a `OnceLock` whether backtraces are
+# enabled, and `Once::call` waits when another thread is already initialising
+# it. On threaded wasm that traps on the browser's main thread. So a `no_block`
+# claim over this graph holds only on an infallible path — if the claim is
+# `#[bridge(sync)]`, whose body runs in the entry frame on whichever thread
+# called it.
+#
+# The way out is placement, and //bridge takes it twice over: its connection
+# work is inside `Node` actor methods, and its ticket parse is `peer_id_for`, a
+# dispatched member whose body is handed to the pool. Both bodies reach the
+# `OnceLock` above and both claims are true, which is why //bridge:block_check
+# settles that whole surface without building anything.
+frustrate_block_check(
+    name = "block_check",
+    bridge = ":codegen",
+    crate = ":check_fixture",
+)
+
+build_test(
+    name = "block_check_build_test",
+    targets = [":block_check"],
+)

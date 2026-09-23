@@ -1,0 +1,99 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+load("//bazel:hot_patch.bzl", "frustrate_hot_patchable")
+load(":defs.bzl", "hot_patch_edit", "in_mode")
+
+# The fixture as a patchable library, and what builds its patches.
+frustrate_hot_patchable(
+    name = "fixture_hot",
+    binding_contract = "//tests/hotpatch/fixture:bridge.ir",
+    library = "//tests/hotpatch/fixture",
+)
+
+# One edit per sibling package, each compiled as the launch crate edited in
+# place. The test hands each to the patch builder as the current build.
+[
+    hot_patch_edit(
+        name = edit,
+        contract = "//tests/hotpatch/%s:bridge.ir" % edit,
+        launch_package = "fixture",
+        library = "//tests/hotpatch/%s:fixture" % edit,
+        patched_crate = "//tests/hotpatch/fixture",
+    )
+    for edit in [
+        "actor_edit",
+        "body_edit",
+        "dependency_call",
+        "drop_edit",
+        "body_edit_again",
+        "contract_change",
+        "layout_change",
+        "new_function",
+        "new_static",
+        "signature_change",
+    ]
+]
+
+# Only a debug build is patchable.
+in_mode(
+    name = "data",
+    mode = "dbg",
+    srcs = [
+        ":actor_edit",
+        ":body_edit",
+        ":body_edit_again",
+        ":contract_change",
+        ":dependency_call",
+        ":drop_edit",
+        ":fixture_hot.hot_patch",
+        ":layout_change",
+        ":new_function",
+        ":new_static",
+        ":signature_change",
+    ],
+)
+
+# Launches the fixture in this process, then drives the manifest's command
+# exactly as a dev tool does — from the execution root, with the files the
+# hot_patch target built — and applies what it answers.
+#
+# `local`: the command runs from the execution root against the build's own
+# outputs and the toolchains' external repositories, which is the contract
+# under test, and no sandbox layout has them at those paths.
+rust_test(
+    name = "hotpatch_test",
+    srcs = ["hotpatch_test.rs"],
+    data = [":data"],
+    edition = "2021",
+    env = {"HOTPATCH_DATA": "$(rlocationpaths :data)"},
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = ["@crates//:serde_json"],
+)
+
+# What ships: the same patchable library built -c opt carries none of it —
+# no loader exports and no slots, so nothing routes. The debug test above is
+# the positive control, loading the same exports by name.
+in_mode(
+    name = "release_data",
+    mode = "opt",
+    srcs = [":fixture_hot"],
+)
+
+rust_test(
+    name = "release_test",
+    srcs = ["release_test.rs"],
+    data = [":release_data"],
+    edition = "2021",
+    env = {"RELEASE_LIBRARY": "$(rlocationpaths :release_data)"},
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = ["//hotpatch:frustrate_hotpatch_lib"],
+)
+
+# The realistic size and timing case, kept out of wildcard builds: a bridge
+# with frustrate's whole integration surface in it.
+frustrate_hot_patchable(
+    name = "test_api_hot",
+    binding_contract = "//tests/test_api:bridge.ir",
+    library = "//tests/test_api:test_api_shared",
+    tags = ["manual"],
+)

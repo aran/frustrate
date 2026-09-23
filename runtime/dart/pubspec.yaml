@@ -1,0 +1,26 @@
+name: frustrate
+description: >-
+  frustrate runtime for Dart: wire codec, opaque handle plumbing, and FFI
+  transport for frustrate-generated bridges.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  ffi: 2.2.0
+
+# Pinned to match rules_dart's internal ext lock (the pub extension rejects
+# version skew of shared transitive packages across lock files).
+dev_dependencies:
+  analyzer: 10.2.0
+  test: 1.31.1
+  runfiles:
+    path: ../../../rules_dart/dart/runfiles
+
+# Force shared transitive packages to the exact versions in rules_dart's
+# internal ext lock (the pub extension rejects cross-lock version skew).
+dependency_overrides:
+  coverage: 1.15.0
+  meta: 1.18.2

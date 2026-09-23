@@ -1,0 +1,410 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@frustrate//bazel:defs.bzl", "frustrate_wasm_module", "frustrate_web_glue")
+load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options")
+load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
+load("@rules_flutter//flutter:defs.bzl", "flutter_application")
+load("@rules_flutter//flutter:ios.bzl", "flutter_ios_app", "flutter_ios_simulator_build_test")
+load("@rules_flutter//flutter:linux.bzl", "flutter_linux_app")
+load("@rules_flutter//flutter:macos.bzl", "flutter_macos_app")
+load("@rules_flutter//flutter:web.bzl", "flutter_web_app")
+load("//bazel:linux.bzl", "linux_x86_64_build")
+load("//bazel:web_csp.bzl", "csp_web_defines")
+
+exports_files(["pubspec.lock"])
+
+# //threaded builds the same main.dart.
+exports_files(["lib/main.dart"])
+
+APP_DEPS = [
+    "//bridge:iroh_bridge",
+    # Pure-Dart QR encoder for the pairing ticket (C4 paints it).
+    "@deps//:qr",
+    "@deps//:flutter",
+    "@rules_flutter//flutter:material_icons",
+]
+
+flutter_application(
+    name = "app_flutter",
+    package_name = "iroh_demo",
+    main = "lib/main.dart",
+    deps = APP_DEPS,
+)
+
+# Every `analysis_options.yaml` here, for the `dart_analyze` aspect `.bazelrc`
+# enables under `bazel test`.
+dart_analysis_options(
+    name = "analysis_options",
+    src = "analysis_options.yaml",
+)
+
+dart_analysis_config(
+    name = "analysis_config",
+    options = [":analysis_options"],
+)
+
+# macOS. The network entitlements live in macos/Runner/{DebugProfile,Release}
+# .entitlements and the macro picks between them by compilation mode — both
+# carry com.apple.security.network.{client,server}, because the conventional
+# `flutter create` pair grants network only in debug and a release build is
+# then silently offline.
+flutter_macos_app(
+    name = "app",
+    app_name = "Tin Can",
+    application = ":app_flutter",
+    bundle_id = "dev.frustrate.irohdemo",
+    minimum_os_version = "26.0",  # .bazelrc sets the toolchains to match
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+# iOS. No entitlements file and no Info.plist keys: with the default (no-mDNS)
+# iroh stack this is plain outbound UDP/QUIC, which needs neither. Measured, not
+# assumed — the only thing `-c opt` takes away is `NSBonjourServices` +
+# `NSLocalNetworkUsageDescription` (which rules_flutter adds to non-release
+# builds for the Dart VM service, not for us) and `get-task-allow`, and an app
+# with that delta applied still binds its QUIC sockets, reaches the relays, and
+# prompts for nothing. That changes the
+# moment mDNS address lookup is added, which is out of scope. The one thing a
+# simulator cannot answer: whether a *device* release build may
+# dial a peer's LAN address without NSLocalNetworkUsageDescription.
+#
+# Two notes on what the preset default means here. "Reaches the relays" now
+# describes an opt-in (`PRESET=n0`) rather than what every build does; the
+# default is `minimal`, which on a phone means pairing by full ticket over the
+# LAN. And a *plaintext* relay is not usable from a device at all: there is no
+# NSAppTransportSecurity in ios/Runner/Info.plist, so ATS blocks `http://`.
+# Nothing regresses — iOS here is build_test-only — but a self-hosted relay for
+# a phone has to be the `https://` one M3 owns.
+# flutter_ios_native_frameworks wraps the cross-compiled libiroh_rust.dylib as
+# a signed, embedded iroh_rust.framework (dlopen-legal on device).
+#
+# The runnable simulator artifact is `-c dbg`. `-c opt` for a simulator cpu
+# builds an .ipa that installs, launches, and renders nothing at all: it is a
+# signed bundle, a launch that returns 0, a live process and a white screen,
+# with the reason only in the simulator's system log.
+flutter_ios_app(
+    name = "app_ios",
+    app_name = "Tin Can",
+    application = ":app_flutter",
+    bundle_id = "dev.frustrate.irohdemo",
+)
+
+# The same app, signed for a physical iPhone. Everything except the signing
+# identity is shared with //:app_ios — this is one extra macro call rather than
+# the hand-assembled `ios_application` that rules_flutter's own e2e/ios_example
+# device overlay uses, because `flutter_ios_app` forwards **kwargs to
+# `ios_application` and `provisioning_profile` is one of the attributes it does
+# not itself set.
+#
+# `//device` is gitignored and does not exist in a fresh checkout: copy
+# device.example/ to device/ and follow its header. Nothing in the wildcard
+# build reaches this target — `flutter_ios_app` defaults to tags = ["manual"],
+# which keeps `bazel build //...` from expanding it and therefore from loading
+# the missing //device package at all. That is also why there is no build_test
+# here: a build_test would drag //device into every wildcard build.
+flutter_ios_app(
+    name = "app_ios_device",
+    app_name = "Tin Can",
+    application = ":app_flutter",
+    bundle_id = "dev.frustrate.irohdemo",
+    provisioning_profile = "//device:profile",
+)
+
+# Android. The iroh_bridge plugin's native_deps select carries the Rust bridge
+# as a per-ABI libiroh_rust.so. arm64-v8a to match an Apple-Silicon emulator or
+# a physical device; add an x64 sibling for x86 emulators (the
+# x86_64-linux-android triple is already in MODULE.bazel, so that is a
+# BUILD-file edit only).
+#
+# --config=android is not optional: it is what registers the SDK and NDK
+# toolchains (.bazelrc says why). `flutter_android_app` defaults to
+# tags = ["manual"], so the wildcard build does not reach it.
+#   bazel build --config=android //:app_android -c dbg
+#   adb install -r bazel-bin/app_android.apk
+#
+# No `manifest = ...` attribute on purpose. Passing one puts the macro in mode
+# 1, which turns OFF res/ and kotlin/ auto-discovery; leaving it off lets the
+# macro discover android/app/src/main/AndroidManifest.xml (mode 2), which keeps
+# discovery *and* uses that manifest — including its <uses-permission> lines —
+# in every compilation mode. That is what gives this app INTERNET in `-c opt`.
+flutter_android_app(
+    name = "app_android",
+    app_name = "Tin Can",
+    android_abi = "arm64",
+    application = ":app_flutter",
+    package_name = "dev.frustrate.irohdemo",
+)
+
+# Linux (GTK). `flutter_linux_app` templates the runner, so there is no
+# linux/runner/ directory to keep in sync — the platform is these six lines
+# plus a Linux cc_toolchain in MODULE.bazel.
+#
+#   bazel build //:app_linux --platforms=@rules_flutter//flutter/platforms:linux_x64 -c dbg
+#
+# `target_compatible_with` keeps this out of a macOS `bazel build //...`, where
+# "the Linux app, built for macOS" is meaningless. That alone is what the
+# sibling e2e/flutter_demo declares — and it is why that target has never been
+# built by anyone: on every machine in this project it is a silent skip.
+# //:linux_app_build_test is the missing half.
+flutter_linux_app(
+    name = "app_linux",
+    app_name = "Tin Can",
+    application = ":app_flutter",
+    gtk_app_id = "dev.frustrate.irohdemo",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# Web (M5). Relay-only, single-threaded, and second-class on purpose.
+#
+# Declared in the root package so the assets land at the site root, matching
+# the URLs initBridge() fetches. //threaded is the same app on threaded wasm —
+# same sources, `manual`, and the only place the wasm-bindgen post-pass and
+# `+atomics` meet.
+#
+# Two things had to be true before any of this existed, and both are now:
+# `ring` compiles for wasm32 (the cc_toolchain in MODULE.bazel), and the
+# module survives the wasm-bindgen post-pass with frustrate's own `extern "C"`
+# exports intact (`bindgen = ` below).
+frustrate_wasm_module(
+    name = "iroh_rust.wasm",
+    # The version-matched CLI, built from source by //bazel/wasm_bindgen's
+    # crate hub. frustrate deliberately does not ship one: the required
+    # version is a property of *this* crate graph, not of frustrate.
+    bindgen = "@wasm_bindgen_crates//:wasm-bindgen-cli__wasm-bindgen",
+    crate = "//bridge:iroh_rust",
+    # The wasm-opt pass, over the post-passed module. This is the one artifact
+    # in the repo that crosses a network to reach a user, so it is the one that
+    # earns the fetch — and it is also the only place the post-pass and the
+    # optimizer meet, which is the pairing frustrate's own fixtures cannot
+    # cover (they have no wasm-bindgen in their graph).
+    wasm_opt = "@binaryen//:wasm-opt",
+    # Waived after reading every call site, not to quiet the build. QUIC's
+    # `ServerConfig` defaults its `TimeSource` to `noq::StdSystemTime`
+    # (noq-proto config/mod.rs:258, :679), whose `now()` is
+    # `SystemTime::now()` — a panic on wasm32-unknown-unknown. Four sites call
+    # through it, and none of them can fire in this build:
+    #
+    #   - noq-proto endpoint.rs:780 (issue a retry token) and token.rs:154,
+    #     :169 (check one has not expired) run only if something calls
+    #     `Incoming::retry()`. Inside iroh the only caller is protocol.rs:571,
+    #     `Router`'s incoming_filter. This app calls `endpoint.accept()`
+    #     directly and has no Router.
+    #   - noq-proto connection/mod.rs:6513 (issue a NEW_TOKEN) is driven by
+    #     `on_path_validated`, which loops `0..validation_token.sent`. That
+    #     default is `if cfg!(feature = "bloom") { 2 } else { 0 }`
+    #     (config/mod.rs:528) and @iroh_crates resolves noq-proto with
+    #     `["ring", "rustls"]` only — so `sent == 0` and nothing is ever
+    #     issued. With nothing issued, nothing decodes, so the two expiry
+    #     checks above are unreachable a second way.
+    #
+    # NOT fixable by iroh's `set_time_source`, for two independent reasons.
+    # The shallow one: overriding at run time leaves `Arc::new(StdSystemTime)`
+    # in `ServerConfig::default`, so the vtable keeps the symbol and a
+    # symbol-level check still sees it. The deeper one: `set_time_source` is on
+    # the *per-connection* ServerConfigBuilder, reachable only through
+    # `Incoming::accept_with`, while three of the four sites read the
+    # *endpoint-level* config built inside `Builder::bind()` — which takes no
+    # such hook. Overriding only the per-connection one would make this app
+    # start minting valid NEW_TOKENs while the endpoint-level clock still
+    # panics on the reconnect that presents one: an immediate trap traded for a
+    # delayed and less attributable one. Closing it properly needs an upstream
+    # hook for the endpoint-level ServerConfig.
+    #
+    # Not `std_check = "off"`: println! and eprintln! stay guarded, and those
+    # are the ones this app could reach in its own code.
+    std_check_allow = ["std::time::SystemTime::now"],
+)
+
+# wasm-bindgen's generated JS: the ~131 shims that satisfy the one import
+# namespace the post-pass leaves behind. Served beside the module and named to
+# `FrustrateWeb.init(bindgenGlueUrl:)` by //bridge/lib/src/init_web.dart.
+#
+# It is an app asset, not glue, and that distinction is what keeps it out of
+# tension with frustrate's one canonical byte-pinned glue file: this file is
+# generated per build and could never be pinned, so it is loaded by URL exactly
+# as the .wasm module already is, and frustrate.js stays byte-identical for
+# every app.
+# Named `_js` rather than `_bg.js` because the *file* is called
+# `iroh_rust_bg.js` — the rule declares it in this package so it stages at the
+# bundle root, and a target may not share a name with a file in its package.
+filegroup(
+    name = "iroh_rust_bg_js",
+    srcs = [":iroh_rust.wasm"],
+    output_group = "bindgen_js",
+)
+
+# The one thing frustrate pins that wasm-bindgen does not document.
+#
+# frustrate owns instantiation, so it performs by hand the handshake
+# wasm-bindgen's own generated entry module performs — `__wbg_set_wasm(exports)`
+# then `__wbindgen_start()` — and `__wbg_set_wasm` is a `--target bundler`
+# internal, named by string in runtime/dart/lib/src/js/frustrate.js and in
+# runtime_web.dart.
+#
+# The tripwire belongs here rather than in frustrate because this is the only
+# real wasm-bindgen dependency graph anywhere in the repo, and because the
+# version it pins is pinned here too (//bridge:Cargo.toml and
+# //bazel/wasm_bindgen:Cargo.toml, both `=0.2.126`). A bump that renames or
+# drops the setter goes red at the bump, not in a browser.
+genrule(
+    name = "bindgen_handshake",
+    srcs = [":iroh_rust_bg_js"],
+    outs = ["bindgen_handshake.ok"],
+    cmd = "grep -Eq '^export (function |const |let |var )?__wbg_set_wasm' " +
+          "$(location :iroh_rust_bg_js) || { " +
+          "echo 'this wasm-bindgen no longer exports __wbg_set_wasm from its " +
+          "--target bundler output; frustrate.js bindgenNamespace and " +
+          "runtime_web.dart _start both name it' >&2; exit 1; }; " +
+          "touch $@",
+)
+
+build_test(
+    name = "bindgen_handshake_test",
+    targets = [":bindgen_handshake"],
+)
+
+# The served glue asset (strict-CSP delivery): web/index.html loads it with a
+# plain <script src="frustrate.js">.
+frustrate_web_glue(
+    name = "frustrate.js",
+)
+
+# The one target in this module that opts into a third party, and it says so
+# here rather than by inheriting a default.
+#
+# `PRESET=minimal` — the default everywhere else, and what every automated run
+# uses — cannot work in a browser without a relay: a page has no UDP socket, so
+# a web peer with no relay has no transport at all and `Node.open` refuses it
+# outright. This target is the one a human opens to try the demo, where n0's
+# relays are the only thing that pairs across the internet with no setup.
+#
+# The browser test does not use this target. It builds //:app_web_hermetic
+# below, which is `minimal` plus a relay the harness starts.
+flutter_web_app(
+    name = "app_web",
+    package_name = "iroh_demo",
+    main = "lib/main.dart",
+    defines = ["PRESET=n0"],
+    extra_web_assets = [
+        ":iroh_rust.wasm",
+        ":iroh_rust_bg_js",
+        ":frustrate.js",
+    ],
+    # The index.html CSP allows scripts from 'self' only: the renderer must
+    # load from the bundled canvaskit/, not the gstatic CDN.
+    use_local_canvaskit = True,
+    web_defines = csp_web_defines(),
+    deps = [
+        "//bridge:iroh_bridge",
+        "@frustrate//runtime/dart:frustrate",
+        "@deps//:flutter",
+        "@deps//:qr",
+        "@rules_flutter//flutter:material_icons",
+    ],
+)
+
+# The bundle playwright/web.spec.js runs: no third party anywhere.
+#
+# `PRESET=minimal` removes n0's pkarr and DNS, and RELAY_URL points at the
+# *harness's own origin* rather than at the relay directly. That indirection is
+# load-bearing and is not about convenience:
+#
+#   web/index.html's CSP is `connect-src 'self' https: wss:`, so a relay on its
+#   own port would be blocked — it is neither 'self' nor https/wss. Serving the
+#   relay through the page's origin makes the browser's dial `ws://` to the same
+#   host:port it loaded from, which 'self' covers. The CSP is one of the things
+#   this spec proves, so widening it to accommodate the test would be the test
+#   damaging its own artifact.
+#
+# The port is fixed because RELAY_URL is a compile-time dart-define: the bundle
+# has to be built before the harness runs, so the harness cannot pick a port and
+# tell it afterwards. web.spec.js must agree with this number; if it does not,
+# the run fails loudly as an unreachable relay rather than falling back to
+# anything.
+flutter_web_app(
+    name = "app_web_hermetic",
+    package_name = "iroh_demo",
+    main = "lib/main.dart",
+    defines = [
+        "PRESET=minimal",
+        "RELAY_URL=http://127.0.0.1:3341",
+    ],
+    extra_web_assets = [
+        ":iroh_rust.wasm",
+        ":iroh_rust_bg_js",
+        ":frustrate.js",
+    ],
+    use_local_canvaskit = True,
+    web_defines = csp_web_defines(),
+    deps = [
+        "//bridge:iroh_bridge",
+        "@frustrate//runtime/dart:frustrate",
+        "@deps//:flutter",
+        "@deps//:qr",
+        "@rules_flutter//flutter:material_icons",
+    ],
+)
+
+# One build_test per platform. These are also the guard for MODULE.bazel's
+# `supported_platform_triples`: a triple missing from that list makes the
+# crate resolve to `//:incompatible` and shows up as a silent
+# target_compatible_with skip, so each platform needs a target that goes red.
+build_test(
+    name = "macos_app_build_test",
+    target_compatible_with = ["@platforms//os:macos"],
+    targets = [":app"],
+)
+
+# iOS simulator bundles (incl. the embedded Rust framework) build, in -c dbg:
+# the simulator runs nothing else. To run one:
+#   bazel build //:app_ios -c dbg   (then install on a booted sim)
+flutter_ios_simulator_build_test(
+    name = "ios_app_build_test",
+    target_compatible_with = ["@platforms//os:macos"],
+    targets = [":app_ios"],
+)
+
+# APK (incl. the per-ABI libiroh_rust.so) builds. Manual: needs
+# --config=android and a local Android SDK/NDK (see .bazelrc.user; the NDK path
+# must be the *versioned* directory, not the `ndk/` parent), so
+# `bazel test //...` must not pick it up.
+#
+# This is also the guard for MODULE.bazel's `supported_platform_triples`: a
+# missing Android triple makes @iroh_crates//:iroh resolve to
+# `//:incompatible`, which without a target that goes red is only a silent
+# target_compatible_with skip.
+build_test(
+    name = "android_app_build_test",
+    tags = ["manual"],
+    targets = [":app_android"],
+)
+
+# Linux, cross-compiled from whatever host runs the test. The transition is the
+# whole point: a plain `build_test(targets = [":app_linux"])` would build in the
+# host configuration, where the target is an incompatible skip and the test
+# passes having built nothing — the exact silent green this build_test exists to
+# prevent. See bazel/linux.bzl.
+#
+# This covers the entire Linux stack in one target: ring's C compiled for
+# x86_64-unknown-linux-gnu, libiroh_rust.so linked against the sysroot's glibc,
+# the templated GTK runner, and the bundle assembly.
+linux_x86_64_build(
+    name = "app_linux_x86_64",
+    srcs = [":app_linux"],
+)
+
+build_test(
+    name = "linux_app_build_test",
+    targets = [":app_linux_x86_64"],
+)
+
+# Web. This one target covers the entire stack that did not exist before M5:
+# ring's C compiled to WebAssembly, the full iroh graph linked for
+# wasm32-unknown-unknown, the wasm-bindgen post-pass, and dart2wasm compiling
+# the app against the same generated bindings every native platform uses.
+build_test(
+    name = "web_app_build_test",
+    targets = [
+        ":app_web",
+        ":app_web_hermetic",
+    ],
+)

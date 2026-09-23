@@ -1,0 +1,67 @@
+# systemd unit for the Tin Can relay.
+#
+# NEVER RUN. This unit has never been loaded by a systemd. See README.md.
+#
+# Installed by deploy/deploy_relay.dart to /etc/systemd/system/iroh-relay.service
+# alongside /usr/local/bin/iroh-relay and /etc/iroh-relay/relay.toml.
+
+[Unit]
+Description=iroh relay server (Tin Can demo)
+Documentation=https://github.com/n0-computer/iroh
+# network-online, not network: the relay binds a specific address and Let's
+# Encrypt must be reachable at start.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/iroh-relay --config-path=/etc/iroh-relay/relay.toml
+
+# The relay must survive its own crashes and, more to the point, a spot
+# preemption: GCP stops the VM, a human (or a schedule) starts it again, and
+# the relay has to be listening before anyone notices. WantedBy=multi-user
+# below is what makes that automatic on boot.
+Restart=always
+RestartSec=2s
+
+# No user to create and no user to clean up. The state directory is really
+# /var/lib/private/iroh-relay with a symlink at /var/lib/iroh-relay; the
+# service sees the latter, which is the path relay.toml's `cert_dir` names.
+DynamicUser=yes
+StateDirectory=iroh-relay/certs
+
+# ports 80 and 443 are privileged, and this process is not root. Ambient
+# capabilities are the whole reason it does not have to be.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+
+# Optional. Holds IROH_RELAY_ACCESS_TOKEN (when access.shared_token is used)
+# and IROH_RELAY_ACME_URL (when pointing at a staging or local ACME server), so
+# neither has to be committed. The leading `-` means "fine if absent".
+EnvironmentFile=-/etc/iroh-relay/env
+Environment=RUST_LOG=info
+
+# Hardening. Nothing here is exotic; the relay reads one config file, writes
+# one cache directory, and talks to the network.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+# One socket per relayed client, and the key cache is sized for a million of
+# them. The default 1024 is not enough for anything but a demo, and this costs
+# nothing.
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

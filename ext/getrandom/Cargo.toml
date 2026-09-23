@@ -1,0 +1,16 @@
+[package]
+name = "frustrate-getrandom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "getrandom's custom backend, served by frustrate's host CSPRNG — entropy on plain wasm32 without wasm-bindgen"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+frustrate = { workspace = true }
+# Named for one type: the `Error` in the backend signature. 0.3 and 0.4 share
+# the `__getrandom_v03_custom` symbol deliberately, so whichever of the two this
+# resolves to, the definition serves both — see the crate docs.
+getrandom = "0.3"

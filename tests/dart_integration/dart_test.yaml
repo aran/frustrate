@@ -1,0 +1,15 @@
+# One test file at a time, for two real reasons:
+# - native: the Rust post callback is process-global (re-registration is the
+#   hot-restart contract); parallel test isolates would steal each other's
+#   completions. Sequential files re-init safely, like a hot restart.
+# - benches: parallel-speedup measurements must not share cores with other
+#   running test files.
+concurrency: 1
+
+# The threaded fixture creates shared WebAssembly.Memory, which Chrome gates
+# on cross-origin isolation; the dart test server does not serve COOP/COEP,
+# so enable SharedArrayBuffer explicitly. Harmless for single-threaded runs.
+override_platforms:
+  chrome:
+    settings:
+      arguments: --enable-features=SharedArrayBuffer
