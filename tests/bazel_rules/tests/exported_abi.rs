@@ -13,7 +13,7 @@
 //! private, so from out here the generated dispatcher exists only as an
 //! exported symbol — exactly the way the Dart transport sees it. Declaring it
 //! `extern "C"` and calling it proves three things a build_test could not: the
-//! rlib links, the generated glue is inside it, and its `#[no_mangle]` exports
+//! rlib links, the generated glue is inside it, and its `#[unsafe(no_mangle)]` exports
 //! survive into a linked binary rather than being dropped as unreferenced
 //! archive members.
 

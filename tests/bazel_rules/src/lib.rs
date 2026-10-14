@@ -9,6 +9,6 @@ mod frustrate_generated;
 // than through generated bindings — here `tests/exported_abi.rs`, which sees
 // this crate the way any dependent does. Dispatch ids are derived from each
 // member's wire facts, so a caller cannot name a member without this; the
-// dispatcher itself is reached as a `#[no_mangle]` symbol, which needs no
+// dispatcher itself is reached as a `#[unsafe(no_mangle)]` symbol, which needs no
 // re-export.
 pub use frustrate_generated::FRUSTRATE_FN_IDS;

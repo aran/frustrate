@@ -13,14 +13,14 @@
 //! nothing and needs no codegen — the scanner reads a compiled module, not an
 //! API surface.
 //!
-//! `#[no_mangle] pub extern "C"` on each export is load-bearing twice over: it
+//! `#[unsafe(no_mangle)] pub extern "C"` on each export is load-bearing twice over: it
 //! makes the function a gc root so `--gc-sections` cannot delete the call, and
 //! the returned value is used by the caller so the body cannot fold to a
 //! constant.
 
 /// Reaches `std::time::SystemTime::now`, which on this platform is
 /// `panic!("time not implemented on this platform")`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn probe_system_time() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -30,7 +30,7 @@ pub extern "C" fn probe_system_time() -> i64 {
 
 /// Reaches `std::io::stdio::_print`, which on this platform accepts the write
 /// and discards it.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn probe_println(n: i32) {
     println!("probe_println {n}");
 }
@@ -38,7 +38,7 @@ pub extern "C" fn probe_println(n: i32) {
 /// The same for stderr (`std::io::stdio::_eprint`). Separate because the two
 /// are separate symbols, and a facility the scanner claims to cover but no
 /// fixture reaches is a claim nothing checks.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn probe_eprintln(n: i32) {
     eprintln!("probe_eprintln {n}");
 }

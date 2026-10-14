@@ -31,7 +31,7 @@ fn spawn(job: Job) {
 /// # Safety
 /// `entry` must be a pointer produced by `spawn` on the same shared memory,
 /// used exactly once.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn worker_entry(entry: u32) {
     let job = *Box::from_raw(entry as *mut Job);
     job();
@@ -40,7 +40,7 @@ pub unsafe extern "C" fn worker_entry(entry: u32) {
 
 /// Spawn `workers` threads, each bumping the shared counter `iters` times
 /// and folding `iters` into the mutex-guarded sum.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn start_counters(workers: u32, iters: u32) {
     for _ in 0..workers {
         spawn(Box::new(move || {
@@ -54,7 +54,7 @@ pub extern "C" fn start_counters(workers: u32, iters: u32) {
 
 /// Spawn `workers` threads each computing the nth prime — the parallel leg
 /// of the speedup measurement.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn start_work(workers: u32, n: u32) {
     for _ in 0..workers {
         spawn(Box::new(move || {
@@ -64,38 +64,38 @@ pub extern "C" fn start_work(workers: u32, n: u32) {
 }
 
 /// The serial baseline: the same total work on the calling thread.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn work_serial(times: u32, n: u32) {
     for _ in 0..times {
         std::hint::black_box(nth_prime(n));
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn done_count() -> u32 {
     DONE.load(Ordering::SeqCst)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn reset_done() {
     DONE.store(0, Ordering::SeqCst);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn counter() -> u32 {
     COUNTER.load(Ordering::SeqCst)
 }
 
 /// Only sound to call once all workers are done (uncontended lock: futex
 /// wait would trap on the main thread).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn locked_sum() -> u64 {
     *LOCKED_SUM.lock().unwrap()
 }
 
 /// Shared (thread-safe, spinlocked under +atomics) allocator, used by the
 /// glue to carve out worker stacks and TLS blocks.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_alloc(size: u32, align: u32) -> u32 {
     let layout = std::alloc::Layout::from_size_align(size as usize, align as usize)
         .expect("bad layout");

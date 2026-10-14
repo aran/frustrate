@@ -146,7 +146,7 @@ pub fn actor_host_count() -> usize {
 
 // --- block-check export gating ---------------------------------------------
 //
-// Every `#[no_mangle]` in this crate that a wasm build would emit carries
+// Every `#[unsafe(no_mangle)]` in this crate that a wasm build would emit carries
 // `#[cfg(not(frustrate_block_check))]` — the same gate codegen puts on the
 // exports it emits. Under `--cfg frustrate_block_check` the only surviving
 // exports are the generated `frustrate_check_block_*` roots, so lld's
@@ -187,7 +187,7 @@ pub fn actor_host_count() -> usize {
 /// neither the exported symbol nor the calling convention, so the JS and Dart
 /// callers are unaffected.
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn frustrate_buffer_free(ptr: *mut u8, len: u64, cap: u64) {
     if ptr.is_null() {
         return;
@@ -242,7 +242,7 @@ pub const RUNTIME_ABI: u64 = 5;
 /// is precisely the silent corruption this constant exists to turn into a
 /// named error.
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_runtime_abi() -> u64 {
     RUNTIME_ABI
 }
@@ -271,7 +271,7 @@ pub extern "C" fn frustrate_runtime_abi() -> u64 {
 /// `api_data` must be the pointer Dart's `NativeApi.initializeApiDLData` yields,
 /// or null; `port` must be a native port id from `SendPort.nativePort`.
 #[cfg(not(target_family = "wasm"))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn frustrate_init_dl(api_data: *mut std::ffi::c_void, port: i64) -> i64 {
     unsafe { post::init_dl(api_data, port) }
 }
@@ -291,7 +291,7 @@ pub unsafe extern "C" fn frustrate_init_dl(api_data: *mut std::ffi::c_void, port
 /// meaningful after `frustrate_init_dl` returned a positive id; before that
 /// there is no port and this is null.
 #[cfg(not(target_family = "wasm"))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_exit_port() -> *mut std::ffi::c_void {
     post::exit_send_port()
 }
@@ -314,7 +314,7 @@ pub extern "C" fn frustrate_exit_port() -> *mut std::ffi::c_void {
 /// change is that the failure says what it was.
 #[cfg(target_family = "wasm")]
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_alloc(len: u64) -> *mut u8 {
     let len = len as usize;
     let mut buf: Vec<u8> = Vec::new();
@@ -363,7 +363,7 @@ pub extern "C" fn frustrate_alloc(len: u64) -> *mut u8 {
 /// unconditionally.
 #[cfg(target_family = "wasm")]
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_web_init() {
     // Settle the cooperative executor here — on the main thread, before any
     // pool worker exists. See `executor::init_global`: it is what stops two

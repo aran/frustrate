@@ -74,7 +74,7 @@ pub fn emit(iface: &Interface) -> String {
          /// from (frustrate-codegen). The generated Dart carries the same value as\n\
          /// `frustrateSchemaHash` and compares them at init; a mismatch means the\n\
          /// Dart bindings are stale relative to this library.\n\
-         {gate}#[no_mangle]\n\
+         {gate}#[unsafe(no_mangle)]\n\
          pub extern \"C\" fn frustrate_schema_hash() -> u64 {{\n\
          {route}    {hash:#018x}\n\
          }}\n\n",
@@ -461,7 +461,7 @@ fn emit_block_checks(out: &mut String, iface: &Interface) {
         out.push_str(ALLOW);
         let _ = write!(
             out,
-            "#[no_mangle]\npub extern \"C\" fn frustrate_check_block_{}_{}() {{\n",
+            "#[unsafe(no_mangle)]\npub extern \"C\" fn frustrate_check_block_{}_{}() {{\n",
             f.fn_id, f.name
         );
         match s {
@@ -4761,7 +4761,7 @@ fn emit_actor_call(out: &mut String, iface: &Interface, f: &Function) {
 /// wasm module contains no code path whose contract cannot hold there.
 const NATIVE_ONLY_CFG: &str = "#[cfg(not(target_family = \"wasm\"))]\n";
 
-/// Gate on every generated `#[no_mangle]` export, so that a **block-check**
+/// Gate on every generated `#[unsafe(no_mangle)]` export, so that a **block-check**
 /// build exports only its check roots and lld's dead-code elimination decides
 /// everything else.
 ///
@@ -4772,7 +4772,7 @@ const NATIVE_ONLY_CFG: &str = "#[cfg(not(target_family = \"wasm\"))]\n";
 ///
 /// Why a source gate at all: restricting a wasm module's exports from the link
 /// line does not work. `--no-export-dynamic` is silently ignored for a cdylib,
-/// and a wrapper `bin` crate with `--no-entry` still exports every `#[no_mangle]`
+/// and a wrapper `bin` crate with `--no-entry` still exports every `#[unsafe(no_mangle)]`
 /// reachable through its rlibs. Measured both ways: 13264 functions survived,
 /// nothing collected. Suppressing the symbol at the source is the only lever
 /// that makes the linker's GC do the reachability work.
@@ -4793,7 +4793,7 @@ const HOT_PATCH_CFG: &str = "#[cfg(all(frustrate_hot_patch, not(target_family = 
 /// the routed entry points by these slot names in the library's exports.
 fn hot_route(name: &str, params: &[(&str, &str)], ret: &str) -> (String, String) {
     let slot = format!(
-        "{HOT_PATCH_CFG}#[no_mangle]\n#[allow(non_upper_case_globals)]\npub static frustrate_hot_slot_{name}: core::sync::atomic::AtomicPtr<core::ffi::c_void> =\n    core::sync::atomic::AtomicPtr::new(core::ptr::null_mut());\n\n"
+        "{HOT_PATCH_CFG}#[unsafe(no_mangle)]\n#[allow(non_upper_case_globals)]\npub static frustrate_hot_slot_{name}: core::sync::atomic::AtomicPtr<core::ffi::c_void> =\n    core::sync::atomic::AtomicPtr::new(core::ptr::null_mut());\n\n"
     );
     let types: Vec<&str> = params.iter().map(|(_, t)| *t).collect();
     let args: Vec<&str> = params.iter().map(|(a, _)| *a).collect();
@@ -4915,7 +4915,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     out.push_str(ALLOW);
     out.push_str(BLOCK_CHECK_SUPPRESS);
     out.push_str(
-        "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[no_mangle]\npub unsafe extern \"C\" fn frustrate_call_sync(\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n    out: *mut u8,\n    out_cap: u64,\n) -> i32 {\n",
+        "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_call_sync(\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n    out: *mut u8,\n    out_cap: u64,\n) -> i32 {\n",
     );
     out.push_str(&route);
     out.push_str("    let req = request_slice(req, req_len);\n    let resp = envelope::run(|| {\n        let mut r = ByteReader::new(req);\n        match fn_id {\n");
@@ -4950,7 +4950,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     out.push_str(ALLOW);
     out.push_str(BLOCK_CHECK_SUPPRESS);
     out.push_str(
-        "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[no_mangle]\npub unsafe extern \"C\" fn frustrate_call_async(fn_id: u32, req: *const u8, req_len: u64, call_id: u64) {\n",
+        "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_call_async(fn_id: u32, req: *const u8, req_len: u64, call_id: u64) {\n",
     );
     out.push_str(&route);
     out.push_str(
@@ -5032,7 +5032,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
         // A deferred prefix that panics never reached its spawn, so the call
         // still gets its envelope — the panic one.
         out.push_str(
-            "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[cfg(not(target_family = \"wasm\"))]\n#[no_mangle]\npub unsafe extern \"C\" fn frustrate_actor_call(\n    host_id: u64,\n    call_id: u64,\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n) {\n",
+            "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[cfg(not(target_family = \"wasm\"))]\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_actor_call(\n    host_id: u64,\n    call_id: u64,\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n) {\n",
         );
         out.push_str(&route);
         out.push_str(
@@ -5146,7 +5146,7 @@ fn emit_model_asserts(out: &mut String, iface: &Interface) {
 }
 
 /// The drop path for every opaque model but Actor: two private *inner* fns per
-/// type, and the two `#[no_mangle]` exports that call them.
+/// type, and the two `#[unsafe(no_mangle)]` exports that call them.
 ///
 /// The split exists so a block-check root can reach this code. The exports are
 /// Dart `NativeFinalizer` / `Finalizer` callbacks, and they carry
@@ -5208,8 +5208,8 @@ fn emit_drops(out: &mut String, iface: &Interface) {
             hot_route(&format!("frustrate_finalize_{}", o.name), &pointer, "");
         let _ = write!(
             out,
-            "{native}{drop_slot}/// # Safety\n/// `h` must be a live `{0}` handle; never used after.\n{gate}#[no_mangle]\npub unsafe extern \"C\" fn frustrate_drop_{0}(h: *mut core::ffi::c_void) {{\n{drop_route}    unsafe {{ drop_inner_{0}(h as u64) }}\n}}\n\n\
-             {native}{finalize_slot}/// # Safety\n/// `h` must be a live `{0}` handle; never used after. GC-finalizer\n/// variant: any channel this object still holds ends as leaked, naming `{0}`.\n{gate}#[no_mangle]\npub unsafe extern \"C\" fn frustrate_finalize_{0}(h: *mut core::ffi::c_void) {{\n{finalize_route}    unsafe {{ finalize_inner_{0}(h as u64) }}\n}}\n\n",
+            "{native}{drop_slot}/// # Safety\n/// `h` must be a live `{0}` handle; never used after.\n{gate}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_drop_{0}(h: *mut core::ffi::c_void) {{\n{drop_route}    unsafe {{ drop_inner_{0}(h as u64) }}\n}}\n\n\
+             {native}{finalize_slot}/// # Safety\n/// `h` must be a live `{0}` handle; never used after. GC-finalizer\n/// variant: any channel this object still holds ends as leaked, naming `{0}`.\n{gate}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_finalize_{0}(h: *mut core::ffi::c_void) {{\n{finalize_route}    unsafe {{ finalize_inner_{0}(h as u64) }}\n}}\n\n",
             o.name
         );
     }
@@ -5243,7 +5243,7 @@ mod tests {
             "frustrate_schema_hash",
         ] {
             let slot = format!(
-                "{}#[no_mangle]\n#[allow(non_upper_case_globals)]\npub static frustrate_hot_slot_{export}:",
+                "{}#[unsafe(no_mangle)]\n#[allow(non_upper_case_globals)]\npub static frustrate_hot_slot_{export}:",
                 super::HOT_PATCH_CFG
             );
             assert!(code.contains(&slot), "{export} has no gated slot:\n{code}");
@@ -6089,7 +6089,7 @@ mod tests {
         // which is the whole reason the inner split exists.
         assert!(
             code.contains(&format!(
-                "{}#[no_mangle]\npub unsafe extern \"C\" fn frustrate_drop_Doc", super::BLOCK_CHECK_SUPPRESS
+                "{}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_drop_Doc", super::BLOCK_CHECK_SUPPRESS
             )),
             "{code}"
         );
@@ -7633,13 +7633,13 @@ mod tests {
         );
         assert!(
             code.contains(&format!(
-                "{gate}\n#[no_mangle]\npub unsafe extern \"C\" fn frustrate_drop_Disk"
+                "{gate}\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_drop_Disk"
             )),
             "{code}"
         );
         assert!(
             code.contains(&format!(
-                "{gate}\n#[no_mangle]\npub unsafe extern \"C\" fn frustrate_finalize_Disk"
+                "{gate}\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_finalize_Disk"
             )),
             "{code}"
         );
@@ -7888,6 +7888,15 @@ mod tests {
         // generated for the extern itself.
         assert!(code.contains("fn enc_Meeting"), "{code}");
         assert!(!code.contains("fn enc_PlanMsg"), "{code}");
+    }
+
+    /// Edition 2024 rejects a bare `#[no_mangle]`; the `unsafe(..)` form is
+    /// valid in every edition since Rust 1.82.
+    #[test]
+    fn exports_use_unsafe_no_mangle() {
+        let code = emit_src("#[bridge] pub fn t() {}");
+        assert!(code.contains("#[unsafe(no_mangle)]"), "{code}");
+        assert!(!code.contains("#[no_mangle]"), "{code}");
     }
 
     #[test]

@@ -6,7 +6,7 @@
 //! would only add a way for the linker's dead-code elimination to become part
 //! of what this test asserts.
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn platform_flag_probe_root() -> i32 {
     0
 }

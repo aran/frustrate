@@ -13,7 +13,7 @@ compile_error!("//bazel:wasm_build resolved to neither branch");
 
 /// Under the wasm transition, and only there.
 #[cfg(expect_wasm)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn probe_is_wasm() -> i32 {
     const {
         assert!(cfg!(target_family = "wasm"), "wasm branch on a non-wasm target");
@@ -25,7 +25,7 @@ pub extern "C" fn probe_is_wasm() -> i32 {
 /// every configuration would take the wasm branch here too, and this would
 /// never be compiled.
 #[cfg(expect_native)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn probe_is_native() -> i32 {
     const {
         assert!(!cfg!(target_family = "wasm"), "default branch on a wasm target");

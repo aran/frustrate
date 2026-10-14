@@ -605,7 +605,7 @@ mod threaded {
     /// only window is an allocation inside a critical section, and it is
     /// reachable only when the module is out of memory — already page-fatal.
     /// See spin.rs, which states the same boundary from the lock's side.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn frustrate_pool_replenish() {
         // A trap implies the pool initialized; an uninitialized pool is a
         // no-op, never an init from here.
@@ -642,7 +642,7 @@ mod threaded {
     /// `entry` must be a pointer produced by `pool()` in this shared memory,
     /// used exactly once, after the calling thread's stack pointer and TLS
     /// block have been initialized by the glue.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn frustrate_worker_entry(entry: u32) {
         let entry = *Box::from_raw(entry as *mut Entry);
         entry();
@@ -651,7 +651,7 @@ mod threaded {
     /// The call id of the async job this thread is currently running (0 if
     /// none). The worker glue reads this after catching a trap so the panic
     /// fails exactly the future it belongs to.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn frustrate_current_call() -> u64 {
         CURRENT_CALL.with(|c| c.get())
     }
@@ -670,7 +670,7 @@ mod threaded {
     /// instead: the panic hook (`frustrate_web_init`) routes the message to
     /// JS, so an exhausted shared memory surfaces as an attributable
     /// BridgePanicException on the call that triggered the spawn.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn frustrate_alloc_aligned(size: u32, align: u32) -> u32 {
         let layout = std::alloc::Layout::from_size_align(size as usize, align as usize)
             .expect("frustrate: bad worker stack/TLS layout");

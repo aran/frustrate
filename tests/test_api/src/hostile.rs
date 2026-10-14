@@ -5,7 +5,7 @@
 //! The Dart side of this bridge is generated and type-safe, but the *wire* is
 //! bytes, and a member's glue meets those bytes before anything checks them.
 //! This drives requests a caller could actually send at the real dispatch
-//! entry — `frustrate_call_sync`, the same `#[no_mangle]` the transport calls —
+//! entry — `frustrate_call_sync`, the same `#[unsafe(no_mangle)]` the transport calls —
 //! and lets Miri decide whether the glue did anything undefined.
 //!
 //! The requests are derived from the interface, not written by hand: the
@@ -151,7 +151,7 @@ fn outcome(resp: &[u8]) -> (u8, String) {
 
 /// The `frustrate_drop_*` export for each opaque this driver can mint.
 ///
-/// A per-type `#[no_mangle]` rather than a dispatch id, so there is no way to
+/// A per-type `#[unsafe(no_mangle)]` rather than a dispatch id, so there is no way to
 /// reach it from the IR the way every call is reached; the table is the
 /// bridge. [`every_mintable_opaque_has_a_reclaim`] fails if an opaque is added
 /// and not listed, so the table cannot silently fall behind — and without it

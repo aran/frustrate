@@ -473,12 +473,12 @@ pub fn reap_isolate(isolate: u32) {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_actor_spawn() -> u64 {
     spawn_host()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_actor_shutdown(host: u64) {
     shutdown(host);
 }
@@ -490,7 +490,7 @@ pub extern "C" fn frustrate_actor_shutdown(host: u64) {
 /// future with the disposed-deferred `StateError`), 0 if the call already
 /// answered (its response is delivered or in flight — Dart must leave it to
 /// complete normally).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_actor_cancel_deferred(host: u64, call_id: u64) -> u8 {
     cancel_deferred(host, call_id) as u8
 }
@@ -501,7 +501,7 @@ pub extern "C" fn frustrate_actor_cancel_deferred(host: u64, call_id: u64) -> u8
 /// Takes a pointer rather than a `u64` so the symbol is directly usable as a
 /// Dart `NativeFinalizer` callback, exactly as the `frustrate_finalize_*`
 /// exports are. Host ids start at 1, so a real token is never null.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_actor_reap(token: *mut core::ffi::c_void) {
     reap(token as u64);
 }

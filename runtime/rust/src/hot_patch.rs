@@ -68,7 +68,7 @@ struct Entry {
 /// the ones it does not fill.
 static FILLED: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn flutter_hot_patch_abi() -> u32 {
     ABI
 }
@@ -80,7 +80,7 @@ pub extern "C" fn flutter_hot_patch_abi() -> u32 {
 /// # Safety
 /// `patch_path` is null or a NUL-terminated path; `message` is null or points
 /// to `message_capacity` writable bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn flutter_hot_patch_apply(
     patch_path: *const c_char,
     message: *mut c_char,

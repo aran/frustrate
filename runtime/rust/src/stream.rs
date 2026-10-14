@@ -643,7 +643,7 @@ fn lookup(id: u64) -> Option<Arc<Inner>> {
 // `frustrate_block_check` gating, here and on the two signal exports below:
 // see the "block-check export gating" note in lib.rs.
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_stream_cancel(id: u64) {
     if let Some(inner) = lookup(id) {
         // A cancel makes `live()` false: wake any parked `send()` so it returns
@@ -657,7 +657,7 @@ pub extern "C" fn frustrate_stream_cancel(id: u64) {
 /// until resume. `add` is unaffected — it never blocks. Store only; nothing to
 /// wake on a pause. Safe for any id.
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_stream_pause(id: u64) {
     if let Some(inner) = lookup(id) {
         inner.pause();
@@ -669,7 +669,7 @@ pub extern "C" fn frustrate_stream_pause(id: u64) {
 /// re-polling parked task observes `paused == false` (see `Ready::poll`). Safe
 /// for any id.
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_stream_resume(id: u64) {
     if let Some(inner) = lookup(id) {
         inner.resume();

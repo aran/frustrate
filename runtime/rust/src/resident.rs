@@ -329,7 +329,7 @@ pub(crate) fn reap_isolate(isolate: u32) {
 /// The count [`leak_report`] details. Read by the Dart transport for
 /// `FrustrateRuntime.residentLeakCount`, which is the only way the loss is
 /// visible to an app that has installed no `log` sink.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_resident_leaked() -> u64 {
     lost()
         .read()
@@ -348,7 +348,7 @@ pub extern "C" fn frustrate_resident_leaked() -> u64 {
 /// Deliberately not consulted on the GC path: a `Finalizer` callback has no
 /// caller to tell, and an error thrown from one reaches the isolate's error
 /// handler.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_resident_reclaimable(handle: u64) -> u8 {
     u8::from(on_owning_thread(handle).is_ok())
 }
@@ -359,7 +359,7 @@ pub extern "C" fn frustrate_resident_reclaimable(handle: u64) -> u8 {
 /// handle, when the Dart object registers its finalizer — the first moment
 /// anything knows both facts at once. A handle this is never called for stays
 /// unattributed and is never reported as anyone's leak.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_resident_attach(handle: u64, isolate: u32) {
     if let Some(e) = live()
         .write()

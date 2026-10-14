@@ -106,7 +106,7 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
 /// The one build-mode cfg the generated Rust names, declared to cargo so that
 /// no consumer has to.
 ///
-/// Every generated `#[no_mangle]` export is gated on `frustrate_block_check`
+/// Every generated `#[unsafe(no_mangle)]` export is gated on `frustrate_block_check`
 /// (`emit_rust`'s `BLOCK_CHECK_SUPPRESS`), and the check roots of a `no_block`
 /// claim are gated on its negation. Nothing that ships sets it. Cargo passes
 /// `--check-cfg` by default, so absent this line every gate is an

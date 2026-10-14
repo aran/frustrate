@@ -586,7 +586,7 @@ static ACTOR_INSTANCE: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 // "block-check export gating" note in lib.rs.
 #[cfg(target_family = "wasm")]
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_mark_actor_instance() {
     ACTOR_INSTANCE.store(true, std::sync::atomic::Ordering::Relaxed);
 }
@@ -757,7 +757,7 @@ pub fn cancel(call_id: u64) -> bool {
 /// it runs to completion on a pool worker — so codegen emits no cancel surface
 /// for one and this export would simply answer `0`.
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_call_cancel(call_id: u64) -> u8 {
     cancel(call_id) as u8
 }
@@ -771,7 +771,7 @@ pub extern "C" fn frustrate_call_cancel(call_id: u64) -> u8 {
 /// export table is uniform; on native / threaded web the pool drives drains
 /// and nothing calls this.
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_drain() {
     global().drain_all();
 }
@@ -798,7 +798,7 @@ pub extern "C" fn frustrate_drain() {
 /// detects that, because the manual arm exists for a harness that drives drains
 /// from one place.
 #[cfg(frustrate_manual_scheduler)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_manual_drain() -> u8 {
     global().drain_all() as u8
 }
@@ -820,7 +820,7 @@ thread_local! {
 /// export table is uniform; native / threaded web unwind in-band and never call
 /// it.
 #[cfg(not(frustrate_block_check))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn frustrate_current_drain_call() -> u64 {
     CURRENT_DRAIN_CALL.with(|c| c.get())
 }

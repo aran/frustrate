@@ -616,7 +616,7 @@ mod returning {
     // in lib.rs. `mod returning` is not cfg'd, so this export is present on
     // wasm even though the blocking `call` path beside it is not.
     #[cfg(not(frustrate_block_check))]
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn frustrate_callback_respond(
         invocation: u64,
         ptr: *const u8,

@@ -51,7 +51,7 @@
 //!
 //! # Why the `use`
 //!
-//! The whole crate is one `#[no_mangle]` symbol and no callable item, so
+//! The whole crate is one `#[unsafe(no_mangle)]` symbol and no callable item, so
 //! nothing in your code refers to it — and rustc links an `--extern` crate only
 //! when it is used. A dependency edge alone can therefore leave the symbol out
 //! and the link fails on `undefined symbol: __getrandom_v03_custom`, naming a
@@ -73,7 +73,7 @@ mod wasm {
     /// `getrandom`'s contract: `dest` is writable for `len` bytes. The host
     /// fills exactly that many or aborts — it never returns short, which is why
     /// this is infallible and why `Ok(())` is not optimism.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     unsafe extern "Rust" fn __getrandom_v03_custom(
         dest: *mut u8,
         len: usize,
