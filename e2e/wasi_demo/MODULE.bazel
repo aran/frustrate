@@ -8,15 +8,15 @@ members into that app's bridge would move it off plain
 module(name = "frustrate_wasi_demo")
 
 bazel_dep(name = "frustrate", version = "0.1.0")
-bazel_dep(name = "rules_flutter", version = "0.0.4")
-bazel_dep(name = "rules_dart", version = "0.7.1")
+bazel_dep(name = "rules_flutter", version = "0.0.6")
+bazel_dep(name = "rules_dart", version = "0.7.3")
 bazel_dep(name = "rules_rust", version = "0.74.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
-bazel_dep(name = "apple_support", version = "2.9.0")
-bazel_dep(name = "rules_apple", version = "5.1.0")
-bazel_dep(name = "rules_cc", version = "0.2.25")
-bazel_dep(name = "rules_swift", version = "4.1.1")
+bazel_dep(name = "apple_support", version = "2.9.1")
+bazel_dep(name = "rules_apple", version = "5.2.0")
+bazel_dep(name = "rules_cc", version = "0.2.26")
+bazel_dep(name = "rules_swift", version = "4.1.2")
 
 # `wasm32-unknown-unknown` is deliberately ABSENT: it is in rules_rust's default
 # triple set, and naming any triple here replaces that default. This app's
@@ -125,11 +125,11 @@ crate.from_cargo(
 use_repo(crate, "wasi_crates")
 
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
-flutter.toolchain(flutter_version = "3.47.5")
+flutter.toolchain(flutter_version = "3.47.7")
 flutter.pub(
     name = "deps",
     lock = "//:pubspec.lock",
 )
-use_repo(flutter, "deps", "dev_tool_deps", "flutter_macos_engine", "flutter_toolchains", "flutter_web_sdk")
+use_repo(flutter, "deps", "dev_tool_deps", "flutter_toolchains", "flutter_web_sdk")
 
 register_toolchains("@flutter_toolchains//:all")

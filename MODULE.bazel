@@ -6,7 +6,7 @@ module(
 )
 
 bazel_dep(name = "rules_rust", version = "0.74.0")
-bazel_dep(name = "rules_dart", version = "0.7.1")
+bazel_dep(name = "rules_dart", version = "0.7.3")
 bazel_dep(name = "platforms", version = "1.1.0")
 
 # build_test, for the Bazel rule tests in //tests/bazel_rules. Already in the
@@ -17,7 +17,7 @@ bazel_dep(name = "bazel_skylib", version = "1.9.2")
 # cc_library, for //runtime/rust:hot_patch_link — the link flags a patchable
 # library needs, which a select() has to choose per object format. Already in
 # the resolved graph, declared direct for the same reason as bazel_skylib.
-bazel_dep(name = "rules_cc", version = "0.2.25")
+bazel_dep(name = "rules_cc", version = "0.2.26")
 
 # git-cliff, which renders the changelog: `bazel run //tools/changelog`.
 bazel_dep(name = "rules_multitool", version = "1.11.1", dev_dependency = True)

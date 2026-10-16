@@ -19,8 +19,8 @@ structurally.
 module(name = "frustrate_iroh_demo")
 
 bazel_dep(name = "frustrate", version = "0.1.0")
-bazel_dep(name = "rules_flutter", version = "0.0.4")
-bazel_dep(name = "rules_dart", version = "0.7.1")
+bazel_dep(name = "rules_flutter", version = "0.0.6")
+bazel_dep(name = "rules_dart", version = "0.7.3")
 # 0.70.0 is a floor, not a current version: earlier releases auto-register a
 # fake wasm32 cc_toolchain that resolves ahead of the real one below, so a
 # downgrade breaks ring's build script far from the cause.
@@ -28,19 +28,19 @@ bazel_dep(name = "rules_dart", version = "0.7.1")
 bazel_dep(name = "rules_rust", version = "0.74.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
-bazel_dep(name = "apple_support", version = "2.9.0")
-bazel_dep(name = "rules_apple", version = "5.1.0")
-bazel_dep(name = "rules_cc", version = "0.2.25")
-bazel_dep(name = "rules_swift", version = "4.1.1")
+bazel_dep(name = "apple_support", version = "2.9.1")
+bazel_dep(name = "rules_apple", version = "5.2.0")
+bazel_dep(name = "rules_cc", version = "0.2.26")
+bazel_dep(name = "rules_swift", version = "4.1.2")
 bazel_dep(name = "llvm", version = "0.8.23")
 
 # Android bundling (rules_flutter's flutter_android_app + the NDK cc toolchain
 # that cross-compiles the Rust bridge to android_arm64).
-bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_android", version = "0.8.0")
 bazel_dep(name = "rules_android_ndk", version = "0.1.5")
 bazel_dep(name = "rules_kotlin", version = "2.4.20")
 bazel_dep(name = "rules_java", version = "9.9.0")
-bazel_dep(name = "rules_go", version = "0.63.0")
+bazel_dep(name = "rules_go", version = "0.64.2")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 
 # Pinned to a commit, not a release: 0.1.5 hardcodes
@@ -407,12 +407,12 @@ use_repo(cc, "llvm_toolchains")
 register_toolchains("@llvm_toolchains//:all")
 
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
-flutter.toolchain(flutter_version = "3.47.5")
+flutter.toolchain(flutter_version = "3.47.7")
 flutter.pub(
     name = "deps",
     lock = "//:pubspec.lock",
 )
-use_repo(flutter, "deps", "dev_tool_deps", "flutter_android_engine_arm64", "flutter_ios_engine", "flutter_macos_engine", "flutter_toolchains", "flutter_web_sdk")
+use_repo(flutter, "deps", "dev_tool_deps", "flutter_android_engine_arm64", "flutter_toolchains", "flutter_web_sdk")
 
 register_toolchains("@flutter_toolchains//:all")
 
