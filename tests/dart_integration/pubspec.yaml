@@ -12,8 +12,6 @@ dependencies:
     path: ../../tools/bench_harness
   frustrate:
     path: ../../runtime/dart
-  runfiles:
-    path: ../../../rules_dart/dart/runfiles
 
 dev_dependencies:
   test: ^1.25.0

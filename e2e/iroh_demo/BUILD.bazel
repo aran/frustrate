@@ -74,8 +74,8 @@ flutter_macos_app(
 # NSAppTransportSecurity in ios/Runner/Info.plist, so ATS blocks `http://`.
 # Nothing regresses — iOS here is build_test-only — but a self-hosted relay for
 # a phone has to be the `https://` one M3 owns.
-# flutter_ios_native_frameworks wraps the cross-compiled libiroh_rust.dylib as
-# a signed, embedded iroh_rust.framework (dlopen-legal on device).
+# The iroh_bridge package's code asset is the Rust bridge, which the app
+# bundler wraps as a signed, embedded framework (dlopen-legal on device).
 #
 # The runnable simulator artifact is `-c dbg`. `-c opt` for a simulator cpu
 # builds an .ipa that installs, launches, and renders nothing at all: it is a
@@ -109,8 +109,8 @@ flutter_ios_app(
     provisioning_profile = "//device:profile",
 )
 
-# Android. The iroh_bridge plugin's native_deps select carries the Rust bridge
-# as a per-ABI libiroh_rust.so. arm64-v8a to match an Apple-Silicon emulator or
+# Android. The iroh_bridge package's code asset carries the Rust bridge as a
+# per-ABI shared library. arm64-v8a to match an Apple-Silicon emulator or
 # a physical device; add an x64 sibling for x86 emulators (the
 # x86_64-linux-android triple is already in MODULE.bazel, so that is a
 # BUILD-file edit only).
@@ -363,7 +363,7 @@ flutter_ios_simulator_build_test(
     targets = [":app_ios"],
 )
 
-# APK (incl. the per-ABI libiroh_rust.so) builds. Manual: needs
+# APK (incl. the per-ABI Rust bridge library) builds. Manual: needs
 # --config=android and a local Android SDK/NDK (see .bazelrc.user; the NDK path
 # must be the *versioned* directory, not the `ndk/` parent), so
 # `bazel test //...` must not pick it up.
@@ -385,7 +385,7 @@ build_test(
 # prevent. See bazel/linux.bzl.
 #
 # This covers the entire Linux stack in one target: ring's C compiled for
-# x86_64-unknown-linux-gnu, libiroh_rust.so linked against the sysroot's glibc,
+# x86_64-unknown-linux-gnu, the Rust bridge library linked against the sysroot's glibc,
 # the templated GTK runner, and the bundle assembly.
 linux_x86_64_build(
     name = "app_linux_x86_64",

@@ -28,7 +28,7 @@ import 'runtime_core.dart';
 ///   }
 /// }
 ///
-/// FrustrateNative.init(path);
+/// FrustrateNative.init(myBridge);
 /// Frustrate.activate(Traced(Frustrate.instance));
 /// ```
 ///

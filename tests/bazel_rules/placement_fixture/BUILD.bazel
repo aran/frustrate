@@ -10,6 +10,7 @@ frustrate_bridge_outputs(
     name = "bridge",
     srcs = ["src/api.rs"],
     crate_name = "placement_claim_fixture",
+    package_name = "placement_claim_fixture",
     module_paths = ["crate::api"],
 )
 

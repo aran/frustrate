@@ -4898,19 +4898,40 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     );
     // sync
     //
-    // ALLOW here, as on every other generated item: the entry point's
-    // `ByteReader` is dead whenever the match below has no arms, and how many
-    // arms it has is not knowable at codegen time. A crate with no sync member
-    // has none on either target; and one emitted file is compiled for both
-    // target families, where the *async* entry's arms differ by `#[cfg]` (see
-    // below), so liveness is a property of the target, not of the interface.
-    // An unconditional item-level allow is the only form that is right for
-    // both — and it is the form `include!` permits.
+    // The match lives in its own never-inlined selector, which has returned
+    // before the member runs, so a panic never unwinds through it. A match on
+    // the unwind path is one frame with an epilogue per arm (LLVM
+    // tail-duplicates the call and return into every arm, even through a
+    // function pointer), and on AArch64 each epilogue carries a
+    // `DW_CFA_remember_state`. LLVM's libunwind (the unwinder of the `llvm` C
+    // toolchain) `alloca`s about 1.5 KB for every one it executes on the way to the panicking PC and frees none until the
+    // frame is parsed, so stepping through a match of a few hundred members
+    // overflows the 1 MB stack of a Dart VM thread, and a panic kills the
+    // process instead of reaching Dart.
     let (slot, route) = hot_route(
         "frustrate_call_sync",
         &[("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64"), ("out", "*mut u8"), ("out_cap", "u64")],
         " -> i32",
     );
+    out.push_str(ALLOW);
+    out.push_str(
+        "#[inline(never)]\nfn select_sync(fn_id: u32) -> Option<fn(&mut ByteReader) -> Outcome> {\n    match fn_id {\n",
+    );
+    for f in iface.functions.iter().filter(|f| f.exec == Exec::Sync) {
+        // Native-only members are absent from the web Dart surface; gating
+        // the arm out too means a forged fn_id hits the loud unknown-fn_id
+        // panic instead of a contract-violating body.
+        if f.requires_native {
+            out.push_str("        ");
+            out.push_str(NATIVE_ONLY_CFG);
+        }
+        let _ = write!(
+            out,
+            "        {} => Some(call_{}_{}),\n",
+            f.fn_id, f.fn_id, f.name
+        );
+    }
+    out.push_str("        _ => None,\n    }\n}\n\n");
     out.push_str(&slot);
     out.push_str(ALLOW);
     out.push_str(BLOCK_CHECK_SUPPRESS);
@@ -4918,43 +4939,18 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
         "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_call_sync(\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n    out: *mut u8,\n    out_cap: u64,\n) -> i32 {\n",
     );
     out.push_str(&route);
-    out.push_str("    let req = request_slice(req, req_len);\n    let resp = envelope::run(|| {\n        let mut r = ByteReader::new(req);\n        match fn_id {\n");
-    for f in iface.functions.iter().filter(|f| f.exec == Exec::Sync) {
-        // Native-only members are absent from the web Dart surface; gating
-        // the arm out too means a forged fn_id hits the loud unknown-fn_id
-        // panic instead of a contract-violating body.
-        if f.requires_native {
-            out.push_str("            ");
-            out.push_str(NATIVE_ONLY_CFG);
-        }
-        let _ = write!(
-            out,
-            "            {} => call_{}_{}(&mut r),\n",
-            f.fn_id, f.fn_id, f.name
-        );
-    }
-    out.push_str("            other => panic!(\"frustrate: unknown sync fn_id {other}\"),\n        }\n    });\n    unsafe { envelope::respond_out(resp, out, out_cap) }\n}\n\n");
-    // async — the entry point where the asymmetry is sharpest. An actor-only
-    // crate's arms are all `#[cfg(target_family = "wasm")]` (natively those
-    // calls route through frustrate_actor_call), so from this one emitted file
-    // the reader is live on wasm and dead on native. ALLOW is unconditional
-    // and therefore right on both; emitting the binding conditionally would
-    // have to mirror those cfgs onto the `let` and onto `req` in cascade, and
-    // would be wrong on one target the moment the cfg rules move.
+    out.push_str("    let req = request_slice(req, req_len);\n    let resp = envelope::run(|| {\n        let mut r = ByteReader::new(req);\n        let Some(arm) = select_sync(fn_id) else {\n            panic!(\"frustrate: unknown sync fn_id {fn_id}\")\n        };\n        arm(&mut r)\n    });\n    unsafe { envelope::respond_out(resp, out, out_cap) }\n}\n\n");
+    // async. Its selector's actor arms exist only on wasm (natively those
+    // calls route through frustrate_actor_call), so an actor-only crate's
+    // native selector is `_ => None` and every id is the unknown-id panic.
     let (slot, route) = hot_route(
         "frustrate_call_async",
         &[("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64"), ("call_id", "u64")],
         "",
     );
-    out.push_str(&slot);
     out.push_str(ALLOW);
-    out.push_str(BLOCK_CHECK_SUPPRESS);
     out.push_str(
-        "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_call_async(fn_id: u32, req: *const u8, req_len: u64, call_id: u64) {\n",
-    );
-    out.push_str(&route);
-    out.push_str(
-        "    let req = request_slice(req, req_len);\n    if let Err(p) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {\n        let mut r = ByteReader::new(req);\n        match fn_id {\n",
+        "#[inline(never)]\nfn select_async(fn_id: u32) -> Option<fn(&mut ByteReader, u64)> {\n    match fn_id {\n",
     );
     for f in iface.functions.iter().filter(|f| f.exec == Exec::Async) {
         if is_actor_fn(iface, f) {
@@ -4981,13 +4977,13 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
             if f.deferred {
                 let _ = write!(
                     out,
-                    "            #[cfg(target_family = \"wasm\")]\n            {} => actor_{}_{}(&mut r, call_id),\n",
+                    "        #[cfg(target_family = \"wasm\")]\n        {} => Some(actor_{}_{}),\n",
                     f.fn_id, f.fn_id, f.name
                 );
             } else {
                 let _ = write!(
                     out,
-                    "            #[cfg(target_family = \"wasm\")]\n            {} => frustrate::post::respond(call_id, envelope::run(|| actor_{}_{}(&mut r))),\n",
+                    "        #[cfg(target_family = \"wasm\")]\n        {} => Some(|r: &mut ByteReader, call_id: u64| frustrate::post::respond(call_id, envelope::run(|| actor_{}_{}(r)))),\n",
                     f.fn_id, f.fn_id, f.name
                 );
             }
@@ -4996,17 +4992,27 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
                 // Reachable since `#[bridge(native_only)]`: a declared
                 // native-only member may be async. (The structural sources
                 // cannot produce one — blocking contracts are sync-only.)
-                out.push_str("            ");
+                out.push_str("        ");
                 out.push_str(NATIVE_ONLY_CFG);
             }
             let _ = write!(
                 out,
-                "            {} => spawn_{}_{}(&mut r, call_id),\n",
+                "        {} => Some(spawn_{}_{}),\n",
                 f.fn_id, f.fn_id, f.name
             );
         }
     }
-    out.push_str("            other => panic!(\"frustrate: unknown async fn_id {other}\"),\n        }\n    })) {\n        frustrate::post::respond(call_id, envelope::panic_envelope(p));\n    }\n}\n\n");
+    out.push_str("        _ => None,\n    }\n}\n\n");
+    out.push_str(&slot);
+    out.push_str(ALLOW);
+    out.push_str(BLOCK_CHECK_SUPPRESS);
+    out.push_str(
+        "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_call_async(fn_id: u32, req: *const u8, req_len: u64, call_id: u64) {\n",
+    );
+    out.push_str(&route);
+    out.push_str(
+        "    let req = request_slice(req, req_len);\n    if let Err(p) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {\n        let mut r = ByteReader::new(req);\n        let Some(arm) = select_async(fn_id) else {\n            panic!(\"frustrate: unknown async fn_id {fn_id}\")\n        };\n        arm(&mut r, call_id)\n    })) {\n        frustrate::post::respond(call_id, envelope::panic_envelope(p));\n    }\n}\n\n",
+    );
 
     // Native actor entry: copy the request (liveness: bytes leave the
     // caller's buffer before this returns), then run the body on the
@@ -5500,7 +5506,7 @@ mod tests {
         let code = emit_src("#[bridge(sync)] pub fn add(a: i32, b: i32) -> i32 { a + b }");
         assert!(code.contains("fn call_#_add"), "{code}");
         assert!(code.contains("crate::api::add(a, b)"), "{code}");
-        assert!(code.contains("# => call_#_add(&mut r),"), "{code}");
+        assert!(code.contains("# => Some(call_#_add),"), "{code}");
     }
 
     #[test]
@@ -7550,7 +7556,7 @@ mod tests {
             "{code}"
         );
         assert!(
-            code.contains(&format!("{gate}\n            # => call_#_blocking_get(&mut r),")),
+            code.contains(&format!("{gate}\n        # => Some(call_#_blocking_get),")),
             "{code}"
         );
         // The try-lock's is not gated at all. Its acquisition is a
@@ -7562,10 +7568,10 @@ mod tests {
                 && !code.contains(&format!("{gate}\n{}fn call_#_try_get", super::ALLOW)),
             "{code}"
         );
-        assert!(code.contains("\n            # => call_#_try_get(&mut r),"), "{code}");
+        assert!(code.contains("\n        # => Some(call_#_try_get),"), "{code}");
         // The dispatched sibling stays ungated: its guard is taken and dropped
         // on the executor, wherever that runs.
-        assert!(code.contains("\n            # => spawn_#_read(&mut r, call_id),"), "{code}");
+        assert!(code.contains("\n        # => Some(spawn_#_read),"), "{code}");
         assert!(
             !code.contains(&format!("{gate}\n{}fn spawn_#_read", super::ALLOW)),
             "{code}"
@@ -7590,10 +7596,10 @@ mod tests {
             "{code}"
         );
         assert!(
-            code.contains(&format!("{gate}\n            # => call_#_dial(&mut r),")),
+            code.contains(&format!("{gate}\n        # => Some(call_#_dial),")),
             "{code}"
         );
-        assert!(code.contains("\n            # => call_#_portable(&mut r),"), "{code}");
+        assert!(code.contains("\n        # => Some(call_#_portable),"), "{code}");
         assert!(
             !code.contains(&format!("{gate}\n{}fn call_#_portable", super::ALLOW)),
             "{code}"
@@ -7607,7 +7613,7 @@ mod tests {
         let code = emit_src("#[bridge(native_only)] pub fn dial(t: String) -> i64 { 0 }");
         let gate = "#[cfg(not(target_family = \"wasm\"))]";
         assert!(
-            code.contains(&format!("{gate}\n            # => spawn_#_dial(&mut r, call_id),")),
+            code.contains(&format!("{gate}\n        # => Some(spawn_#_dial),")),
             "{code}"
         );
     }
@@ -8190,11 +8196,11 @@ mod tests {
         // deferred completion is the first post an actor instance makes
         // outside its dispatch turn.
         assert!(
-            code.contains("# => actor_#_slow(&mut r, call_id),"),
+            code.contains("# => Some(actor_#_slow),"),
             "{code}"
         );
         assert!(
-            !code.contains("2 => frustrate::post::respond"),
+            !code.contains("frustrate::post::respond(call_id, envelope::run(|| actor_#_slow"),
             "the deferred arm must not respond inline: {code}"
         );
     }

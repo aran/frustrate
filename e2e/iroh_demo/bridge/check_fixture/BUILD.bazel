@@ -10,6 +10,7 @@ frustrate_bridge_outputs(
     srcs = ["src/api.rs"],
     crate_name = "iroh_check_fixture",
     module_paths = ["crate::api"],
+    package_name = "iroh_check_fixture",
 )
 
 # The wasm dependency set `//bridge` uses on web. That is what this fixture is

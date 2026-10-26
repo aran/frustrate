@@ -14,6 +14,7 @@ def hot_patch_fixture():
         name = "bridge",
         srcs = ["src/api.rs"],
         crate_name = "hotpatch_fixture",
+        package_name = "hotpatch_fixture",
         module_paths = ["crate::api"],
         visibility = ["//tests/hotpatch:__pkg__"],
     )

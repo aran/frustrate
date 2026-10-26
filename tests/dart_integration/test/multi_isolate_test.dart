@@ -1,24 +1,20 @@
 /// Cross-isolate completion routing (VM-only).
 ///
-/// Two Dart isolates each `FrustrateNative.init` the SAME bridge library and
+/// Two Dart isolates each `FrustrateNative.init` the SAME bridge and
 /// issue concurrent async calls. Their per-isolate call-id sequences both
 /// start at 1, so without isolate-tagged routing the two isolates' call ids
 /// collide and the native transport's completions cross-deliver — the first
 /// isolate's futures either hang or receive the second isolate's results
 /// (silent data corruption). This test pins that they do not: every call's
 /// result is correct in both isolates under concurrency.
-///
-/// Native prerequisite: `cargo build -p test_api`. Run with `dart test`.
 @TestOn('vm')
 library;
 
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:frustrate/frustrate.dart';
 import 'package:frustrate_integration/test_api.frustrate.dart';
-import 'package:runfiles/runfiles.dart';
 import 'package:test/test.dart';
 
 /// How many concurrent calls each isolate issues per round, and how many
@@ -55,10 +51,9 @@ Future<(List<int>, List<String>)> _runBatch() async {
 
 /// Entry point for the second isolate: init the same bridge, run the batch,
 /// and ship the results (or the failure) back to the main isolate.
-void _workerEntry((SendPort, String) args) async {
-  final (toMain, libPath) = args;
+void _workerEntry(SendPort toMain) async {
   try {
-    FrustrateNative.init(libPath);
+    FrustrateNative.init(testApiBridge);
     toMain.send(await _runBatch());
   } catch (e, st) {
     toMain.send('worker error: $e\n$st');
@@ -66,23 +61,18 @@ void _workerEntry((SendPort, String) args) async {
 }
 
 void main() {
-  final libPath = _bridgeLibraryPath();
-
   setUpAll(() {
     // The main isolate is the first to init (isolate tag 1); the worker inits
     // second (tag 2). Under the old single global callback slot, this second
     // init would steal the main isolate's completions.
-    FrustrateNative.init(libPath);
+    FrustrateNative.init(testApiBridge);
   });
 
   test(
     'concurrent async calls from two isolates never cross-deliver',
     () async {
       final fromWorker = ReceivePort();
-      final worker = await Isolate.spawn(_workerEntry, (
-        fromWorker.sendPort,
-        libPath,
-      ));
+      final worker = await Isolate.spawn(_workerEntry, fromWorker.sendPort);
 
       // Run the main isolate's identical batch concurrently with the worker's,
       // then collect the worker's results.
@@ -129,25 +119,3 @@ void main() {
     timeout: const Timeout(Duration(seconds: 30)),
   );
 }
-
-/// Locate the bridge dylib. Mirrors init_native.dart: Bazel supplies it as a
-/// runfile (TEST_SRCDIR set), the cargo loop uses the cargo target dir.
-String _bridgeLibraryPath() {
-  if (Platform.environment.containsKey('TEST_SRCDIR')) {
-    return Runfiles.create().rlocation(
-      '_main/tests/test_api/libtest_api_shared.$_libExt',
-    );
-  }
-  final lib = File('../../target/debug/libtest_api.$_libExt').absolute.path;
-  if (!File(lib).existsSync()) {
-    fail('libtest_api.$_libExt not found; run `cargo build -p test_api` first');
-  }
-  return lib;
-}
-
-/// The shared-library extension of the host the bridge was built for.
-final String _libExt = Platform.isMacOS
-    ? 'dylib'
-    : Platform.isWindows
-    ? 'dll'
-    : 'so';

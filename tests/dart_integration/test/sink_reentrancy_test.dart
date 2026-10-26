@@ -13,7 +13,6 @@
 /// runs on a microtask. This file pins the property on every config, and pins
 /// that legitimate re-entrancy still WORKS — deferred, not refused.
 ///
-/// Native prerequisite: `cargo build -p test_api`.
 /// Web prerequisite: `dart run tool/build_web_fixture.dart`.
 library;
 

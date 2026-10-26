@@ -3,6 +3,7 @@
 //! Usage:
 //!   frustrate-codegen \
 //!     --crate-name my_bridge \
+//!     --dart-package my_app \
 //!     --src api.rs:crate::api [--src more.rs:crate::more ...] \
 //!     --rust-out frustrate_generated.rs \
 //!     --dart-out bridge.frustrate.dart \
@@ -19,6 +20,7 @@ use frustrate_codegen::{GenerateConfig, SourceSpec};
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut crate_name = None;
+    let mut dart_package = None;
     let mut sources = vec![];
     let mut rust_out = None;
     let mut dart_out = None;
@@ -32,6 +34,7 @@ fn main() -> Result<()> {
         };
         match flag.as_str() {
             "--crate-name" => crate_name = Some(value("--crate-name")?),
+            "--dart-package" => dart_package = Some(value("--dart-package")?),
             "--src" => {
                 let v = value("--src")?;
                 let (path, module_path) = v
@@ -52,6 +55,7 @@ fn main() -> Result<()> {
 
     let config = GenerateConfig {
         crate_name: crate_name.context("--crate-name is required")?,
+        dart_package: dart_package.context("--dart-package is required")?,
         sources,
         rust_out: rust_out.context("--rust-out is required")?,
         dart_out: dart_out.context("--dart-out is required")?,

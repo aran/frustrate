@@ -16,7 +16,16 @@ the only thing that ships, but it is also the one crate type nothing can link,
 so a bridge crate declared as a bare cdylib had unit tests and nothing else.
 """
 
+load("@rules_dart//dart:providers.bzl", "DartCodeAssetInfo")
 load("@rules_rust//rust:defs.bzl", "rust_common", "rust_library", "rust_shared_library")
+
+FrustrateBridgeInfo = provider(
+    doc = "What `frustrate_bridge` generated bindings for: the code-asset id they resolve the bridge library by.",
+    fields = {
+        "asset_id": "str: `package:<package_name>/<crate_name>`, the id the generated `@Native` declarations name.",
+        "crate_name": "str: the bridge crate's name.",
+    },
+)
 
 def _frustrate_bridge_impl(ctx):
     if len(ctx.attr.srcs) != len(ctx.attr.module_paths):
@@ -47,6 +56,7 @@ def _frustrate_bridge_impl(ctx):
 
     args = ctx.actions.args()
     args.add("--crate-name", ctx.attr.crate_name)
+    args.add("--dart-package", ctx.attr.package_name)
     for src, module_path in zip(ctx.files.srcs, ctx.attr.module_paths):
         args.add("--src", "{}:{}".format(src.path, module_path))
     args.add("--rust-out", rust_out)
@@ -63,6 +73,10 @@ def _frustrate_bridge_impl(ctx):
         progress_message = "frustrate codegen for %{label}",
     )
     return [
+        FrustrateBridgeInfo(
+            asset_id = "package:{}/{}".format(ctx.attr.package_name, ctx.attr.crate_name),
+            crate_name = ctx.attr.crate_name,
+        ),
         DefaultInfo(files = depset([rust_out, ir_out, claims_out] + dart_outs)),
         OutputGroupInfo(
             rust = depset([rust_out]),
@@ -87,12 +101,69 @@ frustrate_bridge = rule(
             doc = "Rust module path of each src from the crate root, e.g. 'crate::api'.",
         ),
         "crate_name": attr.string(mandatory = True),
+        "package_name": attr.string(
+            mandatory = True,
+            doc = "The Dart package the generated bindings compile into (the " +
+                  "`package_name` of the `dart_library` holding them). It " +
+                  "namespaces the bridge's code-asset id, which the Dart VM " +
+                  "resolves only under the package that declares it.",
+        ),
         "_codegen": attr.label(
             default = Label("//codegen:frustrate_codegen_bin"),
             executable = True,
             cfg = "exec",
         ),
     },
+)
+
+def _frustrate_code_asset_impl(ctx):
+    libraries = [
+        f
+        for f in ctx.attr.library[DefaultInfo].files.to_list()
+        if f.extension in ("so", "dylib", "dll")
+    ]
+    if len(libraries) != 1:
+        fail("frustrate_code_asset %s: `library` %s must provide exactly one shared library, found %s" % (
+            ctx.label,
+            ctx.attr.library.label,
+            [f.short_path for f in libraries] or "none",
+        ))
+    library = libraries[0]
+    return [
+        DefaultInfo(files = depset([library])),
+        DartCodeAssetInfo(
+            asset_id = ctx.attr.bridge[FrustrateBridgeInfo].asset_id,
+            link_mode = "dynamic_loading_bundle",
+            dynamic_library = library,
+            system_uri = "",
+        ),
+    ]
+
+frustrate_code_asset = rule(
+    implementation = _frustrate_code_asset_impl,
+    doc = """A bridge library as the Dart code asset its generated bindings resolve.
+
+The generated `<crate>Bridge` names its exports by the asset id of `bridge`;
+this binds that id to `library`'s file. List it in the `code_assets` of the
+`dart_library` that holds the bindings, and any `dart_test` or `dart_binary`
+depending on that package loads `library` built for the host it runs on. An app
+bundler (rules_flutter) ships it per platform.
+
+`library` is any target providing the bridge's shared library: a
+`frustrate_bridge_library`, `frustrate_manual_scheduler_library`,
+`frustrate_hot_patchable`.""",
+    attrs = {
+        "bridge": attr.label(
+            mandatory = True,
+            providers = [FrustrateBridgeInfo],
+            doc = "The `frustrate_bridge` that generated the bindings.",
+        ),
+        "library": attr.label(
+            mandatory = True,
+            doc = "The shared library built from `bridge`'s crate.",
+        ),
+    },
+    provides = [DartCodeAssetInfo],
 )
 
 def frustrate_bridge_outputs(name, visibility = None, **kwargs):
@@ -148,8 +219,9 @@ def frustrate_bridge_library(name, crate_name = None, visibility = None, **kwarg
     * `<name>` — `rust_shared_library` (crate-type `cdylib`). Byte-for-byte
       what a bare `rust_shared_library(name = "<name>", …)` produced, and the
       target every consumer already names: `frustrate_wasm_module(crate = ":<name>")`,
-      `flutter_plugin(native_deps = [":<name>"])`, `lib<name>.dylib` /
-      `<name>.framework` / `lib<name>.so`.
+      `frustrate_code_asset(library = ":<name>")`, which binds the shared
+      library to the bindings' code-asset id; the app bundler ships it in each
+      platform's form.
     * `<name>_lib` — `rust_library` (crate-type `rlib`). Same crate, same
       crate *name*, in the one form another Rust crate can link.
 

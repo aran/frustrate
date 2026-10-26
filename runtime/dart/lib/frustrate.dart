@@ -2,8 +2,9 @@
 ///
 /// Generated bindings (see frustrate-codegen) import this package and use
 /// only its platform-neutral surface (Frustrate/FrustrateRuntime, the codec,
-/// OpaqueHandle). Bridge users call the platform init once — on native,
-/// `FrustrateNative.init(libraryPath)` — then use the generated API.
+/// OpaqueHandle) and, on native, `BridgeLibrary`. Bridge users call the platform init once — on native,
+/// `FrustrateNative.init(<crate>Bridge)` with the `BridgeLibrary` the bindings
+/// export — then use the generated API.
 ///
 /// Platform selection: `dart.library.js_interop` is true exactly for web
 /// compilers (dart2js and dart2wasm) and false on the VM. Do not condition on

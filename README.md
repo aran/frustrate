@@ -130,6 +130,32 @@ is a file to parse and the Rust path its items are reachable by from the bridge
 crate. The demos declare a single pair because one file covers them, not because
 the tool takes one.
 
+**The bridge library is a Dart code asset.** `package_name` is the Dart package
+the bindings compile into. The generated `<crate>Bridge` (`myBridgeBridge` for
+crate `my_bridge`) resolves the library by the asset id `package:<package_name>/<crate>`,
+and a `frustrate_code_asset` binds that id to the built library:
+
+```starlark
+frustrate_code_asset(
+    name = "bridge_asset",
+    bridge = ":codegen",
+    library = ":my_bridge",
+)
+
+dart_library(
+    name = "bindings",
+    srcs = [":codegen.dart"],
+    code_assets = [":bridge_asset"],
+    package_name = "my_app",
+)
+```
+
+A `dart_test` or `dart_binary` depending on `:bindings` gets the library built
+for the host it runs on, and an app bundler (rules_flutter) ships it per
+platform. In Dart, `FrustrateNative.init(myBridgeBridge)` once, then call the
+bindings. `BridgeLibrary.dynamic(DynamicLibrary.open(path), name: path)` is the
+way to load a library you built yourself.
+
 A source need not live in the bridge crate. A domain crate can carry
 `#[bridge(...)]` on its own types and be listed directly:
 
@@ -139,6 +165,7 @@ frustrate_bridge_outputs(
     srcs = ["//rust/core:src/model.rs", "src/api.rs"],
     crate_name = "my_bridge",
     module_paths = ["my_core::model", "crate::api"],
+    package_name = "my_app",
 )
 ```
 

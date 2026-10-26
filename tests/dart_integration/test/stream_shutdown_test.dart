@@ -25,12 +25,10 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:frustrate/frustrate.dart';
 import 'package:frustrate_integration/test_api.frustrate.dart';
-import 'package:runfiles/runfiles.dart';
 import 'package:test/test.dart';
 
 /// How many items the detached Rust ticker posts. Small enough that natural
@@ -44,9 +42,9 @@ const int _tickCount = 40;
 /// (b) the open stream pins it until the producer finishes. Reports 'opened'
 /// once the stream is running, then the consumed item count from `onDone`
 /// (which fires as the stream closes, just before the isolate exits).
-Future<void> _tickerEntry((SendPort, String, int) args) async {
-  final (toMain, libPath, count) = args;
-  FrustrateNative.init(libPath);
+Future<void> _tickerEntry((SendPort, int) args) async {
+  final (toMain, count) = args;
+  FrustrateNative.init(testApiBridge);
   final c = StreamController<int>();
   final received = <int>[];
   c.stream.listen(received.add, onDone: () => toMain.send(received.length));
@@ -61,9 +59,8 @@ Future<void> _tickerEntry((SendPort, String, int) args) async {
 ///
 /// Reports what the refusal was so the parent can check it arrived through the
 /// future rather than as a synchronous throw.
-Future<void> _failedIssueEntry((SendPort, String) args) async {
-  final (toMain, libPath) = args;
-  FrustrateNative.init(libPath);
+Future<void> _failedIssueEntry(SendPort toMain) async {
+  FrustrateNative.init(testApiBridge);
   final host = await Frustrate.instance.spawnActorHost();
   await host.shutdown();
   // Not wrapped: a synchronous throw here would escape the entry, and the
@@ -79,12 +76,10 @@ Future<void> _failedIssueEntry((SendPort, String) args) async {
 }
 
 void main() {
-  final libPath = _bridgeLibraryPath();
-
   setUpAll(() {
     // The main isolate reads the process-global ticker counters; the ticker's
     // sink belongs to the spawned isolate.
-    FrustrateNative.init(libPath);
+    FrustrateNative.init(testApiBridge);
   });
 
   test(
@@ -94,7 +89,6 @@ void main() {
       final onExit = ReceivePort();
       await Isolate.spawn(_tickerEntry, (
         fromWorker.sendPort,
-        libPath,
         _tickCount,
       ), onExit: onExit.sendPort);
 
@@ -163,10 +157,11 @@ void main() {
     // That is the whole failure mode: not a wrong value, a process that hangs.
     final fromWorker = ReceivePort();
     final onExit = ReceivePort();
-    await Isolate.spawn(_failedIssueEntry, (
+    await Isolate.spawn(
+      _failedIssueEntry,
       fromWorker.sendPort,
-      libPath,
-    ), onExit: onExit.sendPort);
+      onExit: onExit.sendPort,
+    );
 
     final outcome = Completer<String>();
     fromWorker.listen((msg) {
@@ -194,25 +189,3 @@ void main() {
     onExit.close();
   }, timeout: const Timeout(Duration(seconds: 30)));
 }
-
-/// Locate the bridge dylib. Mirrors init_native.dart: Bazel supplies it as a
-/// runfile (TEST_SRCDIR set), the cargo loop uses the cargo target dir.
-String _bridgeLibraryPath() {
-  if (Platform.environment.containsKey('TEST_SRCDIR')) {
-    return Runfiles.create().rlocation(
-      '_main/tests/test_api/libtest_api_shared.$_libExt',
-    );
-  }
-  final lib = File('../../target/debug/libtest_api.$_libExt').absolute.path;
-  if (!File(lib).existsSync()) {
-    fail('libtest_api.$_libExt not found; run `cargo build -p test_api` first');
-  }
-  return lib;
-}
-
-/// The shared-library extension of the host the bridge was built for.
-final String _libExt = Platform.isMacOS
-    ? 'dylib'
-    : Platform.isWindows
-    ? 'dll'
-    : 'so';

@@ -22,7 +22,7 @@
 ///   }
 /// }
 ///
-/// FrustrateNative.init(libraryPath);
+/// FrustrateNative.init(myBridge);
 /// Frustrate.activate(Traced(Frustrate.instance));
 /// ```
 ///

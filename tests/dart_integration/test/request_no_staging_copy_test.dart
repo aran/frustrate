@@ -37,8 +37,6 @@
 ///
 /// Native-only: web has no FFI block and no allocator to inject. Its analogue
 /// is `call_entry_count_test.dart`, which counts wasm entries.
-///
-/// Native prerequisite: `cargo build -p test_api`.
 @TestOn('vm')
 library;
 
@@ -50,7 +48,14 @@ import 'package:frustrate/frustrate.dart';
 import 'package:frustrate_integration/test_api.frustrate.dart';
 import 'package:test/test.dart';
 
-import 'init_native.dart';
+/// `head_ptr`'s dispatch id, looked up rather than written down: ids are
+/// derived from each member's wire facts.
+final int _headPtrFnId = frustrateMemberNames.entries
+    .firstWhere(
+      (e) => e.value == 'head_ptr',
+      orElse: () => throw StateError('no bridged member named head_ptr'),
+    )
+    .key;
 
 /// `malloc`, remembering the most recent block. A pass-through for the same
 /// reason the counting one is: the bytes really are FFI memory and the call
@@ -76,10 +81,7 @@ void main() {
   final recording = _Recording();
 
   setUpAll(() {
-    final rt = NativeRuntime(
-      DynamicLibrary.open(bridgeLibraryPath()),
-      allocator: recording,
-    );
+    final rt = NativeRuntime(testApiBridge, allocator: recording);
     Frustrate.install(
       rt,
       source: recording,
@@ -114,7 +116,7 @@ void main() {
     // and frees whichever is current, and the recording allocator's `last` is
     // the block that survived to the call.
     final payload = Uint8List(64 * 1024);
-    final r = Frustrate.instance.callSync(11, 8, (w) {
+    final r = Frustrate.instance.callSync(_headPtrFnId, 8, (w) {
       w.writeBytes(payload);
     });
     final seen = r.readU64();
@@ -141,7 +143,9 @@ void main() {
     );
 
     var checked = false;
-    final r = Frustrate.instance.callSync(11, 8 + payload.length, (w) {
+    final r = Frustrate.instance.callSync(_headPtrFnId, 8 + payload.length, (
+      w,
+    ) {
       w.writeBytes(payload);
 
       final block = recording.last;

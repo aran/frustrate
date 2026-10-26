@@ -19,8 +19,6 @@
 /// async case. Both were run before this file was committed.
 ///
 /// Native-only: it counts native allocations, which is not a thing web has.
-///
-/// Native prerequisite: `cargo build -p test_api`.
 @TestOn('vm')
 library;
 
@@ -31,8 +29,6 @@ import 'package:ffi/ffi.dart';
 import 'package:frustrate/frustrate.dart';
 import 'package:frustrate_integration/test_api.frustrate.dart';
 import 'package:test/test.dart';
-
-import 'init_native.dart';
 
 /// `request_floor`'s dispatch id, looked up rather than written down: ids are
 /// derived from each member's wire facts, so a literal would be a copy of a
@@ -77,10 +73,7 @@ void main() {
   setUpAll(() {
     // A second runtime over the same library, installed for this isolate. The
     // schema check runs against it exactly as `initBridge` would.
-    final rt = NativeRuntime(
-      DynamicLibrary.open(bridgeLibraryPath()),
-      allocator: counting,
-    );
+    final rt = NativeRuntime(testApiBridge, allocator: counting);
     Frustrate.install(
       rt,
       source: counting,

@@ -180,7 +180,7 @@ Future<void> main() async {
     'frustrate_runtime_abi',
   );
 
-  FrustrateNative.initWithLibrary(dylib);
+  FrustrateNative.init(BridgeLibrary.dynamic(dylib, name: dylibPath));
   checkFrustrateSchema();
 
   final cells = <Cell>[];

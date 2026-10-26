@@ -19,7 +19,6 @@
 ///     an actor is a separate wasm instance with its own `static`s while
 ///     natively there is one process-global logger. Both are asserted by name.
 ///
-/// Native prerequisite: `cargo build -p test_api`.
 /// Web prerequisite: `dart run tool/build_web_fixture.dart`.
 library;
 

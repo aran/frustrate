@@ -21,7 +21,6 @@ import 'dart:io';
 
 import 'package:frustrate/frustrate.dart';
 import 'package:iroh_bridge/iroh_rust.frustrate.dart';
-import 'package:runfiles/runfiles.dart';
 
 /// Crates whose records prove the point: none of them has heard of frustrate,
 /// and none of them is this app.
@@ -47,8 +46,7 @@ bool _isDependency(String target) {
 }
 
 Future<void> main() async {
-  FrustrateNative.init(
-      Runfiles.create().rlocation('_main/bridge/libiroh_rust.dylib'));
+  FrustrateNative.init(irohRustBridge);
   checkFrustrateSchema();
 
   final records = <LogRecord>[];

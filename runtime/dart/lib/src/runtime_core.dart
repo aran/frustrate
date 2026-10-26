@@ -658,7 +658,7 @@ bool get _assertsEnabled {
 /// This is the same "init is an ensure" reasoning one paragraph up, applied to
 /// the one case where the ensure is already satisfied by something that is not
 /// a platform transport. A widget whose first build calls
-/// `FrustrateNative.init(path)` must not dlopen a path that has no reason to
+/// `FrustrateNative.init(bridge)` must not load a library that has no reason to
 /// exist under `flutter test`, and the alternative — requiring every such code
 /// path to know whether it is under a fake — is the knowledge the ensure exists
 /// to remove.
@@ -727,8 +727,8 @@ class Frustrate {
 
   /// What the installed transport was built from, and how to name it in a
   /// disagreement. Comparison is `==` on an opaque value each transport
-  /// chooses (a path, a `DynamicLibrary`, a module identity), so this file
-  /// stays platform-neutral.
+  /// chooses (a `BridgeLibrary`, a module identity), so this file stays
+  /// platform-neutral.
   ///
   /// Recorded by [install] — i.e. only once a transport really exists. An init
   /// that failed partway (a library that would not open, a runtime ABI
@@ -743,7 +743,7 @@ class Frustrate {
     if (i == null) {
       throw StateError(
         'Frustrate has not been initialized; call the platform init '
-        '(e.g. FrustrateNative.init with the bridge library path) before '
+        '(on native, FrustrateNative.init with the generated bridge library) before '
         'using generated bindings',
       );
     }
@@ -793,8 +793,8 @@ class Frustrate {
       // any other non-platform runtime) and a later code path is lazily
       // ensuring the bridge is up. Init is an ensure, so the honest answer is
       // "it is up" — the caller returns having built nothing, and a widget
-      // that calls `FrustrateNative.init(path)` on first build does not dlopen
-      // a path that has no reason to exist under `flutter test`.
+      // that calls `FrustrateNative.init(bridge)` on first build does not load
+      // a library that has no reason to exist under `flutter test`.
       //
       // Narrower than "nothing installed" on purpose: with both slots empty
       // this is a genuine first init and must proceed, which is what the

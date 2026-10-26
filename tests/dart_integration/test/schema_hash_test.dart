@@ -5,7 +5,7 @@
 /// fn_ids / decode wrong types into unsafe handle derefs — so it must fail
 /// loudly, not silently corrupt.
 ///
-/// Prerequisite: `cargo build -p test_api` (native) or the web fixture build.
+/// Web prerequisite: `dart run tool/build_web_fixture.dart`.
 library;
 
 import 'package:frustrate/frustrate.dart';

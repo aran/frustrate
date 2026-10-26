@@ -20,7 +20,6 @@
 /// comparison, a response written at the wrong offset within the block, and a
 /// request that moved when the slab was put in front of it.
 ///
-/// Native prerequisite: `cargo build -p test_api`.
 /// Web prerequisite: `dart run tool/build_web_fixture.dart`.
 library;
 

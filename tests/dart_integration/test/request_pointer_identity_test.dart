@@ -24,8 +24,6 @@
 ///
 /// **The `+ 8`** is the wire's own length prefix: `read_bytes` reads an i64
 /// length, then the payload. So the payload begins 8 bytes into the request.
-///
-/// Native prerequisite: `cargo build -p test_api`.
 @TestOn('vm')
 library;
 
@@ -85,8 +83,10 @@ void main() {
 
   setUpAll(() async {
     await initBridge();
-    callSync = DynamicLibrary.open(bridgeLibraryPath())
-        .lookupFunction<_CallSyncC, _CallSyncDart>('frustrate_call_sync');
+    callSync = testApiBridge
+        .lookup('frustrate_call_sync')
+        .cast<NativeFunction<_CallSyncC>>()
+        .asFunction<_CallSyncDart>();
   });
 
   /// Stage `[i64 len][payload]` in a fresh buffer, dispatch `head_ptr` against

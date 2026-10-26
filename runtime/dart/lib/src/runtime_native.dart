@@ -87,57 +87,77 @@ typedef _SchemaHashDart = int Function();
 typedef _ManualDrainC = Uint8 Function();
 typedef _ManualDrainDart = int Function();
 
+/// The native library that serves a bridge's exports, resolved by name.
+///
+/// Generated bindings declare one `const` (`<crate>Bridge`) that resolves the
+/// bridge as a Dart code asset, so the build decides which library file backs
+/// it; pass it to [FrustrateNative.init]. [BridgeLibrary.dynamic] adapts an
+/// already-open [DynamicLibrary] for a library loaded by hand.
+abstract class BridgeLibrary {
+  /// Names the library in errors: the code-asset id for a generated bridge.
+  String get name;
+
+  /// The address of the export called [symbol].
+  ///
+  /// Throws an [ArgumentError] when the library has no such export. The
+  /// runtime relies on that for the exports a bridge may lack (the manual
+  /// scheduler, actors, streams, resident types).
+  Pointer<Void> lookup(String symbol);
+
+  /// [library]'s exports, named [name] in errors.
+  ///
+  /// Two of these are equal when their libraries are: `DynamicLibrary`
+  /// equality is "loads the same library" (dart:ffi), so naming one library
+  /// through two separate `DynamicLibrary.open` calls is one bridge.
+  factory BridgeLibrary.dynamic(
+    DynamicLibrary library, {
+    required String name,
+  }) = _DynamicBridgeLibrary;
+}
+
+final class _DynamicBridgeLibrary implements BridgeLibrary {
+  final DynamicLibrary _library;
+
+  @override
+  final String name;
+
+  _DynamicBridgeLibrary(this._library, {required this.name});
+
+  @override
+  Pointer<Void> lookup(String symbol) => _library.lookup<Void>(symbol);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _DynamicBridgeLibrary && other._library == _library;
+
+  @override
+  int get hashCode => _library.hashCode;
+}
+
 /// Native entry point: initialize once, then use the generated API.
 ///
-/// Both entry points follow the repeated-init contract stated on [Frustrate]:
-/// naming the same library again does nothing, naming a different one throws.
-/// The no-op is idempotent in the *strong* sense — a second call does not even
-/// open the library — because `Frustrate.install` alone is not enough: its
-/// argument is evaluated before it decides to discard it, and a discarded
-/// `NativeRuntime` has already re-registered this isolate's exit listener
-/// (see [Frustrate.initializedFrom]).
-///
-/// The two entry points share the one transport slot, so they share the guard:
-/// an `init` followed by an `initWithLibrary` is a disagreement like any other.
+/// Repeated calls follow the contract stated on [Frustrate]: naming the same
+/// bridge again does nothing, naming a different one throws. The no-op is
+/// idempotent in the *strong* sense — a second call does not even resolve the
+/// library — because `Frustrate.install` alone is not enough: its argument is
+/// evaluated before it decides to discard it, and a discarded `NativeRuntime`
+/// has already re-registered this isolate's exit listener (see
+/// [Frustrate.initializedFrom]).
 class FrustrateNative {
   /// The transport this class installed, and how to name it in an error.
   static NativeRuntime? _runtime;
   static String? _description;
 
-  /// Open the bridge dynamic library at [libraryPath] and register the
-  /// completion callback.
+  /// Register the completion callback with [bridge] and install the transport.
   ///
-  /// A repeated call with the same [libraryPath] is a no-op; one with a
-  /// different path throws a [StateError] naming both, because the first
-  /// library stays installed and would keep serving every call.
-  ///
-  /// **Paths are compared as written.** Two spellings of one file
-  /// (`libbridge.dylib` and `./libbridge.dylib`) are reported as a
-  /// disagreement rather than resolved to the same library: resolving would
-  /// mean opening the second library to find out what it is, and a guard whose
-  /// job is to *avoid* loading a second bridge must not load one to decide.
-  /// Naming the bridge one way is the fix, and the message quotes both.
-  static void init(String libraryPath) {
-    final description = 'the bridge library at "$libraryPath"';
-    if (Frustrate.initializedFrom(libraryPath, description)) return;
-    _install(
-      NativeRuntime(DynamicLibrary.open(libraryPath)),
-      libraryPath,
-      description,
-    );
-  }
-
-  /// Initialize from an already-loaded library (e.g. DynamicLibrary.process()
-  /// when the bridge is statically linked into the embedder).
-  ///
-  /// Repeated calls follow the same contract as [init]. Here the comparison is
-  /// exact rather than textual: `DynamicLibrary` equality is defined as "loads
-  /// the same library" (dart:ffi), so handing this the same library through two
-  /// separate `DynamicLibrary.open` calls is correctly a no-op.
-  static void initWithLibrary(DynamicLibrary library) {
-    const description = 'an already-loaded library (initWithLibrary)';
-    if (Frustrate.initializedFrom(library, description)) return;
-    _install(NativeRuntime(library), library, description);
+  /// A repeated call with the same [bridge] is a no-op; one with a different
+  /// bridge throws a [StateError] naming both, because the first library stays
+  /// installed and would keep serving every call. Generated bridges are
+  /// `const`, so the same one is always the same object.
+  static void init(BridgeLibrary bridge) {
+    final description = 'the bridge library "${bridge.name}"';
+    if (Frustrate.initializedFrom(bridge, description)) return;
+    _install(NativeRuntime(bridge), bridge, description);
   }
 
   static void _install(
@@ -179,9 +199,10 @@ class FrustrateNative {
     }
     final _ManualDrainDart drain;
     try {
-      drain = runtime.lib.lookupFunction<_ManualDrainC, _ManualDrainDart>(
-        'frustrate_manual_drain',
-      );
+      drain = runtime.bridge
+          .lookup('frustrate_manual_drain')
+          .cast<NativeFunction<_ManualDrainC>>()
+          .asFunction<_ManualDrainDart>();
     } on ArgumentError {
       throw StateError(
         'frustrate: $_description was built without the '
@@ -196,7 +217,7 @@ class FrustrateNative {
 }
 
 final class NativeRuntime implements FrustrateRuntime {
-  final DynamicLibrary lib;
+  final BridgeLibrary bridge;
 
   /// Where request blocks come from. `malloc` in every shipping configuration;
   /// injectable so a test can count allocations and frees.
@@ -209,19 +230,27 @@ final class NativeRuntime implements FrustrateRuntime {
   /// is what observes it.
   final Allocator _alloc;
 
-  late final _CallSyncDart _callSync = lib
-      .lookupFunction<_CallSyncC, _CallSyncDart>('frustrate_call_sync');
-  late final _CallAsyncDart _callAsync = lib
-      .lookupFunction<_CallAsyncC, _CallAsyncDart>('frustrate_call_async');
-  late final _BufferFreeDart _bufferFree = lib
-      .lookupFunction<_BufferFreeC, _BufferFreeDart>('frustrate_buffer_free');
+  late final _CallSyncDart _callSync = bridge
+      .lookup('frustrate_call_sync')
+      .cast<NativeFunction<_CallSyncC>>()
+      .asFunction<_CallSyncDart>();
+  late final _CallAsyncDart _callAsync = bridge
+      .lookup('frustrate_call_async')
+      .cast<NativeFunction<_CallAsyncC>>()
+      .asFunction<_CallAsyncDart>();
+  late final _BufferFreeDart _bufferFree = bridge
+      .lookup('frustrate_buffer_free')
+      .cast<NativeFunction<_BufferFreeC>>()
+      .asFunction<_BufferFreeDart>();
 
   /// `frustrate_call_cancel` (executor.rs) — claims one in-flight `async fn`
   /// call out of the cooperative executor's registry so its future is dropped.
   /// A runtime export since ABI 4, so every loaded bridge has it and the lookup
   /// cannot fail on a module this transport already accepted.
-  late final _CallCancelDart _callCancel = lib
-      .lookupFunction<_CallCancelC, _CallCancelDart>('frustrate_call_cancel');
+  late final _CallCancelDart _callCancel = bridge
+      .lookup('frustrate_call_cancel')
+      .cast<NativeFunction<_CallCancelC>>()
+      .asFunction<_CallCancelDart>();
 
   // Per-isolate call-id sequence. The full id an isolate puts on the wire is
   // `_isolateTag | _nextSeq++` (see [_allocId]): the tag makes ids globally
@@ -275,7 +304,7 @@ final class NativeRuntime implements FrustrateRuntime {
   /// ordering domain.
   late final RawReceivePort _completions;
 
-  NativeRuntime(this.lib, {Allocator? allocator})
+  NativeRuntime(this.bridge, {Allocator? allocator})
     : _alloc = allocator ?? malloc {
     _completions = RawReceivePort(_onMessage, 'frustrate');
     // Keep the isolate alive exactly while there is bridge work it must still
@@ -291,14 +320,26 @@ final class NativeRuntime implements FrustrateRuntime {
     // producer is safe to post. Nothing here is load-bearing for safety — an
     // exit this fails to prevent costs a refused post, not a crash.
     _completions.keepIsolateAlive = false;
-    _checkRuntimeAbi();
-    // Hand Rust the dart_api_dl table and this isolate's port. The returned id
-    // is stamped into every id we allocate so completions route back here and
-    // not to another isolate; a negative return is a failed handshake.
-    final id = lib.lookupFunction<_InitDlC, _InitDlDart>('frustrate_init_dl')(
-      NativeApi.initializeApiDLData,
-      _completions.sendPort.nativePort,
-    );
+    final int id;
+    try {
+      _checkRuntimeAbi();
+      // Hand Rust the dart_api_dl table and this isolate's port. The returned
+      // id is stamped into every id we allocate so completions route back here
+      // and not to another isolate; a negative return is a failed handshake.
+      id =
+          bridge
+              .lookup('frustrate_init_dl')
+              .cast<NativeFunction<_InitDlC>>()
+              .asFunction<_InitDlDart>()(
+            NativeApi.initializeApiDLData,
+            _completions.sendPort.nativePort,
+          );
+    } catch (_) {
+      // No runtime is going to be returned (the library did not resolve, or
+      // speaks another ABI), so nothing else will ever close the port.
+      _completions.close();
+      rethrow;
+    }
     if (id < 0) {
       _completions.close();
       throw StateError(_handshakeFailure(id));
@@ -333,13 +374,14 @@ final class NativeRuntime implements FrustrateRuntime {
   /// message to our own control port, so any later kill queues behind it and
   /// finds the listener installed.
   void _registerExitNotice(int id) {
-    final port = lib.lookupFunction<_ExitPortC, _ExitPortDart>(
-      'frustrate_exit_port',
-    )();
+    final port = bridge
+        .lookup('frustrate_exit_port')
+        .cast<NativeFunction<_ExitPortC>>()
+        .asFunction<_ExitPortDart>()();
     Isolate.current.addOnExitListener(port as SendPort, response: id);
   }
 
-  /// Compare against the loaded dylib before calling anything else, so a
+  /// Compare against the loaded library before calling anything else, so a
   /// runtime/package skew is a named error rather than a mismatched call.
   /// [checkSchemaHash] is the generated-bindings equivalent; this guards the
   /// layer underneath it. [frustrateRuntimeAbi] is the one number both
@@ -347,14 +389,17 @@ final class NativeRuntime implements FrustrateRuntime {
   void _checkRuntimeAbi() {
     final int abi;
     try {
-      abi = lib.lookupFunction<_RuntimeAbiC, _RuntimeAbiDart>(
-        'frustrate_runtime_abi',
-      )();
-    } on ArgumentError {
+      abi = bridge
+          .lookup('frustrate_runtime_abi')
+          .cast<NativeFunction<_RuntimeAbiC>>()
+          .asFunction<_RuntimeAbiDart>()();
+    } on ArgumentError catch (e) {
       throw StateError(
-        'frustrate: the bridge library predates the runtime ABI guard — it '
-        'was built against a frustrate runtime older than the one this '
-        'package (ABI $frustrateRuntimeAbi) speaks. Rebuild the bridge crate.',
+        'frustrate: the bridge library ${bridge.name} has no runtime ABI '
+        'export. Either it predates the runtime ABI guard — it was built '
+        'against a frustrate runtime older than the one this package (ABI '
+        '$frustrateRuntimeAbi) speaks, so rebuild the bridge crate — or the '
+        'library did not resolve at all, which the lookup reports as: $e',
       );
     }
     if (abi != frustrateRuntimeAbi) {
@@ -658,18 +703,18 @@ final class NativeRuntime implements FrustrateRuntime {
   // no generated reference to frustrate::stream, so the export may be
   // absent — and never needed. pause/resume share the cancel signature
   // (`void(u64)`).
-  late final _StreamCancelDart _streamCancel = lib
-      .lookupFunction<_StreamCancelC, _StreamCancelDart>(
-        'frustrate_stream_cancel',
-      );
-  late final _StreamCancelDart _streamPause = lib
-      .lookupFunction<_StreamCancelC, _StreamCancelDart>(
-        'frustrate_stream_pause',
-      );
-  late final _StreamCancelDart _streamResume = lib
-      .lookupFunction<_StreamCancelC, _StreamCancelDart>(
-        'frustrate_stream_resume',
-      );
+  late final _StreamCancelDart _streamCancel = bridge
+      .lookup('frustrate_stream_cancel')
+      .cast<NativeFunction<_StreamCancelC>>()
+      .asFunction<_StreamCancelDart>();
+  late final _StreamCancelDart _streamPause = bridge
+      .lookup('frustrate_stream_pause')
+      .cast<NativeFunction<_StreamCancelC>>()
+      .asFunction<_StreamCancelDart>();
+  late final _StreamCancelDart _streamResume = bridge
+      .lookup('frustrate_stream_resume')
+      .cast<NativeFunction<_StreamCancelC>>()
+      .asFunction<_StreamCancelDart>();
 
   @override
   void cancelStream(int id) {
@@ -723,10 +768,10 @@ final class NativeRuntime implements FrustrateRuntime {
 
   // Lazy like the stream/actor exports: present exactly when the bridge
   // crate has a member that needs it.
-  late final _CallbackRespondDart _callbackRespond = lib
-      .lookupFunction<_CallbackRespondC, _CallbackRespondDart>(
-        'frustrate_callback_respond',
-      );
+  late final _CallbackRespondDart _callbackRespond = bridge
+      .lookup('frustrate_callback_respond')
+      .cast<NativeFunction<_CallbackRespondC>>()
+      .asFunction<_CallbackRespondDart>();
 
   /// Wake the Rust worker blocked in DartFunction::call. Rust copies the
   /// buffer during the call, so the lease ends when it returns.
@@ -746,8 +791,10 @@ final class NativeRuntime implements FrustrateRuntime {
   // Always present (every generated glue emits it), so looked up eagerly. The
   // u64 return comes back signed-reinterpreted in the Dart int; normalize to
   // an unsigned 64-bit BigInt to compare with the compiled-in fingerprint.
-  late final _SchemaHashDart _schemaHash = lib
-      .lookupFunction<_SchemaHashC, _SchemaHashDart>('frustrate_schema_hash');
+  late final _SchemaHashDart _schemaHash = bridge
+      .lookup('frustrate_schema_hash')
+      .cast<NativeFunction<_SchemaHashC>>()
+      .asFunction<_SchemaHashDart>();
 
   @override
   void checkSchemaHash(BigInt expected) {
@@ -784,24 +831,30 @@ final class NativeRuntime implements FrustrateRuntime {
   @override
   HandleDrop residentHandleDrop(String symbol) =>
       _residentDrops[symbol] ??= ResidentHandleDrop(
-        lib.lookupFunction<_DropC, _DropDart>(
-          symbol.replaceFirst('frustrate_drop_', 'frustrate_finalize_'),
-        ),
-        lib.lookupFunction<_DropC, _DropDart>(symbol),
+        bridge
+            .lookup(
+              symbol.replaceFirst('frustrate_drop_', 'frustrate_finalize_'),
+            )
+            .cast<NativeFunction<_DropC>>()
+            .asFunction<_DropDart>(),
+        bridge
+            .lookup(symbol)
+            .cast<NativeFunction<_DropC>>()
+            .asFunction<_DropDart>(),
         _residentAttach,
         _residentReclaimable,
         _isolateId,
       );
 
   /// Looked up lazily: a bridge crate with no resident types never calls them.
-  late final _ResidentAttachDart _residentAttach = lib
-      .lookupFunction<_ResidentAttachC, _ResidentAttachDart>(
-        'frustrate_resident_attach',
-      );
-  late final _ResidentReclaimableDart _residentReclaimable = lib
-      .lookupFunction<_ResidentReclaimableC, _ResidentReclaimableDart>(
-        'frustrate_resident_reclaimable',
-      );
+  late final _ResidentAttachDart _residentAttach = bridge
+      .lookup('frustrate_resident_attach')
+      .cast<NativeFunction<_ResidentAttachC>>()
+      .asFunction<_ResidentAttachDart>();
+  late final _ResidentReclaimableDart _residentReclaimable = bridge
+      .lookup('frustrate_resident_reclaimable')
+      .cast<NativeFunction<_ResidentReclaimableC>>()
+      .asFunction<_ResidentReclaimableDart>();
 
   HandleDrop _lookupHandleDrop(String symbol) {
     // The GC finalizer uses the drop export's `frustrate_finalize_*` sibling.
@@ -815,25 +868,34 @@ final class NativeRuntime implements FrustrateRuntime {
       'frustrate_finalize_',
     );
     return NativeHandleDrop(
-      NativeFinalizer(lib.lookup<NativeFunction<_DropC>>(finalizeSymbol)),
-      lib.lookupFunction<_DropC, _DropDart>(symbol),
+      NativeFinalizer(
+        bridge.lookup(finalizeSymbol).cast<NativeFunction<_DropC>>(),
+      ),
+      bridge
+          .lookup(symbol)
+          .cast<NativeFunction<_DropC>>()
+          .asFunction<_DropDart>(),
     );
   }
 
   // Actor exports are looked up lazily: a bridge crate with no actor types
   // doesn't have them, and never needs them.
-  late final _ActorSpawnDart _actorSpawn = lib
-      .lookupFunction<_ActorSpawnC, _ActorSpawnDart>('frustrate_actor_spawn');
-  late final _ActorCallDart _actorCall = lib
-      .lookupFunction<_ActorCallC, _ActorCallDart>('frustrate_actor_call');
-  late final _ActorShutdownDart _actorShutdown = lib
-      .lookupFunction<_ActorShutdownC, _ActorShutdownDart>(
-        'frustrate_actor_shutdown',
-      );
-  late final _ActorCancelDeferredDart _actorCancelDeferred = lib
-      .lookupFunction<_ActorCancelDeferredC, _ActorCancelDeferredDart>(
-        'frustrate_actor_cancel_deferred',
-      );
+  late final _ActorSpawnDart _actorSpawn = bridge
+      .lookup('frustrate_actor_spawn')
+      .cast<NativeFunction<_ActorSpawnC>>()
+      .asFunction<_ActorSpawnDart>();
+  late final _ActorCallDart _actorCall = bridge
+      .lookup('frustrate_actor_call')
+      .cast<NativeFunction<_ActorCallC>>()
+      .asFunction<_ActorCallDart>();
+  late final _ActorShutdownDart _actorShutdown = bridge
+      .lookup('frustrate_actor_shutdown')
+      .cast<NativeFunction<_ActorShutdownC>>()
+      .asFunction<_ActorShutdownDart>();
+  late final _ActorCancelDeferredDart _actorCancelDeferred = bridge
+      .lookup('frustrate_actor_cancel_deferred')
+      .cast<NativeFunction<_ActorCancelDeferredC>>()
+      .asFunction<_ActorCancelDeferredDart>();
 
   /// The GC backstop shared by every actor on this runtime.
   ///
@@ -843,7 +905,7 @@ final class NativeRuntime implements FrustrateRuntime {
   /// vary. A field so it stays reachable for the life of the runtime — a
   /// `NativeFinalizer` that is itself collected finalizes nothing.
   late final NativeFinalizer _actorReaper = NativeFinalizer(
-    lib.lookup<NativeFunction<_DropC>>('frustrate_actor_reap'),
+    bridge.lookup('frustrate_actor_reap').cast<NativeFunction<_DropC>>(),
   );
 
   @override
@@ -866,9 +928,10 @@ final class NativeRuntime implements FrustrateRuntime {
   @override
   int get residentLeakCount {
     try {
-      return lib.lookupFunction<_ResidentLeakedC, _ResidentLeakedDart>(
-        'frustrate_resident_leaked',
-      )();
+      return bridge
+          .lookup('frustrate_resident_leaked')
+          .cast<NativeFunction<_ResidentLeakedC>>()
+          .asFunction<_ResidentLeakedDart>()();
     } on ArgumentError {
       return 0;
     }

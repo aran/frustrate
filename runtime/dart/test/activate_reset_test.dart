@@ -23,10 +23,24 @@
 @TestOn('vm')
 library;
 
+import 'dart:ffi';
 import 'dart:isolate';
 
 import 'package:frustrate/frustrate.dart';
 import 'package:test/test.dart';
+
+/// A bridge whose library cannot be resolved: any lookup fails, so an init that
+/// reaches it is observable as a throw.
+final class _AbsentBridge implements BridgeLibrary {
+  const _AbsentBridge();
+
+  @override
+  String get name => 'an absent bridge';
+
+  @override
+  Pointer<Void> lookup(String symbol) =>
+      throw StateError('the absent bridge was asked for $symbol');
+}
 
 /// A transport with settable liveness, so the quiescence rule can be tested
 /// against every combination without a real bridge.
@@ -273,13 +287,13 @@ List<String> _activateWithNothingInstalled() {
   return complaints;
 }
 
-/// Init is an *ensure*. A widget that lazily calls `FrustrateNative.init(path)`
-/// under `flutter test`, in a suite that declared a fake, must not dlopen a
-/// path that does not exist — so with nothing installed and something active,
+/// Init is an *ensure*. A widget that lazily calls `FrustrateNative.init(bridge)`
+/// under `flutter test`, in a suite that declared a fake, must not load a
+/// library that does not exist — so with nothing installed and something active,
 /// the guard sends the caller home having built nothing.
 List<String> _initUnderAFakeIsAnEnsure() {
   final complaints = <String>[];
-  const absent = '/nonexistent/libfrustrate_test_bridge.dylib';
+  const absent = _AbsentBridge();
   if (Frustrate.initializedFrom(absent, 'a bridge')) {
     complaints.add('an empty isolate answered a repeated init');
   }
@@ -290,7 +304,7 @@ List<String> _initUnderAFakeIsAnEnsure() {
   try {
     FrustrateNative.init(absent);
   } catch (e) {
-    complaints.add('init under a fake reached dlopen: $e');
+    complaints.add('init under a fake reached the library: $e');
   }
   if (Frustrate.isInstalled) {
     complaints.add('init under a fake installed something');

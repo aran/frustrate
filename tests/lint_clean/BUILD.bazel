@@ -35,6 +35,7 @@ frustrate_bridge_outputs(
     name = "bridge",
     srcs = ["src/api.rs"],
     crate_name = "lint_actor_fixture",
+    package_name = "lint_actor_fixture",
     module_paths = ["crate::api"],
 )
 

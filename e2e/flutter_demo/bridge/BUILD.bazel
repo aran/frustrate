@@ -1,4 +1,4 @@
-load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs")
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
@@ -10,6 +10,7 @@ frustrate_bridge_outputs(
     srcs = ["src/api.rs"],
     crate_name = "demo_rust",
     module_paths = ["crate::api"],
+    package_name = "demo_bridge",
     # `codegen.ir` is each web bundle's `binding_contract` as well as this
     # package's: the three wasm modules must each be named demo_rust.wasm, so
     # they live one per package and their flutter_native_library wrappers do
@@ -21,8 +22,8 @@ frustrate_bridge_outputs(
     ],
 )
 
-# libdemo_rust.dylib on macOS; the same target builds the wasm module under
-# a wasm32 platform transition.
+# The bridge cdylib; the same target builds the wasm module under a wasm32
+# platform transition.
 rust_shared_library(
     name = "demo_rust",
     visibility = [
@@ -55,36 +56,44 @@ rust_shared_library(
     ],
 )
 
-# The same library, told apart from its bindings.
-#
-# Bundling sees no difference — the wrapper forwards the library's DefaultInfo
-# whole. What it adds is a statement the dev tool cannot infer: `codegen.ir` is
-# the interface both halves are generated from, so equal bytes mean the
-# bindings are unchanged. That is the difference between a Rust edit that
-# rewrote a function body and one that changed the wire, and it decides whether
-# a hot reload may deliver a Dart edit made alongside it. Without the wrapper
-# any rebuild of the library withholds the reload, which is correct and blunt.
-#
-# Native only, because it answers a question only a native device asks: the
-# process cannot replace a library it has `dlopen`ed. Web has no `native_deps`
-# entry at all — its module is a served file — so the loop there still reloads
-# Dart over the wasm instance the page already has. See the README.
-#
-# `hot_patch` goes further on a -c dbg build: a Rust edit that leaves the
-# contract alone is compiled into a patch and loaded into the running app, so
-# `r` delivers it with state kept. frustrate_hot_patchable builds the library
-# in the configuration that can take patches and says how to build them.
 frustrate_hot_patchable(
     name = "demo_rust_hot",
     binding_contract = ":codegen.ir",
     library = ":demo_rust",
 )
 
+# The hot-patchable library as the code asset the bindings resolve their
+# `package:demo_bridge/demo_rust` lookups by.
+frustrate_code_asset(
+    name = "demo_rust_asset",
+    bridge = ":codegen",
+    library = ":demo_rust_hot",
+)
+
+# The same asset, told apart from its bindings.
+#
+# Bundling sees no difference — the wrapper forwards the asset whole. What it
+# adds is a statement the dev tool cannot infer: `codegen.ir` is the interface
+# both halves are generated from, so equal bytes mean the bindings are
+# unchanged. That is the difference between a Rust edit that rewrote a function
+# body and one that changed the wire, and it decides whether a hot reload may
+# deliver a Dart edit made alongside it. Without the wrapper any rebuild of the
+# library withholds the reload, which is correct and blunt.
+#
+# Native only, because it answers a question only a native device asks: the
+# process cannot replace a library it has loaded. Web has no code asset at all
+# — its module is a served file — so the loop there still reloads Dart over the
+# wasm instance the page already has. See the README.
+#
+# `hot_patch` goes further on a -c dbg build: a Rust edit that leaves the
+# contract alone is compiled into a patch and loaded into the running app, so
+# `r` delivers it with state kept. frustrate_hot_patchable builds the library
+# in the configuration that can take patches and says how to build them.
 flutter_native_library(
     name = "demo_rust_native",
     binding_contract = [":codegen.ir"],
     hot_patch = ":demo_rust_hot.hot_patch",
-    library = ":demo_rust_hot",
+    library = ":demo_rust_asset",
 )
 
 # The bindings package: generated Dart plus the platform-neutral init seam.
@@ -103,13 +112,7 @@ flutter_plugin(
         "lib/src/native_features_web.dart",
         ":codegen.dart",
     ],
-    native_deps = select({
-        "@platforms//os:macos": [":demo_rust_native"],
-        "@platforms//os:ios": [":demo_rust_native"],
-        "@platforms//os:android": [":demo_rust_native"],
-        "@platforms//os:linux": [":demo_rust_native"],
-        "//conditions:default": [],
-    }),
+    code_assets = [":demo_rust_native"],
     platforms = [
         "macos",
         "ios",

@@ -1,5 +1,5 @@
 /// The repeated-init contract's decision procedure, and the native entry
-/// points' wiring to it.
+/// point's wiring to it.
 ///
 /// The contract itself is stated on `Frustrate` (runtime_core.dart): naming the
 /// same bridge again is a declared no-op, naming a different one is a
@@ -9,10 +9,10 @@
 /// cannot reach:
 ///
 ///   * **Strong idempotence.** "A second init constructs nothing" is invisible
-///     against a real library, because opening it a second time succeeds. Here
-///     the installed source names a library that does not exist, so a second
-///     init returning normally *is* the proof that it never reached
-///     `DynamicLibrary.open` — which would have thrown.
+///     against a real library, because resolving it a second time succeeds.
+///     Here the installed source is a library that cannot be resolved, so a
+///     second init returning normally *is* the proof that it never looked
+///     anything up — which would have thrown.
 ///   * **A failed init leaves the slot clean.** The source is recorded by
 ///     `install`, not by the guard, so an init that threw on the way up is not
 ///     remembered and the next attempt is a first init rather than a
@@ -44,9 +44,27 @@ final class _FakeRuntime implements FrustrateRuntime {
   );
 }
 
-/// A library path that cannot be opened, so *reaching* `DynamicLibrary.open`
-/// is observable as a throw.
-const String _absentLibrary = '/nonexistent/libfrustrate_test_bridge.dylib';
+/// What an absent library throws from every lookup. Its own type, so a test can
+/// require that an init got as far as asking the library for an export, rather
+/// than accepting any failure as the expected one.
+final class _LibraryAbsent implements Exception {
+  @override
+  String toString() => 'the library is absent';
+}
+
+/// A bridge whose library cannot be resolved: every lookup fails.
+final class _AbsentBridge implements BridgeLibrary {
+  @override
+  final String name;
+
+  const _AbsentBridge(this.name);
+
+  @override
+  Pointer<Void> lookup(String symbol) => throw _LibraryAbsent();
+}
+
+const _bridgeA = _AbsentBridge('bridge A');
+const _bridgeB = _AbsentBridge('bridge B');
 
 void main() {
   // Every test in here needs a bridge installed and none of them changes what
@@ -57,21 +75,21 @@ void main() {
     setUpAll(() {
       Frustrate.install(
         _FakeRuntime(),
-        source: _absentLibrary,
+        source: _bridgeA,
         description: 'the bridge library A',
       );
     });
 
     test('the same source: the init is a no-op', () {
       expect(
-        Frustrate.initializedFrom(_absentLibrary, 'the bridge library A'),
+        Frustrate.initializedFrom(_bridgeA, 'the bridge library A'),
         isTrue,
       );
     });
 
     test('a different source: a StateError naming both', () {
       expect(
-        () => Frustrate.initializedFrom('/other/libB.dylib', 'the library B'),
+        () => Frustrate.initializedFrom(_bridgeB, 'the library B'),
         throwsA(
           isA<StateError>().having(
             (e) => e.message,
@@ -97,42 +115,53 @@ void main() {
       // ...and it did not repoint the recorded source either, or the guard
       // would start answering for a transport that was discarded.
       expect(
-        Frustrate.initializedFrom(_absentLibrary, 'the bridge library A'),
+        Frustrate.initializedFrom(_bridgeA, 'the bridge library A'),
         isTrue,
       );
     });
 
-    test('FrustrateNative.init with the installed path constructs nothing', () {
-      // The installed source is a path that cannot be opened. Returning
-      // normally therefore proves the guard ran *before* the construction — a
-      // second `NativeRuntime` would have thrown here, and in a real app it
-      // would instead have silently re-registered the isolate-exit listener.
-      expect(() => FrustrateNative.init(_absentLibrary), returnsNormally);
-    });
+    test(
+      'FrustrateNative.init with the installed bridge constructs nothing',
+      () {
+        // The installed bridge cannot be looked up in. Returning normally
+        // therefore proves the guard ran *before* the construction — a second
+        // `NativeRuntime` would have thrown here, and in a real app it would
+        // instead have silently re-registered the isolate-exit listener.
+        expect(() => FrustrateNative.init(_bridgeA), returnsNormally);
+      },
+    );
 
-    test('FrustrateNative.init with another path is refused', () {
+    test('FrustrateNative.init with another bridge is refused', () {
       expect(
-        () => FrustrateNative.init('/nonexistent/libsomething_else.dylib'),
+        () => FrustrateNative.init(_bridgeB),
         throwsA(
           isA<StateError>().having(
             (e) => e.message,
             'message',
-            contains('libsomething_else.dylib'),
+            allOf(contains('the bridge library A'), contains('bridge B')),
           ),
         ),
       );
     });
+  });
 
-    test('the two native entry points share one slot', () {
+  group('BridgeLibrary.dynamic', () {
+    test('is equal when the libraries are, whatever it is called', () {
+      final one = BridgeLibrary.dynamic(DynamicLibrary.process(), name: 'one');
+      final two = BridgeLibrary.dynamic(DynamicLibrary.process(), name: 'two');
+      expect(one, equals(two));
+      expect(one.hashCode, two.hashCode);
+    });
+
+    test('looks up an export, and refuses one the library lacks', () {
+      final bridge = BridgeLibrary.dynamic(
+        DynamicLibrary.process(),
+        name: 'process',
+      );
+      expect(bridge.lookup('malloc'), isNot(nullptr));
       expect(
-        () => FrustrateNative.initWithLibrary(DynamicLibrary.process()),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            contains('initWithLibrary'),
-          ),
-        ),
+        () => bridge.lookup('frustrate_no_such_export'),
+        throwsArgumentError,
       );
     });
   });
@@ -156,35 +185,32 @@ void main() {
 /// parent reports them (a `TestFailure` is not what we want to send back).
 List<String> _failedInitLeavesTheSlotClean() {
   final complaints = <String>[];
-  complaints.addAll(_dlopenFailure(_absentLibrary));
+  complaints.addAll(_lookupFailure(_bridgeA));
   if (Frustrate.isInstalled) {
     complaints.add('a failed init installed a transport');
   }
-  // Nothing was recorded, so a *different* path is a first init and fails the
+  // Nothing was recorded, so a *different* bridge is a first init and fails the
   // same way — it is not reported as a disagreement with a bridge that was
   // never installed.
-  complaints.addAll(_dlopenFailure('/nonexistent/libanother.dylib'));
+  complaints.addAll(_lookupFailure(_bridgeB));
   return complaints;
 }
 
-/// Init [path] and require the failure to be **dlopen's**, by type.
+/// Init [bridge] and require the failure to be **the library's**, by type.
 ///
 /// Matched exactly rather than caught broadly, because "it threw something" is
 /// not the property under test: the point is that the call got all the way to
-/// `DynamicLibrary.open` and failed there. A contract `StateError`, or any
-/// future refusal raised before the library is reached, has to show up as a
-/// complaint rather than pass for the expected failure.
-List<String> _dlopenFailure(String path) {
+/// asking the library for an export and failed there. A contract `StateError`,
+/// or any future refusal raised before the library is reached, has to show up
+/// as a complaint rather than pass for the expected failure.
+List<String> _lookupFailure(BridgeLibrary bridge) {
   try {
-    FrustrateNative.init(path);
-    return ['opening a nonexistent library should have thrown'];
-  } on ArgumentError catch (e) {
-    // dart:ffi's refusal: "Failed to load dynamic library ... (no such file)".
-    return e.toString().contains('Failed to load dynamic library')
-        ? const []
-        : ['an ArgumentError, but not dlopen\'s: $e'];
+    FrustrateNative.init(bridge);
+    return ['initializing an absent library should have thrown'];
+  } on _LibraryAbsent {
+    return const [];
   } catch (e) {
-    return ['expected dlopen to refuse $path; got ${e.runtimeType}: $e'];
+    return ['expected ${bridge.name} to refuse; got ${e.runtimeType}: $e'];
   }
 }
 

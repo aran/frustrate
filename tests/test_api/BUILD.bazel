@@ -1,6 +1,7 @@
 load("@rules_dart//dart:defs.bzl", "dart_library")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_wasm_module")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_wasm_module")
+load("//bazel:manual_scheduler.bzl", "frustrate_manual_scheduler_library")
 
 frustrate_bridge_outputs(
     name = "bridge",
@@ -15,6 +16,7 @@ frustrate_bridge_outputs(
         "crate::cancel_api",
         "crate::shapes",
     ],
+    package_name = "frustrate_integration",
     visibility = ["//tests:__subpackages__"],
 )
 
@@ -40,6 +42,27 @@ rust_shared_library(
         # wasm-safe, so the web fixture is unaffected.
         "@crates//:pollster",
     ],
+)
+
+# The bridge library as the code asset the bindings resolve it by.
+frustrate_code_asset(
+    name = "test_api_asset",
+    bridge = ":bridge",
+    library = ":test_api_shared",
+    visibility = ["//tests:__subpackages__"],
+)
+
+# The same library built with the manual scheduler, bound to the same asset id
+# as `test_api_asset`: a target takes `bindings` or `bindings_manual`, never both.
+frustrate_manual_scheduler_library(
+    name = "test_api_manual",
+    library = ":test_api_shared",
+)
+
+frustrate_code_asset(
+    name = "test_api_manual_asset",
+    bridge = ":bridge",
+    library = ":test_api_manual",
 )
 
 # The threaded-wasm fixture: same crate, nightly + locally built
@@ -71,6 +94,23 @@ dart_library(
         ":bridge.dart",
         ":fake_plan_dart",
     ],
+    code_assets = [":test_api_asset"],
+    package_name = "frustrate_integration",
+    visibility = ["//tests:__subpackages__"],
+    deps = [
+        "//runtime/dart:frustrate",
+        "@pub_deps//:ffi",
+    ],
+)
+
+# `bindings` with the manual-scheduler library as the bridge's code asset.
+dart_library(
+    name = "bindings_manual",
+    srcs = [
+        ":bridge.dart",
+        ":fake_plan_dart",
+    ],
+    code_assets = [":test_api_manual_asset"],
     package_name = "frustrate_integration",
     visibility = ["//tests:__subpackages__"],
     deps = [

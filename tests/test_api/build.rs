@@ -13,6 +13,7 @@ fn main() {
 
     frustrate_codegen::generate(&frustrate_codegen::GenerateConfig {
         crate_name: "test_api".into(),
+        dart_package: "frustrate_integration".into(),
         // Three sources, matching the Bazel target's `srcs`/`module_paths`. The
         // two flows must scan the same set or the generated fn ids diverge and
         // the schema hash with them.

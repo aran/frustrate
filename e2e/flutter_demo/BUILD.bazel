@@ -50,10 +50,10 @@ flutter_macos_app(
     target_compatible_with = ["@platforms//os:macos"],
 )
 
-# iOS: the same app_flutter + the Rust bridge, which the demo_bridge plugin's
-# native_deps select carries to iOS. flutter_ios_native_frameworks wraps the
-# cross-compiled libdemo_rust.dylib as a signed, embedded demo_rust.framework
-# (dlopen-legal on device); init_native.dart loads it by framework path.
+# iOS: the same app_flutter + the Rust bridge, which reaches iOS as the
+# demo_bridge package's code asset. The app bundler wraps the cross-compiled
+# library as a signed, embedded framework (dlopen-legal on device) and the
+# asset id resolves to it.
 # Simulator build: -c dbg --platforms=@rules_flutter//flutter/platforms:ios_arm64
 # (or the sim platform).
 flutter_ios_app(
@@ -83,9 +83,8 @@ flutter_ios_app(
 )
 
 # Android: the same app_flutter + the Rust bridge, which the demo_bridge
-# plugin's native_deps select carries as a per-ABI libdemo_rust.so
-# (init_native.dart loads it by bare name). arm64-v8a to match an Apple-Silicon
-# emulator or a device; add an x64 sibling for x86 emulators.
+# package's code asset carries as a per-ABI shared library. arm64-v8a to match
+# an Apple-Silicon emulator or a device; add an x64 sibling for x86 emulators.
 #
 # --config=android is not optional: it is what registers the SDK and NDK
 # toolchains (.bazelrc says why). `flutter_android_app` defaults to
@@ -100,9 +99,9 @@ flutter_android_app(
     package_name = "dev.frustrate.demo",
 )
 
-# Linux (GTK): the same app_flutter + the Rust bridge as a libdemo_rust.so
-# beside the runner (init_native.dart loads it by bare name). flutter_linux_app
-# templates the GTK runner, so no linux/ runner dir is needed.
+# Linux (GTK): the same app_flutter + the Rust bridge as the demo_bridge
+# package's code asset, bundled beside the runner. flutter_linux_app templates
+# the GTK runner, so no linux/ runner dir is needed.
 #
 # **Native-host only, and deliberately untested here.** There is no build_test
 # for this target because this module carries no C cross toolchain: MODULE.bazel
@@ -209,7 +208,7 @@ flutter_ios_simulator_build_test(
     targets = [":app_ios"],
 )
 
-# The APK, including the per-ABI libdemo_rust.so. Manual: needs
+# The APK, including the per-ABI Rust bridge library. Manual: needs
 # --config=android and a local Android SDK/NDK (see .bazelrc.user), so
 # `bazel test //...` must not pick it up.
 build_test(

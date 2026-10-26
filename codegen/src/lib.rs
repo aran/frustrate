@@ -26,6 +26,10 @@ pub struct SourceSpec {
 #[derive(Debug, Clone)]
 pub struct GenerateConfig {
     pub crate_name: String,
+    /// The Dart package the generated bindings compile into. The bridge's
+    /// code-asset id is `package:<dart_package>/<crate_name>`, and the Dart VM
+    /// only resolves assets under the package that declares them.
+    pub dart_package: String,
     pub sources: Vec<SourceSpec>,
     /// Where to write the generated Rust glue (compiled into the bridge
     /// crate). One file for every platform: native-only members are
@@ -85,7 +89,7 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
     let entry_stem = entry_name
         .strip_suffix(".dart")
         .with_context(|| format!("dart_out must end in .dart: {entry_name}"))?;
-    let dart = emit_dart::emit(&iface, entry_stem);
+    let dart = emit_dart::emit(&iface, entry_stem, &config.dart_package);
     let src_dir = match config.dart_out.parent() {
         Some(p) => p.join("src"),
         None => PathBuf::from("src"),
@@ -221,7 +225,7 @@ pub(crate) fn mask_ids(code: &str) -> String {
                 }
             }
         }
-        // Also mask a match arm's scrutinee: `<id> => call_#_name(...)`.
+        // Also mask a match arm's scrutinee: `<id> => call_#_name`.
         if let Some(arrow) = arm_id(rest) {
             out.push('#');
             rest = &rest[arrow..];

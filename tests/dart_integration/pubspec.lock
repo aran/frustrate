@@ -223,13 +223,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
-  runfiles:
-    dependency: "direct main"
-    description:
-      path: "../../../rules_dart/dart/runfiles"
-      relative: true
-    source: path
-    version: "0.0.0-dev"
   shelf:
     dependency: transitive
     description:

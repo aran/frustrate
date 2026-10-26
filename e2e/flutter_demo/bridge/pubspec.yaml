@@ -8,9 +8,9 @@
 # dependency set here in step with //bridge:demo_bridge's `deps`.
 #
 # Deliberately not a Flutter plugin in pub's sense (no `flutter:` section):
-# nothing here imports package:flutter, and the native library is loaded by
-# dlopen in lib/src/init_native.dart rather than by plugin registration, so
-# there is no platform channel for pub to register.
+# nothing here imports package:flutter, and the native library reaches Dart as
+# a code asset (`code_assets` in BUILD.bazel) rather than by plugin
+# registration, so there is no platform channel for pub to register.
 #
 # The generated bindings (lib/demo_rust.frustrate.dart and the two files under
 # lib/src/) are build outputs of //bridge:codegen, not checked in and not

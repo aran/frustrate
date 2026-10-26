@@ -27,12 +27,23 @@ import 'package:test/test.dart';
 
 import 'init_native.dart';
 
+/// A bridge whose library is not there: every lookup fails. Stands in for a
+/// second, different library without needing one to exist.
+final class _AbsentBridge implements BridgeLibrary {
+  @override
+  String get name => 'package:not_the_bridge/not_the_bridge';
+
+  @override
+  Pointer<Void> lookup(String symbol) =>
+      throw StateError('the absent bridge was asked for $symbol');
+}
+
 void main() {
   setUpAll(initBridge);
 
   test('a second init naming the same library is a declared no-op', () {
     final installed = Frustrate.instance;
-    expect(() => FrustrateNative.init(bridgeLibraryPath()), returnsNormally);
+    expect(() => FrustrateNative.init(testApiBridge), returnsNormally);
     // Same transport object: the second call did not install a replacement,
     // and (see the strong-idempotence pin in runtime/dart/test) did not build
     // one to discard either.
@@ -41,15 +52,12 @@ void main() {
 
   test('a second init naming a different library is refused', () {
     expect(
-      () => FrustrateNative.init('/nonexistent/libnot_the_bridge.dylib'),
+      () => FrustrateNative.init(_AbsentBridge()),
       throwsA(
         isA<StateError>().having(
           (e) => e.message,
           'message',
-          allOf(
-            contains('already initialized'),
-            contains('libnot_the_bridge.dylib'),
-          ),
+          allOf(contains('already initialized'), contains('not_the_bridge')),
         ),
       ),
     );
@@ -59,20 +67,24 @@ void main() {
     expect(checkFrustrateSchema, returnsNormally);
   });
 
-  test('a second init through the other entry point is refused too', () {
-    // `initWithLibrary(DynamicLibrary.process())` is a different bridge by any
-    // reading — the global symbol namespace is not the file `init` opened. The
-    // two entry points share one slot, so the guard has to span them.
-    expect(
-      () => FrustrateNative.initWithLibrary(DynamicLibrary.process()),
-      throwsA(
-        isA<StateError>().having(
-          (e) => e.message,
-          'message',
-          contains('already initialized'),
+  test(
+    'a hand-loaded library is a different bridge from the generated one',
+    () {
+      // The generated bridge resolves through the VM's asset lookup; a wrapper
+      // over the process's own symbols is a different bridge by any reading.
+      expect(
+        () => FrustrateNative.init(
+          BridgeLibrary.dynamic(DynamicLibrary.process(), name: 'process'),
         ),
-      ),
-    );
-    expect(Frustrate.isInstalled, isTrue);
-  });
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('already initialized'),
+          ),
+        ),
+      );
+      expect(Frustrate.isInstalled, isTrue);
+    },
+  );
 }

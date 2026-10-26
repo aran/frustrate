@@ -1320,7 +1320,7 @@ mod tests {
     fn emit_all(src: &str) -> crate::emit_dart::DartBindings {
         let mut iface = check(parse_source(src, "crate::api").unwrap()).unwrap();
         iface.crate_name = "test_api".into();
-        crate::emit_dart::emit(&iface, "test_api.frustrate")
+        crate::emit_dart::emit(&iface, "test_api.frustrate", "my_app")
     }
 
     fn emit_src(src: &str) -> String {

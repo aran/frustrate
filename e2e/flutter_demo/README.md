@@ -44,9 +44,10 @@ a patch — a second library holding the functions that changed — and the runn
 library's entry points are redirected into it. State is kept: a `Counter` handle
 goes on counting from where it was, and the statics behind `install_logging`
 keep their sinks. `bridge/BUILD.bazel` asks for this by wrapping the library in
-`frustrate_hot_patchable` and naming the result as `flutter_native_library`'s
-`library` and `hot_patch`; `codegen.ir` — the interface both halves are
-generated from — stays its binding contract.
+`frustrate_hot_patchable`, binding the result as the bindings' code asset with
+`frustrate_code_asset`, and wrapping that in `flutter_native_library` with the
+patch builder as `hot_patch`; `codegen.ir` — the interface both halves are
+generated from — is its binding contract.
 
 Only a `-c dbg` build is patchable, which is what `flutter_bazel run` builds.
 Adding a bridged function, renaming one, or changing its signature is carried:

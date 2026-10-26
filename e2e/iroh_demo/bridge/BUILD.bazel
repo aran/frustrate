@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@frustrate//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs")
+load("@frustrate//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs", "frustrate_code_asset")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 load("@rules_dart//dart:defs.bzl", "dart_library", "dart_test")
 load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
@@ -19,6 +19,7 @@ frustrate_bridge_outputs(
     srcs = ["src/api.rs"],
     crate_name = "iroh_rust",
     module_paths = ["crate::api"],
+    package_name = "iroh_bridge",
 )
 
 # Every `#[bridge(no_block)]` claim in src/api.rs is settled by placement, so
@@ -45,8 +46,8 @@ build_test(
     targets = [":block_check"],
 )
 
-# libiroh_rust.dylib on macOS; iroh_rust.framework on iOS; libiroh_rust.so on
-# Android/Linux. flutter_plugin's native_deps select carries it to each.
+# The bridge cdylib, shipped to each native platform as the bindings' code
+# asset.
 #
 # The dep set is a select() on @platforms//os. It was written as "iroh on the
 # four native OSes, nothing on the default" because wasm could not build iroh
@@ -155,18 +156,25 @@ rust_test(
     }),
 )
 
+# The bridge library as the code asset the bindings resolve their
+# `package:iroh_bridge/iroh_rust` lookups by.
+frustrate_code_asset(
+    name = "iroh_rust_asset",
+    bridge = ":codegen",
+    library = ":iroh_rust",
+)
+
 # The generated bindings as a plain Dart library, for the VM test below.
 #
 # The same package name and the same generated source as :iroh_bridge, minus
-# the `lib/init.dart` seam — which exists to find the library inside a *bundled
-# app* (a macOS Frameworks directory, an iOS framework, an Android jniLibs
-# path). A `dart_test` has none of those; it has runfiles, so the test names
-# the artifact itself. Not a `flutter_plugin` because nothing here is Flutter:
-# `dart_test` runs the plain VM, which is the whole reason this is cheap enough
-# to be an ordinary `bazel test` target.
+# the `lib/init.dart` seam. Not a `flutter_plugin` because nothing here is
+# Flutter: `dart_test` runs the plain VM, which is the whole reason this is
+# cheap enough to be an ordinary `bazel test` target. The test loads the
+# asset built for the host that runs it.
 dart_library(
     name = "bindings",
     srcs = [":codegen.dart"],
+    code_assets = [":iroh_rust_asset"],
     package_name = "iroh_bridge",
     deps = ["@frustrate//runtime/dart:frustrate"],
 )
@@ -177,11 +185,10 @@ dart_library(
 # frustrate's repo.
 #
 # Hermetic on the same terms as :iroh_rust_test: `Preset::Minimal` with no
-# relay contacts nothing. Hosts only, because it dlopens a macOS/Linux dylib.
+# relay contacts nothing. Hosts only, because it loads a macOS/Linux library.
 dart_test(
     name = "dependency_logging_test",
     size = "small",
-    data = [":iroh_rust"],
     main = "test/dependency_logging_test.dart",
     target_compatible_with = select({
         "@platforms//os:macos": [],
@@ -191,29 +198,35 @@ dart_test(
     deps = [
         ":bindings",
         "@frustrate//runtime/dart:frustrate",
-        "@rules_dart//dart/runfiles",
     ],
 )
 
-# The bindings package: generated Dart plus the init seam. App code imports
-# package:iroh_bridge/... and never touches a platform transport directly.
-# The library as a native dependency, told apart from its bindings: the dev tool
-# learns that `codegen.ir` is the interface both halves are generated from, so
-# it can tell a Rust edit that rewrote a body from one that moved the wire — and
-# on a -c dbg build it can ask frustrate for a patch of the first kind and
-# deliver it into the running app rather than reporting the code stale.
 frustrate_hot_patchable(
     name = "iroh_rust_hot",
     binding_contract = ":codegen.ir",
     library = ":iroh_rust",
 )
 
+frustrate_code_asset(
+    name = "iroh_rust_hot_asset",
+    bridge = ":codegen",
+    library = ":iroh_rust_hot",
+)
+
+# The asset, told apart from its bindings: the dev tool learns that
+# `codegen.ir` is the interface both halves are generated from, so it can tell
+# a Rust edit that rewrote a body from one that moved the wire — and on a
+# -c dbg build it can ask frustrate for a patch of the first kind and deliver
+# it into the running app rather than reporting the code stale.
 flutter_native_library(
     name = "iroh_rust_native",
     binding_contract = [":codegen.ir"],
     hot_patch = ":iroh_rust_hot.hot_patch",
-    library = ":iroh_rust_hot",
+    library = ":iroh_rust_hot_asset",
 )
+
+# The bindings package: generated Dart plus the init seam. App code imports
+# package:iroh_bridge/... and never touches a platform transport directly.
 
 flutter_plugin(
     name = "iroh_bridge",
@@ -224,17 +237,9 @@ flutter_plugin(
         "lib/src/init_web.dart",
         ":codegen.dart",
     ],
-    # Web is absent here on purpose, and it is not an oversight: on web the
-    # module is not a `native_dep` at all. `flutter_web_app` stages it as an
-    # `extra_web_asset` (//:app_web) and the runtime fetches it by URL, so
-    # there is nothing for a plugin's native_deps to carry.
-    native_deps = select({
-        "@platforms//os:macos": [":iroh_rust_native"],
-        "@platforms//os:ios": [":iroh_rust_native"],
-        "@platforms//os:android": [":iroh_rust_native"],
-        "@platforms//os:linux": [":iroh_rust_native"],
-        "//conditions:default": [],
-    }),
+    # Web has no code asset: `flutter_web_app` stages the module as an
+    # `extra_web_asset` (//:app_web) and the runtime fetches it by URL.
+    code_assets = [":iroh_rust_native"],
     platforms = [
         "macos",
         "ios",
