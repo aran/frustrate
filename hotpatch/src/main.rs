@@ -260,7 +260,9 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
     std::fs::write(&stubs_path, &built.stubs).map_err(|e| format!("cannot write the patch: {e}"))?;
 
     let toolchain = Toolchain::from_rustc_argv(
-        required(&o.llc, "--llc")?.clone(),
+        o.llc.clone().ok_or(
+            "no `llc` to compile patches with: the build found no Rust toolchain that runs on this machine and targets this library's platform",
+        )?,
         &o.rustc_args,
         o.env.clone(),
     );

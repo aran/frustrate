@@ -23,6 +23,8 @@ list of every other input the compilation read, and it answers each reload
 with one JSON line. See `hotpatch/src/main.rs` for the protocol.
 """
 
+load("@platforms//host:constraints.bzl", "HOST_CONSTRAINTS")
+
 _EXTRA_RUSTC_FLAGS = str(Label("@rules_rust//rust/settings:extra_rustc_flags"))
 _PER_CRATE_RUSTC_FLAG = str(Label("@rules_rust//rust/settings:per_crate_rustc_flag"))
 _HOT_PATCH_FLAG = str(Label("//bazel:hot_patch"))
@@ -224,18 +226,17 @@ def _hot_patch_impl(ctx):
         fail("%s: expected one .dylib or .so from %s, found %d" % (ctx.label, ctx.attr.library[0].label, len(libraries)))
     library = libraries[0]
 
-    toolchain = ctx.toolchains[str(Label("@rules_rust//rust:toolchain_type"))]
-    if not toolchain.llvm_cov:
+    # None when no Rust toolchain runs on this machine and targets the
+    # library's platform, as for a library a remote test host loads. Then the
+    # manifest names no `llc`, and the patch builder refuses each patch saying
+    # why, rather than this target failing analysis for everything above it.
+    toolchain = ctx.exec_groups["host"].toolchains[str(Label("@rules_rust//rust:toolchain_type"))]
+    if toolchain and not toolchain.llvm_cov:
         fail((
             "%s: hot patching compiles with the Rust toolchain's own `llc`, which ships in " +
             "its llvm-tools component, and this toolchain has none. Declare the toolchain " +
             "with llvm-tools (rules_rust's `rust.toolchain` fetches it by default)."
         ) % ctx.label)
-
-    # rules_rust names no target for `llc`, but it ships in the same llvm-tools
-    # archive as `llvm-cov`, which the toolchain does declare. Staging llvm-cov
-    # is what puts that directory in the execution root.
-    llc_path = toolchain.llvm_cov.dirname + "/llc"
 
     # The compilation's other inputs, which the patch builder fingerprints and
     # reads from the execution root. They are staged below, because an
@@ -254,7 +255,11 @@ def _hot_patch_impl(ctx):
     command.extend(["--ir", info.ir.path])
     command.extend(["--contract", ctx.file.binding_contract.path])
     command.extend(["--inputs", inputs_list.path])
-    command.extend(["--llc", llc_path])
+    if toolchain:
+        # rules_rust names no target for `llc`, but it ships in the same
+        # llvm-tools archive as `llvm-cov`, which the toolchain does declare.
+        # Staging llvm-cov is what puts that directory in the execution root.
+        command.extend(["--llc", toolchain.llvm_cov.dirname + "/llc"])
     for arg in info.argv:
         command.extend(["--rustc-arg", arg])
     for key, value in sorted(info.env.items()):
@@ -275,7 +280,8 @@ def _hot_patch_impl(ctx):
         return [DefaultInfo(files = depset([manifest]))]
 
     return [DefaultInfo(files = depset(
-        [manifest, ctx.executable._tool, library, info.ir, ctx.file.binding_contract, inputs_list, toolchain.llvm_cov] + inputs,
+        [manifest, ctx.executable._tool, library, info.ir, ctx.file.binding_contract, inputs_list] +
+        ([toolchain.llvm_cov] if toolchain else []) + inputs,
     ))]
 
 _frustrate_hot_patch = rule(
@@ -291,13 +297,20 @@ _frustrate_hot_patch = rule(
         "_tool": attr.label(
             default = Label("//hotpatch:frustrate_hotpatch"),
             executable = True,
-            cfg = "exec",
+            cfg = config.exec("host"),
         ),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
     },
-    toolchains = [str(Label("@rules_rust//rust:toolchain_type"))],
+    # The patch builder and its `llc` run on the developer's machine, not in an
+    # action, so they are built for the host whatever platform actions run on.
+    exec_groups = {
+        "host": exec_group(
+            exec_compatible_with = HOST_CONSTRAINTS,
+            toolchains = [config_common.toolchain_type(str(Label("@rules_rust//rust:toolchain_type")), mandatory = False)],
+        ),
+    },
 )
 
 def frustrate_hot_patchable(name, library, binding_contract, visibility = None, **kwargs):
