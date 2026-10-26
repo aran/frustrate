@@ -34,9 +34,23 @@ impl Toolchain {
 
         let mut linker = String::from("cc");
         let mut link_args = Vec::new();
+        let mut static_libs = Vec::new();
         let mut i = 0;
         while i < argv.len() {
             let arg = &argv[i];
+            let lib = if arg == "-l" {
+                i += 1;
+                argv.get(i).map(String::as_str)
+            } else {
+                arg.strip_prefix("-l")
+            };
+            if let Some((kind, name)) = lib.and_then(|l| l.split_once('=')) {
+                if kind.split(':').next() == Some("static") {
+                    static_libs.push(format!("-l{name}"));
+                }
+                i += 1;
+                continue;
+            }
             let codegen = if let Some(v) = arg.strip_prefix("--codegen=") {
                 Some(v.to_string())
             } else if let Some(v) = arg.strip_prefix("-C") {
@@ -60,7 +74,7 @@ impl Toolchain {
             }
             i += 1;
         }
-        link_args.retain(|a| !a.contains("${"));
+        link_args.retain(|a| !a.contains("${") && !links_an_archive(a, &static_libs));
         let mut env: Vec<(String, String)> = env
             .into_iter()
             .map(|(k, v)| (k, substitute(&v)))
@@ -142,6 +156,33 @@ impl Toolchain {
     }
 }
 
+/// Whether a link argument puts a static archive into the link, or asks for
+/// archives to be loaded whole. A patch links no archive: what it calls and
+/// does not carry is bound to the running image's copy, and a second copy in
+/// the patch would collide with that binding or run with its own state.
+/// rules_rust names a static library both as rustc's `-lstatic=<name>` and as
+/// a `-Clink-arg=-l<name>` (`static_libs` holds those `-l<name>` forms), and an
+/// `alwayslink` one by its path. A `-Wl,` argument may carry several linker
+/// arguments at once (`-Wl,--whole-archive,libx.a,--no-whole-archive`), so
+/// each is judged.
+fn links_an_archive(arg: &str, static_libs: &[String]) -> bool {
+    if static_libs.iter().any(|l| l == arg) {
+        return true;
+    }
+    let linker_args = match arg.strip_prefix("-Wl,") {
+        Some(list) => list.split(',').collect(),
+        None => vec![arg],
+    };
+    linker_args.iter().any(|a| {
+        a.ends_with(".a")
+            || a.ends_with(".lo")
+            || *a == "-all_load"
+            || *a == "-force_load"
+            || *a == "--whole-archive"
+            || *a == "--no-whole-archive"
+    })
+}
+
 /// `DEVELOPER_DIR` and `SDKROOT` for an Apple link, which Bazel adds to an
 /// action when it runs it rather than recording them in the action's
 /// environment: apple_support's `wrapped_clang` refuses to run without them.
@@ -172,5 +213,45 @@ fn apple_developer_env(env: &mut Vec<(String, String)>) {
                 env.push(("SDKROOT".into(), String::from_utf8_lossy(&out.stdout).trim().to_string()));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn link_args(argv: &[&str]) -> Vec<String> {
+        let argv: Vec<String> = argv.iter().map(|a| a.to_string()).collect();
+        Toolchain::from_rustc_argv(PathBuf::new(), &argv, Vec::new()).link_args
+    }
+
+    #[test]
+    fn a_patch_links_none_of_the_librarys_archives() {
+        let args = link_args(&[
+            "--codegen=link-arg=-shared",
+            "-Lnative=bazel-out/bin/c",
+            "--codegen=link-arg=-Wl,-all_load",
+            "-lstatic=shim",
+            "-Clink-arg=-lshim",
+            "-l",
+            "static:+whole-archive=api",
+            "-Clink-arg=-lapi",
+            "-Clink-arg=-Wl,bazel-out/bin/c/libnative.lo",
+            "-Clink-arg=-Wl,-force_load,bazel-out/bin/c/libother.a",
+            "-ldylib=z",
+            "--codegen=link-arg=-lc++",
+            "--codegen=link-arg=-lz",
+        ]);
+        assert_eq!(args, ["-shared", "-lc++", "-lz"]);
+    }
+
+    #[test]
+    fn an_archive_inside_a_combined_linker_argument_is_left_out() {
+        let args = link_args(&[
+            "-Clink-arg=-Wl,--whole-archive,bazel-out/bin/c/libx.a,--no-whole-archive",
+            "-Clink-arg=-Wl,--whole-archive,-lfoo,--no-whole-archive",
+            "-Clink-arg=-Wl,-rpath,$ORIGIN",
+        ]);
+        assert_eq!(args, ["-Wl,-rpath,$ORIGIN"]);
     }
 }

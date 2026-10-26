@@ -260,6 +260,15 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
 
     // A function of a dependency crate that the launch build never linked: the
     // library retains what its crates compiled, so the patch can call it.
+    // A call into the C archive the library links: the patch binds it to the
+    // running image's copy, so it links without the archive.
+    let (ir, contract) = edit("native_call");
+    let reply = builder.patch(&ir, &contract, library.anchor);
+    assert_eq!(reply["status"], "patched", "{reply}");
+    library.apply(reply["file"].as_str()).unwrap();
+    assert_eq!(library.call(add, &[2, 3]), 1006);
+    library.apply(None).unwrap();
+
     let (ir, contract) = edit("dependency_call");
     let reply = builder.patch(&ir, &contract, library.anchor);
     assert_eq!(reply["status"], "patched", "{reply}");

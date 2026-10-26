@@ -29,6 +29,7 @@ def hot_patch_fixture():
         edition = "2021",
         proc_macro_deps = ["//macros:frustrate_macros"],
         visibility = ["//tests/hotpatch:__pkg__"],
+        link_deps = ["//tests/hotpatch:native_dep"],
         deps = ["//runtime/rust:frustrate"],
     )
 
@@ -81,6 +82,12 @@ hot_patch_edit = rule(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
     },
+    # The Rust rules' own toolchains, so the copied argv runs on the platform
+    # it was resolved for.
+    toolchains = [
+        str(Label("@rules_rust//rust:toolchain_type")),
+        config_common.toolchain_type("@bazel_tools//tools/cpp:toolchain_type", mandatory = False),
+    ],
 )
 
 def _mode_transition_impl(_settings, attr):

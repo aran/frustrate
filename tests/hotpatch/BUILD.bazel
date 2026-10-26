@@ -1,6 +1,15 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 load(":defs.bzl", "hot_patch_edit", "in_mode")
+
+# Linked into every edition of the fixture, the way a bridge links a C library
+# it wraps.
+cc_library(
+    name = "native_dep",
+    srcs = ["native_dep.c"],
+    visibility = ["//tests/hotpatch:__subpackages__"],
+)
 
 # The fixture as a patchable library, and what builds its patches.
 frustrate_hot_patchable(
@@ -27,6 +36,7 @@ frustrate_hot_patchable(
         "body_edit_again",
         "contract_change",
         "layout_change",
+        "native_call",
         "new_function",
         "new_static",
         "signature_change",
@@ -46,6 +56,7 @@ in_mode(
         ":drop_edit",
         ":fixture_hot.hot_patch",
         ":layout_change",
+        ":native_call",
         ":new_function",
         ":new_static",
         ":signature_change",
