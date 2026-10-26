@@ -18,23 +18,26 @@ including the ones that never build for the web — is not this module's
 decision to make, which is the same
 reason `frustrate_wasm_module` does not default the `wasm_opt` attribute.
 
-Pin a different release with `binaryen.toolchain(version = "...")` and the four
-checksums; the defaults below are version 132.
+The binary is chosen by the exec platform of the action that runs it, not by
+the machine running Bazel: `@binaryen//:wasm-opt` is an alias that selects
+among one repository per published host, and only the selected one is
+fetched. A Mac that sends its actions to Linux workers gets the Linux binary.
+
+Pin a different release with `binaryen.toolchain(version = "...", sha256s =
+{...})`, one checksum per host you build on; the defaults below are version 132.
 """
 
 # The release these checksums are for. Naming any other version means
-# supplying its checksum too — see the fail() in the extension below.
+# supplying its checksums too — see the fail() in the extension below.
 _DEFAULT_VERSION = "132"
 
-# One entry per host binaryen publishes a release for. Keyed by the pair
-# `repository_ctx.os` reports, because that is what the repository rule can
-# actually see — not by a Bazel platform, since this is a host tool fetched
-# during the loading phase, before any platform exists to resolve against.
+# One entry per host binaryen publishes a release for: the archive's slug, the
+# constraints a platform must carry to run it, and its version-132 checksum.
 _HOSTS = {
-    ("mac os x", "aarch64"): ("arm64-macos", "98aad827847af7ef990ed7098d885725c8e5b5aae75073403635617ae4e259aa"),
-    ("mac os x", "x86_64"): ("x86_64-macos", "40c3de90bb3766bd0282a895e139a6f50253dba49b4f5bb89e66faca162d832e"),
-    ("linux", "aarch64"): ("aarch64-linux", "c58562417836c5d0493d89bdefc434933bdc097db641b483df86bcfa557a107f"),
-    ("linux", "x86_64"): ("x86_64-linux", "195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572"),
+    "arm64-macos": (["@platforms//os:macos", "@platforms//cpu:aarch64"], "98aad827847af7ef990ed7098d885725c8e5b5aae75073403635617ae4e259aa"),
+    "x86_64-macos": (["@platforms//os:macos", "@platforms//cpu:x86_64"], "40c3de90bb3766bd0282a895e139a6f50253dba49b4f5bb89e66faca162d832e"),
+    "aarch64-linux": (["@platforms//os:linux", "@platforms//cpu:aarch64"], "c58562417836c5d0493d89bdefc434933bdc097db641b483df86bcfa557a107f"),
+    "x86_64-linux": (["@platforms//os:linux", "@platforms//cpu:x86_64"], "195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572"),
 }
 
 # The layout below is load-bearing rather than tidy, and the reason differs by
@@ -83,27 +86,10 @@ native_binary(
 """
 
 def _binaryen_repo_impl(repository_ctx):
-    os_name = repository_ctx.os.name.lower()
-    arch = repository_ctx.os.arch.lower()
-    if arch == "arm64":
-        arch = "aarch64"
-    if arch == "amd64":
-        arch = "x86_64"
-
-    key = (os_name, arch)
-    if key not in _HOSTS:
-        fail(
-            "binaryen: no published release for host %s/%s. Binaryen ships " % (os_name, arch) +
-            "macOS and Linux on arm64/x86_64 (and Windows, which frustrate " +
-            "has never built). Supply your own wasm-opt and name it in the " +
-            "`wasm_opt` attribute instead of using this extension.",
-        )
-    slug, sha = _HOSTS[key]
     version = repository_ctx.attr.version
-
     repository_ctx.download_and_extract(
-        url = "https://github.com/WebAssembly/binaryen/releases/download/version_{v}/binaryen-version_{v}-{s}.tar.gz".format(v = version, s = slug),
-        sha256 = repository_ctx.attr.sha256 or sha,
+        url = "https://github.com/WebAssembly/binaryen/releases/download/version_{v}/binaryen-version_{v}-{s}.tar.gz".format(v = version, s = repository_ctx.attr.slug),
+        sha256 = repository_ctx.attr.sha256,
         stripPrefix = "binaryen-version_{v}".format(v = version),
     )
     repository_ctx.file("BUILD.bazel", _BUILD)
@@ -111,29 +97,53 @@ def _binaryen_repo_impl(repository_ctx):
 _binaryen_repo = repository_rule(
     implementation = _binaryen_repo_impl,
     attrs = {
-        "version": attr.string(default = _DEFAULT_VERSION),
-        "sha256": attr.string(
-            doc = "Override the checksum for this host's archive. Required " +
-                  "when `version` names a release this file has no entry for.",
-        ),
+        "version": attr.string(mandatory = True),
+        "slug": attr.string(mandatory = True),
+        "sha256": attr.string(mandatory = True),
     },
+)
+
+# The hub: `wasm-opt` resolves to the host repository whose constraints the
+# configuration matches. The rules name it with `cfg = "exec"`, so that
+# configuration is the action's exec platform.
+def _binaryen_hub_impl(repository_ctx):
+    settings = []
+    branches = []
+    for slug, constraints in repository_ctx.attr.hosts.items():
+        settings.append("config_setting(\n    name = %r,\n    constraint_values = %r,\n)\n" % (slug, constraints))
+        branches.append("        \":%s\": \"@binaryen_%s//:wasm-opt\",\n" % (slug, slug))
+    repository_ctx.file("BUILD.bazel", "".join(settings) + """
+alias(
+    name = "wasm-opt",
+    actual = select(
+        {
+%s        },
+        no_match_error = "binaryen: no wasm-opt for this exec platform; this one covers %s. Name your own wasm-opt in the `wasm_opt` attribute.",
+    ),
+    visibility = ["//visibility:public"],
+)
+""" % ("".join(branches), ", ".join(repository_ctx.attr.hosts.keys())))
+
+_binaryen_hub = repository_rule(
+    implementation = _binaryen_hub_impl,
+    attrs = {"hosts": attr.string_list_dict(mandatory = True)},
 )
 
 _toolchain = tag_class(attrs = {
     "version": attr.string(
         default = "132",
         doc = "The binaryen release to fetch. The built-in checksums are for " +
-              "132; naming another version needs `sha256` for the host you " +
-              "build on.",
+              "132; naming another version needs `sha256s`.",
     ),
-    "sha256": attr.string(
-        doc = "Checksum of this host's archive, when `version` is not 132.",
+    "sha256s": attr.string_dict(
+        doc = "Checksums by host archive slug (%s), when `version` is not " % ", ".join(_HOSTS.keys()) +
+              "132. Only the hosts named get a `wasm-opt`.",
     ),
 })
 
 def _binaryen_impl(module_ctx):
     version = _DEFAULT_VERSION
-    sha256 = ""
+    sha256s = {}
     root_chose = False
     for mod in module_ctx.modules:
         for tag in mod.tags.toolchain:
@@ -148,26 +158,31 @@ def _binaryen_impl(module_ctx):
             if root_chose and not mod.is_root:
                 continue
             version = tag.version
-            sha256 = tag.sha256
+            sha256s = tag.sha256s
             if mod.is_root:
                 root_chose = True
 
-    if version != _DEFAULT_VERSION and not sha256:
+    for slug in sha256s:
+        if slug not in _HOSTS:
+            fail("binaryen: no host %r; the hosts are %s." % (slug, ", ".join(_HOSTS.keys())))
+    if version == _DEFAULT_VERSION and not sha256s:
+        sha256s = {slug: sha for slug, (_, sha) in _HOSTS.items()}
+    if not sha256s:
         fail(
-            "binaryen: version %r has no built-in checksum (only %s does). " % (version, _DEFAULT_VERSION) +
-            "Pass the archive's sha256 for the host you build on:\n\n" +
-            "    binaryen.toolchain(version = %r, sha256 = \"...\")\n\n" % version +
-            "It is published beside the release as " +
-            "binaryen-version_%s-<host>.tar.gz.sha256. Without it the fetch " % version +
-            "would be attempted with %s's checksum and fail as a corrupt " % _DEFAULT_VERSION +
-            "download, which is a much worse way to learn this.",
+            "binaryen: version %r has no built-in checksums (only %s does). " % (version, _DEFAULT_VERSION) +
+            "Pass the archives' sha256s for the hosts you build on:\n\n" +
+            "    binaryen.toolchain(version = %r, sha256s = {\"arm64-macos\": \"...\"})\n\n" % version +
+            "Each is published beside the release as " +
+            "binaryen-version_%s-<host>.tar.gz.sha256." % version,
         )
 
-    _binaryen_repo(name = "binaryen", version = version, sha256 = sha256)
+    for slug, sha in sha256s.items():
+        _binaryen_repo(name = "binaryen_" + slug, version = version, slug = slug, sha256 = sha)
+    _binaryen_hub(name = "binaryen", hosts = {slug: _HOSTS[slug][0] for slug in sha256s})
     return module_ctx.extension_metadata(reproducible = True)
 
 binaryen = module_extension(
     implementation = _binaryen_impl,
     tag_classes = {"toolchain": _toolchain},
-    doc = "Fetches a pinned binaryen release and exposes `@binaryen//:wasm-opt`.",
+    doc = "Fetches a pinned binaryen release per exec platform and exposes `@binaryen//:wasm-opt`.",
 )
