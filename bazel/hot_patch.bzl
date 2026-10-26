@@ -159,12 +159,18 @@ def _hot_patch_ir_aspect_impl(target, ctx):
     # on it, and a name the library lacks is carried or refused, never guessed.
     args.append("-Ccodegen-units=1")
 
+    # The argv names tools by their paths in the exec configuration the Rustc
+    # action resolved, so the copy has to run on that same platform. The aspect
+    # asks for exactly the toolchains the Rust rules ask for, and the action
+    # names the toolchain rules_rust's Rustc action names, which puts it in the
+    # same exec group under --incompatible_auto_exec_groups.
     ctx.actions.run(
         executable = action.argv[0],
         arguments = args,
         inputs = action.inputs,
         outputs = [ir],
         env = action.env,
+        toolchain = str(Label("@rules_rust//rust:toolchain_type")),
         mnemonic = "FrustrateHotPatchIr",
         progress_message = "Emitting hot patch IR for %{label}",
     )
@@ -185,6 +191,10 @@ def _hot_patch_ir_aspect_impl(target, ctx):
 hot_patch_ir_aspect = aspect(
     implementation = _hot_patch_ir_aspect_impl,
     required_aspect_providers = [[_SourcesInfo]],
+    toolchains = [
+        str(Label("@rules_rust//rust:toolchain_type")),
+        config_common.toolchain_type("@bazel_tools//tools/cpp:toolchain_type", mandatory = False),
+    ],
 )
 
 def _forward_impl(ctx):
@@ -257,6 +267,12 @@ def _hot_patch_impl(ctx):
         "sources": sorted({f.path: True for f in info.sources.to_list()}.keys()),
         "command": command,
     }) + "\n")
+
+    # Only a -c dbg library can take a patch, and the dev tool reads the
+    # manifest only there. Elsewhere the manifest alone is the output, so a
+    # test or release build of `//...` compiles no IR and stages nothing.
+    if ctx.var["COMPILATION_MODE"] != "dbg":
+        return [DefaultInfo(files = depset([manifest]))]
 
     return [DefaultInfo(files = depset(
         [manifest, ctx.executable._tool, library, info.ir, ctx.file.binding_contract, inputs_list, toolchain.llvm_cov] + inputs,

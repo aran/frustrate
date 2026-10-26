@@ -58,6 +58,9 @@ def _edit_ir_impl(ctx):
         inputs = edit.compile_inputs,
         outputs = [ir],
         env = edit.env,
+        # The Rustc action's exec group, so the copied argv runs on the
+        # platform its tools were built for.
+        toolchain = str(Label("@rules_rust//rust:toolchain_type")),
         mnemonic = "FrustrateHotPatchEditIr",
     )
     return [DefaultInfo(files = depset([ir, ctx.file.contract]))]
