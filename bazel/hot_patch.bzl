@@ -227,8 +227,17 @@ def _hot_patch_impl(ctx):
     # is what puts that directory in the execution root.
     llc_path = toolchain.llvm_cov.dirname + "/llc"
 
+    # The compilation's other inputs, which the patch builder fingerprints and
+    # reads from the execution root. They are staged below, because an
+    # intermediate output that came from a cache is not downloaded unless
+    # something at the top asks for it. A tool's runfiles tree is left out of
+    # both: it is not a file a consumer can stage, and Bazel does not build one
+    # in every configuration, so listing it would make the patch builder read a
+    # directory that may not exist. The files the tree links are inputs of
+    # their own.
+    inputs = [f for f in info.inputs.to_list() if not f.path.endswith(".runfiles") and ".runfiles/" not in f.path]
     inputs_list = ctx.actions.declare_file(ctx.label.name + ".inputs")
-    ctx.actions.write(inputs_list, "\n".join([f.path for f in info.inputs.to_list()]) + "\n")
+    ctx.actions.write(inputs_list, "\n".join([f.path for f in inputs]) + "\n")
 
     command = [ctx.executable._tool.path]
     command.extend(["--library", library.path])
@@ -249,12 +258,6 @@ def _hot_patch_impl(ctx):
         "command": command,
     }) + "\n")
 
-    # The compilation's other inputs are listed too: the patch builder reads
-    # them from the execution root, and an intermediate output that came from a
-    # cache is not downloaded unless something at the top asks for it. A tool's
-    # runfiles tree is among them and is not a file a consumer can stage, so it
-    # is left out.
-    inputs = [f for f in info.inputs.to_list() if not f.path.endswith(".runfiles") and ".runfiles/" not in f.path]
     return [DefaultInfo(files = depset(
         [manifest, ctx.executable._tool, library, info.ir, ctx.file.binding_contract, inputs_list, toolchain.llvm_cov] + inputs,
     ))]
