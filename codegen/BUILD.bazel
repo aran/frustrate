@@ -8,12 +8,12 @@ rust_library(
     ),
     edition = "2021",
     deps = [
-        "@crates//:anyhow",
-        "@crates//:heck",
-        "@crates//:proc-macro2",
-        "@crates//:serde",
-        "@crates//:serde_json",
-        "@crates//:syn",
+        "@frustrate_crates//:anyhow",
+        "@frustrate_crates//:heck",
+        "@frustrate_crates//:proc-macro2",
+        "@frustrate_crates//:serde",
+        "@frustrate_crates//:serde_json",
+        "@frustrate_crates//:syn",
     ],
     visibility = ["//visibility:public"],
 )
@@ -24,7 +24,7 @@ rust_binary(
     edition = "2021",
     deps = [
         ":frustrate_codegen",
-        "@crates//:anyhow",
+        "@frustrate_crates//:anyhow",
     ],
     visibility = ["//visibility:public"],
 )
@@ -33,5 +33,5 @@ rust_test(
     name = "frustrate_codegen_test",
     crate = ":frustrate_codegen",
     edition = "2021",
-    deps = ["@crates//:pretty_assertions"],
+    deps = ["@frustrate_crates//:pretty_assertions"],
 )

@@ -103,8 +103,8 @@ local_path_override(
 )
 
 # The bridge crate's cargo dependencies. A hub of this module's own: frustrate's
-# `@crates` resolves frustrate's own manifests and hub repos are not re-exported
-# to consumers, so the name here must NOT be "crates".
+# `@frustrate_crates` resolves frustrate's own manifests and hub repos are not re-exported
+# to consumers, so this module declares its own.
 #
 # Nothing checks that this triple list and `extra_target_triples` above agree.
 # The per-platform build_tests in //:BUILD.bazel are what turn a disagreement

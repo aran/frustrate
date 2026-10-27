@@ -36,7 +36,7 @@ rust_library(
 # dependent module can still steer it.
 label_flag(
     name = "getrandom",
-    build_setting_default = "@crates//:getrandom",
+    build_setting_default = "@frustrate_crates//:getrandom",
     visibility = ["//visibility:private"],
 )
 

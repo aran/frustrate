@@ -78,7 +78,7 @@ rust_test(
     env = {"HOTPATCH_DATA": "$(rlocationpaths :data)"},
     tags = ["local"],
     target_compatible_with = ["@platforms//os:macos"],
-    deps = ["@crates//:serde_json"],
+    deps = ["@frustrate_crates//:serde_json"],
 )
 
 # What ships: the same patchable library built -c opt carries none of it —

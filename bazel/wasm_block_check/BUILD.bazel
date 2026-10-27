@@ -23,8 +23,8 @@ exports_files(
 # decision procedure, the panic-path exemption and what green does not claim.
 #
 # Zero dependencies, matching //bazel/wasm_std_check and
-# //codegen:frustrate_codegen_bin as exec tools: a crate would drag the @crates
-# hub into every consumer's exec configuration. It is also a cargo workspace
+# //codegen:frustrate_codegen_bin as exec tools: a crate would drag the
+# @frustrate_crates hub into every consumer's exec configuration. It is also a cargo workspace
 # member, so `tools/check_block.dart` and the Bazel validation action run the
 # identical binary.
 rust_binary(

@@ -74,8 +74,8 @@ rust_library(
     visibility = ["//visibility:public"],
     deps = [
         ":log",
-        "@crates//:async-task",
-        "@crates//:futures-sink",
+        "@frustrate_crates//:async-task",
+        "@frustrate_crates//:futures-sink",
     ],
     link_deps = select({
         "//bazel:hot_patch_apple": [":hot_patch_link_macho"],
@@ -136,7 +136,7 @@ cc_library(name = "no_unwinder")
 # cargo build both resolve.
 label_flag(
     name = "log",
-    build_setting_default = "@crates//:log",
+    build_setting_default = "@frustrate_crates//:log",
     visibility = ["//visibility:private"],
 )
 

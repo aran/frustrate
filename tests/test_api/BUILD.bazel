@@ -34,13 +34,13 @@ rust_shared_library(
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/rust:frustrate",
-        "@crates//:anyhow",
+        "@frustrate_crates//:anyhow",
         # The logging fixture logs through the ordinary facade, exactly as a
         # dependency that has never heard of frustrate would.
-        "@crates//:log",
+        "@frustrate_crates//:log",
         # The bring-your-own-runtime worked example's external executor;
         # wasm-safe, so the web fixture is unaffected.
-        "@crates//:pollster",
+        "@frustrate_crates//:pollster",
     ],
 )
 

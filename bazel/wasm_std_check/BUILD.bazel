@@ -6,7 +6,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 #
 # Zero dependencies, matching //codegen:frustrate_codegen_bin as an exec tool:
 # it reads two wasm sections that have been frozen since the MVP, so a crate
-# would buy nothing and would drag the @crates hub into every consumer's exec
+# would buy nothing and would drag the @frustrate_crates hub into every consumer's exec
 # configuration.
 rust_binary(
     name = "wasm_std_check",

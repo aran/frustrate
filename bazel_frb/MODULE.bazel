@@ -96,8 +96,8 @@ register_toolchains("@rust_toolchains//:all")
 
 # The FRB crate graph. A hub of its own: hub repos are not re-exported to
 # other modules and one hub is one feature-unified graph, so FRB's 60-odd
-# crates cannot ride in frustrate's `@crates` even if this were in the same
-# workspace. `flutter_rust_bridge` is a plain crates.io dependency, so
+# crates cannot ride in frustrate's `@frustrate_crates` even if this
+# were in the same workspace. `flutter_rust_bridge` is a plain crates.io dependency, so
 # crate_universe resolves it exactly like any other.
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 crate.from_cargo(

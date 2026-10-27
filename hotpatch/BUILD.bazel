@@ -10,9 +10,9 @@ rust_library(
     edition = "2021",
     visibility = ["//tests/hotpatch:__pkg__"],
     deps = [
-        "@crates//:object",
-        "@crates//:rustc-demangle",
-        "@crates//:serde_json",
+        "@frustrate_crates//:object",
+        "@frustrate_crates//:rustc-demangle",
+        "@frustrate_crates//:serde_json",
     ],
 )
 
@@ -23,7 +23,7 @@ rust_binary(
     visibility = ["//visibility:public"],
     deps = [
         ":frustrate_hotpatch_lib",
-        "@crates//:serde_json",
+        "@frustrate_crates//:serde_json",
     ],
 )
 

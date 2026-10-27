@@ -609,7 +609,7 @@ rust_shared_library(
     tags = ["manual"],
     deps = [
         "//ext/getrandom:frustrate_getrandom",
-        "@crates//:getrandom",
+        "@frustrate_crates//:getrandom",
     ],
 )
 

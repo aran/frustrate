@@ -97,7 +97,7 @@
 //! # Zero dependencies
 //!
 //! Same stance as `bazel/wasm_std_check`, for the same reason: a crate
-//! dependency would drag the `@crates` hub into every consumer's exec
+//! dependency would drag the `@frustrate_crates` hub into every consumer's exec
 //! configuration.
 
 use std::collections::{BTreeMap, BTreeSet};
