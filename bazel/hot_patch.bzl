@@ -29,7 +29,6 @@ compilation read, and it answers each reload with one JSON line. See
 `hotpatch/src/main.rs` for the protocol.
 """
 
-load("@platforms//host:constraints.bzl", "HOST_CONSTRAINTS")
 load("@rules_rust//rust:defs.bzl", "rust_common")
 load("//bazel:defs.bzl", "FrustrateBridgeInfo", "frustrate_code_asset")
 
@@ -256,6 +255,44 @@ def _unit(ctx, name, info, contract, skip = {}):
         args.extend(["--env", key + "=" + value])
     return args, files
 
+_HOST_PLATFORM = "//command_line_option:host_platform"
+
+def _host_transition_impl(settings, _attr):
+    # `--host_platform` rather than `@platforms//host`: it is the build's own
+    # description of this machine, and may carry constraints the detected one
+    # lacks that select its C toolchain.
+    return {"//command_line_option:platforms": [settings[_HOST_PLATFORM]]}
+
+_host_transition = transition(
+    implementation = _host_transition_impl,
+    inputs = [_HOST_PLATFORM],
+    outputs = ["//command_line_option:platforms"],
+)
+
+_LlcInfo = provider(
+    doc = "The Rust toolchain's `llvm-cov`, beside which its `llc` ships; None without a toolchain.",
+    fields = ["llvm_cov"],
+)
+
+def _rust_llc_impl(ctx):
+    toolchain = ctx.toolchains[str(Label("@rules_rust//rust:toolchain_type"))]
+    if toolchain and not toolchain.llvm_cov:
+        fail((
+            "%s: hot patching compiles with the Rust toolchain's own `llc`, which ships in " +
+            "its llvm-tools component, and this toolchain has none. Declare the toolchain " +
+            "with llvm-tools (rules_rust's `rust.toolchain` fetches it by default)."
+        ) % ctx.label)
+    return [_LlcInfo(llvm_cov = toolchain.llvm_cov if toolchain else None)]
+
+frustrate_rust_llc = rule(
+    implementation = _rust_llc_impl,
+    doc = """The `llc` of the Rust toolchain that targets this configuration's platform and runs on the machine the target's `exec_compatible_with` describes.
+
+Declare it with `exec_compatible_with = HOST_CONSTRAINTS`: the patch builder runs
+the `llc` on the developer's machine. See `//hotpatch:llc`.""",
+    toolchains = [config_common.toolchain_type(str(Label("@rules_rust//rust:toolchain_type")), mandatory = False)],
+)
+
 def _hot_patch_impl(ctx):
     library_target = ctx.attr.library[0]
     info = library_target[HotPatchIrInfo]
@@ -272,21 +309,15 @@ def _hot_patch_impl(ctx):
     # library's platform, as for a library a remote test host loads. Then the
     # manifest names no `llc`, and the patch builder refuses each patch saying
     # why, rather than this target failing analysis for everything above it.
-    toolchain = ctx.exec_groups["host"].toolchains[str(Label("@rules_rust//rust:toolchain_type"))]
-    if toolchain and not toolchain.llvm_cov:
-        fail((
-            "%s: hot patching compiles with the Rust toolchain's own `llc`, which ships in " +
-            "its llvm-tools component, and this toolchain has none. Declare the toolchain " +
-            "with llvm-tools (rules_rust's `rust.toolchain` fetches it by default)."
-        ) % ctx.label)
+    llvm_cov = ctx.attr._llc[_LlcInfo].llvm_cov
 
     command = [ctx.executable._tool.path]
     command.extend(["--library", library.path])
-    if toolchain:
+    if llvm_cov:
         # rules_rust names no target for `llc`, but it ships in the same
         # llvm-tools archive as `llvm-cov`, which the toolchain does declare.
         # Staging llvm-cov is what puts that directory in the execution root.
-        command.extend(["--llc", toolchain.llvm_cov.dirname + "/llc"])
+        command.extend(["--llc", llvm_cov.dirname + "/llc"])
 
     # The units: each compilation the patch builder reads. The library's own
     # links the image, so the linker and its flags come from its argv. A single
@@ -336,7 +367,7 @@ def _hot_patch_impl(ctx):
     # asks for it.
     return [DefaultInfo(files = depset(
         [manifest, ctx.executable._tool, library] +
-        ([toolchain.llvm_cov] if toolchain else []) + files,
+        ([llvm_cov] if llvm_cov else []) + files,
     ))]
 
 _frustrate_hot_patch = rule(
@@ -357,21 +388,17 @@ _frustrate_hot_patch = rule(
             providers = [rust_common.crate_info],
         ),
         "bridges": attr.label_list(providers = [FrustrateBridgeInfo]),
+        # The patch builder runs beside the app after the build, not in an
+        # action, so it is built for the machine running Bazel whatever
+        # platform the app targets or actions run on.
         "_tool": attr.label(
             default = Label("//hotpatch:frustrate_hotpatch"),
             executable = True,
-            cfg = config.exec("host"),
+            cfg = _host_transition,
         ),
+        "_llc": attr.label(default = Label("//hotpatch:llc"), providers = [_LlcInfo]),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
-        ),
-    },
-    # The patch builder and its `llc` run on the developer's machine, not in an
-    # action, so they are built for the host whatever platform actions run on.
-    exec_groups = {
-        "host": exec_group(
-            exec_compatible_with = HOST_CONSTRAINTS,
-            toolchains = [config_common.toolchain_type(str(Label("@rules_rust//rust:toolchain_type")), mandatory = False)],
         ),
     },
 )
@@ -390,12 +417,12 @@ def frustrate_hot_patchable(name, library, binding_contract = None, bridges = No
     and wrap each bridge's code asset for rules_flutter, all naming one patch
     builder:
 
-        [flutter_native_library(
-            name = "app_native." + Label(lib).name,
-            library = ":app_hot." + Label(lib).name,
-            binding_contract = [bridge + ".ir"],
+        flutter_native_library(
+            name = "app_native.ping",
+            library = ":app_hot.ping",  # `<name>.<the bridge library's target name>`
+            binding_contract = ["//ping:codegen.ir"],
             hot_patch = ":app_hot.hot_patch",
-        ) for lib, bridge in BRIDGES.items()]
+        )
 
     A patch never changes a contract in a way it cannot serve: a reload whose
     contract moved past that, in any bridge, answers `restart`.
