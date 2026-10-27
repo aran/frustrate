@@ -195,7 +195,7 @@ hot_patch_ir_aspect = aspect(
     required_aspect_providers = [[_SourcesInfo]],
     toolchains = [
         str(Label("@rules_rust//rust:toolchain_type")),
-        config_common.toolchain_type("@bazel_tools//tools/cpp:toolchain_type", mandatory = False),
+        config_common.toolchain_type("@rules_cc//cc:toolchain_type", mandatory = False),
     ],
 )
 

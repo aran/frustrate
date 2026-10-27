@@ -42,7 +42,7 @@ builder), so running the builder is picked up by the next build with no
 `bazel fetch --force`.
 """
 
-# rules_rust 0.74.0 deleted the public `rust/repositories.bzl`; this symbol now
+# rules_rust deleted the public `rust/repositories.bzl`; this symbol now
 # lives under `rust/private/`, where its own `extensions.bzl` loads it from. The
 # file carries no `visibility()` restriction, so the load is legal — but it is a
 # private API, so a rules_rust bump can move it again without a deprecation
