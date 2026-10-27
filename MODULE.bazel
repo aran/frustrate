@@ -46,7 +46,6 @@ use_repo(
     "frustrate_custom_std_browser",
     "frustrate_custom_std_threads",
     "frustrate_nightly_host",
-    "frustrate_nightly_tools",
 )
 
 # Order does NOT matter here, and that is deliberate — do not start relying on
@@ -68,9 +67,9 @@ use_repo(
 # proc-macros and build scripts that a custom-std build's nightly rustc consumes
 # — a stable proc-macro dylib does not load into nightly rustc.
 register_toolchains(
-    "@frustrate_custom_std_threads//:toolchain",
-    "@frustrate_custom_std_browser//:toolchain",
-    "@frustrate_nightly_host//:host_toolchain",
+    "@frustrate_custom_std_threads//:all",
+    "@frustrate_custom_std_browser//:all",
+    "@frustrate_nightly_host//:all",
 )
 
 register_toolchains("@rust_toolchains//:all")
