@@ -645,7 +645,7 @@ fn emit_handle_struct_codec(out: &mut String, iface: &Interface, s: &StructDecl)
         );
         for f in &s.fields {
             let expr = crate::emit_dart::decode_expr_fake_consumed(iface, &f.ty);
-            let _ = write!(out, "  final {} = {expr};\n", field_name(f));
+            let _ = write!(out, "  final ${} = {expr};\n", field_name(f));
         }
         let args: Vec<String> = s
             .fields
@@ -653,9 +653,9 @@ fn emit_handle_struct_codec(out: &mut String, iface: &Interface, s: &StructDecl)
             .map(|f| {
                 let dn = field_name(f);
                 if tuple {
-                    dn
+                    format!("${dn}")
                 } else {
-                    format!("{dn}: {dn}")
+                    format!("{dn}: ${dn}")
                 }
             })
             .collect();
@@ -672,7 +672,7 @@ fn emit_handle_struct_codec(out: &mut String, iface: &Interface, s: &StructDecl)
                 (true, Some(spec)) => mirror_call(iface, spec, true),
                 _ => decode_expr_fake(iface, &f.ty),
             };
-            let _ = write!(out, "  final {} = {expr};\n", field_name(f));
+            let _ = write!(out, "  final ${} = {expr};\n", field_name(f));
         }
         let args: Vec<String> = s
             .fields
@@ -680,9 +680,9 @@ fn emit_handle_struct_codec(out: &mut String, iface: &Interface, s: &StructDecl)
             .map(|f| {
                 let dn = field_name(f);
                 if tuple {
-                    dn
+                    format!("${dn}")
                 } else {
-                    format!("{dn}: {dn}")
+                    format!("{dn}: ${dn}")
                 }
             })
             .collect();
@@ -783,17 +783,17 @@ fn emit_handle_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
             for f in &v.fields {
                 let _ = write!(
                     out,
-                    "      final {} = {};\n",
+                    "      final ${} = {};\n",
                     field_name(f),
                     decode_expr_fake(iface, &f.ty)
                 );
             }
             let args: Vec<String> = if v.tuple {
-                v.fields.iter().map(field_name).collect()
+                v.fields.iter().map(|f| format!("${}", field_name(f))).collect()
             } else {
                 v.fields
                     .iter()
-                    .map(|f| format!("{0}: {0}", field_name(f)))
+                    .map(|f| format!("{0}: ${0}", field_name(f)))
                     .collect()
             };
             let _ = write!(out, "      return {cls}({});\n", args.join(", "));

@@ -3613,11 +3613,13 @@ fn emit_struct_decoder(
     let prefix = if side == Side::Reclaim { "_reclaim" } else { "_dec" };
     let _ = write!(out, "{scls} {prefix}{stem}(BinaryReader r) {{\n");
     // Field order must match the wire; named-arg evaluation order in Dart is
-    // textual, so decode into locals first to be explicit.
+    // textual, so decode into locals first to be explicit. Each local is the
+    // field name behind a `$`, which no field name can contain (FR0065), so a
+    // field called `r` cannot shadow the reader.
     for f in &s.fields {
         let _ = write!(
             out,
-            "  final {} = {};\n",
+            "  final ${} = {};\n",
             field_name(f),
             decode_expr_opt(iface, &f.ty, false, side)
         );
@@ -3628,9 +3630,9 @@ fn emit_struct_decoder(
         .map(|f| {
             let n = field_name(f);
             if tuple {
-                n
+                format!("${n}")
             } else {
-                format!("{n}: {n}")
+                format!("{n}: ${n}")
             }
         })
         .collect();
@@ -3838,17 +3840,17 @@ fn emit_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
                 for f in &v.fields {
                     let _ = write!(
                         out,
-                        "      final {} = {};\n",
+                        "      final ${} = {};\n",
                         field_name(f),
                         decode_expr_opt(iface, &f.ty, false, side)
                     );
                 }
                 let args: Vec<String> = if v.tuple {
-                    v.fields.iter().map(field_name).collect()
+                    v.fields.iter().map(|f| format!("${}", field_name(f))).collect()
                 } else {
                     v.fields
                         .iter()
-                        .map(|f| format!("{0}: {0}", field_name(f)))
+                        .map(|f| format!("{0}: ${0}", field_name(f)))
                         .collect()
                 };
                 let _ = write!(out, "      return {cls}({});\n", args.join(", "));
@@ -4980,7 +4982,7 @@ mod tests {
         assert!(code.contains("final class EitherLeft<L, R> extends Either<L, R> {"), "{code}");
         assert!(code.contains("  final L field0;"), "{code}");
         assert!(code.contains("if (v is EitherLeft<int, String>)"), "{code}");
-        assert!(code.contains("return EitherLeft<int, String>(field0);"), "{code}");
+        assert!(code.contains("return EitherLeft<int, String>($field0);"), "{code}");
         assert!(!code.contains("Either<i64"), "{code}");
     }
 
@@ -5275,7 +5277,7 @@ mod tests {
         assert!(code.contains("Wrap _decWrap(BinaryReader r) {"), "{code}");
         assert!(code.contains("Wrap _reclaimWrap(BinaryReader r) {"), "{code}");
         assert!(
-            code.contains("  final d = (Doc._(r.readHandle())..dispose());\n  final tag = r.readString();"),
+            code.contains("  final $d = (Doc._(r.readHandle())..dispose());\n  final $tag = r.readString();"),
             "{code}"
         );
         assert!(code.contains("reclaim: [(r) => (_reclaimWrap(r)), null],"), "{code}");
@@ -6481,7 +6483,7 @@ mod tests {
         assert!(code.contains("const EV({required this.field0});"), "{code}");
         assert!(!code.contains("const EV(this.field0);"), "{code}");
         // Decode reconstructs by name, not position.
-        assert!(code.contains("return EV(field0: field0);"), "{code}");
+        assert!(code.contains("return EV(field0: $field0);"), "{code}");
     }
 
     #[test]
@@ -6494,7 +6496,7 @@ mod tests {
         );
         // A genuine tuple variant still emits the positional constructor.
         assert!(code.contains("const EV(this.field0);"), "{code}");
-        assert!(code.contains("return EV(field0);"), "{code}");
+        assert!(code.contains("return EV($field0);"), "{code}");
     }
 
     #[test]
@@ -6663,6 +6665,18 @@ mod tests {
         assert!(code.contains("String? f({int? x}) {"), "{code}");
         assert!(!code.contains("FrOption"), "{code}");
         assert!(code.contains("r.readBool() ? r.readString() : null"), "{code}");
+    }
+
+    #[test]
+    fn a_field_named_like_the_reader_does_not_shadow_it() {
+        let code = emit_src(
+            "#[bridge(data)] pub struct P { pub r: f64 } \
+             #[bridge(data)] pub enum S { Circle { r: f64 }, Square(f64) } \
+             #[bridge(sync)] pub fn f(p: P, s: S) -> (P, S) { (p, s) }",
+        );
+        assert!(code.contains("  final $r = r.readF64();\n  return P(r: $r);"), "{code}");
+        assert!(code.contains("      final $r = r.readF64();\n      return SCircle(r: $r);"), "{code}");
+        assert!(code.contains("      return SSquare($field0);"), "{code}");
     }
 
     #[test]
