@@ -156,6 +156,36 @@ platform. In Dart, `FrustrateNative.init(myBridgeBridge)` once, then call the
 bindings. `BridgeLibrary.dynamic(DynamicLibrary.open(path), name: path,
 bridge: frustrateBridge)` is the way to load a library you built yourself.
 
+**Several bridges, one library.** An isolate (a page, on web) runs one Rust
+runtime, so bridges an app uses together are linked into one library.
+`frustrate_library` does that, keeping each bridge its own crate, bindings and
+asset id, and declares a code asset per bridge that binds its id to the
+combined library:
+
+```starlark
+frustrate_library(
+    name = "app_rust",
+    bridges = {
+        "//main:main_rust": "//main:codegen",
+        "//compute:compute_rust": "//compute:codegen",
+    },
+)
+
+dart_binary(
+    name = "dt",
+    code_assets = [":app_rust.main_rust", ":app_rust.compute_rust"],
+    ...
+)
+```
+
+`FrustrateNative.init` each bridge's library: the first builds the transport,
+the rest attach to it. A library built separately is refused. On web,
+`frustrate_wasm_module(crate = ":app_rust")` builds the one module, and
+`FrustrateWeb.init` serves every bridge in it. Generated code reaches its
+runtime with `Frustrate.of(frustrateBridge)`; `Frustrate.instance` answers
+only while one bridge is active, and `Frustrate.activate` replaces only the
+bridge its runtime serves, so a test can fake one bridge and keep another real.
+
 A source need not live in the bridge crate. A domain crate can carry
 `#[bridge(...)]` on its own types and be listed directly:
 

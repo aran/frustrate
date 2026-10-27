@@ -50,6 +50,21 @@ Future<void> main(List<String> args) async {
       ? '$workspace/tests/dart_integration'
       : Directory.current.path;
 
+  // 0. Stage the composed fixture (two bridges, one module) that Bazel built
+  //    into this binary's runfiles: the module under build/, both bridges'
+  //    bindings under lib/. `dart run` has no runfiles and nothing builds the
+  //    fixture without Bazel, so that path leaves out the files that need it,
+  //    by their `bazel_fixture` tag, and says so.
+  final bazel = workspace != null;
+  if (bazel) {
+    _stageComposed(packageDir);
+  } else {
+    stdout.writeln(
+      'not under `bazel run`: leaving out the bazel_fixture tests '
+      '(compose_web_test.dart), whose fixture only Bazel builds',
+    );
+  }
+
   // 1. Build + stage the wasm fixture (reuses the single source of the build
   //    logic rather than duplicating the cargo invocation here).
   final built = await _run('dart', [
@@ -69,6 +84,7 @@ Future<void> main(List<String> args) async {
     'chrome',
     '-c',
     'dart2wasm',
+    if (!bazel) ...['--exclude-tags', 'bazel_fixture'],
     ...passthrough,
   ], packageDir);
   exit(tested);
@@ -83,4 +99,21 @@ Future<int> _run(String exe, List<String> args, String cwd) async {
     mode: ProcessStartMode.inheritStdio,
   );
   return proc.exitCode;
+}
+
+/// Copy the composed fixture out of the runfiles `bazel run` starts in.
+void _stageComposed(String packageDir) {
+  const module = 'tests/compose/composed.wasm';
+  Directory('$packageDir/build').createSync(recursive: true);
+  File(module).copySync('$packageDir/build/composed.wasm');
+  for (final bridge in ['alpha', 'beta']) {
+    final lib = Directory('tests/compose/$bridge/lib');
+    for (final file in lib.listSync(recursive: true).whereType<File>()) {
+      final relative = file.path.substring(lib.path.length + 1);
+      final staged = File('$packageDir/lib/$relative')
+        ..parent.createSync(recursive: true);
+      file.copySync(staged.path);
+    }
+  }
+  stdout.writeln('staged the composed fixture from $module');
 }

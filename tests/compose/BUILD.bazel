@@ -1,0 +1,49 @@
+load("@rules_dart//dart:defs.bzl", "dart_test")
+load("//bazel:defs.bzl", "frustrate_library", "frustrate_wasm_module")
+load(":defs.bzl", "code_asset_as")
+
+# Two bridges, one library: //tests/compose/alpha and //tests/compose/beta,
+# each its own crate, bindings and code-asset id, linked into one image with
+# one Rust runtime. Declares `:composed`, `:composed.alpha` and
+# `:composed.beta` (the code assets binding each bridge's id to it).
+frustrate_library(
+    name = "composed",
+    bridges = {
+        "//tests/compose/alpha": "//tests/compose/alpha:bridge",
+        "//tests/compose/beta": "//tests/compose/beta:bridge",
+    },
+    visibility = ["//tests:__subpackages__"],
+)
+
+# The same composition for the web, for `bazel run //tests/dart_integration:web_test`
+# (compose_web_test.dart).
+frustrate_wasm_module(
+    name = "composed.wasm",
+    crate = ":composed",
+    visibility = ["//tests:__subpackages__"],
+)
+
+# Alpha built alone, as its own library: a second image beside the composed
+# one, loaded by the test under an id of its own.
+code_asset_as(
+    name = "alpha_alone",
+    asset_id = "package:compose_alpha/alone",
+    library = "//tests/compose/alpha",
+)
+
+dart_test(
+    name = "compose_test",
+    size = "small",
+    main = "test/compose_test.dart",
+    code_assets = [
+        ":alpha_alone",
+        ":composed.alpha",
+        ":composed.beta",
+    ],
+    deps = [
+        "//runtime/dart:frustrate",
+        "//tests/compose/alpha:bindings",
+        "//tests/compose/beta:bindings",
+        "@pub_deps//:test",
+    ],
+)

@@ -1,0 +1,39 @@
+load("@rules_dart//dart:defs.bzl", "dart_library")
+load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "compose_beta",
+    module_paths = ["crate::api"],
+    package_name = "compose_beta",
+    visibility = ["//tests:__subpackages__"],
+)
+
+frustrate_bridge_library(
+    name = "beta",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "compose_beta",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    visibility = ["//tests:__subpackages__"],
+    deps = [
+        "//runtime/rust:frustrate",
+        "//tests/compose/shared",
+    ],
+)
+
+dart_library(
+    name = "bindings",
+    srcs = [":bridge.dart"],
+    package_name = "compose_beta",
+    visibility = ["//tests:__subpackages__"],
+    deps = [
+        "//runtime/dart:frustrate",
+        "@pub_deps//:ffi",
+    ],
+)

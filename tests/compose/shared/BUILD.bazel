@@ -1,0 +1,11 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+# A dependency both bridges share. Linked into one library it is one crate with
+# one static, which is how the test sees that two bridges run in one image.
+rust_library(
+    name = "shared",
+    srcs = ["lib.rs"],
+    crate_name = "compose_shared",
+    edition = "2021",
+    visibility = ["//tests/compose:__subpackages__"],
+)
