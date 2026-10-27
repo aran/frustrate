@@ -1,0 +1,36 @@
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
+load("@rules_flutter//flutter:defs.bzl", "flutter_plugin")
+
+frustrate_bridge_outputs(
+    name = "codegen",
+    srcs = ["src/api.rs"],
+    crate_name = "compose_ping",
+    module_paths = ["crate::api"],
+    package_name = "compose_ping",
+    visibility = ["//compose:__pkg__"],
+)
+
+frustrate_bridge_library(
+    name = "ping",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":codegen.rs",
+    ],
+    crate_name = "compose_ping",
+    edition = "2021",
+    proc_macro_deps = ["@frustrate//macros:frustrate_macros"],
+    visibility = ["//compose:__pkg__"],
+    deps = ["@frustrate//runtime/rust:frustrate"],
+)
+
+# The bindings alone: the app names the library that serves them in its
+# `code_assets` (//compose:BUILD.bazel).
+flutter_plugin(
+    name = "bindings",
+    package_name = "compose_ping",
+    srcs = [":codegen.dart"],
+    platforms = ["macos", "ios", "android"],
+    visibility = ["//compose:__pkg__"],
+    deps = ["@frustrate//runtime/dart:frustrate"],
+)

@@ -1,0 +1,65 @@
+# Two bridges linked into one library and hot-patchable as one: a Rust edit in
+# either reaches the running app with its state kept. A second app beside the
+# gallery rather than a second bridge in it, so the gallery's library and its
+# web variants stay one bridge each.
+#
+#   bazel run @rules_flutter//tools/dev_tool:flutter_bazel -- run -t //:compose_app -d macos
+#   bazel run @rules_flutter//tools/dev_tool:flutter_bazel -- run -t //compose:app_android \
+#       -d android --build-arg=--config=android
+
+load("@frustrate//bazel:defs.bzl", "frustrate_library")
+load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
+load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
+load("@rules_flutter//flutter:defs.bzl", "flutter_application", "flutter_native_library")
+
+BRIDGES = {
+    "//compose/ping": "//compose/ping:codegen",
+    "//compose/pong": "//compose/pong:codegen",
+}
+
+frustrate_library(
+    name = "compose_rust",
+    bridges = BRIDGES,
+)
+
+frustrate_hot_patchable(
+    name = "compose_rust_hot",
+    bridges = BRIDGES,
+    library = ":compose_rust",
+)
+
+# One wrapper per code-asset id, each with its own bridge's contract and all
+# naming the one patch builder.
+[flutter_native_library(
+    name = "compose_rust_native." + bridge,
+    binding_contract = ["//compose/%s:codegen.ir" % bridge],
+    hot_patch = ":compose_rust_hot.hot_patch",
+    library = ":compose_rust_hot." + bridge,
+) for bridge in ("ping", "pong")]
+
+flutter_application(
+    name = "app_flutter",
+    package_name = "compose_demo",
+    code_assets = [
+        ":compose_rust_native.ping",
+        ":compose_rust_native.pong",
+    ],
+    main = "lib/main.dart",
+    visibility = ["//:__pkg__"],
+    deps = [
+        "//compose/ping:bindings",
+        "//compose/pong:bindings",
+        "@deps//:flutter",
+        "@frustrate//runtime/dart:frustrate",
+    ],
+)
+
+# Declared here rather than beside //:app_android: this package has no
+# android/ directory, so the runner is templated for this app's own package.
+flutter_android_app(
+    name = "app_android",
+    app_name = "Frustrate Compose",
+    android_abi = "arm64",
+    application = ":app_flutter",
+    package_name = "dev.frustrate.compose",
+)

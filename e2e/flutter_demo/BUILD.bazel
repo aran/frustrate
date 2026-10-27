@@ -50,6 +50,16 @@ flutter_macos_app(
     target_compatible_with = ["@platforms//os:macos"],
 )
 
+# //compose's two-bridge app, on this package's macOS runner.
+flutter_macos_app(
+    name = "compose_app",
+    app_name = "Frustrate Compose",
+    application = "//compose:app_flutter",
+    bundle_id = "dev.frustrate.compose",
+    minimum_os_version = "26.0",
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
 # iOS: the same app_flutter + the Rust bridge, which reaches iOS as the
 # demo_bridge package's code asset. The app bundler wraps the cross-compiled
 # library as a signed, embedded framework (dlopen-legal on device) and the
