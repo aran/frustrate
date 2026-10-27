@@ -47,10 +47,15 @@ pub enum Outcome {
 }
 
 pub struct Patch {
-    /// The patch module.
+    /// The patch module: the carried code of one crate. [`support`] supplies
+    /// what the modules of one patch share.
     pub ir: String,
-    /// Symbols bound to the running image: thunks and absolute addresses.
-    pub stubs: String,
+    /// The module's `target` lines, for [`support`].
+    pub target_lines: Vec<String>,
+    /// Symbols bound to the running image, unescaped.
+    pub bound: BTreeSet<String>,
+    /// Whether the module reads a thread-local through `frustrate_hot_tlv_get`.
+    pub tls: bool,
     /// The functions whose code changed, demangled.
     pub functions: Vec<String>,
     /// The entry points this patch redirects, by export name.
@@ -342,11 +347,17 @@ pub fn build(base: &Baseline, new: &Module, target: &Target) -> Outcome {
     let mut routed: Vec<&str> = include.iter().copied().filter(|n| roots.contains(n)).collect();
     routed.sort();
 
-    let ir_text = emit_module(new, &include, &kept_constants, &bound, &tls, &routed, target);
-    let stubs = emit_stubs(new, &bound, &tls, target);
+    let ir_text = emit_module(new, &include, &kept_constants, &bound, &tls);
     Outcome::Patch(Patch {
         ir: ir_text,
-        stubs,
+        target_lines: new
+            .entities
+            .iter()
+            .filter(|e| e.kind == Kind::Other && e.text.starts_with("target "))
+            .map(|e| e.text.to_string())
+            .collect(),
+        bound: bound.iter().map(|n| ir::unescape(n)).collect(),
+        tls: !tls.is_empty(),
         functions: dirty.iter().map(|d| demangle(d)).collect(),
         routed: routed.iter().map(|r| ir::unescape(r)).collect(),
         kept_statics,
@@ -394,8 +405,6 @@ fn emit_module(
     kept_constants: &BTreeSet<&str>,
     bound: &BTreeSet<&str>,
     tls: &BTreeSet<&str>,
-    routed: &[&str],
-    target: &Target,
 ) -> String {
     let mut out = String::new();
     let mut body = String::new();
@@ -491,7 +500,6 @@ fn emit_module(
         body.push('\n');
     }
 
-    body.push_str(&descriptor(routed, target));
     out.push_str(&body);
     out
 }
@@ -724,6 +732,26 @@ fn split_words(s: &str) -> Vec<&str> {
     out
 }
 
+/// The module every patch links once beside its crates' modules: the thunks
+/// and addresses binding what they do not carry to the running image, and the
+/// descriptor naming the slots they fill. A symbol two crates bind is bound
+/// once.
+pub fn support(patches: &[&Patch], target: &Target) -> String {
+    let mut out = String::new();
+    for line in patches.first().map(|p| p.target_lines.as_slice()).unwrap_or_default() {
+        let _ = writeln!(out, "{line}");
+    }
+    let bound: BTreeSet<&str> = patches.iter().flat_map(|p| p.bound.iter().map(String::as_str)).collect();
+    out.push_str(&emit_stubs(&bound, patches.iter().any(|p| p.tls), target));
+    let routed: Vec<&str> = patches.iter().flat_map(|p| p.routed.iter().map(String::as_str)).collect();
+    for r in &routed {
+        let _ = writeln!(out, "declare void {}()", ir::spell(r));
+    }
+    out.push_str(&descriptor(&routed, target));
+    out
+}
+
+/// `routed` holds unescaped export names.
 fn descriptor(routed: &[&str], target: &Target) -> String {
     let mut out = String::new();
     let identity = target.image.identity.clone().unwrap_or_default();
@@ -733,7 +761,7 @@ fn descriptor(routed: &[&str], target: &Target) -> String {
         "ptr null".to_string()
     } else {
         for (i, r) in routed.iter().enumerate() {
-            let slot = format!("{SLOT_PREFIX}{}", ir::unescape(r));
+            let slot = format!("{SLOT_PREFIX}{r}");
             let _ = writeln!(
                 out,
                 "@__frustrate_hot_patch_slot.{i} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
@@ -747,7 +775,7 @@ fn descriptor(routed: &[&str], target: &Target) -> String {
             .map(|(i, r)| {
                 format!(
                     "{{ ptr, ptr }} {{ ptr @__frustrate_hot_patch_slot.{i}, ptr {} }}",
-                    ir::spell(&ir::unescape(r))
+                    ir::spell(r)
                 )
             })
             .collect();
@@ -782,9 +810,9 @@ fn escape_bytes(bytes: &[u8]) -> String {
     s
 }
 
-/// Thunks for bound functions and absolute symbols for bound data, as a module
-/// of assembly for the image's architecture.
-fn emit_stubs(new: &Module, bound: &BTreeSet<&str>, tls: &BTreeSet<&str>, target: &Target) -> String {
+/// Thunks for bound functions and absolute symbols for bound data, as module
+/// assembly for the image's architecture. `bound` holds unescaped names.
+fn emit_stubs(bound: &BTreeSet<&str>, tls: bool, target: &Target) -> String {
     let image = target.image;
     let mangle = |n: &str| match image.format {
         Format::MachO => format!("\"_{n}\""),
@@ -792,11 +820,10 @@ fn emit_stubs(new: &Module, bound: &BTreeSet<&str>, tls: &BTreeSet<&str>, target
     };
     let mut asm = String::new();
     let _ = writeln!(asm, ".text");
-    for name in bound {
-        let raw = ir::unescape(name);
-        let Some(sym) = image.symbols.get(&raw) else { continue };
+    for &raw in bound {
+        let Some(sym) = image.symbols.get(raw) else { continue };
         let address = (sym.address as i64 + target.slide) as u64;
-        let label = mangle(&raw);
+        let label = mangle(raw);
         match sym.kind {
             SymKind::Text => {
                 let _ = writeln!(asm, ".globl {label}");
@@ -825,7 +852,7 @@ fn emit_stubs(new: &Module, bound: &BTreeSet<&str>, tls: &BTreeSet<&str>, target
             }
         }
     }
-    if !tls.is_empty() {
+    if tls {
         let label = mangle("frustrate_hot_tlv_get");
         let _ = writeln!(asm, ".globl {label}");
         let _ = writeln!(asm, ".p2align 2");
@@ -843,9 +870,6 @@ fn emit_stubs(new: &Module, bound: &BTreeSet<&str>, tls: &BTreeSet<&str>, target
         }
     }
     let mut out = String::new();
-    if let Some(triple) = new.target_triple() {
-        let _ = writeln!(out, "target triple = \"{triple}\"");
-    }
     for line in asm.lines() {
         let _ = writeln!(out, "module asm \"{}\"", escape_bytes_keep_space(line.as_bytes()));
     }

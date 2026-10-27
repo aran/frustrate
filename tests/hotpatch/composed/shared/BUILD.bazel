@@ -1,0 +1,10 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+# State both bridges of the composed fixture reach: one counter in the image.
+rust_library(
+    name = "shared",
+    srcs = ["lib.rs"],
+    crate_name = "hotpatch_composed_shared",
+    edition = "2021",
+    visibility = ["//tests/hotpatch:__subpackages__"],
+)

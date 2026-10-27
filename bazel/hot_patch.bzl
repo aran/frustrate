@@ -1,11 +1,16 @@
 """Hot patching a running bridge library: the build half.
 
-`frustrate_hot_patchable` declares two targets over one bridge cdylib:
+`frustrate_hot_patchable` declares these over one bridge cdylib, or over a
+`frustrate_library` that links several bridges:
 
 * `<name>` — the library, built so a running copy can take patches. Name it as
   `flutter_native_library.library`.
 * `<name>.hot_patch` — what builds those patches. Name it as
-  `flutter_native_library.hot_patch`.
+  `flutter_native_library.hot_patch`; over a `frustrate_library`, every
+  bridge's wrapper names this same target, since one patch serves them all.
+* `<name>.<library>` — over a `frustrate_library` only: per bridge, the
+  `frustrate_code_asset` binding its id to `<name>`. Wrap each in a
+  `flutter_native_library` with that bridge's `.ir` as its contract.
 
 Only a `-c dbg` build is patchable. There the library is compiled with
 `--cfg=frustrate_hot_patch`, which routes the generated entry points through
@@ -18,12 +23,15 @@ reinstalls it on every restart. Under any other compilation mode the transition
 changes nothing, so a release build is the plain library, byte for byte.
 
 The manifest's command is frustrate's patch builder (`//hotpatch`). It reads
-the library, the LLVM IR of the same compilation, the binding contract and a
-list of every other input the compilation read, and it answers each reload
-with one JSON line. See `hotpatch/src/main.rs` for the protocol.
+the library and, for each bridge crate in it, the LLVM IR of that crate's
+compilation, its binding contract and a list of every other input the
+compilation read, and it answers each reload with one JSON line. See
+`hotpatch/src/main.rs` for the protocol.
 """
 
 load("@platforms//host:constraints.bzl", "HOST_CONSTRAINTS")
+load("@rules_rust//rust:defs.bzl", "rust_common")
+load("//bazel:defs.bzl", "FrustrateBridgeInfo", "frustrate_code_asset")
 
 _EXTRA_RUSTC_FLAGS = str(Label("@rules_rust//rust/settings:extra_rustc_flags"))
 _PER_CRATE_RUSTC_FLAG = str(Label("@rules_rust//rust/settings:per_crate_rustc_flag"))
@@ -47,7 +55,8 @@ def _hot_patch_transition_impl(settings, attr):
         # loader exports live in //runtime/rust.
         flags.append(_HOT_PATCH_CFG)
 
-        # `-Clink-dead-code` on the library alone. It does two things: rustc
+        # `-Clink-dead-code` on the library and its bridge crates alone. It
+        # does two things: rustc
         # stops passing the linker its dead-code strip, so the image keeps every
         # function of every archive member the link pulled in — which is what
         # lets a patch call something the launch build never called — and rustc
@@ -58,12 +67,12 @@ def _hot_patch_transition_impl(settings, attr):
         # patch needs from a dependency is code that dependency already
         # compiled.
         # `patched_crate` rather than `library`, so a rule that compiles an
-        # edited copy of the crate can name the crate being patched and land in
+        # edited copy of a crate can name the library being patched and land in
         # the same configuration: the configuration's name reaches source paths
         # inside the IR, and two IRs compared against each other must agree on
-        # them.
-        patched = getattr(attr, "patched_crate", None) or attr.library
-        per_crate.append("{}@-Clink-dead-code".format(_prefix_filter(patched)))
+        # them. Sorted for the same reason.
+        patched = [getattr(attr, "patched_crate", None) or attr.library] + list(getattr(attr, "crates", None) or [])
+        per_crate.extend(sorted(["{}@-Clink-dead-code".format(_prefix_filter(p)) for p in patched]))
     return {
         _EXTRA_RUSTC_FLAGS: flags,
         _PER_CRATE_RUSTC_FLAG: per_crate,
@@ -208,11 +217,44 @@ frustrate_hot_patchable_library = rule(
     doc = "The bridge cdylib, in the configuration `frustrate_hot_patch` builds patches for.",
     attrs = {
         "library": attr.label(mandatory = True, cfg = hot_patch_transition),
+        # Only read by the transition: the bridge crates of a frustrate_library.
+        "crates": attr.label_list(cfg = hot_patch_transition),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
     },
 )
+
+def _crate_name(argv):
+    for i, arg in enumerate(argv):
+        if arg == "--crate-name":
+            return argv[i + 1]
+        if arg.startswith("--crate-name="):
+            return arg[len("--crate-name="):]
+    fail("no --crate-name in a Rustc argv")
+
+def _without_runfiles(files):
+    # A tool's runfiles tree is left out: it is not a file a consumer can
+    # stage, and Bazel does not build one in every configuration, so listing it
+    # would make the patch builder read a directory that may not exist. The
+    # files the tree links are inputs of their own.
+    return [f for f in files if not f.path.endswith(".runfiles") and ".runfiles/" not in f.path]
+
+def _unit(ctx, name, info, contract, skip = {}):
+    """The patch builder's options for one compilation, and the files they name."""
+    inputs = [f for f in _without_runfiles(info.inputs.to_list()) if f.path not in skip]
+    inputs_list = ctx.actions.declare_file("%s.%s.inputs" % (ctx.label.name, name))
+    ctx.actions.write(inputs_list, "".join([f.path + "\n" for f in inputs]))
+    args = ["--unit", name, "--inputs", inputs_list.path]
+    files = [inputs_list] + inputs
+    if contract:
+        args.extend(["--ir", info.ir.path, "--contract", contract.path])
+        files.extend([info.ir, contract])
+    for arg in info.argv:
+        args.extend(["--rustc-arg", arg])
+    for key, value in sorted(info.env.items()):
+        args.extend(["--env", key + "=" + value])
+    return args, files
 
 def _hot_patch_impl(ctx):
     library_target = ctx.attr.library[0]
@@ -238,32 +280,41 @@ def _hot_patch_impl(ctx):
             "with llvm-tools (rules_rust's `rust.toolchain` fetches it by default)."
         ) % ctx.label)
 
-    # The compilation's other inputs, which the patch builder fingerprints and
-    # reads from the execution root. They are staged below, because an
-    # intermediate output that came from a cache is not downloaded unless
-    # something at the top asks for it. A tool's runfiles tree is left out of
-    # both: it is not a file a consumer can stage, and Bazel does not build one
-    # in every configuration, so listing it would make the patch builder read a
-    # directory that may not exist. The files the tree links are inputs of
-    # their own.
-    inputs = [f for f in info.inputs.to_list() if not f.path.endswith(".runfiles") and ".runfiles/" not in f.path]
-    inputs_list = ctx.actions.declare_file(ctx.label.name + ".inputs")
-    ctx.actions.write(inputs_list, "\n".join([f.path for f in inputs]) + "\n")
-
     command = [ctx.executable._tool.path]
     command.extend(["--library", library.path])
-    command.extend(["--ir", info.ir.path])
-    command.extend(["--contract", ctx.file.binding_contract.path])
-    command.extend(["--inputs", inputs_list.path])
     if toolchain:
         # rules_rust names no target for `llc`, but it ships in the same
         # llvm-tools archive as `llvm-cov`, which the toolchain does declare.
         # Staging llvm-cov is what puts that directory in the execution root.
         command.extend(["--llc", toolchain.llvm_cov.dirname + "/llc"])
-    for arg in info.argv:
-        command.extend(["--rustc-arg", arg])
-    for key, value in sorted(info.env.items()):
-        command.extend(["--env", key + "=" + value])
+
+    # The units: each compilation the patch builder reads. The library's own
+    # links the image, so the linker and its flags come from its argv. A single
+    # bridge's library is also the crate a patch is built from. A
+    # frustrate_library's crate root only names the bridge crates, so each
+    # bridge crate is a unit of its own, and the library's unit fingerprints
+    # what else it links — leaving out the bridge crates' outputs, which their
+    # own units compare by their IR.
+    files = []
+    if ctx.attr.crates:
+        bridge_outputs = {}
+        for crate in ctx.attr.crates:
+            crate_info = crate[rust_common.crate_info]
+            bridge_outputs[crate_info.output.path] = True
+            if crate_info.metadata:
+                bridge_outputs[crate_info.metadata.path] = True
+        args, unit_files = _unit(ctx, _crate_name(info.argv), info, None, bridge_outputs)
+        command.extend(args + ["--links"])
+        files.extend(unit_files)
+        for crate, bridge in zip(ctx.attr.crates, ctx.attr.bridges):
+            bridge_info = bridge[FrustrateBridgeInfo]
+            args, unit_files = _unit(ctx, bridge_info.crate_name, crate[HotPatchIrInfo], bridge_info.ir)
+            command.extend(args)
+            files.extend(unit_files)
+    else:
+        args, unit_files = _unit(ctx, _crate_name(info.argv), info, ctx.file.binding_contract)
+        command.extend(args + ["--links"])
+        files.extend(unit_files)
 
     manifest = ctx.actions.declare_file(ctx.label.name + ".hot_patch.json")
     ctx.actions.write(manifest, json.encode_indent({
@@ -279,9 +330,13 @@ def _hot_patch_impl(ctx):
     if ctx.var["COMPILATION_MODE"] != "dbg":
         return [DefaultInfo(files = depset([manifest]))]
 
+    # The compilations' other inputs, which the patch builder fingerprints and
+    # reads from the execution root, are staged too: an intermediate output
+    # that came from a cache is not downloaded unless something at the top
+    # asks for it.
     return [DefaultInfo(files = depset(
-        [manifest, ctx.executable._tool, library, info.ir, ctx.file.binding_contract, inputs_list] +
-        ([toolchain.llvm_cov] if toolchain else []) + inputs,
+        [manifest, ctx.executable._tool, library] +
+        ([toolchain.llvm_cov] if toolchain else []) + files,
     ))]
 
 _frustrate_hot_patch = rule(
@@ -293,7 +348,15 @@ _frustrate_hot_patch = rule(
             cfg = hot_patch_transition,
             aspects = [rust_sources_aspect, hot_patch_ir_aspect],
         ),
-        "binding_contract": attr.label(mandatory = True, allow_single_file = True),
+        "binding_contract": attr.label(allow_single_file = True),
+        # A frustrate_library's bridge crates (rlibs), and the frustrate_bridge
+        # each was generated by, in the same order.
+        "crates": attr.label_list(
+            cfg = hot_patch_transition,
+            aspects = [rust_sources_aspect, hot_patch_ir_aspect],
+            providers = [rust_common.crate_info],
+        ),
+        "bridges": attr.label_list(providers = [FrustrateBridgeInfo]),
         "_tool": attr.label(
             default = Label("//hotpatch:frustrate_hotpatch"),
             executable = True,
@@ -313,22 +376,58 @@ _frustrate_hot_patch = rule(
     },
 )
 
-def frustrate_hot_patchable(name, library, binding_contract, visibility = None, **kwargs):
-    """A bridge cdylib that a running app can patch, and what builds the patches.
+def frustrate_hot_patchable(name, library, binding_contract = None, bridges = None, visibility = None, **kwargs):
+    """A bridge library that a running app can patch, and what builds the patches.
+
+    Over one bridge, give its cdylib and its contract:
+
+        frustrate_hot_patchable(name = "x_hot", library = ":x", binding_contract = ":bridge.ir")
+
+    Over a `frustrate_library`, give it and the same `bridges` dict:
+
+        frustrate_hot_patchable(name = "app_hot", library = ":app", bridges = BRIDGES)
+
+    and wrap each bridge's code asset for rules_flutter, all naming one patch
+    builder:
+
+        [flutter_native_library(
+            name = "app_native." + Label(lib).name,
+            library = ":app_hot." + Label(lib).name,
+            binding_contract = [bridge + ".ir"],
+            hot_patch = ":app_hot.hot_patch",
+        ) for lib, bridge in BRIDGES.items()]
+
+    A patch never changes a contract in a way it cannot serve: a reload whose
+    contract moved past that, in any bridge, answers `restart`.
 
     Args:
         name: `<name>` is the library to bundle; `<name>.hot_patch` builds patches for it.
-        library: the bridge crate's `rust_shared_library`.
-        binding_contract: the bridge's `<bridge>.ir`. A patch never changes it:
-            a reload whose contract moved answers `restart`.
-        visibility: applied to both targets.
-        **kwargs: common attributes (`tags`, `testonly`) for both targets.
+        library: the bridge crate's `rust_shared_library`, or a `frustrate_library`.
+        binding_contract: one bridge's `<bridge>.ir`. Not with `bridges`.
+        bridges: for a `frustrate_library`, the dict it was given. Also
+            declares `<name>.<library>`, each bridge's code asset over `<name>`.
+        visibility: applied to every target.
+        **kwargs: common attributes (`tags`, `testonly`) for every target.
     """
-    frustrate_hot_patchable_library(name = name, library = library, visibility = visibility, **kwargs)
+    if (binding_contract == None) == (bridges == None):
+        fail("frustrate_hot_patchable %s: give `binding_contract` for one bridge, or `bridges` for a frustrate_library" % name)
+    libraries = [native.package_relative_label(lib) for lib in (bridges or {})]
+    crates = [lib.same_package_label(lib.name + "_lib") for lib in libraries]
+    frustrate_hot_patchable_library(name = name, library = library, crates = crates, visibility = visibility, **kwargs)
     _frustrate_hot_patch(
         name = name + ".hot_patch",
         library = library,
         binding_contract = binding_contract,
+        crates = crates,
+        bridges = list((bridges or {}).values()),
         visibility = visibility,
         **kwargs
     )
+    for lib, bridge in zip(libraries, (bridges or {}).values()):
+        frustrate_code_asset(
+            name = "%s.%s" % (name, lib.name),
+            bridge = bridge,
+            library = name,
+            visibility = visibility,
+            **kwargs
+        )

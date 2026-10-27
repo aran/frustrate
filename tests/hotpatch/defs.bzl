@@ -1,7 +1,7 @@
 """The hot patch test's fixture crates and the rules that build its data."""
 
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
 load("//bazel:hot_patch.bzl", "HotPatchIrInfo", "hot_patch_ir_aspect", "hot_patch_transition", "rust_sources_aspect")
 
 def hot_patch_fixture():
@@ -33,17 +33,65 @@ def hot_patch_fixture():
         deps = ["//runtime/rust:frustrate"],
     )
 
+def hot_patch_bridge(name):
+    """One edition of a bridge of the composed fixture (`composed/<name>*`).
+
+    `hotpatch_<name>`, declared as `<name>` (and `<name>_lib`, the crate a
+    `frustrate_library` links), with its bindings as `bridge`.
+    """
+    frustrate_bridge_outputs(
+        name = "bridge",
+        srcs = ["src/api.rs"],
+        crate_name = "hotpatch_" + name,
+        package_name = "hotpatch_" + name,
+        module_paths = ["crate::api"],
+        visibility = ["//tests/hotpatch:__pkg__"],
+    )
+    frustrate_bridge_library(
+        name = name,
+        srcs = [
+            "src/api.rs",
+            "src/lib.rs",
+            ":bridge.rs",
+        ],
+        crate_name = "hotpatch_" + name,
+        edition = "2021",
+        proc_macro_deps = ["//macros:frustrate_macros"],
+        visibility = ["//tests/hotpatch:__pkg__"],
+        deps = [
+            "//runtime/rust:frustrate",
+            "//tests/hotpatch/composed/shared",
+        ],
+    )
+
 def _crate_dir(argv):
     # process_wrapper flags, `--`, rustc, then the crate root.
     root = argv[argv.index("--") + 2]
     return root.rsplit("/src/", 1)[0]
 
+_LABEL_HASHED = ("--codegen=metadata=", "--codegen=extra-filename=")
+
 def _edit_ir_impl(ctx):
     edit = ctx.attr.library[0][HotPatchIrInfo]
     ir = ctx.actions.declare_file(ctx.label.name + ".ll")
+
+    # An rlib's symbols carry a hash rules_rust derives from its label, which
+    # differs between the edit's package and the launch crate's. The launch
+    # crate's, so the two name the same functions alike.
+    launch = {}
+    if ctx.attr.launch_crate:
+        for arg in ctx.attr.launch_crate[0][HotPatchIrInfo].argv:
+            for flag in _LABEL_HASHED:
+                if arg.startswith(flag):
+                    launch[flag] = arg
     args = []
     for arg in edit.argv[1:]:
-        args.append("--emit=llvm-ir=" + ir.path if arg.startswith("--emit=") else arg)
+        if arg.startswith("--emit="):
+            arg = "--emit=llvm-ir=" + ir.path
+        for flag in _LABEL_HASHED:
+            if arg.startswith(flag):
+                arg = launch.get(flag, arg)
+        args.append(arg)
     args.append("-Ccodegen-units=1")
 
     # The edit lives in its own package; as far as source paths reach the IR
@@ -76,6 +124,11 @@ hot_patch_edit = rule(
         # The crate this is an edit of: it names the configuration, so this
         # compilation lands in the one the launch library was built in.
         "patched_crate": attr.label(mandatory = True),
+        # The launch library's bridge crates, when it is a frustrate_library:
+        # they name the configuration too.
+        "crates": attr.label_list(),
+        # The launch build of the crate this edits, when that is an rlib.
+        "launch_crate": attr.label(cfg = hot_patch_transition, aspects = [rust_sources_aspect, hot_patch_ir_aspect]),
         "launch_package": attr.string(mandatory = True),
         "contract": attr.label(mandatory = True, allow_single_file = True),
         "_allowlist_function_transition": attr.label(

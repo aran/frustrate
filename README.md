@@ -340,6 +340,28 @@ flutter_native_library(
 Then name `my_bridge_native` in the plugin's `native_deps`, in place of the
 library itself.
 
+For a `frustrate_library`, pass the same `bridges` dict instead of a contract.
+That also declares each bridge's code asset over the patchable library
+(`<name>.<library>`), and every bridge's wrapper names the one patch builder:
+
+```starlark
+frustrate_hot_patchable(
+    name = "app_rust_hot",
+    bridges = BRIDGES,  # what frustrate_library(name = "app_rust") was given
+    library = ":app_rust",
+)
+
+[flutter_native_library(
+    name = "app_rust_native." + bridge,
+    binding_contract = ["//%s:codegen.ir" % bridge],
+    hot_patch = ":app_rust_hot.hot_patch",
+    library = ":app_rust_hot." + bridge,  # the bridge library's target name
+) for bridge in ("ping", "pong")]
+```
+
+List those wrappers in the app's `code_assets`. One patch carries an edit to any
+of the bridge crates.
+
 A patchable debug library is bigger than a plain one, because it keeps
 functions the app never called so that a patch can call them. Release builds
 are untouched: outside `-c dbg` the wrapper is the plain library, byte for byte.
