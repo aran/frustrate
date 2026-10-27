@@ -231,7 +231,7 @@ def frustrate_bridge_outputs(name, visibility = None, **kwargs):
         visibility = visibility,
     )
 
-def frustrate_bridge_library(name, crate_name = None, visibility = None, **kwargs):
+def frustrate_bridge_library(name, crate_name = None, shared_library = True, visibility = None, **kwargs):
     """The bridge crate, declared twice: as the shipped cdylib and as a linkable rlib.
 
     Use this instead of a bare `rust_shared_library` for a bridge crate. It
@@ -303,6 +303,10 @@ def frustrate_bridge_library(name, crate_name = None, visibility = None, **kwarg
         crate_name: the Rust crate name for both targets. Defaults to `name`.
             This is what a test's `use` line spells, and what the native
             artifact is named after.
+        shared_library: False for a bridge that only ever ships inside a
+            `frustrate_library`: `<name>` is then not declared, and only
+            `<name>_lib` is built. The `frustrate_library`'s `bridges` key
+            stays `:<name>`.
         visibility: applied to both targets.
         **kwargs: forwarded verbatim to both targets.
     """
@@ -314,12 +318,13 @@ def frustrate_bridge_library(name, crate_name = None, visibility = None, **kwarg
         visibility = visibility,
         **kwargs
     )
-    rust_shared_library(
-        name = name,
-        crate_name = crate_name,
-        visibility = visibility,
-        **kwargs
-    )
+    if shared_library:
+        rust_shared_library(
+            name = name,
+            crate_name = crate_name,
+            visibility = visibility,
+            **kwargs
+        )
 
 def _frustrate_library_shim_impl(ctx):
     names = [crate[rust_common.crate_info].name for crate in ctx.attr.crates]

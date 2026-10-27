@@ -20,6 +20,8 @@ frustrate_bridge_library(
     crate_name = "compose_beta",
     edition = "2021",
     proc_macro_deps = ["//macros:frustrate_macros"],
+    # Beta only ever ships inside //tests/compose:composed.
+    shared_library = False,
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/rust:frustrate",
