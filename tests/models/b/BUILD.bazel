@@ -1,0 +1,52 @@
+load("@rules_dart//dart:defs.bzl", "dart_library")
+load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_code_asset")
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = [
+        "//tests/models/shared:src/model.rs",
+        "src/api.rs",
+    ],
+    crate_name = "models_b",
+    models = ["//tests/models/a:bridge"],
+    module_paths = [
+        "models_shared::model",
+        "crate::api",
+    ],
+    package_name = "models_b",
+    visibility = ["//tests/models:__subpackages__"],
+)
+
+frustrate_bridge_library(
+    name = "models_b",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    visibility = ["//tests/models:__subpackages__"],
+    deps = [
+        "//runtime/rust:frustrate",
+        "//tests/models/shared:models_shared",
+    ],
+)
+
+frustrate_code_asset(
+    name = "asset",
+    bridge = ":bridge",
+    library = ":models_b",
+    visibility = ["//tests/models:__subpackages__"],
+)
+
+dart_library(
+    name = "bindings",
+    srcs = [":bridge.dart"],
+    package_name = "models_b",
+    visibility = ["//tests/models:__subpackages__"],
+    deps = [
+        "//tests/models/a:bindings",
+        "//runtime/dart:frustrate",
+    ],
+)

@@ -1,0 +1,19 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+# The data types both bridges carry, in a crate of their own: each bridge lists
+# `src/model.rs` as a codegen source and links this crate.
+rust_library(
+    name = "models_shared",
+    srcs = [
+        "src/lib.rs",
+        "src/model.rs",
+    ],
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    visibility = ["//tests/models:__subpackages__"],
+)
+
+exports_files(
+    ["src/model.rs"],
+    visibility = ["//tests/models:__subpackages__"],
+)

@@ -20,10 +20,13 @@ load("@rules_dart//dart:providers.bzl", "DartCodeAssetInfo")
 load("@rules_rust//rust:defs.bzl", "rust_common", "rust_library", "rust_shared_library")
 
 FrustrateBridgeInfo = provider(
-    doc = "What `frustrate_bridge` generated bindings for: the code-asset id they resolve the bridge library by.",
+    doc = "What `frustrate_bridge` generated bindings for: the code-asset id they resolve the bridge library by, and what a bridge naming it in `models` reads.",
     fields = {
         "asset_id": "str: `package:<package_name>/<crate_name>`, the id the generated `@Native` declarations name.",
         "crate_name": "str: the bridge crate's name.",
+        "dart_import": "str: import URI of the generated Dart bindings entry.",
+        "ir": "File: the interface JSON, which a bridge naming this one in `models` checks its shared types against.",
+        "package_name": "str: the Dart package the bindings compile into.",
     },
 )
 
@@ -59,6 +62,9 @@ def _frustrate_bridge_impl(ctx):
     args.add("--dart-package", ctx.attr.package_name)
     for src, module_path in zip(ctx.files.srcs, ctx.attr.module_paths):
         args.add("--src", "{}:{}".format(src.path, module_path))
+    models = [m[FrustrateBridgeInfo] for m in ctx.attr.models]
+    for m in models:
+        args.add("--model", "{}={}".format(m.ir.path, m.dart_import))
     args.add("--rust-out", rust_out)
     args.add("--dart-out", dart_out)
     args.add("--ir-out", ir_out)
@@ -66,7 +72,7 @@ def _frustrate_bridge_impl(ctx):
 
     ctx.actions.run(
         executable = ctx.executable._codegen,
-        inputs = ctx.files.srcs,
+        inputs = ctx.files.srcs + [m.ir for m in models],
         outputs = [rust_out, ir_out, claims_out] + dart_outs,
         arguments = [args],
         mnemonic = "FrustrateCodegen",
@@ -76,6 +82,9 @@ def _frustrate_bridge_impl(ctx):
         FrustrateBridgeInfo(
             asset_id = "package:{}/{}".format(ctx.attr.package_name, ctx.attr.crate_name),
             crate_name = ctx.attr.crate_name,
+            dart_import = "package:{}/{}.dart".format(ctx.attr.package_name, stem),
+            ir = ir_out,
+            package_name = ctx.attr.package_name,
         ),
         DefaultInfo(files = depset([rust_out, ir_out, claims_out] + dart_outs)),
         OutputGroupInfo(
@@ -107,6 +116,18 @@ frustrate_bridge = rule(
                   "`package_name` of the `dart_library` holding them). It " +
                   "namespaces the bridge's code-asset id, which the Dart VM " +
                   "resolves only under the package that declares it.",
+        ),
+        "models": attr.label_list(
+            providers = [FrustrateBridgeInfo],
+            doc = "Other `frustrate_bridge` targets whose plain data types " +
+                  "(structs and enums reaching no handle) this bridge uses. " +
+                  "A struct or enum declared here under the name of one of " +
+                  "theirs is theirs: list the source that declares it in " +
+                  "`srcs` as usual, and the Dart bindings import its class " +
+                  "and codec from that bridge's package instead of declaring " +
+                  "their own, so one Dart object crosses both bridges. The " +
+                  "bindings' `dart_library` must depend on theirs. Codegen " +
+                  "refuses a type whose declaration differs between the two.",
         ),
         "_codegen": attr.label(
             default = Label("//codegen:frustrate_codegen_bin"),

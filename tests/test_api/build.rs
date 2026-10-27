@@ -31,6 +31,7 @@ fn main() {
                 module_path: "crate::shapes".into(),
             },
         ],
+        models: vec![],
         rust_out: manifest.join("src/frustrate_generated.rs"),
         dart_out: manifest.join("../dart_integration/lib/test_api.frustrate.dart"),
         // The interface the hostile-request driver reads (`src/hostile.rs`),

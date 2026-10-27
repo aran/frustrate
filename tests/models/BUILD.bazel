@@ -1,0 +1,60 @@
+load("@rules_dart//dart:defs.bzl", "dart_test")
+load("//bazel:defs.bzl", "frustrate_library")
+
+# Bridge B (`b/`) takes bridge A's (`a/`) data types through `models`, so one
+# Dart object crosses both.
+
+# A's real library, and B through its generated fake: a value A returns passes
+# through B's API and back, and what B returns passes into A.
+dart_test(
+    name = "shared_through_fake_test",
+    size = "small",
+    main = "test/shared_through_fake_test.dart",
+    code_assets = ["//tests/models/a:asset"],
+    deps = [
+        "//runtime/dart:frustrate",
+        "//tests/models/a:bindings",
+        "//tests/models/b:bindings",
+        "@pub_deps//:test",
+    ],
+)
+
+# B's real library, given objects built from A's package.
+dart_test(
+    name = "shared_into_b_test",
+    size = "small",
+    main = "test/shared_into_b_test.dart",
+    code_assets = ["//tests/models/b:asset"],
+    deps = [
+        "//runtime/dart:frustrate",
+        "//tests/models/a:bindings",
+        "//tests/models/b:bindings",
+        "@pub_deps//:test",
+    ],
+)
+
+# Both bridges linked into one library, as an app ships them: an object A's
+# real library returns goes through B's real library in the same process.
+frustrate_library(
+    name = "composed",
+    bridges = {
+        "//tests/models/a:models_a": "//tests/models/a:bridge",
+        "//tests/models/b:models_b": "//tests/models/b:bridge",
+    },
+)
+
+dart_test(
+    name = "shared_composed_test",
+    size = "small",
+    main = "test/shared_composed_test.dart",
+    code_assets = [
+        ":composed.models_a",
+        ":composed.models_b",
+    ],
+    deps = [
+        "//runtime/dart:frustrate",
+        "//tests/models/a:bindings",
+        "//tests/models/b:bindings",
+        "@pub_deps//:test",
+    ],
+)

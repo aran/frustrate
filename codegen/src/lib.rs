@@ -10,6 +10,7 @@ pub mod emit_dart_fake;
 pub mod emit_rust;
 pub mod hash;
 pub mod ir;
+pub mod models;
 pub mod parse;
 
 use anyhow::{Context, Result};
@@ -23,6 +24,17 @@ pub struct SourceSpec {
     pub module_path: String,
 }
 
+/// A bridge whose plain data types this one takes instead of declaring its
+/// own Dart copies (see [`models`]).
+#[derive(Debug, Clone)]
+pub struct ModelSpec {
+    /// The model bridge's interface JSON (its `ir_out`).
+    pub ir: PathBuf,
+    /// Import URI of the model bridge's Dart bindings entry, e.g.
+    /// `package:core_app/core.frustrate.dart`.
+    pub dart_import: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct GenerateConfig {
     pub crate_name: String,
@@ -31,6 +43,10 @@ pub struct GenerateConfig {
     /// only resolves assets under the package that declares them.
     pub dart_package: String,
     pub sources: Vec<SourceSpec>,
+    /// Bridges whose data types of the same name this one takes. The
+    /// declarations still come from `sources`, which must list the files
+    /// that declare them.
+    pub models: Vec<ModelSpec>,
     /// Where to write the generated Rust glue (compiled into the bridge
     /// crate). One file for every platform: native-only members are
     /// cfg-gated rather than variant-split.
@@ -74,10 +90,20 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
     report(&warnings);
 
     let iface = parse::merge(&config.crate_name, parts);
-    let iface = check::check(iface).map_err(|diags| {
-        let rendered: Vec<String> = diags.iter().map(|d| d.to_string()).collect();
-        anyhow::anyhow!("interface check failed:\n{}", rendered.join("\n"))
-    })?;
+    let mut model_inputs = vec![];
+    for m in &config.models {
+        let text = std::fs::read_to_string(&m.ir)
+            .with_context(|| format!("reading {}", m.ir.display()))?;
+        let iface: ir::Interface = serde_json::from_str(&text)
+            .with_context(|| format!("reading the interface in {}", m.ir.display()))?;
+        model_inputs.push(models::ModelInterface { iface, dart_import: m.dart_import.clone() });
+    }
+    let iface = check::check(iface)
+        .and_then(|iface| models::apply(iface, &model_inputs))
+        .map_err(|diags| {
+            let rendered: Vec<String> = diags.iter().map(|d| d.to_string()).collect();
+            anyhow::anyhow!("interface check failed:\n{}", rendered.join("\n"))
+        })?;
 
     write_atomic(&config.rust_out, &emit_rust::emit(&iface))?;
 

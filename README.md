@@ -204,6 +204,29 @@ so the only cost is making `#[bridge(...)]` resolve for rustc. Bazel supplies it
 `proc_macro_deps = ["@frustrate//macros:frustrate_macros"]` on that crate's
 `rust_library`, over the `bazel_dep` on `frustrate` the bridge already declares.
 
+**Two bridges can share data types.** A bridge that lists another in `models`
+takes that bridge's plain data types (structs and enums that reach no handle)
+instead of generating its own Dart copies, so one Dart object crosses both:
+
+```starlark
+frustrate_bridge_outputs(
+    name = "codegen",
+    srcs = ["//rust/core:src/model.rs", "src/compute.rs"],
+    crate_name = "my_compute",
+    models = ["//bridge:codegen"],
+    module_paths = ["my_core::model", "crate::compute"],
+    package_name = "my_compute",
+)
+```
+
+List the shared source in `srcs` as before; a struct or enum declared under the
+name of one in a `models` bridge is that bridge's. The generated bindings import
+its class and re-export it, so the bindings' `dart_library` must depend on the
+other bridge's. Codegen refuses the pair when the two declarations are different
+Rust items or have different shapes, and refuses a shared type that reaches a
+handle, since a handle belongs to the bridge that minted it. Members of a shared
+type stay on its home bridge.
+
 Your `MODULE.bazel` needs a `bazel_dep` on `frustrate`, `rules_flutter`,
 `rules_dart` and `rules_rust` (see the demo module above for versions known to
 work together). Until frustrate is on BCR, you'll need to use a git or local

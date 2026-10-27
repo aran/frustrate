@@ -5,6 +5,7 @@
 //!     --crate-name my_bridge \
 //!     --dart-package my_app \
 //!     --src api.rs:crate::api [--src more.rs:crate::more ...] \
+//!     [--model core.json=package:core_app/core.frustrate.dart ...] \
 //!     --rust-out frustrate_generated.rs \
 //!     --dart-out bridge.frustrate.dart \
 //!     [--ir-out interface.json] \
@@ -15,13 +16,14 @@
 //! Dart surfaces behind a conditional export.
 
 use anyhow::{bail, Context, Result};
-use frustrate_codegen::{GenerateConfig, SourceSpec};
+use frustrate_codegen::{GenerateConfig, ModelSpec, SourceSpec};
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let mut crate_name = None;
     let mut dart_package = None;
     let mut sources = vec![];
+    let mut models = vec![];
     let mut rust_out = None;
     let mut dart_out = None;
     let mut ir_out = None;
@@ -45,6 +47,17 @@ fn main() -> Result<()> {
                     module_path: module_path.to_string(),
                 });
             }
+            "--model" => {
+                let v = value("--model")?;
+                let (ir, dart_import) = v.split_once('=').context(
+                    "--model expects <interface json>=<bindings import URI>, \
+                     e.g. core.json=package:core_app/core.frustrate.dart",
+                )?;
+                models.push(ModelSpec {
+                    ir: ir.into(),
+                    dart_import: dart_import.to_string(),
+                });
+            }
             "--rust-out" => rust_out = Some(value("--rust-out")?.into()),
             "--dart-out" => dart_out = Some(value("--dart-out")?.into()),
             "--ir-out" => ir_out = Some(value("--ir-out")?.into()),
@@ -57,6 +70,7 @@ fn main() -> Result<()> {
         crate_name: crate_name.context("--crate-name is required")?,
         dart_package: dart_package.context("--dart-package is required")?,
         sources,
+        models,
         rust_out: rust_out.context("--rust-out is required")?,
         dart_out: dart_out.context("--dart-out is required")?,
         ir_out,

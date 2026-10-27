@@ -48,6 +48,25 @@ pub struct Interface {
     /// order. `fn_id` is assigned by `check::finalize` and is the dispatch
     /// key shared by the generated Rust and Dart.
     pub functions: Vec<Function>,
+    /// The `models` bridges whose Dart classes and codecs this interface's
+    /// data declarations of the same name are taken from, set by
+    /// [`crate::models::apply`]. The declarations stay in `structs`/`enums`
+    /// (the Rust glue and the wire use them as before); only the Dart surface
+    /// imports instead of declaring, so this is `#[serde(skip)]`.
+    #[serde(skip, default)]
+    pub models: Vec<ModelBridge>,
+}
+
+/// A bridge named in `models`, as far as the importing bindings need it.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ModelBridge {
+    pub crate_name: String,
+    /// Import URIs of the model bridge's native and web Dart surfaces, which
+    /// declare the classes and the codecs.
+    pub native_import: String,
+    pub web_import: String,
+    /// The data declarations taken from it, in this interface's order.
+    pub types: Vec<String>,
 }
 
 /// How a struct declares its fields. Read straight from the syntax at parse
@@ -1375,6 +1394,11 @@ impl Interface {
     /// The Dart runtime spells the same names (`FrustrateBridge.symbol`).
     pub fn export_symbol(&self, entry: &str) -> String {
         format!("frustrate_{}_{entry}", self.crate_name)
+    }
+
+    /// The `models` bridge the data declaration `name` is taken from.
+    pub fn model_of(&self, name: &str) -> Option<&ModelBridge> {
+        self.models.iter().find(|m| m.types.iter().any(|t| t == name))
     }
 
     pub fn opaque(&self, name: &str) -> Option<&OpaqueDecl> {
