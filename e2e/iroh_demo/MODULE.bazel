@@ -336,7 +336,7 @@ use_repo(cc, "llvm_toolchains")
 register_toolchains("@llvm_toolchains//:all")
 
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
-flutter.toolchain(flutter_version = "3.47.7")
+flutter.toolchain(flutter_version = "3.47.8")
 flutter.pub(
     name = "deps",
     lock = "//:pubspec.lock",
