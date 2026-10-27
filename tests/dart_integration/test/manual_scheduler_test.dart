@@ -1,6 +1,7 @@
 /// `FrustrateNative.manualDrain` against a bridge built with the manual
 /// scheduler (`:test_api_manual`): a Rust `async fn` makes no progress until
 /// the harness drains, and one drain carries it to its answer.
+@TestOn('vm')
 library;
 
 import 'package:frustrate/frustrate.dart';

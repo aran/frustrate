@@ -1,6 +1,7 @@
 /// `FrustrateNative.manualDrain` against an ordinary bridge build refuses,
 /// rather than handing a harness a drain that would never be the one running
 /// its Rust tasks.
+@TestOn('vm')
 library;
 
 import 'package:frustrate/frustrate.dart';
