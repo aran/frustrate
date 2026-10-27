@@ -3,6 +3,15 @@ load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_wasm_module")
 load("//bazel:manual_scheduler.bzl", "frustrate_manual_scheduler_library")
 
+# Read by //tools/shape_coverage:shape_coverage_test, which checks the fixture
+# against what its generator writes today.
+exports_files([
+    "src/api.rs",
+    "src/cancel_api.rs",
+    "src/shapes.rs",
+    "src/shapes_reclaim.rs",
+])
+
 frustrate_bridge_outputs(
     name = "bridge",
     srcs = [

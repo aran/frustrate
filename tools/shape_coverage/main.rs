@@ -1500,6 +1500,20 @@ fn repo_sources(root: &Path) -> Vec<(PathBuf, &'static str)> {
     ]
 }
 
+/// The repo root: under `bazel test`, the runfiles tree the test runs in;
+/// otherwise found from this crate's own manifest rather than from the working
+/// directory, so the gate answers the same wherever it is run.
+fn repo_root() -> PathBuf {
+    if std::env::var_os("TEST_SRCDIR").is_some() && Path::new(FIXTURE).exists() {
+        return std::env::current_dir().expect("a working directory");
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("tools/shape_coverage sits two levels below the repo root")
+        .to_path_buf()
+}
+
 const USAGE: &str = "\
 Reports member shapes the checker accepts and this repo's bridge sources never
 instantiate.
@@ -1535,11 +1549,7 @@ fn main() -> ExitCode {
 
     // The repo root, from this crate's own manifest rather than from the
     // working directory, so the gate answers the same wherever it is run.
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .expect("tools/shape_coverage sits two levels below the repo root")
-        .to_path_buf();
+    let root = repo_root();
 
     let survey = survey();
 
@@ -1781,17 +1791,64 @@ mod tests {
         );
     }
 
+    /// The gate: every emitted code path has an instantiated member or an
+    /// exemption.
+    #[test]
+    fn every_emitted_path_is_instantiated() {
+        let root = repo_root();
+        let covered = instantiated(&repo_sources(&root)).expect("the repo's sources check");
+        let s = survey();
+        let groups = emission_classes(&s);
+        let uncovered = groups
+            .values()
+            .filter(|g| !g.iter().any(|c| covered.contains(c)))
+            .filter(|g| g.iter().next().is_none_or(|c| exempt(c).is_none()))
+            .filter_map(|g| g.iter().next())
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>();
+        assert!(
+            uncovered.is_empty(),
+            "{} emitted code path(s) nothing instantiates; run \
+             `cargo run -p shape-coverage -- --write-fixture`:\n{}",
+            uncovered.len(),
+            uncovered.join("\n")
+        );
+    }
+
+    /// The checked-in fixture is exactly what `--write-fixture` writes today.
+    /// The gate alone cannot say so: a fixture written for an older emitter
+    /// can still cover every path while naming members a regeneration would
+    /// renumber, add or drop.
+    #[test]
+    fn the_fixture_is_current() {
+        let root = repo_root();
+        let base = instantiated(&repo_sources_less_fixture(&root)).expect("the sources check");
+        let dir = std::env::var_os("TEST_TMPDIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join(format!("shape_coverage_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("shapes.rs");
+        write_fixture(&survey(), &base, &out).unwrap();
+        for name in ["shapes.rs", "shapes_reclaim.rs"] {
+            let want = std::fs::read_to_string(dir.join(name)).unwrap();
+            let have = std::fs::read_to_string(root.join(FIXTURE).with_file_name(name)).unwrap();
+            assert!(
+                want == have,
+                "tests/test_api/src/{name} is stale; run \
+                 `cargo run -p shape-coverage -- --write-fixture`"
+            );
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// And every entry must still be uninstantiable. This is the anti-rot
     /// property, and it is not hypothetical: the entry this table was designed
     /// for (`locked` + `async fn`) became instantiable once codegen stopped
     /// handing a blocking lock to a cooperative executor.
     #[test]
     fn no_exemption_has_gone_stale() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(Path::parent)
-            .expect("two levels below the repo root")
-            .to_path_buf();
+        let root = repo_root();
         let covered = instantiated(&repo_sources(&root)).expect("the repo's sources check");
         let s = survey();
         let groups = emission_classes(&s);
@@ -2042,11 +2099,7 @@ mod tests {
     /// the only value that needs no caveat.
     #[test]
     fn every_cell_this_repo_instantiates_lies_inside_the_grid() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(Path::parent)
-            .unwrap()
-            .to_path_buf();
+        let root = repo_root();
         let covered = instantiated(&repo_sources(&root)).expect("the repo's own sources check");
         let survey = survey();
         let outside: Vec<&Cell> = covered.difference(&survey.legal).collect();

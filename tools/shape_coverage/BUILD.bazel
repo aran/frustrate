@@ -1,0 +1,19 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+
+# The gate and its fixture's freshness, in `bazel test //...`: every emitted
+# code path is instantiated, and tests/test_api/src/shapes.rs is exactly what
+# `cargo run -p shape-coverage -- --write-fixture` writes today.
+rust_test(
+    name = "shape_coverage_test",
+    size = "medium",
+    srcs = ["main.rs"],
+    crate_root = "main.rs",
+    data = [
+        "//tests/test_api:src/api.rs",
+        "//tests/test_api:src/cancel_api.rs",
+        "//tests/test_api:src/shapes.rs",
+        "//tests/test_api:src/shapes_reclaim.rs",
+    ],
+    edition = "2021",
+    deps = ["//codegen:frustrate_codegen"],
+)
