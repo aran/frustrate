@@ -146,14 +146,6 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
-# Set only under frustrate_block_check's transition (//bazel:defs.bzl): this
-# build is the throwaway `--cfg frustrate_block_check` artifact whose only
-# exports are the `#[bridge(no_block)]` check roots, never something that ships.
-#
-# It exists for exactly one select — :wasm_threads_feature_build below — and
-# defaults False, so every production configuration is the configuration it was
-# before this flag existed. Nothing else should read it: it is not a "diagnostic
-# build" knob in general, and a second reader would make it one.
 # Whether this configuration builds a library that can take patches
 # (bazel/hot_patch.bzl sets it for a -c dbg build through
 # frustrate_hot_patchable). What it selects is //runtime/rust's hot patch link
@@ -192,9 +184,24 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
+# Set only under frustrate_block_check's transition (//bazel:defs.bzl): this
+# build is the throwaway `--cfg frustrate_block_check` artifact whose only
+# exports are the `#[bridge(no_block)]` check roots, never something that ships.
+#
+# It has exactly two readers, :wasm_threads_feature_build below and
+# :block_check_build, which hands the custom-std toolchains the check's link
+# filter. It defaults False, so every production configuration is the
+# configuration it was before this flag existed. Nothing else should read it:
+# it is not a "diagnostic build" knob in general.
 bool_flag(
     name = "block_check",
     build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "block_check_build",
+    flag_values = {":block_check": "True"},
     visibility = ["//visibility:public"],
 )
 

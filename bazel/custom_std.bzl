@@ -195,10 +195,26 @@ toolchain(
 _ROOT_STDLIB = """\
 
 load("{toolchain_bzl}", "rust_stdlib_filegroup")
+load("{sysroot_linker_bzl}", "sysroot_linker")
 
 rust_stdlib_filegroup(
     name = "rust_std",
     srcs = glob(["{lib_dir}/*.rlib"]),
+    visibility = ["//impl:__pkg__"],
+)
+{linkers}"""
+
+# Each toolchain's linker under `frustrate_block_check`: rust-lld, with the
+# block check's link filter beside it in the sysroot, where the check's
+# `-Clinker=` finds it. Every other build links with rust-lld alone and never
+# builds the filter. Here rather than in //impl because a file's place in the
+# sysroot is its path below this repository's root.
+_ROOT_LINKER = """\
+sysroot_linker(
+    name = "linker_{triple}",
+    exec_triple = "{triple}",
+    lld = "{tools}//:rust-lld",
+    tools = {{"{link_filter}": "frustrate-link-filter"}},
     visibility = ["//impl:__pkg__"],
 )
 """
@@ -226,7 +242,10 @@ rust_toolchain(
     # and must come from the same place the std did.
     extra_rustc_flags = {rustflags},
     iso_date = "{iso_date}",
-    linker = "{tools}//:rust-lld",
+    linker = select({{
+        "{block_check_build}": "//:linker_{exec_triple}",
+        "//conditions:default": "{tools}//:rust-lld",
+    }}),
     linker_type = "direct",
     rust_doc = "{tools}//:rustdoc",
     rust_std = "//:rust_std",
@@ -372,7 +391,13 @@ def _custom_std_repo_impl(rctx):
 
     rctx.file("BUILD.bazel", root_build(_ROOT_STDLIB.format(
         toolchain_bzl = _label("@rules_rust//rust:toolchain.bzl"),
+        sysroot_linker_bzl = _label("//bazel:sysroot_linker.bzl"),
         lib_dir = _LIB_DIR,
+        linkers = "".join([_ROOT_LINKER.format(
+            triple = triple,
+            tools = _tools(triple),
+            link_filter = _label("//bazel/wasm_block_check:link_filter"),
+        ) for triple in rctx.attr.hosts]),
     )))
     rctx.file("impl/BUILD.bazel", _IMPL_BUILD.format(
         manifest = str(manifest),
@@ -385,6 +410,7 @@ def _custom_std_repo_impl(rctx):
             rustflags = json.encode(m["rustflags"]),
             iso_date = rctx.attr.iso_date,
             wasm_triple = _WASM_TRIPLE,
+            block_check_build = _label("//bazel:block_check_build"),
         ) for triple in rctx.attr.hosts]),
     ))
 

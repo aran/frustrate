@@ -59,10 +59,6 @@ frustrate_bridge_outputs(
 # emitted glue (and this fixture's own two files), not the runtime. The macro
 # forwards it to both halves, so neither crate type can carry a warning the
 # other would have caught.
-#
-# `compile_data` is the declaration `frustrate_block_check` requires: the linker
-# it points `-Clinker=` at, which a transition cannot add as an action input.
-# rustc never opens the file.
 frustrate_bridge_library(
     name = "fixture_shared",
     srcs = [
@@ -70,7 +66,6 @@ frustrate_bridge_library(
         "src/lib.rs",
         ":bridge.rs",
     ],
-    compile_data = ["//bazel/wasm_block_check:link_export_filter.py"],
     crate_name = "rule_test_fixture",
     edition = "2021",
     proc_macro_deps = ["//macros:frustrate_macros"],

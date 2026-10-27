@@ -17,7 +17,7 @@ so a bridge crate declared as a bare cdylib had unit tests and nothing else.
 """
 
 load("@rules_dart//dart:providers.bzl", "DartCodeAssetInfo")
-load("@rules_rust//rust:defs.bzl", "rust_common", "rust_library", "rust_shared_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_shared_library")
 
 FrustrateBridgeInfo = provider(
     doc = "What `frustrate_bridge` generated bindings for: the code-asset id they resolve the bridge library by.",
@@ -332,21 +332,11 @@ _BLOCK_CHECK_FLAG = str(Label("//bazel:block_check"))
 _EXTRA_RUSTC_FLAGS = str(Label("@rules_rust//rust/settings:extra_rustc_flags"))
 
 # The check configuration's linker: rust-lld with the export list cut back to
-# the check roots. Read //bazel/wasm_block_check/link_export_filter.py for what
-# it does and what it cannot break.
-_LINK_FILTER = Label("//bazel/wasm_block_check:link_export_filter.py")
-
-# Its execroot-relative source path, which is where rustc runs and so how
-# `-Clinker=` must spell it. Composed from the label rather than read off a
-# File, because a transition returns strings and runs before analysis.
-# `workspace_root` is "" in frustrate's own repo and `external/<canonical>` in a
-# consumer's, so one spelling serves both. `_require_link_filter` checks the
-# composition against the File Bazel stages.
-_LINK_FILTER_PATH = "/".join([
-    p
-    for p in [_LINK_FILTER.workspace_root, _LINK_FILTER.package, _LINK_FILTER.name]
-    if p
-])
+# the check roots. Read //bazel/wasm_block_check/link_filter.rs for what it
+# does and what it cannot break. A bare name, found on the PATH rustc gives a
+# linker: the custom-std toolchains place it in their sysroot, built for the
+# host each action runs on.
+_LINK_FILTER = "frustrate-link-filter"
 
 def _wasm_platform_transition_impl(settings, attr):
     # The whole transition. Everything a target platform needs beyond its
@@ -417,7 +407,7 @@ def _block_check_transition_impl(settings, attr):
         _EXTRA_RUSTC_FLAGS: [
             "--cfg=frustrate_block_check",
             "-Adead_code",
-            "-Clinker=" + _LINK_FILTER_PATH,
+            "-Clinker=" + _LINK_FILTER,
         ],
         # Turns //runtime/rust's `wasm-threads` feature off while the platform
         # above keeps the +atomics std on.
@@ -911,46 +901,6 @@ frustrate_wasm_opt = rule(
     },
 )
 
-def _require_link_filter(ctx):
-    """The crate carries the export filter as a compile-time input.
-
-    The transition points `-Clinker=` at it but cannot add an action input, so
-    the crate declares it in `compile_data`. Checked here because otherwise the
-    failure is a linker-not-found from inside rustc, naming a path and no
-    reason — and because comparing the staged File's path to the composed
-    `_LINK_FILTER_PATH` is what keeps that composition honest.
-    """
-    # `TestCrateInfo` rather than `CrateInfo`: rules_rust withholds `CrateInfo`
-    # from a cdylib (nothing can link one) and wraps the same struct here
-    # instead. It is what `rust_test(crate = ":a_cdylib")` reads.
-    crate = ctx.attr.crate[0]
-    if rust_common.test_crate_info in crate:
-        info = crate[rust_common.test_crate_info].crate
-    elif rust_common.crate_info in crate:
-        info = crate[rust_common.crate_info]
-    else:
-        fail("frustrate_block_check: %s is not a rules_rust crate — it " % crate.label +
-             "provides neither CrateInfo nor TestCrateInfo. `crate` wants the " +
-             "bridge rust_shared_library.")
-    compile_data = info.compile_data.to_list()
-    if [f for f in compile_data if f.path == _LINK_FILTER_PATH]:
-        return
-    fail(
-        ("frustrate_block_check: %s does not carry the check configuration's " % ctx.attr.crate[0].label) +
-        "linker as a compile-time input.\n\n" +
-        "Add to that target:\n\n" +
-        ("    compile_data = [\"%s\"],\n\n" % _LINK_FILTER) +
-        "This rule's transition links the check module with " +
-        ("`-Clinker=%s` —\n" % _LINK_FILTER_PATH) +
-        "rust-lld with the export list cut back to the check roots. A " +
-        "transition cannot add an\naction input, so the crate declares it. " +
-        "rustc never opens the file, and it is inert in\nevery other " +
-        "configuration.\n\n" +
-        "If that path is not where Bazel stages the file, the mismatch is the " +
-        "bug rather than\nthe missing line." +
-        ("\nThis crate's compile_data: [%s]" % ", ".join([f.path for f in compile_data])),
-    )
-
 def _frustrate_block_check_impl(ctx):
     census = ctx.attr.bridge[OutputGroupInfo].claims.to_list()
     if len(census) != 1:
@@ -985,8 +935,6 @@ def _frustrate_block_check_impl(ctx):
             DefaultInfo(files = depset([])),
             OutputGroupInfo(_validation = depset([marker])),
         ]
-
-    _require_link_filter(ctx)
 
     files = ctx.attr.crate[0][DefaultInfo].files.to_list()
     wasm = [f for f in files if f.extension == "wasm"]
@@ -1098,18 +1046,17 @@ frustrate_block_check = rule(
           "byte-identical under a genuine recompile — getrandom's non-atomics " +
           "arm never names `js_sys`. uuid carries the identical pattern and " +
           "wants the identical annotation, but only if its `js` feature is on.\n\n" +
-          "The second: the crate must carry the check configuration's linker " +
-          "as `compile_data = [\"@frustrate//bazel/wasm_block_check:" +
-          "link_export_filter.py\"]`. The transition points `-Clinker=` at " +
-          "that file but cannot add an action input, so the crate declares it; " +
-          "rustc never opens it, and it is inert in every other " +
-          "configuration. Omit it and this rule says so at analysis time.\n\n" +
+          "The second: the check module links through " +
+          "`frustrate-link-filter`, which frustrate's custom-std toolchains " +
+          "carry in their sysroot. A platform that resolves some other " +
+          "toolchain must carry it too.\n\n" +
           "That linker is what makes the rule work on a graph containing " +
           "wasm-bindgen. The cfg suppresses *frustrate's* `#[no_mangle]`s and " +
           "cannot reach a `#[wasm_bindgen]` export inside a dependency rlib, " +
           "so it cuts the `--export` arguments rustc collected for them off " +
           "the link line instead — restoring \"the only exports are the " +
-          "roots\" before lld's GC runs. Read that file for what it can and " +
+          "roots\" before lld's GC runs. Read " +
+          "//bazel/wasm_block_check/link_filter.rs for what it can and " +
           "cannot break.",
     attrs = {
         "bridge": attr.label(
@@ -1130,11 +1077,7 @@ frustrate_block_check = rule(
                   "is declared here: the roots come from the `no_block` " +
                   "annotations in the crate's own sources, which is where the " +
                   "claim belongs (a BUILD-level claim would make one source " +
-                  "generate different Rust under cargo and Bazel). " +
-                  "The crate's one obligation " +
-                  "is mechanical, `compile_data = [\"@frustrate//bazel/" +
-                  "wasm_block_check:link_export_filter.py\"]`, and the rule " +
-                  "doc says why.\n\n" +
+                  "generate different Rust under cargo and Bazel).\n\n" +
                   "Omit it when every claim in the crate is settled by " +
                   "placement. Nothing under the transition is then built, so " +
                   "the target needs no +atomics std and no `manual` tag.",

@@ -24,10 +24,6 @@ frustrate_bridge_outputs(
 # native iroh graph in to prove nothing. It is reached only through
 # `frustrate_block_check`'s transition, which builds it for
 # `@frustrate//bazel:wasm32_threads`.
-#
-# `compile_data` is the declaration that rule requires — the linker it points
-# `-Clinker=` at, which a transition cannot add as an action input. rustc never
-# opens the file.
 rust_shared_library(
     name = "check_fixture",
     srcs = [
@@ -35,7 +31,6 @@ rust_shared_library(
         "src/lib.rs",
         ":codegen.rs",
     ],
-    compile_data = ["@frustrate//bazel/wasm_block_check:link_export_filter.py"],
     edition = "2021",
     proc_macro_deps = ["@frustrate//macros:frustrate_macros"],
     tags = ["manual"],

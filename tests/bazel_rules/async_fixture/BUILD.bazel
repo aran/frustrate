@@ -27,10 +27,6 @@ frustrate_bridge_outputs(
 # and it is warning-free — measured — but fencing that here would declare
 # //tests/lint_clean's contract in the wrong package. If the shape is worth a
 # fence it belongs beside the other two.
-#
-# `compile_data` is the declaration `frustrate_block_check` requires: the linker
-# it points `-Clinker=` at, which a transition cannot add as an action input.
-# rustc never opens the file.
 rust_shared_library(
     name = "async_fixture_shared",
     srcs = [
@@ -38,7 +34,6 @@ rust_shared_library(
         "src/lib.rs",
         ":bridge.rs",
     ],
-    compile_data = ["//bazel/wasm_block_check:link_export_filter.py"],
     # Spelled the same as frustrate_bridge_outputs was told above: it is the name
     # the block check's witness chain prints.
     crate_name = "async_claim_fixture",

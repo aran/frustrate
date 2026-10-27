@@ -65,7 +65,7 @@
 //!
 //! The cfg reaches frustrate's own `#[no_mangle]`s and no further, so a graph
 //! containing wasm-bindgen would arrive here with its dependency rlibs' exports
-//! still on. The check configuration links through `link_export_filter.py`,
+//! still on. The check configuration links through `link_filter.rs`,
 //! which drops those `--export` arguments before lld's GC. It can only remove
 //! exports, so one it misses is still a stray this refuses by name.
 //!

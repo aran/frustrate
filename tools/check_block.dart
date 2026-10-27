@@ -60,7 +60,7 @@
 ///   zero.
 /// * **`-Zbuild-std=std,panic_abort`,** because `+atomics` needs a std compiled
 ///   for it; the shipped `rust-std-wasm32-unknown-unknown` is not.
-/// * **`-C linker=bazel/wasm_block_check/link_export_filter.py`,** `rust-lld`
+/// * **`-C linker=<frustrate-link-filter>`,** `rust-lld`
 ///   with every `--export` the cfg could not suppress cut off the link line, so
 ///   the GC still sees "exports == roots" on a graph whose dependency rlibs
 ///   carry `#[wasm_bindgen]` exports. A no-op on this workspace, and set anyway
@@ -248,16 +248,27 @@ const _rustflags = [
 /// What the checkout's path is rewritten to. See the header.
 const _remapTo = '/frustrate';
 
-/// The linker the check build uses. See the header.
-///
-/// Absolute, because rustc runs it from whatever directory cargo picks, and
-/// built from the **symlink-resolved** [root] for the same reason [_remapFlags]
-/// is — `/tmp` against `/private/tmp` names a path that resolves here and not
-/// there.
-List<String> _linkerFlags(String root) => [
-  '-C',
-  'linker=$root/bazel/wasm_block_check/link_export_filter.py',
-];
+/// Builds the linker the check build uses (see the header) for this host and
+/// returns its absolute path, which cargo reports. Absolute, because rustc
+/// runs it from whatever directory cargo picks.
+Future<String> _buildLinkFilter() async {
+  final b = await Process.run('cargo', [
+    'build', '-q', '--message-format=json', //
+    '-p', 'wasm-block-check', '--bin', 'frustrate-link-filter',
+  ]);
+  if (b.exitCode == 0) {
+    for (final line in LineSplitter.split(b.stdout as String)) {
+      final m = jsonDecode(line) as Map<String, dynamic>;
+      final exe = m['executable'];
+      if (m['reason'] == 'compiler-artifact' && exe is String) return exe;
+    }
+  }
+  stderr.write(b.stderr);
+  stderr.writeln(
+    '\ncheck_block: the link filter did not build, so nothing was scanned.',
+  );
+  exit(2);
+}
 
 /// `--remap-path-prefix` for a checkout rooted at [root].
 ///
@@ -332,6 +343,7 @@ Future<void> main(List<String> args) async {
       '==> building the block-check artifact ($pin, debug, '
       '+atomics, no wasm-threads)',
     );
+    final linker = await _buildLinkFilter();
     final b = await Process.run(
       'cargo',
       [
@@ -348,7 +360,8 @@ Future<void> main(List<String> args) async {
         'CARGO_ENCODED_RUSTFLAGS': [
           ..._rustflags,
           ..._remapFlags(root),
-          ..._linkerFlags(root),
+          '-C',
+          'linker=$linker',
         ].join('\x1f'),
       },
     );

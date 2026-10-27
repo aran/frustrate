@@ -279,7 +279,7 @@
   "moduleExtensions": {
     "//bazel:custom_std.bzl%custom_std": {
       "general": {
-        "bzlTransitiveDigest": "k1It1mxLlPJLtv4ZKaqJJPfgtsPw3HQ2sVriVdRR47Q=",
+        "bzlTransitiveDigest": "0BlQvU5xBUnYwgIRfqgLrdWfN/x4aTjnxzaojdNN5OI=",
         "usagesDigest": "pG1p4cHpho955ZaGkdzy8pWqY3z/Hn8VWC094nMP8fA=",
         "recordedInputs": [
           "REPO_MAPPING:,rules_rust rules_rust+",

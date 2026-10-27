@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
+default-run = "wasm_block_check"
 description = "Scans a --cfg frustrate_block_check wasm module for reachable memory.atomic.wait"
 
 # The source sits at the package root rather than in `src/`, so the Bazel
@@ -12,3 +13,7 @@ description = "Scans a --cfg frustrate_block_check wasm module for reachable mem
 [[bin]]
 name = "wasm_block_check"
 path = "main.rs"
+
+[[bin]]
+name = "frustrate-link-filter"
+path = "link_filter.rs"

@@ -18,10 +18,6 @@ frustrate_bridge_outputs(
 # Native, like the async fixture's crate, and for the same reason: it keeps the
 # generated glue compiling without pulling the +atomics check target in behind
 # it.
-#
-# `compile_data` is the declaration `frustrate_block_check` requires: the linker
-# it points `-Clinker=` at, which a transition cannot add as an action input.
-# rustc never opens the file.
 rust_shared_library(
     name = "locked_fixture_shared",
     srcs = [
@@ -29,7 +25,6 @@ rust_shared_library(
         "src/lib.rs",
         ":bridge.rs",
     ],
-    compile_data = ["//bazel/wasm_block_check:link_export_filter.py"],
     crate_name = "locked_claim_fixture",
     edition = "2021",
     proc_macro_deps = ["//macros:frustrate_macros"],
