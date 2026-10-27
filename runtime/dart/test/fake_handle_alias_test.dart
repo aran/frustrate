@@ -36,8 +36,10 @@ import 'package:frustrate/frustrate.dart';
 import 'package:frustrate/testing.dart';
 import 'package:test/test.dart';
 
+const _silent = FrustrateBridge('silent');
+
 final class _SilentBridge extends FakeBridge {
-  _SilentBridge() : super(BigInt.zero);
+  _SilentBridge() : super(_silent, BigInt.zero);
 
   @override
   Uint8List answerSync(int fnId, BinaryReader request) =>
@@ -52,6 +54,9 @@ final class _SilentBridge extends FakeBridge {
 /// one `HandleDrop.attach` at construction and one finalizer.
 final class _Handle extends OpaqueHandle {
   _Handle(super.raw, super.drop);
+
+  @override
+  FrustrateBridge get frustrateBridge => _silent;
 }
 
 /// Construct a handle for [raw] and abandon it — the shape a harness's

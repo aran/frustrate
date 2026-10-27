@@ -34,8 +34,11 @@ final class _AbsentBridge implements BridgeLibrary {
   String get name => 'package:not_the_bridge/not_the_bridge';
 
   @override
+  FrustrateBridge get bridge => const FrustrateBridge('not_the_bridge');
+
+  @override
   Pointer<Void> lookup(String symbol) =>
-      throw StateError('the absent bridge was asked for $symbol');
+      throw ArgumentError('the absent bridge has no $symbol');
 }
 
 void main() {
@@ -57,7 +60,7 @@ void main() {
         isA<StateError>().having(
           (e) => e.message,
           'message',
-          allOf(contains('already initialized'), contains('not_the_bridge')),
+          allOf(contains('not_the_bridge'), contains('did not resolve')),
         ),
       ),
     );
@@ -66,25 +69,4 @@ void main() {
     expect(Frustrate.isInstalled, isTrue);
     expect(checkFrustrateSchema, returnsNormally);
   });
-
-  test(
-    'a hand-loaded library is a different bridge from the generated one',
-    () {
-      // The generated bridge resolves through the VM's asset lookup; a wrapper
-      // over the process's own symbols is a different bridge by any reading.
-      expect(
-        () => FrustrateNative.init(
-          BridgeLibrary.dynamic(DynamicLibrary.process(), name: 'process'),
-        ),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            contains('already initialized'),
-          ),
-        ),
-      );
-      expect(Frustrate.isInstalled, isTrue);
-    },
-  );
 }

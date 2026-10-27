@@ -153,8 +153,8 @@ dart_library(
 A `dart_test` or `dart_binary` depending on `:bindings` gets the library built
 for the host it runs on, and an app bundler (rules_flutter) ships it per
 platform. In Dart, `FrustrateNative.init(myBridgeBridge)` once, then call the
-bindings. `BridgeLibrary.dynamic(DynamicLibrary.open(path), name: path)` is the
-way to load a library you built yourself.
+bindings. `BridgeLibrary.dynamic(DynamicLibrary.open(path), name: path,
+bridge: frustrateBridge)` is the way to load a library you built yourself.
 
 A source need not live in the bridge crate. A domain crate can carry
 `#[bridge(...)]` on its own types and be listed directly:

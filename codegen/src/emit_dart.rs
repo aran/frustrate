@@ -162,7 +162,7 @@ fn emit_surface(iface: &Interface, web: bool, dart_package: &str) -> String {
     }
     out.push('\n');
     // The wire-schema fingerprint (codegen/src/hash.rs): the same value the
-    // generated Rust exports as `frustrate_schema_hash`. `checkFrustrateSchema`
+    // generated Rust exports as `frustrate_<crate>_schema_hash`. `checkFrustrateSchema`
     // reads that export and throws if they disagree — stale bindings dispatch
     // wrong fn_ids / decode wrong types into unsafe derefs, so this must fail
     // loudly at init rather than corrupt silently.
@@ -173,17 +173,26 @@ fn emit_surface(iface: &Interface, web: bool, dart_package: &str) -> String {
     // has no const constructor — the value is built once, lazily.
     let _ = write!(
         out,
-        "/// Wire-schema fingerprint of the interface these bindings were generated\n\
-         /// from. Compared against the loaded library's `frustrate_schema_hash`\n\
+        "/// The bridge these bindings speak for: what every generated call names\n\
+         /// to reach its runtime (`Frustrate.of`), and what a fake of this\n\
+         /// interface serves.\n\
+         const FrustrateBridge frustrateBridge = FrustrateBridge('{crate}');\n\n\
+         /// [frustrateBridge], under a name no member of a generated class can\n\
+         /// shadow: a handle class's own `frustrateBridge` getter answers it.\n\
+         const FrustrateBridge _frustrateBridge = frustrateBridge;\n\n\
+         /// Wire-schema fingerprint of the interface these bindings were generated\n\
+         /// from. Compared against the loaded library's `{schema_export}`\n\
          /// export by [checkFrustrateSchema].\n\
-         final BigInt frustrateSchemaHash = BigInt.parse('{:016x}', radix: 16);\n\n\
+         final BigInt frustrateSchemaHash = BigInt.parse('{hash:016x}', radix: 16);\n\n\
          /// Verify the loaded native library / wasm module was generated from the\n\
          /// same interface as these bindings. Call once, right after the platform\n\
          /// init and before any bridge call; throws [StateError] on a mismatch\n\
          /// (stale bindings — regenerate).\n\
          void checkFrustrateSchema() =>\n\
-         \x20   Frustrate.instance.checkSchemaHash(frustrateSchemaHash);\n\n",
-        crate::hash::schema_hash(iface)
+         \x20   Frustrate.of(_frustrateBridge).checkSchemaHash(frustrateSchemaHash);\n\n",
+        crate = iface.crate_name,
+        schema_export = iface.export_symbol("schema_hash"),
+        hash = crate::hash::schema_hash(iface)
     );
     if !web {
         emit_bridge_library(&mut out, iface, dart_package);
@@ -219,17 +228,14 @@ fn emit_surface(iface: &Interface, web: bool, dart_package: &str) -> String {
 }
 
 /// Every export the Dart runtime looks up by a fixed name
-/// (`runtime/dart/lib/src/runtime_native.dart`). Per-type drop and finalizer
-/// exports are not here: they are derived from the interface.
+/// (`runtime/dart/lib/src/runtime_native.dart`): the runtime's own, which a
+/// library has once however many bridges it links.
 const RUNTIME_EXPORTS: &[&str] = &[
-    "frustrate_call_sync",
-    "frustrate_call_async",
     "frustrate_call_cancel",
     "frustrate_buffer_free",
     "frustrate_init_dl",
     "frustrate_exit_port",
     "frustrate_runtime_abi",
-    "frustrate_schema_hash",
     "frustrate_callback_respond",
     "frustrate_stream_cancel",
     "frustrate_stream_pause",
@@ -238,21 +244,27 @@ const RUNTIME_EXPORTS: &[&str] = &[
     "frustrate_resident_reclaimable",
     "frustrate_resident_leaked",
     "frustrate_actor_spawn",
-    "frustrate_actor_call",
     "frustrate_actor_shutdown",
     "frustrate_actor_cancel_deferred",
     "frustrate_actor_reap",
     "frustrate_manual_drain",
 ];
 
+/// The fixed exports this bridge's glue defines under its crate name
+/// ([`Interface::export_symbol`]). `FrustrateBridge.symbol` in the runtime
+/// spells the same names.
+const BRIDGE_ENTRIES: &[&str] = &["call_sync", "call_async", "actor_call", "schema_hash"];
+
 /// Every export the native surface can ask the loaded library for: the
-/// runtime's fixed ones plus a drop and a finalizer per handle class.
-/// An actor has neither (it drops through its executor).
+/// runtime's, this bridge's fixed ones, and a drop and a finalizer per handle
+/// class. An actor has neither of the last two (it drops through its
+/// executor).
 fn bridge_exports(iface: &Interface) -> Vec<String> {
     let mut exports: Vec<String> = RUNTIME_EXPORTS.iter().map(|s| s.to_string()).collect();
+    exports.extend(BRIDGE_ENTRIES.iter().map(|e| iface.export_symbol(e)));
     for o in iface.opaques.iter().filter(|o| o.model != Model::Actor) {
-        exports.push(format!("frustrate_drop_{}", o.name));
-        exports.push(format!("frustrate_finalize_{}", o.name));
+        exports.push(iface.export_symbol(&format!("drop_{}", o.name)));
+        exports.push(iface.export_symbol(&format!("finalize_{}", o.name)));
     }
     exports
 }
@@ -286,6 +298,8 @@ fn emit_bridge_library(out: &mut String, iface: &Interface, dart_package: &str) 
          \x20 const {class}();\n\n\
          \x20 @override\n\
          \x20 String get name => '{asset_id}';\n\n\
+         \x20 @override\n\
+         \x20 FrustrateBridge get bridge => frustrateBridge;\n\n\
          \x20 @override\n\
          \x20 ffi.Pointer<ffi.Void> lookup(String symbol) {{\n\
          \x20   switch (symbol) {{\n"
@@ -4060,9 +4074,12 @@ fn emit_opaque(out: &mut String, iface: &Interface, o: &OpaqueDecl, web: bool) {
          /// is dropped when this handle is garbage-collected.{reclaim}\n\
          final class {cls} extends OpaqueHandle{implements} {{\n\
          \x20 {cls}._(int raw)\n\
-         \x20     : super(raw, Frustrate.instance.{drop}('frustrate_drop_{n}'));\n\n",
+         \x20     : super(raw, Frustrate.of(_frustrateBridge).{drop}('{symbol}'));\n\n\
+         \x20 @override\n\
+         \x20 FrustrateBridge get frustrateBridge => _frustrateBridge;\n\n",
         reclaim = reclaim_doc(o.model),
         drop = drop_hook(o.model),
+        symbol = iface.export_symbol(&format!("drop_{n}")),
     );
     emit_take(out, iface, o, web);
     for f in iface
@@ -4146,8 +4163,11 @@ fn emit_trait(out: &mut String, iface: &Interface, o: &OpaqueDecl, web: bool) {
         out,
         "final class _Dyn{n} extends OpaqueHandle implements {cls} {{\n\
          \x20 _Dyn{n}._(int raw)\n\
-         \x20     : super(raw, Frustrate.instance.{drop}('frustrate_drop_{n}'));\n\n",
+         \x20     : super(raw, Frustrate.of(_frustrateBridge).{drop}('{symbol}'));\n\n\
+         \x20 @override\n\
+         \x20 FrustrateBridge get frustrateBridge => _frustrateBridge;\n\n",
         drop = drop_hook(o.model),
+        symbol = iface.export_symbol(&format!("drop_{n}")),
     );
     if consumed {
         // Typed as the interface, not as this private class: `_Dyn{n}` is not
@@ -4250,7 +4270,7 @@ fn emit_actor(out: &mut String, iface: &Interface, o: &OpaqueDecl, web: bool) {
          \x20     assert(reportConsumed(this));\n\
          \x20     throw StateError('{n} was disposed');\n\
          \x20   }}\n\
-         \x20   assert(identical(_host.bridgeIdentity, Frustrate.activeBridge) ||\n\
+         \x20   assert(identical(_host.bridgeIdentity, Frustrate.identityOf(_frustrateBridge)) ||\n\
          \x20       staleBridgeHandle('{n}'));\n\
          \x20   return raw;\n\
          \x20 }}\n\n\
@@ -4386,7 +4406,7 @@ fn emit_actor_constructor(out: &mut String, iface: &Interface, f: &Function) {
         out,
         "  /// Spawns a new executor and constructs the actor on it.\n\
          \x20 static Future<{cls}> {name}{} async {{\n\
-         \x20   final host = await Frustrate.instance.spawnActorHost(debugName: '{parent}');\n\
+         \x20   final host = await Frustrate.of(_frustrateBridge).spawnActorHost(debugName: '{parent}');\n\
          \x20   try {{\n",
         param_list(&params)
     );
@@ -4617,7 +4637,7 @@ fn emit_function(out: &mut String, iface: &Interface, f: &Function, depth: usize
     } else {
         "_host"
     };
-    let port = if parent_is_actor { host } else { "Frustrate.instance" };
+    let port = if parent_is_actor { host } else { "Frustrate.of(_frustrateBridge)" };
     // A **data** receiver is the value itself, encoded ahead of the
     // parameters by the same codec a parameter of that type would use. It is
     // not a handle: there is nothing to read out of `this`, nothing to keep
@@ -4816,11 +4836,11 @@ fn emit_function(out: &mut String, iface: &Interface, f: &Function, depth: usize
     } else {
         match f.exec {
             Exec::Sync => format!(
-                "Frustrate.instance.callSync({}, {encode_arg}{})",
+                "Frustrate.of(_frustrateBridge).callSync({}, {encode_arg}{})",
                 f.fn_id, typed_error
             ),
             Exec::Async => format!(
-                "await Frustrate.instance.callAsync({}, {encode_arg}{}{})",
+                "await Frustrate.of(_frustrateBridge).callAsync({}, {encode_arg}{}{})",
                 f.fn_id,
                 typed_error,
                 if takes_cancel_token(f) {
@@ -5105,7 +5125,7 @@ mod tests {
             "#,
         );
         assert!(
-            code.contains("Frustrate.instance.residentHandleDrop('frustrate_drop_Scene')"),
+            code.contains("Frustrate.of(_frustrateBridge).residentHandleDrop('frustrate_test_api_drop_Scene')"),
             "{code}"
         );
         assert!(code.contains("(Resident concurrency model)"), "{code}");
@@ -5125,7 +5145,7 @@ mod tests {
             "#,
         );
         assert!(
-            confined.contains("Frustrate.instance.handleDrop('frustrate_drop_D')"),
+            confined.contains("Frustrate.of(_frustrateBridge).handleDrop('frustrate_test_api_drop_D')"),
             "{confined}"
         );
         assert!(!confined.contains("residentHandleDrop"), "{confined}");
@@ -5292,7 +5312,7 @@ mod tests {
     fn sync_free_function() {
         let code = emit_src("#[bridge(sync)] pub fn add(a: i32, b: i32) -> i32 { a + b }");
         assert!(code.contains("int add({required int a, required int b}) {"), "{code}");
-        assert!(code.contains("Frustrate.instance.callSync(#, 8, (w) {"), "{code}");
+        assert!(code.contains("Frustrate.of(_frustrateBridge).callSync(#, 8, (w) {"), "{code}");
         // The response value is decoded into a local, the buffer asserted
         // fully consumed (trailing-byte defense), then returned.
         assert!(code.contains("final _ret = r.readI32();"), "{code}");
@@ -5444,7 +5464,7 @@ mod tests {
             assert!(surface.contains(&literal), "{label}: expected {literal}");
             assert!(
                 surface.contains("void checkFrustrateSchema() =>")
-                    && surface.contains("Frustrate.instance.checkSchemaHash(frustrateSchemaHash)"),
+                    && surface.contains("Frustrate.of(_frustrateBridge).checkSchemaHash(frustrateSchemaHash)"),
                 "{label}: {surface}"
             );
         }
@@ -5479,7 +5499,7 @@ mod tests {
         assert!(native.contains("import 'dart:ffi' as ffi;"), "{native}");
         assert!(
             native.contains(
-                "@ffi.Native<ffi.Void Function()>(symbol: 'frustrate_call_sync', assetId: 'package:my_app/test_api')"
+                "@ffi.Native<ffi.Void Function()>(symbol: 'frustrate_test_api_call_sync', assetId: 'package:my_app/test_api')"
             ),
             "{native}"
         );
@@ -5490,6 +5510,14 @@ mod tests {
             "{native}"
         );
         let web = &bindings.web;
+        // Both surfaces name their bridge the same way: it is how generated
+        // code reaches its runtime, whatever the platform.
+        for surface in [native, web] {
+            assert!(
+                surface.contains("const FrustrateBridge frustrateBridge = FrustrateBridge('test_api');"),
+                "{surface}"
+            );
+        }
         for absent in ["dart:ffi", "BridgeLibrary", "@ffi.Native", "testApiBridge"] {
             assert!(!web.contains(absent), "web surface names {absent}: {web}");
         }
@@ -5508,8 +5536,15 @@ mod tests {
         for fixed in super::RUNTIME_EXPORTS {
             assert!(cases.contains(fixed), "no case for {fixed}: {cases:?}");
         }
+        // The bridge's own entries are under its crate name, which is what
+        // lets two bridges' tables point into one library.
+        for entry in super::BRIDGE_ENTRIES {
+            let symbol = format!("frustrate_test_api_{entry}");
+            assert!(cases.contains(&symbol.as_str()), "no case for {symbol}: {cases:?}");
+        }
+        assert!(native.contains("FrustrateBridge get bridge => frustrateBridge;"), "{native}");
         for ty in ["Doc", "Scene", "Store"] {
-            for prefix in ["frustrate_drop_", "frustrate_finalize_"] {
+            for prefix in ["frustrate_test_api_drop_", "frustrate_test_api_finalize_"] {
                 let symbol = format!("{prefix}{ty}");
                 assert!(cases.contains(&symbol.as_str()), "no case for {symbol}: {cases:?}");
             }
@@ -5522,10 +5557,10 @@ mod tests {
         // Every drop symbol a handle class passes to the runtime is covered.
         let mut passed = 0;
         for line in native.lines() {
-            let Some((_, rest)) = line.split_once("Drop('frustrate_drop_") else { continue };
+            let Some((_, rest)) = line.split_once("Drop('frustrate_test_api_drop_") else { continue };
             let ty = rest.split('\'').next().unwrap();
             passed += 1;
-            for prefix in ["frustrate_drop_", "frustrate_finalize_"] {
+            for prefix in ["frustrate_test_api_drop_", "frustrate_test_api_finalize_"] {
                 let symbol = format!("{prefix}{ty}");
                 assert!(cases.contains(&symbol.as_str()), "no case for {symbol}");
             }
@@ -5752,7 +5787,7 @@ mod tests {
             code.contains("Future<List<String>> fetchAll({required Int64List ids}) async {"),
             "{code}"
         );
-        assert!(code.contains("await Frustrate.instance.callAsync(#, 8 + ids.length * 8, (w) {"), "{code}");
+        assert!(code.contains("await Frustrate.of(_frustrateBridge).callAsync(#, 8 + ids.length * 8, (w) {"), "{code}");
         assert!(
             code.contains("List.generate(r.readLen(), (_) => r.readString())"),
             "{code}"
@@ -6485,7 +6520,8 @@ mod tests {
         assert!(
             code.contains(
                 "Doc._(int raw)\n      : super(raw, \
-                 Frustrate.instance.handleDrop('frustrate_drop_Doc'));"
+                 Frustrate.of(_frustrateBridge).handleDrop('frustrate_test_api_drop_Doc'));\n\n  \
+                 @override\n  FrustrateBridge get frustrateBridge => _frustrateBridge;"
             ),
             "{code}"
         );
@@ -6678,7 +6714,7 @@ mod tests {
         assert!(!b.web.contains("`tryGet` is native-only"), "{}", b.web);
         // fn_ids never renumber: `read` is 3 on both, with one omission before
         // it on web.
-        let id_line = "Frustrate.instance.callAsync(#, ";
+        let id_line = "Frustrate.of(_frustrateBridge).callAsync(#, ";
         assert!(b.native.contains(id_line), "{}", b.native);
         assert!(b.web.contains(id_line), "{}", b.web);
     }
@@ -6821,12 +6857,12 @@ mod tests {
         // cannot strand them for the life of the isolate.
         assert!(code.contains("scope.failAllOpened(e, st);"), "{code}");
         assert!(code.contains("rethrow;"), "{code}");
-        assert!(code.contains("Frustrate.instance.callSync(#, 8, (w) {"), "{code}");
-        assert!(code.contains("Frustrate.instance.callAsync(#, 8, (w) {"), "{code}");
+        assert!(code.contains("Frustrate.of(_frustrateBridge).callSync(#, 8, (w) {"), "{code}");
+        assert!(code.contains("Frustrate.of(_frustrateBridge).callAsync(#, 8, (w) {"), "{code}");
         // The caller's controller binds through the ordinary handle path.
         assert!(code.contains("final t = sink;"), "{code}");
         assert!(
-            code.contains("FrustrateOpenScope(Frustrate.instance, 'Doc.watch')"),
+            code.contains("FrustrateOpenScope(Frustrate.of(_frustrateBridge), 'Doc.watch')"),
             "{code}"
         );
         assert!(code.contains("scope.channel.openObject(["), "{code}");
@@ -7199,7 +7235,7 @@ mod tests {
         // debugName gives the disposed-deferred StateError (and any other
         // host-attributed report) the actor's type name on both platforms.
         assert!(
-            code.contains("Frustrate.instance.spawnActorHost(debugName: 'A')"),
+            code.contains("Frustrate.of(_frustrateBridge).spawnActorHost(debugName: 'A')"),
             "{code}"
         );
         assert!(code.contains("static Future<A> new_() async {"), "{code}");
@@ -7246,7 +7282,7 @@ mod tests {
                 "      throw StateError('A was disposed');\n",
                 "    }\n",
                 "    assert(identical(_host.bridgeIdentity, ",
-                "Frustrate.activeBridge) ||\n",
+                "Frustrate.identityOf(_frustrateBridge)) ||\n",
                 "        staleBridgeHandle('A'));\n",
                 "    return raw;\n",
                 "  }\n",

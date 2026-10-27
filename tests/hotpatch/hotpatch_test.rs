@@ -87,7 +87,7 @@ impl Library {
         assert_eq!(unsafe { abi() }, 1);
         let apply = sym(c"flutter_hot_patch_apply");
         Library {
-            call_sync: unsafe { std::mem::transmute(sym(c"frustrate_call_sync")) },
+            call_sync: unsafe { std::mem::transmute(sym(c"frustrate_hotpatch_fixture_call_sync")) },
             apply: unsafe { std::mem::transmute(apply) },
             anchor: apply as usize,
         }
@@ -288,7 +288,8 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
         "{reply}"
     );
     assert!(
-        said.contains("frustrate_actor_call") && said.contains("frustrate_call_async"),
+        said.contains("frustrate_hotpatch_fixture_actor_call")
+            && said.contains("frustrate_hotpatch_fixture_call_async"),
         "the actor and async entry points are the ones redirected: {said}"
     );
     library.apply(reply["file"].as_str()).unwrap();
@@ -303,7 +304,8 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
     let (reply, said) = builder.patch_with_diagnostics(&ir, &contract, library.anchor);
     assert_eq!(reply["status"], "patched", "{reply}");
     assert!(
-        said.contains("frustrate_drop_Doc") && said.contains("frustrate_finalize_Doc"),
+        said.contains("frustrate_hotpatch_fixture_drop_Doc")
+            && said.contains("frustrate_hotpatch_fixture_finalize_Doc"),
         "the drop exports are redirected: {said}"
     );
     library.apply(reply["file"].as_str()).unwrap();

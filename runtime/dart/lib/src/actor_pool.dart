@@ -60,14 +60,17 @@ final class ActorPool<T extends ActorHandle> {
   /// fails, the instances that did spawn are disposed and the first
   /// failure rethrown.
   ///
-  /// [size] defaults to `Frustrate.instance.hardwareParallelism`. On web
+  /// [size] defaults to the active runtime's `hardwareParallelism`. On web
   /// every instance carries its own wasm linear memory — pass [size]
   /// explicitly for actors with large resident state.
   static Future<ActorPool<T>> spawn<T extends ActorHandle>(
     Future<T> Function(int index) spawn, {
     int? size,
   }) async {
-    final width = size ?? Frustrate.instance.hardwareParallelism;
+    final width =
+        size ??
+        (Frustrate.activeRuntimes.firstOrNull ?? Frustrate.instance)
+            .hardwareParallelism;
     if (width < 1) {
       throw ArgumentError.value(size, 'size', 'an ActorPool needs >= 1');
     }

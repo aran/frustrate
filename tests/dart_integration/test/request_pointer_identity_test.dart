@@ -84,7 +84,7 @@ void main() {
   setUpAll(() async {
     await initBridge();
     callSync = testApiBridge
-        .lookup('frustrate_call_sync')
+        .lookup(frustrateBridge.symbol('call_sync'))
         .cast<NativeFunction<_CallSyncC>>()
         .asFunction<_CallSyncDart>();
   });

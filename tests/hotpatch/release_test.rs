@@ -10,7 +10,7 @@ fn a_release_build_has_no_patch_loader_and_no_slots() {
     let bytes = std::fs::read(std::path::Path::new(&root).join(path)).unwrap();
     let image = frustrate_hotpatch::image::Image::read(&bytes).unwrap();
 
-    assert!(image.exported.contains("frustrate_call_sync"), "the entry points are exported");
+    assert!(image.exported.contains("frustrate_hotpatch_fixture_call_sync"), "the entry points are exported");
     let patch_exports: Vec<&String> = image
         .exported
         .iter()

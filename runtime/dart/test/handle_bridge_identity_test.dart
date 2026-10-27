@@ -37,6 +37,8 @@ import 'package:test/test.dart';
 
 /// A transport that answers only what these tests read. `bridgeIdentity`
 /// defaults to the runtime itself — the answer both real transports give.
+const _testBridge = FrustrateBridge('test');
+
 final class _Bridge implements FrustrateRuntime {
   final String name;
   final _Drop drop = _Drop();
@@ -45,6 +47,9 @@ final class _Bridge implements FrustrateRuntime {
 
   @override
   Object get bridgeIdentity => this;
+
+  @override
+  FrustrateBridge get servedBridge => _testBridge;
 
   @override
   HandleDrop handleDrop(String symbol) => drop;
@@ -94,6 +99,9 @@ final class _Decorator implements FrustrateRuntime {
   Object get bridgeIdentity => inner.bridgeIdentity;
 
   @override
+  FrustrateBridge get servedBridge => inner.servedBridge;
+
+  @override
   HandleDrop handleDrop(String symbol) => inner.handleDrop(symbol);
 
   @override
@@ -114,14 +122,17 @@ final class _Decorator implements FrustrateRuntime {
 /// minted with a raw and the transport's drop hook, and everything else is
 /// inherited.
 final class _Doc extends OpaqueHandle {
-  _Doc(super.raw, super.drop);
+  _Doc(super.raw, super.drop, [this.frustrateBridge = _testBridge]);
+
+  @override
+  final FrustrateBridge frustrateBridge;
 }
 
 /// Mint a handle exactly the way generated code does — the drop hook read from
-/// `Frustrate.instance` at the moment of the mint, never from a per-class
-/// static.
+/// the bridge's active runtime at the moment of the mint, never from a
+/// per-class static.
 _Doc mint(int raw) =>
-    _Doc(raw, Frustrate.instance.handleDrop('frustrate_drop_Doc'));
+    _Doc(raw, Frustrate.of(_testBridge).handleDrop('frustrate_test_drop_Doc'));
 
 Matcher get _staleBridge => throwsA(
   isA<StateError>().having(
@@ -239,6 +250,10 @@ void main() {
     );
   });
 
+  test('faking one bridge leaves the other bridge\'s handles usable', () async {
+    expect(await Isolate.run(_fakeOneOfTwo), isEmpty);
+  });
+
   test(
     'a bridge swapped by way of nothing still strands its handles',
     () async {
@@ -272,7 +287,7 @@ List<String> _swapThroughNothing() {
   final alsoF = mint(0xF00E);
 
   Frustrate.reset();
-  if (Frustrate.activeBridge != null) {
+  if (Frustrate.identityOf(_testBridge) != null) {
     complaints.add('reset with nothing installed left a bridge active');
   }
   Frustrate.activate(g);
@@ -318,4 +333,63 @@ List<String> _swapThroughNothing() {
     }
   }
   return complaints;
+}
+
+/// Two bridges on one transport, and a fake activated for the second. The
+/// first bridge's handles were minted by the transport, which still serves
+/// it, so they stay usable; the second's real handles are refused while the
+/// fake serves it, and the fake's own handles strand once it is reset.
+List<String> _fakeOneOfTwo() {
+  final complaints = <String>[];
+  const other = FrustrateBridge('other');
+  final transport = _Bridge('transport');
+  final a = _Decorator(transport);
+  final b = _Served(transport, other);
+  Frustrate.install(a, source: 'lib', description: 'the library');
+  Frustrate.install(b, source: 'lib', description: 'the library');
+  final onA = mint(0xA);
+  final onB = _Doc(
+    0xB,
+    Frustrate.of(other).handleDrop('frustrate_other_drop_Doc'),
+    other,
+  );
+
+  final fake = _Served(_Bridge('fake'), other);
+  Frustrate.activate(fake);
+  try {
+    onB.handleValue;
+    complaints.add('a real handle of the faked bridge reached the fake');
+  } on StateError catch (e) {
+    if (!e.message.contains('different bridge')) {
+      complaints.add('real handle refused, but not as a stale bridge: $e');
+    }
+  }
+  try {
+    if (onA.handleValue != 0xA) complaints.add('the A handle changed');
+  } on StateError catch (e) {
+    complaints.add('faking the other bridge stranded an A handle: $e');
+  }
+  final onFake = _Doc(
+    0xF,
+    Frustrate.of(other).handleDrop('frustrate_other_drop_Doc'),
+    other,
+  );
+  Frustrate.reset(other);
+  try {
+    onFake.handleValue;
+    complaints.add('a fake-minted handle reached the wire after its reset');
+  } on StateError catch (e) {
+    if (!e.message.contains('different bridge')) {
+      complaints.add('fake handle refused, but not as a stale bridge: $e');
+    }
+  }
+  return complaints;
+}
+
+/// [inner]'s identity and drops, serving [servedBridge].
+final class _Served extends _Decorator {
+  @override
+  final FrustrateBridge servedBridge;
+
+  _Served(super.inner, this.servedBridge);
 }

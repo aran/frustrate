@@ -144,6 +144,8 @@ final class Bridge implements FrustrateRuntime {
   @override
   Object get bridgeIdentity => this;
   @override
+  FrustrateBridge get servedBridge => const FrustrateBridge('probe');
+  @override
   HandleDrop handleDrop(String symbol) => drop;
   @override
   int get inFlightCallCount => 0;
@@ -169,6 +171,8 @@ final class Drop implements HandleDrop {
 
 final class Doc extends OpaqueHandle {
   Doc(super.raw, super.drop);
+  @override
+  FrustrateBridge get frustrateBridge => const FrustrateBridge('probe');
 }
 
 void main() {
@@ -180,7 +184,7 @@ void main() {
   final second = Bridge('second');
 
   Frustrate.activate(first);
-  final h = Doc(0x1234, Frustrate.instance.handleDrop('frustrate_drop_Doc'));
+  final h = Doc(0x1234, Frustrate.instance.handleDrop('frustrate_probe_drop_Doc'));
 
   try {
     Frustrate.reset();

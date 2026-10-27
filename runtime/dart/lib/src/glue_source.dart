@@ -284,6 +284,9 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
   let exports = null;
   let mem = null;
   let lastPanic = null;
+  // The actor's bridge's `call_async` export, named by the init message: one
+  // instance serves one bridge, and the bridge's exports carry its crate name.
+  let callAsync = null;
   const td = new TextDecoder();
 
   // Satisfy every import namespace the runtime does not own itself.
@@ -490,7 +493,7 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
   };
 
   // Actor pump: instantiates its own instance of the shared module and
-  // drives the same frustrate_call_async export the main transport uses
+  // drives the same call_async export the main transport uses
   // (inline execution, serialized by the instance's single thread).
   // Channel = postMessage with transferred ArrayBuffers. This frame catches
   // traps directly — no $frustrateCall needed off the main thread.
@@ -569,6 +572,7 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
             await bindgenImports(m.module, imports, m.bindgenGlueUrl, created);
         const instance = await WebAssembly.instantiate(m.module, imports);
         exports = instance.exports;
+        callAsync = exports[m.callAsync];
         mem = created || exports.memory;
         bindgenStart(ns, exports);
         exports.frustrate_web_init();
@@ -592,7 +596,7 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
         new Uint8Array(mem.buffer, Number(ptr), req.length).set(req);
       }
       try {
-        exports.frustrate_call_async(m.fnId, ptr, BigInt(req.length), BigInt(m.callId));
+        callAsync(m.fnId, ptr, BigInt(req.length), BigInt(m.callId));
       } catch (err) {
         postMessage({ type: 'trap', callId: m.callId, message: lastPanic || String(err) });
         lastPanic = null;

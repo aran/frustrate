@@ -1026,7 +1026,7 @@ fn emission_classes(s: &Survey) -> BTreeMap<u64, BTreeSet<Cell>> {
 fn normalize_emission(code: &str) -> String {
     let mut out = String::with_capacity(code.len());
     for line in code.lines() {
-        if line.contains("frustrate_schema_hash") {
+        if line.contains("_schema_hash") {
             continue;
         }
         let mut rest = line;
@@ -1371,7 +1371,7 @@ fn write_fixture(survey: &Survey, covered: &BTreeSet<Cell>, out: &Path) -> std::
                 continue;
             }
             rows.push_str(&format!(
-                "    (\"{ty}\", g::frustrate_drop_{ty} as Reclaim),\n"
+                "    (\"{ty}\", g::frustrate_test_api_drop_{ty} as Reclaim),\n"
             ));
         }
     }
@@ -1741,10 +1741,10 @@ mod tests {
     #[test]
     fn normalization_erases_ids_and_the_hash_only() {
         let a = normalize_emission(
-            "fn call_0_probe(r: &mut ByteReader) {}\npub extern \"C\" fn frustrate_schema_hash() -> u64 { 0x1 }\n",
+            "fn call_0_probe(r: &mut ByteReader) {}\npub extern \"C\" fn frustrate_probe_schema_hash() -> u64 { 0x1 }\n",
         );
         let b = normalize_emission(
-            "fn call_7_probe(r: &mut ByteReader) {}\npub extern \"C\" fn frustrate_schema_hash() -> u64 { 0x2 }\n",
+            "fn call_7_probe(r: &mut ByteReader) {}\npub extern \"C\" fn frustrate_probe_schema_hash() -> u64 { 0x2 }\n",
         );
         assert_eq!(a, b, "fn id and schema hash must not distinguish two emissions");
         // But a real difference still is one.

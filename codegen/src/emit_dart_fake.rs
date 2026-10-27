@@ -1148,13 +1148,15 @@ fn emit_bridge(out: &mut String, iface: &Interface, web: bool) {
          /// addTearDown(Frustrate.reset);\n\
          /// ```\n\
          ///\n\
-         /// It accepts exactly [frustrateSchemaHash], so a harness generated from\n\
+         /// It serves [frustrateBridge], so activating it replaces this bridge\n\
+         /// alone and leaves any other bridge in the app on its own runtime. It\n\
+         /// accepts exactly [frustrateSchemaHash], so a harness generated from\n\
          /// one interface cannot answer for another's bindings.\n\
          final class Fake{stem}Bridge extends FakeBridge {{\n\
          \x20 /// The free functions, statics and constructors. Every other member\n\
          \x20 /// is reached through the `Fake<Type>` a constructor returned.\n\
          \x20 final Fake{stem} impl;\n\n\
-         \x20 Fake{stem}Bridge(this.impl) : super(frustrateSchemaHash);\n\n\
+         \x20 Fake{stem}Bridge(this.impl) : super(frustrateBridge, frustrateSchemaHash);\n\n\
          \x20 /// The member a fn id names, or a placeholder for one this\n\
          \x20 /// interface does not have — read only for attribution, and never\n\
          \x20 /// allowed to throw inside an error path.\n\

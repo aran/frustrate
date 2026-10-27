@@ -79,7 +79,7 @@ const Set<String> _scalarReceivers = {
   '_poolWorkerStackBytes',
   // Strings crossing as JS strings
   'frustrateGlueSource', 'url', 'servedUrl', 'name', 'type', 'args',
-  '_workerRegistryKey',
+  '_workerRegistryKey', 'callAsyncExport',
   // Functions crossing as JS callables. Named rather than written as an
   // inline closure only because `toJS` rejects an all-throws closure (its
   // return type infers to `Never`), which is what puts them in this scan's

@@ -134,6 +134,9 @@ class DelegatingRuntime implements FrustrateRuntime {
   Object get bridgeIdentity => inner.bridgeIdentity;
 
   @override
+  FrustrateBridge get servedBridge => inner.servedBridge;
+
+  @override
   int get inFlightCallCount => inner.inFlightCallCount;
 
   /// Wrapped, so a `dispose()` and a GC finalization are observable the same

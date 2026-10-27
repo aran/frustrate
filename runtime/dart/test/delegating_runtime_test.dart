@@ -35,6 +35,9 @@ final class _Inner implements FrustrateRuntime {
 
   _Inner(this.log);
 
+  @override
+  FrustrateBridge get servedBridge => const FrustrateBridge('inner');
+
   BinaryReader _answer() => BinaryReader(Uint8List(0));
 
   @override
@@ -335,7 +338,13 @@ void main() {
     inner.inFlight = 4;
     Frustrate.activate(d);
     expect(identical(Frustrate.instance, d), isTrue);
-    expect(identical(Frustrate.activeBridge, inner.bridgeIdentity), isTrue);
+    expect(
+      identical(
+        Frustrate.identityOf(const FrustrateBridge('inner')),
+        inner.bridgeIdentity,
+      ),
+      isTrue,
+    );
     Frustrate.reset();
     expect(identical(Frustrate.instance, inner), isTrue);
   });

@@ -275,6 +275,14 @@ final class StreamRouter {
     return true;
   }
 
+  /// Whether [id] is registered here, or was and may still see a late event.
+  /// How a transport serving several bridges finds the router an event is
+  /// for.
+  bool owns(int id) =>
+      _functions.containsKey(id) ||
+      _streams.containsKey(id) ||
+      _tombstones.containsKey(id);
+
   /// Whether [id]/[status] is a router event at all — the half of [deliver]
   /// that cannot be deferred.
   ///

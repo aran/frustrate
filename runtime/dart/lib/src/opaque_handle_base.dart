@@ -7,8 +7,8 @@ import 'consumed.dart';
 import 'runtime_core.dart';
 
 /// A Dart-owned handle to a Rust object. Generated subclasses provide the
-/// per-type [HandleDrop] (looked up from the generated `frustrate_drop_<Type>`
-/// symbol).
+/// per-type [HandleDrop] (looked up from the generated
+/// `frustrate_<crate>_drop_<Type>` symbol).
 ///
 /// **Two fields, and that is the whole object.** A raw is a value one
 /// transport handed out, meaningful only to that transport, and sending it to
@@ -25,9 +25,14 @@ abstract base class OpaqueHandleBase implements Consumable {
   final HandleDrop _drop;
 
   OpaqueHandleBase(int raw, HandleDrop drop) : _raw = raw, _drop = drop {
-    assert(stampHandleBridge(this));
+    assert(stampHandleBridge(this, frustrateBridge));
     drop.attach(this, raw);
   }
+
+  /// The bridge this handle's class belongs to: the generated bindings'
+  /// `frustrateBridge`, answered by a getter on each generated class so no
+  /// handle stores it. Read only by the debug-only bridge checks.
+  FrustrateBridge get frustrateBridge;
 
   bool get isDisposed => _raw == null;
 
@@ -46,7 +51,7 @@ abstract base class OpaqueHandleBase implements Consumable {
     // reported one. Bridge identity rather than the active runtime object: a
     // decorator over this handle's transport is the same bridge, and a handle
     // must survive one going on and coming off.
-    assert(checkHandleBridge(this));
+    assert(checkHandleBridge(this, frustrateBridge));
     return r;
   }
 

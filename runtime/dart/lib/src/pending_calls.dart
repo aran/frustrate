@@ -226,6 +226,10 @@ final class PendingCalls {
   /// Whether any call is in flight. Native's keep-alive reads this.
   bool get isEmpty => _calls.isEmpty;
 
+  /// Whether [callId] is in flight here: how a transport serving several
+  /// bridges finds the registry a completion belongs to.
+  bool owns(int callId) => _calls.containsKey(callId);
+
   /// The ids in flight. The web actor host's shutdown assert reads this to
   /// say something stronger than [isEmpty]: everything still pending must be
   /// a deferred call (the one kind whose completion is detached from the

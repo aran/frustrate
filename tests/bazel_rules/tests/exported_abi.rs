@@ -34,7 +34,8 @@ fn id_of(name: &str) -> u32 {
 
 // The generated glue's ABI, declared here the way any foreign consumer would.
 //
-// `frustrate_call_sync` comes from the fixture crate's generated module;
+// `frustrate_rule_test_fixture_call_sync` comes from the fixture crate's
+// generated module;
 // `frustrate_buffer_free` comes from `//runtime/rust:frustrate`, one rlib
 // further down. Both are reached the same way, so this also covers the
 // transitive case — the one every shipped module already depends on, since
@@ -44,7 +45,7 @@ fn id_of(name: &str) -> u32 {
 // Plain comments, not doc comments: rustdoc does not document extern blocks,
 // and `unused_doc_comments` is a warning this package builds with `-Dwarnings`.
 extern "C" {
-    fn frustrate_call_sync(
+    fn frustrate_rule_test_fixture_call_sync(
         fn_id: u32,
         req: *const u8,
         req_len: u64,
@@ -93,7 +94,7 @@ fn a_bridge_call_round_trips_through_the_exported_c_abi() {
 fn a_response_too_large_for_the_buffer_is_leased_back() {
     let mut out = [0u8; 24];
     let n = unsafe {
-        frustrate_call_sync(4242, std::ptr::null(), 0, out.as_mut_ptr(), out.len() as u64)
+        frustrate_rule_test_fixture_call_sync(4242, std::ptr::null(), 0, out.as_mut_ptr(), out.len() as u64)
     };
     assert_eq!(n, -1, "the panic message must not have fitted 24 bytes");
 
@@ -120,7 +121,7 @@ unsafe fn call_add(a: i32, b: i32, out: *mut u8, out_cap: u64) -> i32 {
     w.write_i32(b);
     let req = w.take();
     unsafe {
-        frustrate_call_sync(
+        frustrate_rule_test_fixture_call_sync(
             id_of("add"),
             req.as_ptr(),
             req.len() as u64,

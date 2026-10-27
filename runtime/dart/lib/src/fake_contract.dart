@@ -6,6 +6,7 @@ library;
 import 'dart:typed_data';
 
 import 'binary_codec.dart';
+import 'bridge.dart';
 import 'envelope.dart';
 import 'exceptions.dart';
 
@@ -38,7 +39,11 @@ abstract base class FakeBridge {
   /// cannot sit under crate B's bindings and answer plausible-looking bytes.
   final BigInt schemaHash;
 
-  FakeBridge(this.schemaHash);
+  /// The bridge whose bindings this harness answers: the generated
+  /// `frustrateBridge`. A fake runtime over it replaces that bridge alone.
+  final FrustrateBridge servedBridge;
+
+  FakeBridge(this.servedBridge, this.schemaHash);
 
   FakeWire? _wire;
 

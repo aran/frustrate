@@ -63,6 +63,9 @@ final class _OtherBridge implements FrustrateRuntime {
   final List<int> encoded = [];
 
   @override
+  FrustrateBridge get servedBridge => frustrateBridge;
+
+  @override
   BinaryReader callSync(
     int fnId,
     int sizeHint,
@@ -342,8 +345,14 @@ void main() {
 /// A handle minted by hand, standing in for a generated one where no generated
 /// class can be reached (nothing calls through a fake that serves no calls).
 /// Identical in shape: a raw and the active transport's drop hook.
+/// The bindings' bridge, under a name `_Minted`'s own getter does not shadow.
+const _testApi = frustrateBridge;
+
 final class _Minted extends OpaqueHandle {
   _Minted(super.raw, super.drop);
+
+  @override
+  FrustrateBridge get frustrateBridge => _testApi;
 }
 
 final class _RecordingDrop implements HandleDrop {

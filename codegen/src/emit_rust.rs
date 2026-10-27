@@ -12,8 +12,11 @@
 //!   - per-call glue (`call_N_*` for sync, `spawn_N_*` for async)
 //!   - per-opaque drop glue: private `drop_inner_<Type>` /
 //!     `finalize_inner_<Type>`, and the exports that call them
-//!   - the no_mangle FFI surface: frustrate_call_sync, frustrate_call_async,
-//!     and frustrate_drop_<Type> / frustrate_finalize_<Type> per opaque type
+//!   - the no_mangle FFI surface: frustrate_<crate>_call_sync,
+//!     frustrate_<crate>_call_async, and frustrate_<crate>_drop_<Type> /
+//!     frustrate_<crate>_finalize_<Type> per opaque type. Every export carries
+//!     the crate name ([`Interface::export_symbol`]) so several bridges link
+//!     into one library; comments below name them without it.
 //!   - block-check roots, under `--cfg frustrate_block_check` only
 
 use crate::ir::*;
@@ -66,7 +69,8 @@ pub fn emit(iface: &Interface) -> String {
     // actually running, so a late `checkFrustrateSchema()` agrees with the
     // bindings that were reloaded beside the patch instead of reporting them
     // stale.
-    let (slot, route) = hot_route("frustrate_schema_hash", &[], " -> u64");
+    let schema_hash = iface.export_symbol("schema_hash");
+    let (slot, route) = hot_route(&schema_hash, &[], " -> u64");
     out.push_str(&slot);
     let _ = write!(
         out,
@@ -75,11 +79,12 @@ pub fn emit(iface: &Interface) -> String {
          /// `frustrateSchemaHash` and compares them at init; a mismatch means the\n\
          /// Dart bindings are stale relative to this library.\n\
          {gate}#[unsafe(no_mangle)]\n\
-         pub extern \"C\" fn frustrate_schema_hash() -> u64 {{\n\
+         pub extern \"C\" fn {schema_hash}() -> u64 {{\n\
          {route}    {hash:#018x}\n\
          }}\n\n",
         gate = BLOCK_CHECK_SUPPRESS,
         route = route,
+        schema_hash = schema_hash,
         hash = crate::hash::schema_hash(iface)
     );
 
@@ -4908,8 +4913,9 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     // frame is parsed, so stepping through a match of a few hundred members
     // overflows the 1 MB stack of a Dart VM thread, and a panic kills the
     // process instead of reaching Dart.
+    let call_sync = iface.export_symbol("call_sync");
     let (slot, route) = hot_route(
-        "frustrate_call_sync",
+        &call_sync,
         &[("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64"), ("out", "*mut u8"), ("out_cap", "u64")],
         " -> i32",
     );
@@ -4936,15 +4942,20 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     out.push_str(ALLOW);
     out.push_str(BLOCK_CHECK_SUPPRESS);
     out.push_str(
-        "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_call_sync(\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n    out: *mut u8,\n    out_cap: u64,\n) -> i32 {\n",
+        "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[unsafe(no_mangle)]\n",
+    );
+    let _ = write!(
+        out,
+        "pub unsafe extern \"C\" fn {call_sync}(\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n    out: *mut u8,\n    out_cap: u64,\n) -> i32 {{\n",
     );
     out.push_str(&route);
     out.push_str("    let req = request_slice(req, req_len);\n    let resp = envelope::run(|| {\n        let mut r = ByteReader::new(req);\n        let Some(arm) = select_sync(fn_id) else {\n            panic!(\"frustrate: unknown sync fn_id {fn_id}\")\n        };\n        arm(&mut r)\n    });\n    unsafe { envelope::respond_out(resp, out, out_cap) }\n}\n\n");
     // async. Its selector's actor arms exist only on wasm (natively those
     // calls route through frustrate_actor_call), so an actor-only crate's
     // native selector is `_ => None` and every id is the unknown-id panic.
+    let call_async = iface.export_symbol("call_async");
     let (slot, route) = hot_route(
-        "frustrate_call_async",
+        &call_async,
         &[("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64"), ("call_id", "u64")],
         "",
     );
@@ -5007,7 +5018,11 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     out.push_str(ALLOW);
     out.push_str(BLOCK_CHECK_SUPPRESS);
     out.push_str(
-        "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_call_async(fn_id: u32, req: *const u8, req_len: u64, call_id: u64) {\n",
+        "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[unsafe(no_mangle)]\n",
+    );
+    let _ = write!(
+        out,
+        "pub unsafe extern \"C\" fn {call_async}(fn_id: u32, req: *const u8, req_len: u64, call_id: u64) {{\n",
     );
     out.push_str(&route);
     out.push_str(
@@ -5025,8 +5040,9 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
         // in the file carries it: the file's contract is that no generated
         // item can warn, and a contract with a hole in it is one somebody has
         // to re-derive the next time the arms are gated.
+        let actor_call = iface.export_symbol("actor_call");
         let (slot, route) = hot_route(
-            "frustrate_actor_call",
+            &actor_call,
             &[("host_id", "u64"), ("call_id", "u64"), ("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64")],
             "",
         );
@@ -5038,7 +5054,11 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
         // A deferred prefix that panics never reached its spawn, so the call
         // still gets its envelope — the panic one.
         out.push_str(
-            "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[cfg(not(target_family = \"wasm\"))]\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_actor_call(\n    host_id: u64,\n    call_id: u64,\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n) {\n",
+            "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[cfg(not(target_family = \"wasm\"))]\n#[unsafe(no_mangle)]\n",
+        );
+        let _ = write!(
+            out,
+            "pub unsafe extern \"C\" fn {actor_call}(\n    host_id: u64,\n    call_id: u64,\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n) {{\n",
         );
         out.push_str(&route);
         out.push_str(
@@ -5209,13 +5229,14 @@ fn emit_drops(out: &mut String, iface: &Interface) {
         // The exports take a *pointer*, so the symbols are directly usable as
         // Dart `NativeFinalizer` callbacks.
         let pointer = [("h", "*mut core::ffi::c_void")];
-        let (drop_slot, drop_route) = hot_route(&format!("frustrate_drop_{}", o.name), &pointer, "");
-        let (finalize_slot, finalize_route) =
-            hot_route(&format!("frustrate_finalize_{}", o.name), &pointer, "");
+        let drop_export = iface.export_symbol(&format!("drop_{}", o.name));
+        let finalize_export = iface.export_symbol(&format!("finalize_{}", o.name));
+        let (drop_slot, drop_route) = hot_route(&drop_export, &pointer, "");
+        let (finalize_slot, finalize_route) = hot_route(&finalize_export, &pointer, "");
         let _ = write!(
             out,
-            "{native}{drop_slot}/// # Safety\n/// `h` must be a live `{0}` handle; never used after.\n{gate}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_drop_{0}(h: *mut core::ffi::c_void) {{\n{drop_route}    unsafe {{ drop_inner_{0}(h as u64) }}\n}}\n\n\
-             {native}{finalize_slot}/// # Safety\n/// `h` must be a live `{0}` handle; never used after. GC-finalizer\n/// variant: any channel this object still holds ends as leaked, naming `{0}`.\n{gate}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_finalize_{0}(h: *mut core::ffi::c_void) {{\n{finalize_route}    unsafe {{ finalize_inner_{0}(h as u64) }}\n}}\n\n",
+            "{native}{drop_slot}/// # Safety\n/// `h` must be a live `{0}` handle; never used after.\n{gate}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {drop_export}(h: *mut core::ffi::c_void) {{\n{drop_route}    unsafe {{ drop_inner_{0}(h as u64) }}\n}}\n\n\
+             {native}{finalize_slot}/// # Safety\n/// `h` must be a live `{0}` handle; never used after. GC-finalizer\n/// variant: any channel this object still holds ends as leaked, naming `{0}`.\n{gate}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {finalize_export}(h: *mut core::ffi::c_void) {{\n{finalize_route}    unsafe {{ finalize_inner_{0}(h as u64) }}\n}}\n\n",
             o.name
         );
     }
@@ -5238,15 +5259,15 @@ mod tests {
             "#,
         );
         for export in [
-            "frustrate_call_sync",
-            "frustrate_call_async",
-            "frustrate_drop_Doc",
-            "frustrate_finalize_Doc",
+            "frustrate_test_api_call_sync",
+            "frustrate_test_api_call_async",
+            "frustrate_test_api_drop_Doc",
+            "frustrate_test_api_finalize_Doc",
             // Not an entry point, but it must be redirectable for the same
             // reason: its body is a constant over the interface, so any
             // interface change moves it, and an exported function a patch
             // cannot redirect is a restart.
-            "frustrate_schema_hash",
+            "frustrate_test_api_schema_hash",
         ] {
             let slot = format!(
                 "{}#[unsafe(no_mangle)]\n#[allow(non_upper_case_globals)]\npub static frustrate_hot_slot_{export}:",
@@ -5262,6 +5283,79 @@ mod tests {
         // Exactly the five above: a routed export is one a patch may take over,
         // so a sixth appearing without a decision should fail here.
         assert_eq!(code.matches("frustrate::hot_patch::route(").count(), 5, "{code}");
+    }
+
+    /// Every symbol the glue exports carries the crate name, so two bridges
+    /// link into one library without defining one symbol twice. Read from the
+    /// parsed items, so an export spelled any way at all is counted; the
+    /// block-check roots are exempt because only a single-bridge check build
+    /// compiles them.
+    #[test]
+    fn every_export_carries_the_crate_name() {
+        let code = emit_src_raw(
+            r#"
+            #[bridge(confined)] pub struct Doc { x: i32 }
+            #[bridge] impl Doc {
+                #[bridge(sync)] pub fn new() -> Self { Doc { x: 0 } }
+            }
+            #[bridge(resident)] pub struct Scene { x: i32 }
+            #[bridge] impl Scene {
+                #[bridge(sync)] pub fn new() -> Self { Scene { x: 0 } }
+            }
+            #[bridge(actor)] pub struct Miner { x: i32 }
+            #[bridge] impl Miner {
+                pub fn new() -> Self { Miner { x: 0 } }
+                pub fn dig(&mut self) -> i32 { self.x }
+            }
+            #[bridge] pub fn plain() -> String { String::new() }
+            #[bridge] pub async fn later() -> i32 { 1 }
+            #[bridge(no_block)] pub fn quick() -> i32 { 1 }
+            "#,
+        );
+        let file = syn::parse_file(&code).expect("generated glue parses");
+        let is = |attrs: &[syn::Attribute], path: &str, inner: &str| {
+            attrs.iter().any(|a| {
+                a.path().is_ident(path)
+                    && a.meta.require_list().is_ok_and(|l| l.tokens.to_string().contains(inner))
+            })
+        };
+        let mut exports = vec![];
+        for item in &file.items {
+            let (attrs, ident) = match item {
+                syn::Item::Fn(f) => (&f.attrs, f.sig.ident.to_string()),
+                syn::Item::Static(s) => (&s.attrs, s.ident.to_string()),
+                _ => continue,
+            };
+            if !is(attrs, "unsafe", "no_mangle") {
+                continue;
+            }
+            // `#[cfg(frustrate_block_check)]`, not the `not(...)` gate every
+            // shipped export carries.
+            let check_only = attrs.iter().any(|a| {
+                a.path().is_ident("cfg")
+                    && a.meta.require_list().is_ok_and(|l| l.tokens.to_string() == "frustrate_block_check")
+            });
+            if !check_only {
+                exports.push(ident);
+            }
+        }
+        for want in [
+            "frustrate_test_api_call_sync",
+            "frustrate_test_api_call_async",
+            "frustrate_test_api_actor_call",
+            "frustrate_test_api_schema_hash",
+            "frustrate_test_api_drop_Doc",
+            "frustrate_test_api_finalize_Doc",
+            "frustrate_test_api_drop_Scene",
+            "frustrate_test_api_finalize_Scene",
+            "frustrate_hot_slot_frustrate_test_api_call_sync",
+        ] {
+            assert!(exports.iter().any(|e| e == want), "{want} is not exported: {exports:?}");
+        }
+        for e in &exports {
+            let bare = e.strip_prefix("frustrate_hot_slot_").unwrap_or(e);
+            assert!(bare.starts_with("frustrate_test_api_"), "`{e}` lacks the crate name");
+        }
     }
 
     /// The generated Rust names the instantiation the user's signature names,
@@ -5559,7 +5653,7 @@ mod tests {
         let src = "#[bridge(sync)] pub fn add(a: i32, b: i32) -> i32 { a + b }";
         let code = emit_src(src);
         assert!(
-            code.contains("pub extern \"C\" fn frustrate_schema_hash() -> u64"),
+            code.contains("pub extern \"C\" fn frustrate_test_api_schema_hash() -> u64"),
             "{code}"
         );
         // The emitted literal is exactly the hash of the same (crate-named) IR.
@@ -6084,18 +6178,18 @@ mod tests {
                 .to_string()
         };
         assert!(
-            body("frustrate_drop_Doc").ends_with("    unsafe { drop_inner_Doc(h as u64) }"),
+            body("frustrate_test_api_drop_Doc").ends_with("    unsafe { drop_inner_Doc(h as u64) }"),
             "{code}"
         );
         assert!(
-            body("frustrate_finalize_Doc").ends_with("    unsafe { finalize_inner_Doc(h as u64) }"),
+            body("frustrate_test_api_finalize_Doc").ends_with("    unsafe { finalize_inner_Doc(h as u64) }"),
             "{code}"
         );
         // ...and the exports themselves are still absent from a check build,
         // which is the whole reason the inner split exists.
         assert!(
             code.contains(&format!(
-                "{}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_drop_Doc", super::BLOCK_CHECK_SUPPRESS
+                "{}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_test_api_drop_Doc", super::BLOCK_CHECK_SUPPRESS
             )),
             "{code}"
         );
@@ -6635,7 +6729,7 @@ mod tests {
         );
         assert!(code.contains("handle::confined_mut::<crate::api::Doc>"), "{code}");
         assert!(code.contains("crate::api::Doc::bump(this)"), "{code}");
-        assert!(code.contains("frustrate_drop_Doc"), "{code}");
+        assert!(code.contains("frustrate_test_api_drop_Doc"), "{code}");
     }
 
     /// Resident's glue is confined's `Box` glue with its own accessors: the
@@ -6671,7 +6765,7 @@ mod tests {
         assert!(!code.contains("assert_resident"), "{code}");
         assert!(!code.contains("assert_confined"), "{code}");
         // The GC export is still the leak-naming variant.
-        assert!(code.contains("frustrate_finalize_Scene"), "{code}");
+        assert!(code.contains("frustrate_test_api_finalize_Scene"), "{code}");
     }
 
     #[test]
@@ -6836,8 +6930,8 @@ mod tests {
     }
 
     /// Actor members decode on the actor's executor, through their own
-    /// entry (`frustrate_actor_call` natively, the wasm arm of
-    /// `frustrate_call_async` in a worker) — the transport whose request
+    /// entry (`frustrate_<crate>_actor_call` natively, the wasm arm of
+    /// `frustrate_<crate>_call_async` in a worker) — the transport whose request
     /// crosses a `postMessage`, so the one that most needs this.
     #[test]
     fn actor_call_asserts_the_request_was_fully_consumed() {
@@ -7018,7 +7112,7 @@ mod tests {
         assert!(code.contains("crate::api::report(store)"), "{code}");
         // drop/finalize exports over the boxed dyn type
         assert!(
-            code.contains("frustrate_drop_Store"),
+            code.contains("frustrate_test_api_drop_Store"),
             "{code}"
         );
         assert!(
@@ -7639,13 +7733,13 @@ mod tests {
         );
         assert!(
             code.contains(&format!(
-                "{gate}\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_drop_Disk"
+                "{gate}\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_test_api_drop_Disk"
             )),
             "{code}"
         );
         assert!(
             code.contains(&format!(
-                "{gate}\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_finalize_Disk"
+                "{gate}\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_test_api_finalize_Disk"
             )),
             "{code}"
         );
@@ -7919,12 +8013,12 @@ mod tests {
         assert!(code.contains("fn actor_#_new"), "{code}");
         assert!(code.contains("fn actor_#_get"), "{code}");
         assert!(code.contains("fn actor_#___frustrate_drop_A"), "{code}");
-        assert!(code.contains("frustrate_actor_call"), "{code}");
+        assert!(code.contains("frustrate_test_api_actor_call"), "{code}");
         assert!(code.contains("frustrate::actor::submit"), "{code}");
         // wasm worker path rides the ordinary async export, native does not.
         assert!(code.contains("#[cfg(target_family = \"wasm\")]"), "{code}");
         // no drop export: disposal is the dispatched synthetic drop.
-        assert!(!code.contains("extern \"C\" fn frustrate_drop_A"), "{code}");
+        assert!(!code.contains("extern \"C\" fn frustrate_test_api_drop_A"), "{code}");
     }
 
     /// The `enc_<name>` function body of a struct codec, so wire-encode paths

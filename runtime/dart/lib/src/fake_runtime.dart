@@ -109,6 +109,11 @@ final class FakeRuntime implements FrustrateRuntime, FakeWire {
   @override
   Object get bridgeIdentity => this;
 
+  /// The bridge its harness was generated for, so activating it replaces that
+  /// bridge alone.
+  @override
+  FrustrateBridge get servedBridge => bridge.servedBridge;
+
   @override
   int get inFlightCallCount => _inFlight.count;
 

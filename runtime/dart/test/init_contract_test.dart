@@ -34,9 +34,14 @@ import 'package:test/test.dart';
 /// transport then does. It answers `bridgeIdentity` because `install` records
 /// it — a transport is its own bridge, which is what both real transports say
 /// too (runtime_core.dart, [FrustrateRuntime.bridgeIdentity]).
+const _testBridge = FrustrateBridge('test');
+
 final class _FakeRuntime implements FrustrateRuntime {
   @override
   Object get bridgeIdentity => this;
+
+  @override
+  FrustrateBridge get servedBridge => _testBridge;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw StateError(
@@ -58,6 +63,9 @@ final class _AbsentBridge implements BridgeLibrary {
   final String name;
 
   const _AbsentBridge(this.name);
+
+  @override
+  FrustrateBridge get bridge => _testBridge;
 
   @override
   Pointer<Void> lookup(String symbol) => throw _LibraryAbsent();
@@ -146,17 +154,33 @@ void main() {
   });
 
   group('BridgeLibrary.dynamic', () {
-    test('is equal when the libraries are, whatever it is called', () {
-      final one = BridgeLibrary.dynamic(DynamicLibrary.process(), name: 'one');
-      final two = BridgeLibrary.dynamic(DynamicLibrary.process(), name: 'two');
+    test('is equal when the libraries and bridges are, whatever it is '
+        'called', () {
+      final one = BridgeLibrary.dynamic(
+        DynamicLibrary.process(),
+        name: 'one',
+        bridge: _testBridge,
+      );
+      final two = BridgeLibrary.dynamic(
+        DynamicLibrary.process(),
+        name: 'two',
+        bridge: _testBridge,
+      );
       expect(one, equals(two));
       expect(one.hashCode, two.hashCode);
+      final other = BridgeLibrary.dynamic(
+        DynamicLibrary.process(),
+        name: 'one',
+        bridge: const FrustrateBridge('other'),
+      );
+      expect(one, isNot(equals(other)));
     });
 
     test('looks up an export, and refuses one the library lacks', () {
       final bridge = BridgeLibrary.dynamic(
         DynamicLibrary.process(),
         name: 'process',
+        bridge: _testBridge,
       );
       expect(bridge.lookup('malloc'), isNot(nullptr));
       expect(

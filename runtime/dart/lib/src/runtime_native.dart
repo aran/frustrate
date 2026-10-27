@@ -97,6 +97,10 @@ abstract class BridgeLibrary {
   /// Names the library in errors: the code-asset id for a generated bridge.
   String get name;
 
+  /// The bridge whose exports this resolves: the generated bindings'
+  /// `frustrateBridge`.
+  FrustrateBridge get bridge;
+
   /// The address of the export called [symbol].
   ///
   /// Throws an [ArgumentError] when the library has no such export. The
@@ -104,14 +108,16 @@ abstract class BridgeLibrary {
   /// scheduler, actors, streams, resident types).
   Pointer<Void> lookup(String symbol);
 
-  /// [library]'s exports, named [name] in errors.
+  /// [library]'s exports for [bridge], named [name] in errors.
   ///
-  /// Two of these are equal when their libraries are: `DynamicLibrary`
-  /// equality is "loads the same library" (dart:ffi), so naming one library
-  /// through two separate `DynamicLibrary.open` calls is one bridge.
+  /// Two of these are equal when their libraries and bridges are:
+  /// `DynamicLibrary` equality is "loads the same library" (dart:ffi), so
+  /// naming one library through two separate `DynamicLibrary.open` calls is
+  /// one library.
   factory BridgeLibrary.dynamic(
     DynamicLibrary library, {
     required String name,
+    required FrustrateBridge bridge,
   }) = _DynamicBridgeLibrary;
 }
 
@@ -121,53 +127,80 @@ final class _DynamicBridgeLibrary implements BridgeLibrary {
   @override
   final String name;
 
-  _DynamicBridgeLibrary(this._library, {required this.name});
+  @override
+  final FrustrateBridge bridge;
+
+  _DynamicBridgeLibrary(
+    this._library, {
+    required this.name,
+    required this.bridge,
+  });
 
   @override
   Pointer<Void> lookup(String symbol) => _library.lookup<Void>(symbol);
 
   @override
   bool operator ==(Object other) =>
-      other is _DynamicBridgeLibrary && other._library == _library;
+      other is _DynamicBridgeLibrary &&
+      other._library == _library &&
+      other.bridge == bridge;
 
   @override
-  int get hashCode => _library.hashCode;
+  int get hashCode => Object.hash(_library, bridge);
 }
 
-/// Native entry point: initialize once, then use the generated API.
+/// Native entry point: initialize each bridge once, then use the generated
+/// API.
 ///
 /// Repeated calls follow the contract stated on [Frustrate]: naming the same
-/// bridge again does nothing, naming a different one throws. The no-op is
-/// idempotent in the *strong* sense — a second call does not even resolve the
-/// library — because `Frustrate.install` alone is not enough: its argument is
-/// evaluated before it decides to discard it, and a discarded `NativeRuntime`
-/// has already re-registered this isolate's exit listener (see
-/// [Frustrate.initializedFrom]).
+/// library again does nothing, naming another bridge in the same library
+/// attaches it to the running transport, and naming a different library
+/// throws. The no-op is idempotent in the *strong* sense — a second call does
+/// not even resolve the library — because `Frustrate.install` alone is not
+/// enough: its argument is evaluated before it decides to discard it, and a
+/// discarded transport has already re-registered this isolate's exit listener
+/// (see [Frustrate.initializedFrom]).
 class FrustrateNative {
-  /// The transport this class installed, and how to name it in an error.
-  static NativeRuntime? _runtime;
+  /// The transport this class built, and how to name it in an error.
+  static _NativeTransport? _transport;
   static String? _description;
 
-  /// Register the completion callback with [bridge] and install the transport.
+  /// Serve [library]'s bridge from this isolate's Rust runtime, building the
+  /// transport on the first call.
   ///
-  /// A repeated call with the same [bridge] is a no-op; one with a different
-  /// bridge throws a [StateError] naming both, because the first library stays
-  /// installed and would keep serving every call. Generated bridges are
-  /// `const`, so the same one is always the same object.
-  static void init(BridgeLibrary bridge) {
-    final description = 'the bridge library "${bridge.name}"';
-    if (Frustrate.initializedFrom(bridge, description)) return;
-    _install(NativeRuntime(bridge), bridge, description);
-  }
-
-  static void _install(
-    NativeRuntime runtime,
-    Object source,
-    String description,
-  ) {
-    Frustrate.install(runtime, source: source, description: description);
-    _runtime ??= runtime;
-    _description ??= description;
+  /// A later call naming another bridge attaches it when its library is the
+  /// one already loaded — several bridges composed into one library with
+  /// `frustrate_library` — and throws a [StateError] naming the fix when it
+  /// is a different library, whose Rust runtime would be a second one. The
+  /// same [library] again is a no-op; generated libraries are `const`, so the
+  /// same one is always the same object.
+  static void init(BridgeLibrary library) {
+    final description = 'the bridge library "${library.name}"';
+    final transport = _transport;
+    if (transport != null) {
+      transport.attach(library, description);
+      Frustrate.install(
+        transport.runtimeFor(library),
+        source: library,
+        description: description,
+      );
+      return;
+    }
+    if (Frustrate.initializedFrom(
+      library,
+      description,
+      bridge: library.bridge,
+    )) {
+      return;
+    }
+    final built = _NativeTransport(library);
+    Frustrate.install(
+      built.runtimeFor(library),
+      source: library,
+      description: description,
+    );
+    _transport = built;
+    _description = description;
   }
 
   /// The drain of the installed bridge's manual scheduler, for a test harness
@@ -190,8 +223,8 @@ class FrustrateNative {
   /// when the installed one was built without the manual scheduler: a harness
   /// that asked for manual scheduling and got the pool would replay nothing.
   static bool Function() manualDrain() {
-    final runtime = _runtime;
-    if (runtime == null) {
+    final transport = _transport;
+    if (transport == null) {
       throw StateError(
         'frustrate: manualDrain() needs an installed bridge; '
         'call FrustrateNative.init first.',
@@ -199,7 +232,7 @@ class FrustrateNative {
     }
     final _ManualDrainDart drain;
     try {
-      drain = runtime.bridge
+      drain = transport._primary
           .lookup('frustrate_manual_drain')
           .cast<NativeFunction<_ManualDrainC>>()
           .asFunction<_ManualDrainDart>();
@@ -216,8 +249,23 @@ class FrustrateNative {
   }
 }
 
-final class NativeRuntime implements FrustrateRuntime {
-  final BridgeLibrary bridge;
+/// The one native transport of an isolate: the completion port and the
+/// call-id sequence, shared by every bridge linked into its library. Each
+/// bridge reaches it through its own [NativeRuntime], which keeps that
+/// bridge's pending calls and stream router.
+final class _NativeTransport {
+  /// The library the transport was built from. Every library it accepts
+  /// later is the same image ([attach]), so the runtime's own exports resolve
+  /// through this one.
+  final BridgeLibrary _primary;
+
+  /// Every library this transport has accepted, and the runtime each one's
+  /// bridge is served by.
+  final Map<BridgeLibrary, NativeRuntime> _runtimes = {};
+
+  /// Where `frustrate_runtime_abi` resolves in [_primary]: how [attach] tells
+  /// the same image from another one.
+  late final int _image = _primary.lookup('frustrate_runtime_abi').address;
 
   /// Where request blocks come from. `malloc` in every shipping configuration;
   /// injectable so a test can count allocations and frees.
@@ -230,15 +278,7 @@ final class NativeRuntime implements FrustrateRuntime {
   /// is what observes it.
   final Allocator _alloc;
 
-  late final _CallSyncDart _callSync = bridge
-      .lookup('frustrate_call_sync')
-      .cast<NativeFunction<_CallSyncC>>()
-      .asFunction<_CallSyncDart>();
-  late final _CallAsyncDart _callAsync = bridge
-      .lookup('frustrate_call_async')
-      .cast<NativeFunction<_CallAsyncC>>()
-      .asFunction<_CallAsyncDart>();
-  late final _BufferFreeDart _bufferFree = bridge
+  late final _BufferFreeDart _bufferFree = _primary
       .lookup('frustrate_buffer_free')
       .cast<NativeFunction<_BufferFreeC>>()
       .asFunction<_BufferFreeDart>();
@@ -247,7 +287,7 @@ final class NativeRuntime implements FrustrateRuntime {
   /// call out of the cooperative executor's registry so its future is dropped.
   /// A runtime export since ABI 4, so every loaded bridge has it and the lookup
   /// cannot fail on a module this transport already accepted.
-  late final _CallCancelDart _callCancel = bridge
+  late final _CallCancelDart _callCancel = _primary
       .lookup('frustrate_call_cancel')
       .cast<NativeFunction<_CallCancelC>>()
       .asFunction<_CallCancelDart>();
@@ -267,17 +307,6 @@ final class NativeRuntime implements FrustrateRuntime {
   /// is minted on a sync call and there is no call id to carry it.
   late final int _isolateId;
 
-  /// Every async call on this transport, including every actor call: a native
-  /// host dispatches through `_issueAsync`, so there is one registry to count.
-  final InFlightCalls _inFlight = InFlightCalls();
-
-  late final PendingCalls _pending = PendingCalls(
-    _allocId,
-    onChanged: _updateKeepAlive,
-    cancelCall: (id) => _callCancel(id) != 0,
-    tally: _inFlight,
-  );
-
   /// The zone `FrustrateNative.init` was called in — an ordinary field, so it
   /// is captured when this runtime is constructed rather than whenever a `late`
   /// field first runs. Terminal reports that have no handler to go to are
@@ -286,13 +315,6 @@ final class NativeRuntime implements FrustrateRuntime {
   /// reaching an app's `runZonedGuarded`. Web's equivalent is `_zone` in
   /// runtime_web.dart, for the same reason.
   final Zone _zone = Zone.current;
-
-  late final StreamRouter _router = StreamRouter(
-    _allocId,
-    respond: _respondToCallback,
-    cancel: cancelStream,
-    zone: _zone,
-  );
 
   /// Where every async completion lands: call responses, stream events, and
   /// callback invocations, on ONE port.
@@ -304,13 +326,14 @@ final class NativeRuntime implements FrustrateRuntime {
   /// ordering domain.
   late final RawReceivePort _completions;
 
-  NativeRuntime(this.bridge, {Allocator? allocator})
+  _NativeTransport(this._primary, {Allocator? allocator})
     : _alloc = allocator ?? malloc {
     _completions = RawReceivePort(_onMessage, 'frustrate');
     // Keep the isolate alive exactly while there is bridge work it must still
     // service: an in-flight call, OR an open stream / stored callback whose
     // Rust producer may still post. An idle port does NOT pin (or the process
-    // would never exit); `_updateKeepAlive` recomputes this from `_pending` and
+    // would never exit); `_updateKeepAlive` recomputes this from each bridge's
+    // pending calls and
     // the router's open registrations at every change. This is the same
     // contract an open `ReceivePort` has — and it applies to the ROOT isolate
     // too: a `main()` that returns with an open registration stays up until it
@@ -327,7 +350,7 @@ final class NativeRuntime implements FrustrateRuntime {
       // id is stamped into every id we allocate so completions route back here
       // and not to another isolate; a negative return is a failed handshake.
       id =
-          bridge
+          _primary
               .lookup('frustrate_init_dl')
               .cast<NativeFunction<_InitDlC>>()
               .asFunction<_InitDlDart>()(
@@ -374,7 +397,7 @@ final class NativeRuntime implements FrustrateRuntime {
   /// message to our own control port, so any later kill queues behind it and
   /// finds the listener installed.
   void _registerExitNotice(int id) {
-    final port = bridge
+    final port = _primary
         .lookup('frustrate_exit_port')
         .cast<NativeFunction<_ExitPortC>>()
         .asFunction<_ExitPortDart>()();
@@ -389,13 +412,13 @@ final class NativeRuntime implements FrustrateRuntime {
   void _checkRuntimeAbi() {
     final int abi;
     try {
-      abi = bridge
+      abi = _primary
           .lookup('frustrate_runtime_abi')
           .cast<NativeFunction<_RuntimeAbiC>>()
           .asFunction<_RuntimeAbiDart>()();
     } on ArgumentError catch (e) {
       throw StateError(
-        'frustrate: the bridge library ${bridge.name} has no runtime ABI '
+        'frustrate: the bridge library ${_primary.name} has no runtime ABI '
         'export. Either it predates the runtime ABI guard — it was built '
         'against a frustrate runtime older than the one this package (ABI '
         '$frustrateRuntimeAbi) speaks, so rebuild the bridge crate — or the '
@@ -438,20 +461,62 @@ final class NativeRuntime implements FrustrateRuntime {
     _ => 'frustrate: frustrate_init_dl failed with code $code',
   };
 
-  /// Allocate a globally-unique id for a call, stream, or callback: this
+  /// Accept [library] into this transport: a no-op for one already accepted,
+  /// and a [StateError] for one that is not the image this transport runs.
+  ///
+  /// The same image is decided by where the runtime's own export resolves.
+  /// Two tables naming one loaded library answer the same address; two
+  /// copies of a library, even byte-identical ones, are two images with two
+  /// Rust runtimes, and serving a bridge from the second would hand its raws
+  /// to the first.
+  void attach(BridgeLibrary library, String description) {
+    if (_runtimes.containsKey(library)) return;
+    final int theirs;
+    try {
+      theirs = library.lookup('frustrate_runtime_abi').address;
+    } on ArgumentError catch (e) {
+      throw StateError(
+        'frustrate: $description has no runtime ABI export, or did not '
+        'resolve at all: $e',
+      );
+    }
+    if (theirs != _image) {
+      throw StateError(
+        'frustrate: $description is a different library from '
+        '"${_primary.name}", which this isolate already runs. An isolate runs '
+        'one Rust runtime, so every bridge it uses must be linked into one '
+        'library: compose them with frustrate_library '
+        '(@frustrate//bazel:defs.bzl) and bind each bridge\'s code asset to '
+        'the combined library.',
+      );
+    }
+    runtimeFor(library);
+  }
+
+  /// The runtime [library]'s bridge is served by. Only for a library this
+  /// transport was built from or has [attach]ed.
+  NativeRuntime runtimeFor(BridgeLibrary library) =>
+      _runtimes[library] ??= NativeRuntime._(this, library).._join();
+
   /// isolate's tag in the high bits, a per-isolate sequence in the low bits.
   int _allocId() => _isolateTag | (_nextSeq++);
 
   /// Recompute keep-alive from live work: an in-flight call, or an open stream
   /// / stored-callback registration whose Rust producer may still post. Called
-  /// after every mutation of `_pending` or the router's registrations. Runs
+  /// after every mutation of a bridge's pending calls or router registrations. Runs
   /// only on the isolate thread (request encoding, `_onPost`, user cancel), so
   /// it needs no synchronization; recomputing from state (rather than
   /// incrementing a counter) is robust against a handler that opens or closes
   /// registrations re-entrantly.
   void _updateKeepAlive() {
-    _completions.keepIsolateAlive =
-        !_pending.isEmpty || _router.hasOpenRegistrations;
+    var live = false;
+    for (final view in _views) {
+      if (!view._pending.isEmpty || view._router.hasOpenRegistrations) {
+        live = true;
+        break;
+      }
+    }
+    _completions.keepIsolateAlive = live;
   }
 
   /// One `[callId, payload]` completion message.
@@ -468,18 +533,203 @@ final class NativeRuntime implements FrustrateRuntime {
     // early return — once no call is pending and no registration is open, the
     // isolate is free to exit. Open registrations pin; in-flight calls pin;
     // nothing else does.
-    if (_router.deliver(callId, bytes)) {
+    //
+    // Ids come from one sequence however many bridges share the port, so
+    // whichever bridge's router or pending calls hold an id is the one it is
+    // for.
+    if (_routerFor(_views, callId).deliver(callId, bytes)) {
       _updateKeepAlive();
       return;
     }
-    // NB: the call must be outside the assert — asserts are stripped in
-    // release, and this one settles the future.
-    final settled = _pending.complete(callId, bytes);
+    final views = _views;
+    for (var i = 0; i < views.length; i++) {
+      final pending = views[i]._pending;
+      if (pending.owns(callId)) {
+        pending.complete(callId, bytes);
+        return;
+      }
+    }
     // A completion for a call we no longer know about would indicate a
     // bridge bug (call ids are never reused within an isolate).
-    assert(settled, 'frustrate: completion for unknown call id $callId');
+    assert(false, 'frustrate: completion for unknown call id $callId');
   }
 
+  // Lazy like the actor exports: a bridge crate with no stream members has
+  // no generated reference to frustrate::stream, so the export may be
+  // absent — and never needed. pause/resume share the cancel signature
+  // (`void(u64)`).
+  late final _StreamCancelDart _streamCancel = _primary
+      .lookup('frustrate_stream_cancel')
+      .cast<NativeFunction<_StreamCancelC>>()
+      .asFunction<_StreamCancelDart>();
+  late final _StreamCancelDart _streamPause = _primary
+      .lookup('frustrate_stream_pause')
+      .cast<NativeFunction<_StreamCancelC>>()
+      .asFunction<_StreamCancelDart>();
+  late final _StreamCancelDart _streamResume = _primary
+      .lookup('frustrate_stream_resume')
+      .cast<NativeFunction<_StreamCancelC>>()
+      .asFunction<_StreamCancelDart>();
+
+  // Lazy like the stream/actor exports: present exactly when the bridge
+  // crate has a member that needs it.
+  late final _CallbackRespondDart _callbackRespond = _primary
+      .lookup('frustrate_callback_respond')
+      .cast<NativeFunction<_CallbackRespondC>>()
+      .asFunction<_CallbackRespondDart>();
+
+  /// Wake the Rust worker blocked in DartFunction::call. Rust copies the
+  /// buffer during the call, so the lease ends when it returns.
+  ///
+  /// `malloc`, not `calloc`, for the reason `callSync` already states: `setAll`
+  /// below writes every byte, so zeroing first is work nothing observes.
+  void _respondToCallback(int invocationId, Uint8List response) {
+    final ptr = malloc<Uint8>(response.length);
+    try {
+      ptr.asTypedList(response.length).setAll(0, response);
+      _callbackRespond(invocationId, ptr, response.length);
+    } finally {
+      malloc.free(ptr);
+    }
+  }
+
+  /// Looked up lazily: a bridge crate with no resident types never calls them.
+  late final _ResidentAttachDart _residentAttach = _primary
+      .lookup('frustrate_resident_attach')
+      .cast<NativeFunction<_ResidentAttachC>>()
+      .asFunction<_ResidentAttachDart>();
+  late final _ResidentReclaimableDart _residentReclaimable = _primary
+      .lookup('frustrate_resident_reclaimable')
+      .cast<NativeFunction<_ResidentReclaimableC>>()
+      .asFunction<_ResidentReclaimableDart>();
+
+  // Actor exports are looked up lazily: a bridge crate with no actor types
+  // doesn't have them, and never needs them.
+  late final _ActorSpawnDart _actorSpawn = _primary
+      .lookup('frustrate_actor_spawn')
+      .cast<NativeFunction<_ActorSpawnC>>()
+      .asFunction<_ActorSpawnDart>();
+  late final _ActorShutdownDart _actorShutdown = _primary
+      .lookup('frustrate_actor_shutdown')
+      .cast<NativeFunction<_ActorShutdownC>>()
+      .asFunction<_ActorShutdownDart>();
+  late final _ActorCancelDeferredDart _actorCancelDeferred = _primary
+      .lookup('frustrate_actor_cancel_deferred')
+      .cast<NativeFunction<_ActorCancelDeferredC>>()
+      .asFunction<_ActorCancelDeferredDart>();
+
+  /// The GC backstop shared by every actor on this runtime.
+  ///
+  /// One finalizer, not one per host: `frustrate_actor_reap` is a single
+  /// runtime export taking the host id as its token, so unlike
+  /// [handleDrop]'s per-type `frustrate_finalize_<Type>` there is nothing to
+  /// vary. A field so it stays reachable for the life of the runtime — a
+  /// `NativeFinalizer` that is itself collected finalizes nothing.
+  late final NativeFinalizer _actorReaper = NativeFinalizer(
+    _primary.lookup('frustrate_actor_reap').cast<NativeFunction<_DropC>>(),
+  );
+
+  bool get asyncIsParallel => true;
+
+  int get hardwareParallelism => Platform.numberOfProcessors;
+
+  /// Looked up on demand rather than as a `late final`: a bridge crate with no
+  /// resident types does not export this, and reading the count is not worth
+  /// making such a bridge fail to load. An absent export is an honest 0 —
+  /// nothing can have been lost.
+  int get residentLeakCount {
+    try {
+      return _primary
+          .lookup('frustrate_resident_leaked')
+          .cast<NativeFunction<_ResidentLeakedC>>()
+          .asFunction<_ResidentLeakedDart>()();
+    } on ArgumentError {
+      return 0;
+    }
+  }
+
+  /// Every bridge's runtime, for routing what arrives on the one port.
+  final List<NativeRuntime> _views = [];
+
+  /// The router an event for [id] belongs to: the one that registered it, or,
+  /// when none did, any one — a router drops a late stream event for an id it
+  /// does not know and leaves a call completion to the pending calls. Every
+  /// router would claim such a stream event, which is why the owner is looked
+  /// for first.
+  static StreamRouter _routerFor(List<NativeRuntime> views, int id) {
+    if (views.length == 1) return views[0]._router;
+    for (var i = 0; i < views.length; i++) {
+      final router = views[i]._router;
+      if (router.owns(id)) return router;
+    }
+    return views[0]._router;
+  }
+}
+
+/// One bridge's view of its isolate's native transport: what generated code
+/// reaches through `Frustrate.of`.
+///
+/// The bridge's own exports — its dispatch entries, its schema fingerprint,
+/// its drop and finalize exports — resolve through its own [library], and its
+/// pending calls and stream router are its own; the completion port and the
+/// call-id sequence are the transport's, shared with every other bridge linked
+/// into that library.
+final class NativeRuntime implements FrustrateRuntime {
+  final _NativeTransport _t;
+
+  /// The library this bridge's exports resolve through.
+  final BridgeLibrary library;
+
+  @override
+  final FrustrateBridge servedBridge;
+
+  /// A runtime for [library]'s bridge over a transport of its own.
+  ///
+  /// [FrustrateNative.init] is how an app gets one; this is for a test that
+  /// needs a second transport, such as one with a counting [allocator].
+  /// Where request blocks come from is `malloc` in every shipping
+  /// configuration.
+  factory NativeRuntime(BridgeLibrary library, {Allocator? allocator}) =>
+      _NativeTransport(library, allocator: allocator).runtimeFor(library);
+
+  NativeRuntime._(this._t, this.library) : servedBridge = library.bridge;
+
+  /// Join the transport's routing: from here on, what arrives on its port for
+  /// an id this runtime issued reaches this runtime.
+  void _join() => _t._views.add(this);
+
+  /// This bridge's async calls, every actor call included: a native host
+  /// dispatches through [_issueAsync], so there is one registry to count. Its
+  /// own, so [inFlightCallCount] answers for this bridge alone; the transport
+  /// reads every bridge's for keep-alive.
+  final InFlightCalls _inFlight = InFlightCalls();
+
+  late final PendingCalls _pending = PendingCalls(
+    _t._allocId,
+    onChanged: _t._updateKeepAlive,
+    cancelCall: (id) => _t._callCancel(id) != 0,
+    tally: _inFlight,
+  );
+
+  /// This bridge's streams and callbacks. Ids come from the transport's one
+  /// sequence and events arrive on its one port, so ordering across kinds is
+  /// the port's; the router being this bridge's is what lets
+  /// [openChannelCount] answer for it alone.
+  late final StreamRouter _router = StreamRouter(
+    _t._allocId,
+    respond: _t._respondToCallback,
+    cancel: cancelStream,
+    zone: _t._zone,
+  );
+
+  late final _CallSyncDart _callSync = library
+      .lookup(servedBridge.symbol('call_sync'))
+      .cast<NativeFunction<_CallSyncC>>()
+      .asFunction<_CallSyncDart>();
+  late final _CallAsyncDart _callAsync = library
+      .lookup(servedBridge.symbol('call_async'))
+      .cast<NativeFunction<_CallAsyncC>>()
+      .asFunction<_CallAsyncDart>();
   @override
   BinaryReader callSync(
     int fnId,
@@ -512,7 +762,7 @@ final class NativeRuntime implements FrustrateRuntime {
     // The writer's own 64-byte floor, applied here too: a hint is a lower
     // bound, and undershooting it by a few bytes on a small call would trade a
     // 64-byte over-allocation for a whole realloc-and-copy.
-    var block = _alloc.allocate<Uint8>(
+    var block = _t._alloc.allocate<Uint8>(
       frustrateRespSlabBytes + (sizeHint < 64 ? 64 : sizeHint),
     );
     final w = BinaryWriter.external(
@@ -523,11 +773,11 @@ final class NativeRuntime implements FrustrateRuntime {
       // it after the body returns) and the slack past `written` is by
       // definition unread.
       (newCap, written) {
-        final next = _alloc.allocate<Uint8>(frustrateRespSlabBytes + newCap);
+        final next = _t._alloc.allocate<Uint8>(frustrateRespSlabBytes + newCap);
         if (written > 0) {
           _requestView(next, written).setAll(0, _requestView(block, written));
         }
-        _alloc.free(block);
+        _t._alloc.free(block);
         block = next;
         return _requestView(next, newCap);
       },
@@ -555,7 +805,7 @@ final class NativeRuntime implements FrustrateRuntime {
       final p = Pointer<Uint8>.fromAddress(lease[0]);
       final len = lease[1];
       final resp = Uint8List.fromList(p.asTypedList(len));
-      _bufferFree(p, len, lease[2]);
+      _t._bufferFree(p, len, lease[2]);
       return decodeEnvelope(resp, typedError: typedError);
     } finally {
       // Close BEFORE the free, so a writer stashed by a codec hook reports a
@@ -563,7 +813,7 @@ final class NativeRuntime implements FrustrateRuntime {
       w.close();
       // `block`, not the one allocated above: a grow republished it, and the
       // frame frees whichever block is current.
-      _alloc.free(block);
+      _t._alloc.free(block);
     }
   }
 
@@ -591,6 +841,119 @@ final class NativeRuntime implements FrustrateRuntime {
     typedError: typedError,
     cancel: cancel,
   );
+
+  /// The finalize export beside the drop export [symbol] names.
+  String _finalizeSymbol(String symbol) => symbol.replaceFirst(
+    servedBridge.symbol('drop_'),
+    servedBridge.symbol('finalize_'),
+  );
+
+  // Always present (every generated glue emits it), so looked up eagerly. The
+  // u64 return comes back signed-reinterpreted in the Dart int; normalize to
+  // an unsigned 64-bit BigInt to compare with the compiled-in fingerprint.
+  late final _SchemaHashDart _schemaHash = library
+      .lookup(servedBridge.symbol('schema_hash'))
+      .cast<NativeFunction<_SchemaHashC>>()
+      .asFunction<_SchemaHashDart>();
+
+  @override
+  void checkSchemaHash(BigInt expected) {
+    final native = BigInt.from(_schemaHash()).toUnsigned(64);
+    final want = expected.toUnsigned(64);
+    if (native != want) {
+      throw StateError(
+        'frustrate: generated Dart bindings are stale — regenerate '
+        '(schema 0x${want.toRadixString(16)} != '
+        'native 0x${native.toRadixString(16)})',
+      );
+    }
+  }
+
+  /// One [HandleDrop] per drop symbol, for the life of the transport.
+  ///
+  /// Memoized because the hooks have to *stay alive*, not merely to save a
+  /// `dlsym`. Generated classes read this at every mint (so a handle's drop is
+  /// bound to the transport that issued its raw, rather than to whichever
+  /// transport happened to be active when the class was first touched), and a
+  /// `NativeFinalizer` that is itself collected finalizes nothing — the same
+  /// reason `_actorReaper` below is a field.
+  final Map<String, HandleDrop> _drops = {};
+
+  @override
+  HandleDrop handleDrop(String symbol) =>
+      _drops[symbol] ??= _lookupHandleDrop(symbol);
+
+  /// Memoized separately from [_drops], and for the same reason that map
+  /// exists: the hook owns the [Finalizer] that backs the GC path and has to
+  /// outlive every handle it was attached to.
+  final Map<String, HandleDrop> _residentDrops = {};
+
+  @override
+  HandleDrop residentHandleDrop(String symbol) =>
+      _residentDrops[symbol] ??= ResidentHandleDrop(
+        library
+            .lookup(_finalizeSymbol(symbol))
+            .cast<NativeFunction<_DropC>>()
+            .asFunction<_DropDart>(),
+        library
+            .lookup(symbol)
+            .cast<NativeFunction<_DropC>>()
+            .asFunction<_DropDart>(),
+        _t._residentAttach,
+        _t._residentReclaimable,
+        _t._isolateId,
+      );
+
+  HandleDrop _lookupHandleDrop(String symbol) {
+    // The GC finalizer uses the drop export's `frustrate_finalize_*` sibling.
+    // Both retire whatever channels the object holds; they differ in what the
+    // terminal says. Eager dispose() closes them normally, while the finalize
+    // variant ends them as *leaked* and names the type — reaching it proves
+    // dispose() was never called, because dispose() detaches this finalizer
+    // before dropping (`stream::finalize_scope`).
+    final finalizeSymbol = _finalizeSymbol(symbol);
+    return NativeHandleDrop(
+      NativeFinalizer(
+        library.lookup(finalizeSymbol).cast<NativeFunction<_DropC>>(),
+      ),
+      library
+          .lookup(symbol)
+          .cast<NativeFunction<_DropC>>()
+          .asFunction<_DropDart>(),
+    );
+  }
+
+  late final _ActorCallDart _actorCall = library
+      .lookup(servedBridge.symbol('actor_call'))
+      .cast<NativeFunction<_ActorCallC>>()
+      .asFunction<_ActorCallDart>();
+
+  @override
+  Future<ActorHost> spawnActorHost({String? debugName}) async =>
+      _NativeActorHost(this, _t._actorSpawn(), debugName);
+
+  /// The transport: it issues every raw this runtime hands out, and every
+  /// bridge in the same library shares it.
+  @override
+  Object get bridgeIdentity => _t;
+
+  @override
+  int get inFlightCallCount => _inFlight.count;
+
+  @override
+  bool get asyncIsParallel => true;
+
+  @override
+  int get hardwareParallelism => _t.hardwareParallelism;
+
+  @override
+  int get openChannelCount => _router.openRegistrationCount;
+
+  @override
+  List<String> get openChannelLabels => _router.openChannelLabels;
+
+  @override
+  int get residentLeakCount => _t.residentLeakCount;
 
   /// Shared async issue path: registers the completer, pins the listener,
   /// leases the request buffer for exactly the duration of [issue] (Rust
@@ -632,16 +995,16 @@ final class NativeRuntime implements FrustrateRuntime {
       // Rust reads exactly the length we pass and the codec is length-prefixed
       // throughout, so no reader can reach the slack past it.
       final cap = sizeHint < 64 ? 64 : sizeHint;
-      var reqPtr = _alloc.allocate<Uint8>(cap);
+      var reqPtr = _t._alloc.allocate<Uint8>(cap);
       final w = BinaryWriter.external(reqPtr.asTypedList(cap), (
         newCap,
         written,
       ) {
-        final next = _alloc.allocate<Uint8>(newCap);
+        final next = _t._alloc.allocate<Uint8>(newCap);
         if (written > 0) {
           next.asTypedList(written).setAll(0, reqPtr.asTypedList(written));
         }
-        _alloc.free(reqPtr);
+        _t._alloc.free(reqPtr);
         reqPtr = next;
         return next.asTypedList(newCap);
       });
@@ -654,7 +1017,7 @@ final class NativeRuntime implements FrustrateRuntime {
         issue(callId, len == 0 ? nullptr.cast<Uint8>() : reqPtr, len);
       } finally {
         w.close();
-        _alloc.free(reqPtr);
+        _t._alloc.free(reqPtr);
       }
     });
   }
@@ -676,7 +1039,7 @@ final class NativeRuntime implements FrustrateRuntime {
       label: label,
       reclaim: reclaim,
     );
-    _updateKeepAlive();
+    _t._updateKeepAlive();
     return id;
   }
 
@@ -695,26 +1058,9 @@ final class NativeRuntime implements FrustrateRuntime {
       label: label,
       reclaim: reclaim == null || reclaim.isEmpty ? null : reclaim[0],
     );
-    _updateKeepAlive();
+    _t._updateKeepAlive();
     return id;
   }
-
-  // Lazy like the actor exports: a bridge crate with no stream members has
-  // no generated reference to frustrate::stream, so the export may be
-  // absent — and never needed. pause/resume share the cancel signature
-  // (`void(u64)`).
-  late final _StreamCancelDart _streamCancel = bridge
-      .lookup('frustrate_stream_cancel')
-      .cast<NativeFunction<_StreamCancelC>>()
-      .asFunction<_StreamCancelDart>();
-  late final _StreamCancelDart _streamPause = bridge
-      .lookup('frustrate_stream_pause')
-      .cast<NativeFunction<_StreamCancelC>>()
-      .asFunction<_StreamCancelDart>();
-  late final _StreamCancelDart _streamResume = bridge
-      .lookup('frustrate_stream_resume')
-      .cast<NativeFunction<_StreamCancelC>>()
-      .asFunction<_StreamCancelDart>();
 
   @override
   void cancelStream(int id) {
@@ -724,21 +1070,21 @@ final class NativeRuntime implements FrustrateRuntime {
     // recompute so it can exit. NB: the *producer* may still post once more
     // before it observes the flag — the narrow "posts racing isolate death"
     // window closed separately by a post.rs dead-isolate net.
-    _updateKeepAlive();
+    _t._updateKeepAlive();
     // The registry is process-global shared memory: the flag is visible to
     // whatever thread runs the producer (pool, actor executor, or a later
     // call holding a stored sink) immediately.
-    _streamCancel(id);
+    _t._streamCancel(id);
   }
 
   // Backpressure signals the shared registry too; unlike cancel they retire no
   // registration, so keep-alive is untouched (the stream stays open — an open
   // registration already pins the isolate).
   @override
-  void pauseStream(int id) => _streamPause(id);
+  void pauseStream(int id) => _t._streamPause(id);
 
   @override
-  void resumeStream(int id) => _streamResume(id);
+  void resumeStream(int id) => _t._streamResume(id);
 
   @override
   void failStream(int id, Object error, StackTrace st) {
@@ -746,7 +1092,7 @@ final class NativeRuntime implements FrustrateRuntime {
     // opening-call error that retires the sink before the Rust sink is even
     // constructed would pin the isolate forever.
     _router.fail(id, error, st);
-    _updateKeepAlive();
+    _t._updateKeepAlive();
   }
 
   @override
@@ -762,191 +1108,9 @@ final class NativeRuntime implements FrustrateRuntime {
       onDeclaredError: onDeclaredError,
       reclaim: reclaim,
     );
-    _updateKeepAlive();
+    _t._updateKeepAlive();
     return id;
   }
-
-  // Lazy like the stream/actor exports: present exactly when the bridge
-  // crate has a member that needs it.
-  late final _CallbackRespondDart _callbackRespond = bridge
-      .lookup('frustrate_callback_respond')
-      .cast<NativeFunction<_CallbackRespondC>>()
-      .asFunction<_CallbackRespondDart>();
-
-  /// Wake the Rust worker blocked in DartFunction::call. Rust copies the
-  /// buffer during the call, so the lease ends when it returns.
-  ///
-  /// `malloc`, not `calloc`, for the reason `callSync` already states: `setAll`
-  /// below writes every byte, so zeroing first is work nothing observes.
-  void _respondToCallback(int invocationId, Uint8List response) {
-    final ptr = malloc<Uint8>(response.length);
-    try {
-      ptr.asTypedList(response.length).setAll(0, response);
-      _callbackRespond(invocationId, ptr, response.length);
-    } finally {
-      malloc.free(ptr);
-    }
-  }
-
-  // Always present (every generated glue emits it), so looked up eagerly. The
-  // u64 return comes back signed-reinterpreted in the Dart int; normalize to
-  // an unsigned 64-bit BigInt to compare with the compiled-in fingerprint.
-  late final _SchemaHashDart _schemaHash = bridge
-      .lookup('frustrate_schema_hash')
-      .cast<NativeFunction<_SchemaHashC>>()
-      .asFunction<_SchemaHashDart>();
-
-  @override
-  void checkSchemaHash(BigInt expected) {
-    final native = BigInt.from(_schemaHash()).toUnsigned(64);
-    final want = expected.toUnsigned(64);
-    if (native != want) {
-      throw StateError(
-        'frustrate: generated Dart bindings are stale — regenerate '
-        '(schema 0x${want.toRadixString(16)} != '
-        'native 0x${native.toRadixString(16)})',
-      );
-    }
-  }
-
-  /// One [HandleDrop] per drop symbol, for the life of the transport.
-  ///
-  /// Memoized because the hooks have to *stay alive*, not merely to save a
-  /// `dlsym`. Generated classes read this at every mint (so a handle's drop is
-  /// bound to the transport that issued its raw, rather than to whichever
-  /// transport happened to be active when the class was first touched), and a
-  /// `NativeFinalizer` that is itself collected finalizes nothing — the same
-  /// reason `_actorReaper` below is a field.
-  final Map<String, HandleDrop> _drops = {};
-
-  @override
-  HandleDrop handleDrop(String symbol) =>
-      _drops[symbol] ??= _lookupHandleDrop(symbol);
-
-  /// Memoized separately from [_drops], and for the same reason that map
-  /// exists: the hook owns the [Finalizer] that backs the GC path and has to
-  /// outlive every handle it was attached to.
-  final Map<String, HandleDrop> _residentDrops = {};
-
-  @override
-  HandleDrop residentHandleDrop(String symbol) =>
-      _residentDrops[symbol] ??= ResidentHandleDrop(
-        bridge
-            .lookup(
-              symbol.replaceFirst('frustrate_drop_', 'frustrate_finalize_'),
-            )
-            .cast<NativeFunction<_DropC>>()
-            .asFunction<_DropDart>(),
-        bridge
-            .lookup(symbol)
-            .cast<NativeFunction<_DropC>>()
-            .asFunction<_DropDart>(),
-        _residentAttach,
-        _residentReclaimable,
-        _isolateId,
-      );
-
-  /// Looked up lazily: a bridge crate with no resident types never calls them.
-  late final _ResidentAttachDart _residentAttach = bridge
-      .lookup('frustrate_resident_attach')
-      .cast<NativeFunction<_ResidentAttachC>>()
-      .asFunction<_ResidentAttachDart>();
-  late final _ResidentReclaimableDart _residentReclaimable = bridge
-      .lookup('frustrate_resident_reclaimable')
-      .cast<NativeFunction<_ResidentReclaimableC>>()
-      .asFunction<_ResidentReclaimableDart>();
-
-  HandleDrop _lookupHandleDrop(String symbol) {
-    // The GC finalizer uses the drop export's `frustrate_finalize_*` sibling.
-    // Both retire whatever channels the object holds; they differ in what the
-    // terminal says. Eager dispose() closes them normally, while the finalize
-    // variant ends them as *leaked* and names the type — reaching it proves
-    // dispose() was never called, because dispose() detaches this finalizer
-    // before dropping (`stream::finalize_scope`).
-    final finalizeSymbol = symbol.replaceFirst(
-      'frustrate_drop_',
-      'frustrate_finalize_',
-    );
-    return NativeHandleDrop(
-      NativeFinalizer(
-        bridge.lookup(finalizeSymbol).cast<NativeFunction<_DropC>>(),
-      ),
-      bridge
-          .lookup(symbol)
-          .cast<NativeFunction<_DropC>>()
-          .asFunction<_DropDart>(),
-    );
-  }
-
-  // Actor exports are looked up lazily: a bridge crate with no actor types
-  // doesn't have them, and never needs them.
-  late final _ActorSpawnDart _actorSpawn = bridge
-      .lookup('frustrate_actor_spawn')
-      .cast<NativeFunction<_ActorSpawnC>>()
-      .asFunction<_ActorSpawnDart>();
-  late final _ActorCallDart _actorCall = bridge
-      .lookup('frustrate_actor_call')
-      .cast<NativeFunction<_ActorCallC>>()
-      .asFunction<_ActorCallDart>();
-  late final _ActorShutdownDart _actorShutdown = bridge
-      .lookup('frustrate_actor_shutdown')
-      .cast<NativeFunction<_ActorShutdownC>>()
-      .asFunction<_ActorShutdownDart>();
-  late final _ActorCancelDeferredDart _actorCancelDeferred = bridge
-      .lookup('frustrate_actor_cancel_deferred')
-      .cast<NativeFunction<_ActorCancelDeferredC>>()
-      .asFunction<_ActorCancelDeferredDart>();
-
-  /// The GC backstop shared by every actor on this runtime.
-  ///
-  /// One finalizer, not one per host: `frustrate_actor_reap` is a single
-  /// runtime export taking the host id as its token, so unlike
-  /// [handleDrop]'s per-type `frustrate_finalize_<Type>` there is nothing to
-  /// vary. A field so it stays reachable for the life of the runtime — a
-  /// `NativeFinalizer` that is itself collected finalizes nothing.
-  late final NativeFinalizer _actorReaper = NativeFinalizer(
-    bridge.lookup('frustrate_actor_reap').cast<NativeFunction<_DropC>>(),
-  );
-
-  @override
-  Future<ActorHost> spawnActorHost({String? debugName}) async =>
-      _NativeActorHost(this, _actorSpawn(), debugName);
-
-  @override
-  bool get asyncIsParallel => true;
-
-  @override
-  int get hardwareParallelism => Platform.numberOfProcessors;
-
-  @override
-  int get openChannelCount => _router.openRegistrationCount;
-
-  /// Looked up on demand rather than as a `late final`: a bridge crate with no
-  /// resident types does not export this, and reading the count is not worth
-  /// making such a bridge fail to load. An absent export is an honest 0 —
-  /// nothing can have been lost.
-  @override
-  int get residentLeakCount {
-    try {
-      return bridge
-          .lookup('frustrate_resident_leaked')
-          .cast<NativeFunction<_ResidentLeakedC>>()
-          .asFunction<_ResidentLeakedDart>()();
-    } on ArgumentError {
-      return 0;
-    }
-  }
-
-  @override
-  List<String> get openChannelLabels => _router.openChannelLabels;
-
-  /// A platform transport *is* its bridge: its raws, its `frustrate_drop_*`
-  /// exports and its router are all its own.
-  @override
-  Object get bridgeIdentity => this;
-
-  @override
-  int get inFlightCallCount => _inFlight.count;
 }
 
 /// A dedicated Rust thread (see runtime/rust/src/actor.rs). Completions
@@ -1090,7 +1254,7 @@ final class _NativeActorHost implements ActorHost {
     // already answered (its response is delivered or in the port queue) and
     // must be left to complete normally.
     for (final id in _deferredInFlight.toList()) {
-      if (_rt._actorCancelDeferred(_hostId, id) != 0) {
+      if (_rt._t._actorCancelDeferred(_hostId, id) != 0) {
         _rt._pending.fail(
           id,
           disposedDeferredError(_debugName),
@@ -1098,21 +1262,21 @@ final class _NativeActorHost implements ActorHost {
         );
       }
     }
-    _rt._actorShutdown(_hostId);
+    _rt._t._actorShutdown(_hostId);
   }
 
   /// The token is the host id, which is all the reap path needs — the object
   /// pointer is already held by the executor's own teardown slot
   /// (`handle::actor_new`). Host ids start at 1, so the token is never null.
   @override
-  void attachReaper(covariant Finalizable owner) => _rt._actorReaper.attach(
+  void attachReaper(covariant Finalizable owner) => _rt._t._actorReaper.attach(
     owner,
     Pointer<Void>.fromAddress(_hostId),
     detach: owner,
   );
 
   @override
-  void detachReaper(Object owner) => _rt._actorReaper.detach(owner);
+  void detachReaper(Object owner) => _rt._t._actorReaper.detach(owner);
 }
 
 /// The GC path for a `#[bridge(resident)]` handle: a `dart:core` [Finalizer],

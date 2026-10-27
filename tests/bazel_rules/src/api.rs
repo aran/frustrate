@@ -36,6 +36,6 @@ mod tests {
         assert_eq!(super::add(2, 3), 5);
         // Private to the crate, so this line is what an integration test
         // cannot write — it has to go through the C ABI instead.
-        assert_ne!(crate::frustrate_generated::frustrate_schema_hash(), 0);
+        assert_ne!(crate::frustrate_generated::frustrate_rule_test_fixture_schema_hash(), 0);
     }
 }

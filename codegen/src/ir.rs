@@ -1369,6 +1369,14 @@ impl OpaqueDecl {
 }
 
 impl Interface {
+    /// The symbol this bridge's generated glue exports `entry` under:
+    /// `frustrate_<crate>_<entry>`. The crate name is what lets several
+    /// bridges link into one library without two of them defining one symbol.
+    /// The Dart runtime spells the same names (`FrustrateBridge.symbol`).
+    pub fn export_symbol(&self, entry: &str) -> String {
+        format!("frustrate_{}_{entry}", self.crate_name)
+    }
+
     pub fn opaque(&self, name: &str) -> Option<&OpaqueDecl> {
         self.opaques.iter().find(|o| o.name == name)
     }

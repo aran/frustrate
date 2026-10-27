@@ -25,7 +25,7 @@ final BigInt _hash = BigInt.parse('0123456789abcdef', radix: 16);
 /// test spells out only the member it cares about. A generated harness has a
 /// `switch` here instead.
 final class _ProbeBridge extends FakeBridge {
-  _ProbeBridge() : super(_hash);
+  _ProbeBridge() : super(const FrustrateBridge('probe'), _hash);
 
   final Map<int, Uint8List Function(BinaryReader r)> sync = {};
   final Map<int, Future<Uint8List> Function(BinaryReader r)> async = {};

@@ -29,6 +29,9 @@ import 'dart:isolate';
 import 'package:frustrate/frustrate.dart';
 import 'package:test/test.dart';
 
+/// The bridge every runtime in this file serves, unless a test names another.
+const _testBridge = FrustrateBridge('test');
+
 /// A bridge whose library cannot be resolved: any lookup fails, so an init that
 /// reaches it is observable as a throw.
 final class _AbsentBridge implements BridgeLibrary {
@@ -36,6 +39,9 @@ final class _AbsentBridge implements BridgeLibrary {
 
   @override
   String get name => 'an absent bridge';
+
+  @override
+  FrustrateBridge get bridge => _testBridge;
 
   @override
   Pointer<Void> lookup(String symbol) =>
@@ -49,10 +55,17 @@ final class _Bridge implements FrustrateRuntime {
   int inFlight = 0;
   List<String> channels = const [];
 
-  _Bridge(this.name);
+  @override
+  final FrustrateBridge servedBridge;
+
+  /// What issues this runtime's raws: itself, unless it is one bridge's view
+  /// of a transport shared with others.
+  final Object? _transport;
+
+  _Bridge(this.name, [this.servedBridge = _testBridge, this._transport]);
 
   @override
-  Object get bridgeIdentity => this;
+  Object get bridgeIdentity => _transport ?? this;
 
   @override
   int get inFlightCallCount => inFlight;
@@ -79,6 +92,9 @@ final class _Decorator implements FrustrateRuntime {
 
   @override
   Object get bridgeIdentity => inner.bridgeIdentity;
+
+  @override
+  FrustrateBridge get servedBridge => inner.servedBridge;
 
   @override
   int get inFlightCallCount => inner.inFlightCallCount;
@@ -120,13 +136,16 @@ void main() {
       expect(identical(Frustrate.instance, installed), isTrue);
       expect(Frustrate.isInstalled, isTrue);
       expect(
-        identical(Frustrate.activeBridge, installed.bridgeIdentity),
+        identical(Frustrate.identityOf(_testBridge), installed.bridgeIdentity),
         isTrue,
       );
 
       Frustrate.activate(fake);
       expect(identical(Frustrate.instance, fake), isTrue);
-      expect(identical(Frustrate.activeBridge, fake.bridgeIdentity), isTrue);
+      expect(
+        identical(Frustrate.identityOf(_testBridge), fake.bridgeIdentity),
+        isTrue,
+      );
       expect(
         Frustrate.isInstalled,
         isTrue,
@@ -268,6 +287,10 @@ void main() {
     test('reset with nothing installed empties the slot', () async {
       expect(await Isolate.run(_resetWithNothingInstalled), isEmpty);
     });
+
+    test('each bridge of one transport has its own active runtime', () async {
+      expect(await Isolate.run(_twoBridgesOneTransport), isEmpty);
+    });
   });
 }
 
@@ -294,11 +317,11 @@ List<String> _activateWithNothingInstalled() {
 List<String> _initUnderAFakeIsAnEnsure() {
   final complaints = <String>[];
   const absent = _AbsentBridge();
-  if (Frustrate.initializedFrom(absent, 'a bridge')) {
+  if (Frustrate.initializedFrom(absent, 'a bridge', bridge: _testBridge)) {
     complaints.add('an empty isolate answered a repeated init');
   }
   Frustrate.activate(_Bridge('fake'));
-  if (!Frustrate.initializedFrom(absent, 'a bridge')) {
+  if (!Frustrate.initializedFrom(absent, 'a bridge', bridge: _testBridge)) {
     complaints.add('init under a fake did not short-circuit');
   }
   try {
@@ -316,7 +339,7 @@ List<String> _resetWithNothingInstalled() {
   final complaints = <String>[];
   Frustrate.activate(_Bridge('fake'));
   Frustrate.reset();
-  if (Frustrate.activeBridge != null) {
+  if (Frustrate.identityOf(_testBridge) != null) {
     complaints.add('reset with nothing installed left a bridge active');
   }
   try {
@@ -324,6 +347,71 @@ List<String> _resetWithNothingInstalled() {
     complaints.add('instance answered after a reset to nothing');
   } on StateError {
     // Expected: back to "call the platform init first".
+  }
+  return complaints;
+}
+
+/// Two bridges served by one transport: each is reached by name, each can be
+/// faked alone, and a runtime from a second transport is not accepted.
+List<String> _twoBridgesOneTransport() {
+  final complaints = <String>[];
+  const other = FrustrateBridge('other');
+  final transport = Object();
+  final a = _Bridge('a', _testBridge, transport);
+  final b = _Bridge('b', other, transport);
+  Frustrate.install(a, source: 'lib', description: 'the library');
+  Frustrate.install(b, source: 'lib', description: 'the library');
+  if (!identical(Frustrate.of(_testBridge), a) ||
+      !identical(Frustrate.of(other), b)) {
+    complaints.add('of() did not answer each bridge with its own runtime');
+  }
+  try {
+    Frustrate.instance;
+    complaints.add('instance answered with two bridges active');
+  } on StateError catch (e) {
+    if (!e.message.contains('Frustrate.of')) {
+      complaints.add('instance refused without naming Frustrate.of: $e');
+    }
+  }
+
+  // Quiescence is each bridge's own: work on the bridge staying real does not
+  // hold up faking the other, and work on the faked one does.
+  final fake = _Bridge('fake', other);
+  b.inFlight = 1;
+  try {
+    Frustrate.activate(fake);
+    complaints.add('a bridge with a call in flight was swapped');
+  } on StateError {
+    // Expected.
+  }
+  b.inFlight = 0;
+  a.inFlight = 1;
+  a.channels = const ['Alpha.watch'];
+  Frustrate.activate(fake);
+  a.inFlight = 0;
+  a.channels = const [];
+  if (!identical(Frustrate.of(other), fake)) {
+    complaints.add('activate did not reach the bridge its runtime serves');
+  }
+  if (!identical(Frustrate.of(_testBridge), a) ||
+      !identical(Frustrate.identityOf(_testBridge), transport)) {
+    complaints.add('faking one bridge moved the other');
+  }
+  Frustrate.reset(other);
+  if (!identical(Frustrate.of(other), b)) {
+    complaints.add('reset(bridge) did not restore that bridge');
+  }
+
+  // A runtime of some other transport cannot join: its raws would come from
+  // a Rust runtime the installed one never heard of.
+  const third = FrustrateBridge('third');
+  Frustrate.install(
+    _Bridge('stranger', third),
+    source: 'lib2',
+    description: 'another library',
+  );
+  if (Frustrate.isServed(third)) {
+    complaints.add('a second transport was installed beside the first');
   }
   return complaints;
 }

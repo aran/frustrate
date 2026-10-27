@@ -1182,12 +1182,13 @@ fn check_pass(mut iface: Interface, caps: &Capabilities) -> Result<Interface, Ve
                 // a property of the name that is emitted.
                 matches!(
                     crate::emit_dart::member_name(f).as_str(),
-                    "dispose" | "isDisposed" | "handleValue" | "take"
+                    "dispose" | "isDisposed" | "handleValue" | "frustrateBridge" | "take"
                 )
                 .then_some((
-                    "the generated handle surface (`dispose`/`isDisposed`/`handleValue`, \
-                     and `take`, which every handle class reserves so that a consuming \
-                     member added later cannot break an app that already compiled)",
+                    "the generated handle surface (`dispose`/`isDisposed`/`handleValue`/\
+                     `frustrateBridge`, and `take`, which every handle class reserves so \
+                     that a consuming member added later cannot break an app that already \
+                     compiled)",
                     "it would silently shadow it (e.g. a `dispose` that never frees the \
                      object)",
                 ))
@@ -6445,6 +6446,20 @@ mod tests {
         )
         .unwrap_err();
         assert!(ds.iter().any(|d| d.code == "FR0027"), "{ds:?}");
+    }
+
+    /// `frustrateBridge` is the getter every handle class answers its bridge
+    /// with, read by the debug-only handle check; a member under that name
+    /// would shadow it.
+    #[test]
+    fn frustrate_bridge_is_reserved_on_every_handle_class() {
+        let ds = check_src(
+            "#[bridge(confined)] pub struct D { x: i64 } \
+             #[bridge] impl D { #[bridge(sync)] pub fn frustrate_bridge(&self) -> i64 { 0 } }",
+        )
+        .unwrap_err();
+        let d = ds.iter().find(|d| d.code == "FR0027").expect("reserved");
+        assert!(d.message.contains("frustrateBridge"), "{}", d.message);
     }
 
     /// A representation marker in a constructor's return used to lose it its

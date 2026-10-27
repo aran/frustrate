@@ -58,6 +58,9 @@ external JSPromise<JSObject> _wasmCompile(JSAny bufferSource);
 @JS('WebAssembly.Module.imports')
 external JSArray<JSObject> _wasmModuleImports(JSObject module);
 
+@JS('WebAssembly.Module.exports')
+external JSArray<JSObject> _wasmModuleExports(JSObject module);
+
 @JS('WebAssembly.Memory')
 extension type _WasmMemory._(JSObject _) implements JSObject {
   external _WasmMemory(JSObject descriptor);
@@ -105,6 +108,23 @@ const _poolWorkerStackBytes = 1 << 20;
 /// because only `--shared-memory` makes rustc pass `--import-memory`. So an
 /// imported memory means a threaded module by construction, and
 /// //bazel/wasm_import_check gates the rest of that shape at build time.
+/// The bridges [module] contains, found by the `call_sync` entry every
+/// bridge's glue exports under its crate name (`FrustrateBridge.symbol`).
+List<FrustrateBridge> _bridgesIn(JSObject module) {
+  const prefix = 'frustrate_';
+  const suffix = '_call_sync';
+  return [
+    for (final entry in _wasmModuleExports(module).toDart)
+      if (entry.getProperty<JSString>('name'.toJS).toDart case final name
+          when name.startsWith(prefix) &&
+              name.endsWith(suffix) &&
+              name.length > prefix.length + suffix.length)
+        FrustrateBridge(
+          name.substring(prefix.length, name.length - suffix.length),
+        ),
+  ];
+}
+
 bool _importsMemory(JSObject module) {
   for (final entry in _wasmModuleImports(module).toDart) {
     if (entry.getProperty<JSString>('kind'.toJS).toDart == 'memory') {
@@ -452,10 +472,16 @@ class FrustrateWeb {
     // hot restart costs a pool's width once instead of once per restart.
     if (!Frustrate.isInstalled) _reapOrphanedWorkers();
     await _installGlue();
-    final runtime = WebRuntime._();
+    final runtime = _WebTransport._();
     runtime._bindgenGlueUrl = bindgenGlueUrl;
     final moduleBytes = wasmModuleBytes.toJS; // per-byte: Dart-heap init only
     final module = await _wasmCompile(moduleBytes).toDart;
+    final bridges = _bridgesIn(module);
+    // Every bridge the module carries is already served — by fakes a test
+    // activated — so init is an ensure that is already satisfied (see
+    // "Init while a fake is active" on [Frustrate]). A bridge that is not
+    // served still needs the module, and gets it.
+    if (bridges.isNotEmpty && bridges.every(Frustrate.isServed)) return;
     runtime._module = module;
     // Threaded wasm modules import a shared memory; create it before
     // instantiation.
@@ -489,7 +515,13 @@ class FrustrateWeb {
     if (_textEncoder != null) {
       BinaryWriter.stringEncodeHook = _encodeStringJs;
     }
-    Frustrate.install(runtime, source: source, description: description);
+    for (final bridge in bridges) {
+      Frustrate.install(
+        WebRuntime._(runtime, bridge),
+        source: source,
+        description: description,
+      );
+    }
   }
 }
 
@@ -514,7 +546,11 @@ final _TextEncoder? _textEncoder = () {
   }
 }();
 
-final class WebRuntime implements FrustrateRuntime {
+/// The one web transport of a page: the module instance, its memory and the
+/// call-id sequence, shared by every bridge linked into the module. Each
+/// bridge reaches it through its own [WebRuntime], which keeps that bridge's
+/// pending calls and stream router.
+final class _WebTransport {
   late final JSObject _exports;
   late final JSObject _memory;
 
@@ -607,7 +643,11 @@ final class WebRuntime implements FrustrateRuntime {
     // only the delivery that waits for the stack to unwind.
     onFatal: (error) {
       final st = StackTrace.current;
-      scheduleMicrotask(() => _pending.failAll(error, st));
+      scheduleMicrotask(() {
+        for (final view in _views) {
+          view._pending.failAll(error, st);
+        }
+      });
     },
     onDegraded: (error) {
       final st = StackTrace.current;
@@ -627,7 +667,7 @@ final class WebRuntime implements FrustrateRuntime {
   // The page's single id sequence. Every id that can appear on the wire —
   // a call id on this instance, a call id on any actor host, a stream or
   // callback id opened against any of them — is drawn from here, so ids are
-  // unique page-wide and a single router can route by id alone. (Native gets
+  // unique page-wide and the routers can route by id alone. (Native gets
   // the same property from `_allocId`'s isolate tag; web needs no tag, so
   // ids stay tag-0 and well inside the JS 2^53 integer boundary.)
   //
@@ -637,57 +677,45 @@ final class WebRuntime implements FrustrateRuntime {
   int _nextCallId = 1;
   int _allocId() => _nextCallId++;
 
-  /// This instance's own async calls. Actor hosts keep their own registries
-  /// (their worker's pump completes them), so both contribute to [_inFlight]
-  /// rather than sharing this one.
-  late final PendingCalls _pending = PendingCalls(
-    _allocId,
-    cancelCall: (id) => _callCancel(id),
-    tally: _inFlight,
-  );
-
-  /// Async calls in flight page-wide on this bridge: this instance's plus
-  /// every actor host's. Shared with each host's [PendingCalls] at
-  /// construction, because a transport cannot enumerate the hosts it spawned.
-  final InFlightCalls _inFlight = InFlightCalls();
-
-  /// The page's single stream/callback router. Actor hosts route through it
-  /// too (their worker pumps call [StreamRouter.deliver] on it), so a handle
-  /// is routable from any channel by its id alone.
-  ///
-  /// Returning callbacks (DartFunction) are portable via `call_async`: the
-  /// router runs the closure and responds through the wasm export, exactly
-  /// like native — but deferred to a microtask, since on single-threaded web
-  /// the invocation fires inside the Rust poll's synchronous `post` import.
-  /// `respond` reaches *this* instance's export, which is why an actor host
-  /// still refuses `openFunction` (see `_WebActorHost.openFunction`).
-  // `cancel` is the router's throw policy hook (a Dart method that threw
-  // terminates its channel). It runs through [cancelStream], which consults
-  // [_actorOwner] first: a handle minted during an actor call lives in that
-  // worker's own wasm instance, so signalling this instance's registry would
-  // be a no-op for it. Producer *observation* stays advisory on web actors
-  // (the worker sees the message when its executor idles); what this
-  // guarantees is that the signal reaches the right registry.
-  late final StreamRouter _router = StreamRouter(
-    _allocId,
-    respond: _respondToCallback,
-    cancel: cancelStream,
-    deferDelivery: true,
-    zone: _zone,
-  );
-
   /// Which actor host owns a given stream/object id, for ids opened against a
-  /// host rather than this instance. The router is page-wide and routes by id
+  /// host rather than this instance. A router routes by id
   /// alone, but a *cancel* must reach the wasm instance whose registry holds
   /// the producer's flag — this table is what tells them apart. Retired at
   /// every exit `_WebActorHost._openStreams` is (terminal, cancel, shutdown),
   /// so it never outlives the registration.
   final Map<int, _WebActorHost> _actorOwner = {};
 
+  /// Every bridge's runtime, for routing what this instance posts back.
+  final List<WebRuntime> _views = [];
+
+  /// The router an event for [id] belongs to: the one that registered it, or,
+  /// when none did, any one — a router drops a late stream event for an id it
+  /// does not know and leaves a call completion to the pending calls. Every
+  /// router would claim such a stream event, which is why the owner is looked
+  /// for first.
+  StreamRouter _routerFor(int id) {
+    final views = _views;
+    if (views.length == 1) return views[0]._router;
+    for (var i = 0; i < views.length; i++) {
+      final router = views[i]._router;
+      if (router.owns(id)) return router;
+    }
+    return views[0]._router;
+  }
+
+  /// The pending calls of whichever bridge issued [callId], if any bridge's
+  /// still holds it. Ids come from one sequence, so at most one does.
+  PendingCalls? _pendingFor(int callId) {
+    for (final view in _views) {
+      if (view._pending.owns(callId)) return view._pending;
+    }
+    return null;
+  }
+
   /// Message captured by the panic hook for the trap currently propagating.
   String? _lastPanic;
 
-  WebRuntime._();
+  _WebTransport._();
 
   /// The `frustrate.*` import object (plus `env.memory` when threaded). Built
   /// before instantiation; the closures reach back into this runtime once
@@ -788,8 +816,6 @@ final class WebRuntime implements FrustrateRuntime {
     return imports;
   }
 
-  late final JSFunction _callSyncFn;
-  late final JSFunction _callAsyncFn;
   late final JSFunction _allocFn;
   late final JSFunction _freeFn;
 
@@ -807,17 +833,13 @@ final class WebRuntime implements FrustrateRuntime {
     }
     _memory = _sharedMemory ?? _exports.getProperty<JSObject>('memory'.toJS);
     _checkRuntimeAbi();
-    _callSyncFn = _export('frustrate_call_sync');
-    _callAsyncFn = _export('frustrate_call_async');
     _allocFn = _export('frustrate_alloc');
     _freeFn = _export('frustrate_buffer_free');
     _call(_export('frustrate_web_init'));
   }
 
-  @override
   bool get asyncIsParallel => _sharedMemory != null;
 
-  @override
   int get hardwareParallelism {
     final nav = globalContext.getProperty<JSObject?>('navigator'.toJS);
     final n = nav
@@ -825,20 +847,6 @@ final class WebRuntime implements FrustrateRuntime {
         ?.toDartInt;
     return (n == null || n < 1) ? 4 : n;
   }
-
-  @override
-  int get openChannelCount => _router.openRegistrationCount;
-
-  @override
-  List<String> get openChannelLabels => _router.openChannelLabels;
-
-  /// A platform transport *is* its bridge: its raws, its drop exports and its
-  /// router are all its own.
-  @override
-  Object get bridgeIdentity => this;
-
-  @override
-  int get inFlightCallCount => _inFlight.count;
 
   /// Threaded wasm: spawn one pool worker. Without the wasm-bindgen post-pass
   /// the stack and TLS blocks come from the instance's own (thread-safe)
@@ -967,11 +975,14 @@ final class WebRuntime implements FrustrateRuntime {
         }
         final callId = m.getProperty<JSNumber>('callId'.toJS).toDartInt;
         final message = m.getProperty<JSString>('message'.toJS).toDart;
-        if (!_pending.fail(
-          callId,
-          BridgePanicException(message),
-          StackTrace.current,
-        )) {
+        final failed =
+            _pendingFor(callId)?.fail(
+              callId,
+              BridgePanicException(message),
+              StackTrace.current,
+            ) ??
+            false;
+        if (!failed) {
           throw StateError(
             'frustrate: a pool worker trapped outside any attributable '
             'call (call id $callId): $message',
@@ -1260,8 +1271,8 @@ final class WebRuntime implements FrustrateRuntime {
     }
   }
 
-  @override
-  BinaryReader callSync(
+  BinaryReader _callSyncVia(
+    JSFunction entry,
     int fnId,
     int sizeHint,
     void Function(BinaryWriter w) encode, {
@@ -1314,7 +1325,7 @@ final class WebRuntime implements FrustrateRuntime {
       // `_callInt`, not `_call`: the export returns an i32 and reading it back
       // through `Number()` would spend more than the entry it saves.
       final n = _callInt(
-        _callSyncFn,
+        entry,
         fnId.toJS,
         (base + frustrateRespSlabBytes).toJS,
         _jsBigInt(reqLen),
@@ -1362,8 +1373,9 @@ final class WebRuntime implements FrustrateRuntime {
   bool _callCancel(int callId) =>
       _jsNumber(_call(_callCancelFn, _jsBigInt(callId))!) != 0;
 
-  @override
-  Future<BinaryReader> callAsync(
+  Future<BinaryReader> _callAsyncVia(
+    PendingCalls pending,
+    JSFunction Function() entry,
     int fnId,
     int sizeHint,
     void Function(BinaryWriter w) encode, {
@@ -1374,7 +1386,7 @@ final class WebRuntime implements FrustrateRuntime {
     // `_alloc` traps on a memory-growth failure and a user codec hook can
     // throw, and either must reject the future like any other issue-path
     // failure rather than throw out of a Future-returning method.
-    return _pending.issue(typedError: typedError, cancel: cancel, (callId) {
+    return pending.issue(typedError: typedError, cancel: cancel, (callId) {
       // Threaded web only: with no pool worker left, nothing will ever run
       // this. Inside the closure so it rejects the future rather than throwing
       // out of a Future-returning method, and ahead of the encode so a dead
@@ -1389,7 +1401,7 @@ final class WebRuntime implements FrustrateRuntime {
         // queues the job to a worker thread; the completion relays back
         // through the pool pump.
         _call(
-          _callAsyncFn,
+          entry(),
           fnId.toJS,
           reqPtr.toJS,
           _jsBigInt(reqTotal),
@@ -1443,7 +1455,9 @@ final class WebRuntime implements FrustrateRuntime {
       // No attributable pending call (id 0, or an already-settled id): a
       // trap in executor plumbing rather than a user poll — surface it
       // loudly instead of swallowing a real trap.
-      if (!_pending.fail(callId, e, StackTrace.current)) rethrow;
+      final failed =
+          _pendingFor(callId)?.fail(callId, e, StackTrace.current) ?? false;
+      if (!failed) rethrow;
     }
   }
 
@@ -1453,44 +1467,19 @@ final class WebRuntime implements FrustrateRuntime {
     // Stream events route by id (single-threaded modules post them inline
     // during the producing call; threaded modules relay them from pool
     // workers — same path).
-    if (_router.deliver(callId, bytes)) return;
-    // Outside the assert: asserts are stripped in release, and this settles
-    // the future.
-    final settled = _pending.complete(callId, bytes);
+    // Ids come from one sequence however many bridges share the instance, so
+    // whichever bridge's router or pending calls hold an id is the one it is
+    // for.
+    if (_routerFor(callId).deliver(callId, bytes)) return;
     // A completion for a call we no longer know about would indicate a
     // bridge bug (call ids are never reused within a page).
-    assert(settled, 'frustrate: completion for unknown call id $callId');
+    final pending = _pendingFor(callId);
+    assert(
+      pending != null,
+      'frustrate: completion for unknown call id $callId',
+    );
+    pending?.complete(callId, bytes);
   }
-
-  @override
-  int openObject(
-    List<StreamItemHandler> methods,
-    StreamErrorHandler onError,
-    StreamDoneHandler onDone, {
-    String? label,
-    List<StreamReclaim?>? reclaim,
-  }) => _router.openObject(
-    methods,
-    onError,
-    onDone,
-    label: label,
-    reclaim: reclaim,
-  );
-
-  @override
-  int openStream(
-    StreamItemHandler onItem,
-    StreamErrorHandler onError,
-    StreamDoneHandler onDone, {
-    String? label,
-    List<StreamReclaim?>? reclaim,
-  }) => _router.open(
-    onItem,
-    onError,
-    onDone,
-    label: label,
-    reclaim: reclaim == null || reclaim.isEmpty ? null : reclaim[0],
-  );
 
   // Lazy: a bridge crate with no stream members has no generated reference
   // to frustrate::stream, so the export may be absent — and never needed.
@@ -1498,54 +1487,13 @@ final class WebRuntime implements FrustrateRuntime {
   late final JSFunction _streamPauseFn = _export('frustrate_stream_pause');
   late final JSFunction _streamResumeFn = _export('frustrate_stream_resume');
 
-  @override
-  void cancelStream(int id) {
-    _router.cancelLocal(id);
-    // An actor-owned id's producer runs in that worker's instance, whose
-    // cancel registry is a different linear memory; signal it through the
-    // worker's pump instead of this instance's export.
-    final host = _actorOwner[id];
-    if (host != null) {
-      host._postCancel(id);
-      return;
-    }
-    // Single-threaded: the producer only ever runs during a call on this
-    // thread, so the flag is simply seen at its next run (a stored sink's
-    // next push). Threaded: the registry lives in the shared linear
-    // memory — pool workers observe it immediately.
-    _call(_streamCancelFn, _jsBigInt(id));
-  }
-
   // Backpressure on a main-instance stream: flip the flag in this instance's
   // registry. Threaded producers observe it immediately; a single-threaded
   // inline producer runs during the opening call and cannot be reached
   // mid-run, so `send()` there simply never parks.
-  @override
   void pauseStream(int id) => _call(_streamPauseFn, _jsBigInt(id));
 
-  @override
   void resumeStream(int id) => _call(_streamResumeFn, _jsBigInt(id));
-
-  @override
-  void failStream(int id, Object error, StackTrace st) =>
-      _router.fail(id, error, st);
-
-  // Void callbacks (DartCallback) register through openStream; returning
-  // callbacks (DartFunction) through openFunction. Both are portable: the
-  // awaited `call_async` path parks a future on the executor, so the router
-  // answers the invocation through the wasm export (see `_respondToCallback`).
-  @override
-  int openFunction(
-    BinaryWriter Function(BinaryReader) onInvoke, {
-    String? label,
-    BinaryWriter? Function(Object error)? onDeclaredError,
-    StreamReclaim? reclaim,
-  }) => _router.openFunction(
-    onInvoke,
-    label: label,
-    onDeclaredError: onDeclaredError,
-    reclaim: reclaim,
-  );
 
   // Lazy: only a bridge crate with a DartFunction member references the
   // callback machinery, so the export exists exactly then (and never needed
@@ -1602,13 +1550,12 @@ final class WebRuntime implements FrustrateRuntime {
     }
   }
 
-  @override
-  void checkSchemaHash(BigInt expected) {
+  void _checkSchemaHash(String export, BigInt expected) {
     // The i64 export return arrives as a JS BigInt; read it at full precision
     // through its decimal string, then compare as unsigned 64-bit (the wasm
     // integration may sign-extend the i64 — normalizing both to unsigned
     // makes them agree).
-    final result = _call(_export('frustrate_schema_hash'));
+    final result = _call(_export(export));
     final native = BigInt.parse(_jsString(result).toDart).toUnsigned(64);
     final want = expected.toUnsigned(64);
     if (native != want) {
@@ -1629,7 +1576,6 @@ final class WebRuntime implements FrustrateRuntime {
   /// outlive.
   final Map<String, HandleDrop> _drops = {};
 
-  @override
   HandleDrop handleDrop(String symbol) =>
       _drops[symbol] ??= _WebHandleDrop(this, _export(symbol));
 
@@ -1639,20 +1585,228 @@ final class WebRuntime implements FrustrateRuntime {
   /// memory that no handle can reach. [_WebHandleDrop] is already backed by a
   /// `dart:core` [Finalizer] rather than a `NativeFinalizer`, which is the
   /// property native has to arrange for and this already has.
-  @override
   HandleDrop residentHandleDrop(String symbol) => handleDrop(symbol);
 
   /// Nothing can be lost here: web has no isolates to exit, and every resident
   /// touch is on the one Dart thread (see `frustrate::resident`).
-  @override
   int get residentLeakCount => 0;
 
-  @override
-  Future<ActorHost> spawnActorHost({String? debugName}) async {
-    final host = _WebActorHost(this, debugName);
+  Future<ActorHost> _spawnActorHost(
+    WebRuntime view,
+    String callAsyncExport, {
+    String? debugName,
+  }) async {
+    final host = _WebActorHost(this, view, callAsyncExport, debugName);
     await host._readyC.future;
     return host;
   }
+}
+
+/// One bridge's view of its page's web transport: what generated code
+/// reaches through `Frustrate.of`.
+///
+/// The bridge's own exports — its dispatch entries, its schema fingerprint,
+/// its drop exports — are its own, and so are its pending calls and stream
+/// router; the module instance and the call-id sequence are the transport's,
+/// shared with every other bridge linked into the module.
+final class WebRuntime implements FrustrateRuntime {
+  final _WebTransport _t;
+
+  @override
+  final FrustrateBridge servedBridge;
+
+  WebRuntime._(this._t, this.servedBridge) {
+    _t._views.add(this);
+  }
+
+  /// This bridge's async calls on the instance, and those of every actor host
+  /// it spawned (each host keeps its own registry, but adds to this tally).
+  /// Its own, so [inFlightCallCount] answers for this bridge alone.
+  final InFlightCalls _inFlight = InFlightCalls();
+
+  late final PendingCalls _pending = PendingCalls(
+    _t._allocId,
+    cancelCall: (id) => _t._callCancel(id),
+    tally: _inFlight,
+  );
+
+  /// This bridge's streams and callbacks, its actor hosts' included (their
+  /// worker pumps deliver into it). Ids come from the page's one sequence,
+  /// so a handle is routable by id alone.
+  ///
+  /// Returning callbacks (DartFunction) are portable via `call_async`: the
+  /// router runs the closure and responds through the wasm export, exactly
+  /// like native — but deferred to a microtask, since on single-threaded web
+  /// the invocation fires inside the Rust poll's synchronous `post` import.
+  /// `respond` reaches the *instance's* export, which is why an actor host
+  /// still refuses `openFunction` (see `_WebActorHost.openFunction`).
+  // `cancel` is the router's throw policy hook (a Dart method that threw
+  // terminates its channel). It runs through [cancelStream], which consults
+  // the transport's actor-owner table first: a handle minted during an actor
+  // call lives in that worker's own wasm instance, so signalling the main
+  // instance's registry would be a no-op for it.
+  late final StreamRouter _router = StreamRouter(
+    _t._allocId,
+    respond: _t._respondToCallback,
+    cancel: cancelStream,
+    deferDelivery: true,
+    zone: _t._zone,
+  );
+
+  late final JSFunction _callSyncFn = _t._export(
+    servedBridge.symbol('call_sync'),
+  );
+  late final JSFunction _callAsyncFn = _t._export(
+    servedBridge.symbol('call_async'),
+  );
+
+  @override
+  BinaryReader callSync(
+    int fnId,
+    int sizeHint,
+    void Function(BinaryWriter w) encode, {
+    Object Function(BinaryReader)? typedError,
+  }) => _t._callSyncVia(
+    _callSyncFn,
+    fnId,
+    sizeHint,
+    encode,
+    typedError: typedError,
+  );
+
+  /// The export is resolved inside the transport's guarded region, so a
+  /// module without it rejects the call's future rather than throwing here.
+  @override
+  Future<BinaryReader> callAsync(
+    int fnId,
+    int sizeHint,
+    void Function(BinaryWriter w) encode, {
+    Object Function(BinaryReader)? typedError,
+    FrustrateCancelToken? cancel,
+  }) => _t._callAsyncVia(
+    _pending,
+    () => _callAsyncFn,
+    fnId,
+    sizeHint,
+    encode,
+    typedError: typedError,
+    cancel: cancel,
+  );
+
+  @override
+  void checkSchemaHash(BigInt expected) =>
+      _t._checkSchemaHash(servedBridge.symbol('schema_hash'), expected);
+
+  @override
+  HandleDrop handleDrop(String symbol) => _t.handleDrop(symbol);
+
+  @override
+  HandleDrop residentHandleDrop(String symbol) => _t.handleDrop(symbol);
+
+  @override
+  Future<ActorHost> spawnActorHost({String? debugName}) => _t._spawnActorHost(
+    this,
+    servedBridge.symbol('call_async'),
+    debugName: debugName,
+  );
+
+  /// The transport: it issues every raw this runtime hands out, and every
+  /// bridge in the same module shares it.
+  @override
+  Object get bridgeIdentity => _t;
+
+  @override
+  int get inFlightCallCount => _inFlight.count;
+
+  @override
+  bool get asyncIsParallel => _t.asyncIsParallel;
+
+  @override
+  int get hardwareParallelism => _t.hardwareParallelism;
+
+  @override
+  int get openChannelCount => _router.openRegistrationCount;
+
+  @override
+  List<String> get openChannelLabels => _router.openChannelLabels;
+
+  @override
+  int get residentLeakCount => _t.residentLeakCount;
+
+  @override
+  void pauseStream(int id) => _t.pauseStream(id);
+
+  @override
+  void resumeStream(int id) => _t.resumeStream(id);
+
+  @override
+  int openObject(
+    List<StreamItemHandler> methods,
+    StreamErrorHandler onError,
+    StreamDoneHandler onDone, {
+    String? label,
+    List<StreamReclaim?>? reclaim,
+  }) => _router.openObject(
+    methods,
+    onError,
+    onDone,
+    label: label,
+    reclaim: reclaim,
+  );
+
+  @override
+  int openStream(
+    StreamItemHandler onItem,
+    StreamErrorHandler onError,
+    StreamDoneHandler onDone, {
+    String? label,
+    List<StreamReclaim?>? reclaim,
+  }) => _router.open(
+    onItem,
+    onError,
+    onDone,
+    label: label,
+    reclaim: reclaim == null || reclaim.isEmpty ? null : reclaim[0],
+  );
+
+  @override
+  void cancelStream(int id) {
+    _router.cancelLocal(id);
+    // An actor-owned id's producer runs in that worker's instance, whose
+    // cancel registry is a different linear memory; signal it through the
+    // worker's pump instead of this instance's export.
+    final host = _t._actorOwner[id];
+    if (host != null) {
+      host._postCancel(id);
+      return;
+    }
+    // Single-threaded: the producer only ever runs during a call on this
+    // thread, so the flag is simply seen at its next run (a stored sink's
+    // next push). Threaded: the registry lives in the shared linear
+    // memory — pool workers observe it immediately.
+    _t._call(_t._streamCancelFn, _jsBigInt(id));
+  }
+
+  @override
+  void failStream(int id, Object error, StackTrace st) =>
+      _router.fail(id, error, st);
+
+  // Void callbacks (DartCallback) register through openStream; returning
+  // callbacks (DartFunction) through openFunction. Both are portable: the
+  // awaited `call_async` path parks a future on the executor, so the router
+  // answers the invocation through the wasm export (see `_respondToCallback`).
+  @override
+  int openFunction(
+    BinaryWriter Function(BinaryReader) onInvoke, {
+    String? label,
+    BinaryWriter? Function(Object error)? onDeclaredError,
+    StreamReclaim? reclaim,
+  }) => _router.openFunction(
+    onInvoke,
+    label: label,
+    onDeclaredError: onDeclaredError,
+    reclaim: reclaim,
+  );
 }
 
 // ------------------------------------------------------------- workers --
@@ -1683,7 +1837,7 @@ extension type _JSWorker._(JSObject _) implements JSObject {
 ///
 /// A Worker belongs to the *document*, not to the Dart heap that constructed
 /// it. Flutter web hot restart resets the heap and re-runs `main()` without
-/// unloading the document: the previous [WebRuntime], its [PoolWorkers] set,
+/// unloading the document: the previous [_WebTransport], its [PoolWorkers] set,
 /// every `_WebActorHost`, and every Dart-side handle to their Workers are all
 /// simply gone — while the Workers keep running, each pool worker parked in
 /// `frustrate_worker_entry` on a shared memory nothing can address any more.
@@ -1807,10 +1961,14 @@ _JSWorker _spawnGlueWorker() {
 /// pump's JS frame catches traps directly — no `$frustrateCall` needed off
 /// the main thread.
 final class _WebActorHost implements ActorHost {
-  /// The page runtime, for the shared id sequence and the shared router.
+  /// The page transport, for the shared id sequence.
   /// Ids this host mints must not collide with any other channel's, since
-  /// one router routes them all (see [WebRuntime._nextCallId]).
-  final WebRuntime _rt;
+  /// the routers route by id alone (see [_WebTransport._allocId]).
+  final _WebTransport _rt;
+
+  /// The bridge this host's actor belongs to: its calls count toward that
+  /// bridge, and its channels are registered on that bridge's router.
+  final WebRuntime _view;
   final _JSWorker _worker;
   final Completer<void> _readyC = Completer();
 
@@ -1822,7 +1980,7 @@ final class _WebActorHost implements ActorHost {
   late final PendingCalls _pending = PendingCalls(
     _rt._allocId,
     cancelCall: _postCancelCall,
-    tally: _rt._inFlight,
+    tally: _view._inFlight,
   );
   bool _stopped = false;
 
@@ -1840,9 +1998,10 @@ final class _WebActorHost implements ActorHost {
   final Set<int> _deferredInFlight = {};
 
   @override
-  Object get bridgeIdentity => _rt.bridgeIdentity;
+  Object get bridgeIdentity => _rt;
 
-  _WebActorHost(this._rt, this._debugName) : _worker = _spawnGlueWorker() {
+  _WebActorHost(this._rt, this._view, String callAsyncExport, this._debugName)
+    : _worker = _spawnGlueWorker() {
     _worker.onmessage = ((JSObject e) {
       _onMessage(e.getProperty<JSObject>('data'.toJS));
     }).toJS;
@@ -1856,7 +2015,10 @@ final class _WebActorHost implements ActorHost {
         ),
       );
     }).toJS;
+    // The bridge's own `call_async` export: an actor instance serves one
+    // bridge, so its pump resolves the entry once rather than per call.
     final init = _rt._moduleInitMessage('init')
+      ..setProperty('callAsync'.toJS, callAsyncExport.toJS)
       ..setProperty('memInitial'.toJS, _sharedMemoryInitialPages.toJS)
       ..setProperty('memMaximum'.toJS, _sharedMemoryMaxPages.toJS);
     _worker.postMessage(init, JSArray());
@@ -1899,7 +2061,7 @@ final class _WebActorHost implements ActorHost {
         // pump; route by id before the completer path. The router is the
         // page's single one — ids are globally unique, so an event for this
         // worker's handle can never be confused with another channel's.
-        if (_rt._router.deliver(callId, bytes)) return;
+        if (_view._router.deliver(callId, bytes)) return;
         // Outside the assert: asserts are stripped in release, and this
         // settles the future.
         final settled = _pending.complete(callId, bytes);
@@ -2010,7 +2172,7 @@ final class _WebActorHost implements ActorHost {
       // Encoded here, inside the guarded region, so a throwing codec hook
       // rejects the future instead of escaping a Future-returning method —
       // and after the shut-down check, so a refused call does no encoding.
-      final (reqPieces, reqLen) = WebRuntime._encodeRequestPieces(
+      final (reqPieces, reqLen) = _WebTransport._encodeRequestPieces(
         sizeHint,
         encode,
       );
@@ -2095,7 +2257,7 @@ final class _WebActorHost implements ActorHost {
     late final int id;
     // `openObject` only allocates and stores; it never runs a handler, so
     // `id` is assigned before either closure can observe it.
-    id = _rt._router.openObject(
+    id = _view._router.openObject(
       methods,
       (e, st) {
         _retire(id);
@@ -2125,13 +2287,13 @@ final class _WebActorHost implements ActorHost {
     // arrives on), but signal *this* worker: each actor worker runs its own
     // wasm instance, so the producer's cancel registry lives in that
     // instance's memory and nowhere else.
-    _rt._router.cancelLocal(id);
+    _view._router.cancelLocal(id);
     _postCancel(id);
   }
 
   /// Signal the cancel to this host's worker and retire the id. Shared by the
   /// consumer's `onCancel` ([cancelStream]) and the router's throw policy,
-  /// which reaches here through `WebRuntime.cancelStream` — both must reach
+  /// which reaches here through `_WebTransport.cancelStream` — both must reach
   /// *this* instance's registry, not the main one's.
   ///
   /// A tombstoned entry leaves `_streams` without running either handler, so
@@ -2168,10 +2330,10 @@ final class _WebActorHost implements ActorHost {
 
   @override
   void failStream(int id, Object error, StackTrace st) =>
-      _rt._router.fail(id, error, st);
+      _view._router.fail(id, error, st);
 
   // Load-bearing that this still throws rather than forwarding to the now-
-  // shared `_rt._router.openFunction`: the router answers an invocation
+  // shared `_view._router.openFunction`: the router answers an invocation
   // through the *main* instance's `frustrate_callback_respond`, but an actor's
   // parked `CallFuture` lives in its worker's own wasm instance and memory.
   // Responding on the main instance would fill an unrelated slot in a
@@ -2239,7 +2401,7 @@ final class _WebActorHost implements ActorHost {
     // would not have noticed.
     _terminateWorker(_worker);
     // The backstop for when shutdown's assert is wrong, and the ordinary case
-    // for a GC reap. Retiring here keeps the page-wide router and this map from
+    // for a GC reap. Retiring here keeps the bridge's router and this map from
     // accumulating dead entries, and turns what would be a silent forever-hang
     // into an attributable error. And it must follow the terminate(): the
     // worker is what would otherwise still be able to post against the entries
@@ -2252,7 +2414,7 @@ final class _WebActorHost implements ActorHost {
     final st = StackTrace.current;
     for (final id in _openStreams.toList()) {
       _rt._actorOwner.remove(id);
-      _rt._router.fail(id, error, st);
+      _view._router.fail(id, error, st);
     }
     _openStreams.clear();
     _pending.failAll(error, st);
@@ -2294,7 +2456,7 @@ final class _WebActorHost implements ActorHost {
 }
 
 final class _WebHandleDrop implements HandleDrop {
-  final WebRuntime _runtime;
+  final _WebTransport _runtime;
   final JSFunction _dropFn;
   late final Finalizer<int> _finalizer = Finalizer(drop);
 

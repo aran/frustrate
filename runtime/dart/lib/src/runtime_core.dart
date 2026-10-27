@@ -4,8 +4,11 @@
 library;
 
 import 'binary_codec.dart';
+import 'bridge.dart';
 import 'exceptions.dart';
 import 'pending_calls.dart' show FrustrateCancelToken;
+
+export 'bridge.dart';
 
 /// Delivery callbacks for one open Rust → Dart stream, registered via
 /// `openStream`. `onItem` receives a reader positioned at one encoded item;
@@ -173,24 +176,32 @@ final class FrustrateOpenScope {
 /// transport on native (runtime_native.dart) and the wasm transport on web
 /// (runtime_web.dart).
 abstract interface class FrustrateRuntime implements FrustrateChannel {
-  /// Which **bridge** this runtime speaks for — the identity every handle,
-  /// actor host and channel is stamped against.
+  /// The bridge whose calls this runtime answers. Generated code reaches it
+  /// through [Frustrate.of] with that bridge, and [Frustrate.activate] puts it
+  /// in front of that bridge alone.
+  FrustrateBridge get servedBridge;
+
+  /// What actually issues and frees this runtime's raws — the identity every
+  /// handle, actor host and channel is stamped against.
   ///
-  /// A platform transport answers `this`: it *is* the bridge, and its raws,
-  /// its drop exports and its channel registry are its own. A decorator
-  /// (package:frustrate/intercept.dart) answers its inner runtime's identity,
-  /// because wrapping a transport does not change any of that — the same raws
-  /// come back, the same exports free them. A fake answers `this`.
+  /// A platform runtime answers its transport: the one Rust runtime of this
+  /// isolate (page, on web), shared by every bridge linked into its library.
+  /// A decorator (package:frustrate/intercept.dart) answers its inner
+  /// runtime's identity, because wrapping a runtime does not change any of
+  /// that — the same raws come back, the same exports free them. A fake
+  /// answers `this`.
   ///
   /// That distinction is the whole reason this is a separate concept from the
-  /// runtime object. [Frustrate.activate] compares *bridges*, so putting a
+  /// runtime object. [Frustrate.activate] compares identities, so putting a
   /// tracing decorator on a live app or taking it off again neither requires
   /// quiescence nor invalidates a single handle, while swapping in a fake
   /// does both.
   Object get bridgeIdentity;
 
   /// How many async bridge calls this transport still owes a completion — its
-  /// own, plus those in flight on every actor host it spawned.
+  /// own, plus those in flight on every actor host it spawned. A platform
+  /// runtime counts its own bridge's calls, not the other bridges sharing its
+  /// transport.
   ///
   /// Exact, and derived from the pending registrations rather than counted by
   /// hand. Hosts are deliberately not enumerated: neither transport keeps a
@@ -267,7 +278,7 @@ abstract interface class FrustrateRuntime implements FrustrateChannel {
   });
 
   /// The drop/finalization hooks for an opaque type, looked up by its
-  /// generated `frustrate_drop_<Type>` symbol.
+  /// generated `frustrate_<crate>_drop_<Type>` symbol.
   HandleDrop handleDrop(String symbol);
 
   /// [handleDrop] for a `#[bridge(resident)]` type, which needs a different
@@ -284,7 +295,7 @@ abstract interface class FrustrateRuntime implements FrustrateChannel {
   /// the sync entry point carries no isolate id.
   HandleDrop residentHandleDrop(String symbol);
 
-  /// Read the loaded library's `frustrate_schema_hash` export and compare it
+  /// Read this bridge's `frustrate_<crate>_schema_hash` export and compare it
   /// against [expected] (the generated `frustrateSchemaHash`). Throws
   /// [StateError] on a mismatch — stale bindings dispatch the wrong `fn_id`s
   /// and decode wrong types into unsafe handle derefs, so the guard must be
@@ -373,7 +384,7 @@ abstract interface class ActorHost implements FrustrateChannel {
   ///
   /// An actor handle has no [OpaqueHandleBase] to carry a stamp for it (its
   /// identity on this side is the host, not the object), so the generated
-  /// receiver read compares this against [Frustrate.activeBridge] instead. Same
+  /// receiver read compares this against [Frustrate.identityOf] instead. Same
   /// rule, same message, one concept — and, like the opaque one, the comparison
   /// is inside an `assert`, because a build without asserts cannot reach a
   /// bridge change at all ([Frustrate.activate]).
@@ -502,8 +513,8 @@ Never staleBridgeHandle(String type) => throw StateError(
   'minted it.',
 );
 
-/// Which bridge minted a handle, for the handles where that is not the answer
-/// [_HandleBridge.baseline] gives.
+/// What minted a handle ([FrustrateRuntime.bridgeIdentity]), for the handles
+/// where that is not the first identity their bridge ever had active.
 ///
 /// An [Expando] rather than a field on [OpaqueHandleBase], because a field
 /// costs a word on every handle in every build and this costs nothing in the
@@ -518,35 +529,37 @@ Never staleBridgeHandle(String type) => throw StateError(
 /// nobody disposed.
 final Expando<Object> _mintedUnder = Expando<Object>('frustrate handle bridge');
 
-/// Record which bridge minted [handle]. Called only from inside an `assert`.
+/// Record what minted [handle], a handle of [bridge]. Called only from inside
+/// an `assert`.
 ///
 /// Returns true so it can be the *condition* of one: `assert(f())` is stripped
 /// whole — call included — from a build without asserts, which a statement
 /// guarded by a boolean would not be.
 ///
 /// **What an absent entry means** is the load-bearing part: the handle was
-/// minted under [Frustrate._firstBridge], the first bridge identity this
-/// isolate ever made active. Sound because a handle can only be minted while
-/// something is active, and until the first identity change there is only one
-/// thing that can have been. So an app that never swaps — every shipping app,
-/// and most tests — records nothing here at all.
-bool stampHandleBridge(Object handle) {
-  final active = Frustrate.activeBridge;
-  if (!identical(active, Frustrate._firstBridge)) {
-    _mintedUnder[handle] = active!;
+/// minted under the first identity [bridge] ever had active. So an app that
+/// never swaps — every shipping app, and most tests — records nothing here at
+/// all, however many bridges it has.
+bool stampHandleBridge(Object handle, FrustrateBridge bridge) {
+  final slot = Frustrate._slots[bridge];
+  final minted = slot?.identity;
+  if (minted != null && !identical(minted, slot!.first)) {
+    _mintedUnder[handle] = minted;
   }
   return true;
 }
 
-/// Refuse [handle] if the bridge that minted it is not the active one. Called
-/// only from inside an `assert`; returns true so it can be its condition.
-bool checkHandleBridge(Object handle) {
-  // Nothing has ever changed bridge identity in this isolate, so every live
-  // handle was minted under what is active now, stamped or not. The whole
-  // check is this one static load for as long as that holds.
+/// Refuse [handle], a handle of [bridge], if what minted it is not what
+/// serves [bridge] now. Called only from inside an `assert`; returns true so
+/// it can be its condition.
+bool checkHandleBridge(Object handle, FrustrateBridge bridge) {
+  // Nothing has ever changed identity in this isolate, so every live handle
+  // was minted under what is active now, stamped or not. The whole check is
+  // this one static load for as long as that holds.
   if (!Frustrate._bridgeSwapped) return true;
-  final minted = _mintedUnder[handle] ?? Frustrate._firstBridge;
-  if (!identical(minted, Frustrate.activeBridge)) {
+  final slot = Frustrate._slots[bridge];
+  final minted = _mintedUnder[handle] ?? slot?.first;
+  if (!identical(minted, slot?.identity)) {
     staleBridgeHandle('${handle.runtimeType}');
   }
   return true;
@@ -595,80 +608,79 @@ bool get _assertsEnabled {
   return on;
 }
 
-/// Entry point holder: a platform init (FrustrateNative.init on native)
-/// installs the transport once; generated bindings read [instance].
+/// Where generated bindings find their runtime: [of] with their bridge.
 ///
-/// ## Installed versus active
+/// ## One Rust runtime, any number of bridges
 ///
-/// Two slots, answering two different questions.
+/// An isolate (a page, on web) loads one library and runs one Rust runtime:
+/// one std, one allocator, one worker pool, one memory. Every bridge linked
+/// into that library is served by it — natively each through its own
+/// `FrustrateNative.init`, on web all of them by the one module
+/// `FrustrateWeb.init` loads. A bridge built into a *different* library cannot
+/// join: its Rust runtime would be a second one, with its own pool and its own
+/// handle registry. The platform init refuses it, naming the fix (compose the
+/// bridges into one library with `frustrate_library`).
 ///
-/// **Installed** is the platform transport this isolate (this page, on web)
-/// built. It is first-wins, is never replaced, and is never rebuilt — a second
-/// `NativeRuntime` would re-register the isolate-exit listener on the
+/// ## Installed versus active, per bridge
+///
+/// Each bridge has two slots, answering two different questions.
+///
+/// **Installed** is the platform runtime for that bridge. It is first-wins and
+/// never replaced, and the transport behind it is never rebuilt — a second
+/// native transport would re-register the isolate-exit listener on the
 /// process-global port and break the callback sweep, and a web reset that
 /// blanked the slot would let a later init reap the live runtime's pool
-/// workers. [isInstalled] reports this slot, and the web transport's
-/// orphan reap depends on that meaning.
+/// workers. [isInstalled] reports whether a transport exists at all, and the
+/// web transport's orphan reap depends on that meaning.
 ///
-/// **Active** is where generated bindings send calls: what [instance] returns.
-/// [install] fills it when it is empty, and [activate]/[reset] move it. That
-/// is what lets a test put a fake in front of the bindings, and a production
-/// build put a tracing decorator there
-/// (package:frustrate/intercept.dart), without either one having to
+/// **Active** is where that bridge's generated bindings send calls: what [of]
+/// returns. [install] fills it when it is empty, and [activate]/[reset] move
+/// it. That is what lets a test put a fake in front of one bridge — the others
+/// stay on the real library — and a production build put a tracing decorator
+/// there (package:frustrate/intercept.dart), without either one having to
 /// reach inside a platform init.
 ///
-/// A swap that **changes bridge identity** requires the outgoing runtime to be
-/// quiescent — see [activate]. A swap that keeps it does not, because nothing
-/// is at stake: handles, actor hosts and channels are all stamped with a
-/// *bridge*, and a decorator is the same bridge.
+/// A swap that **changes identity** ([FrustrateRuntime.bridgeIdentity])
+/// requires the outgoing runtime to be quiescent — see [activate]. A swap that
+/// keeps it does not, because nothing is at stake: handles, actor hosts and
+/// channels are all stamped with an identity, and a decorator keeps it.
 ///
 /// ## The repeated-init contract
 ///
-/// One transport is installed per isolate (per page on web), and a platform
-/// init may be called more than once. What happens then is decided by *what the
-/// call names*, and both halves are deliberate:
+/// A platform init may be called more than once, and what happens then is
+/// decided by *what the call names*:
 ///
-///   * **The same bridge again — a declared no-op.** Nothing is constructed,
-///     nothing is replaced, the call returns. This is not politeness: init is
-///     an *ensure*, and the shapes that reach it twice are ordinary. An app
-///     with an `initBridge()` helper calls it from `main()` and from a test's
-///     `setUp`; two independent widgets each make sure the bridge is up; a
-///     `package:test` file inits per group. Throwing at those would buy
-///     nothing and break working code.
+///   * **The same library again — a declared no-op.** Nothing is constructed,
+///     nothing is replaced, the call returns. Init is an *ensure*, and the
+///     shapes that reach it twice are ordinary: an `initBridge()` helper called
+///     from `main()` and from a test's `setUp`, two widgets each making sure
+///     the bridge is up, a `package:test` file initializing per group.
 ///
-///   * **A different bridge — a [StateError].** The first transport stays
-///     installed and keeps serving every call, so a silent second init hands
-///     the caller a bridge to a library it no longer believes it is using.
-///     Nothing detects that downstream: [FrustrateRuntime.checkSchemaHash]
-///     compares the bindings against the *installed* module, so it agrees. This
-///     is the one repeated-init case that is always a bug, and it is the case
-///     this refuses.
+///   * **Another bridge in the same library — attached.** It joins the
+///     installed transport: same completion port and call-id sequence, with
+///     pending calls and a stream router of its own.
 ///
-/// The guard runs **before** the transport is constructed ([initializedFrom]),
+///   * **A different library — a [StateError].** The first transport stays
+///     installed and keeps serving, and the bridge named would be answered by
+///     a runtime it was not built into.
+///
+/// The guard runs **before** a transport is constructed ([initializedFrom]),
 /// not merely before it is installed, and that is load-bearing rather than
 /// tidy — see the note there.
 ///
 /// ### Init while a fake is active
 ///
-/// A platform init that runs with **nothing installed and something active** —
-/// a test that declared a fake (package:frustrate/testing.dart) and a later
-/// code path lazily ensuring the bridge is up — returns having built nothing,
-/// and the fake keeps serving.
+/// A platform init that runs with **nothing installed and its bridge already
+/// served** — a test that declared a fake (package:frustrate/testing.dart) and
+/// a later code path lazily ensuring the bridge is up — returns having built
+/// nothing, and the fake keeps serving. That is "init is an ensure" applied to
+/// the case where the ensure is already satisfied by something that is not a
+/// platform runtime: a widget whose first build calls `FrustrateNative.init`
+/// must not load a library that has no reason to exist under `flutter test`.
 ///
-/// This is the same "init is an ensure" reasoning one paragraph up, applied to
-/// the one case where the ensure is already satisfied by something that is not
-/// a platform transport. A widget whose first build calls
-/// `FrustrateNative.init(bridge)` must not load a library that has no reason to
-/// exist under `flutter test`, and the alternative — requiring every such code
-/// path to know whether it is under a fake — is the knowledge the ensure exists
-/// to remove.
-///
-/// It is deliberately narrower than "nothing installed": with *both* slots
-/// empty this is a genuine first init and proceeds. And once a platform
-/// transport **is** installed, the repeated-init rules above apply unchanged,
-/// so "real A installed, fake active, init names B" is still a [StateError] —
-/// after a [reset] A would serve while the caller believed B, which is exactly
-/// what that rule is for.
+/// Once a transport **is** installed, the repeated-init rules above apply
+/// unchanged, so "real A installed, fake active, init names a library that
+/// is not A's" is still a [StateError].
 ///
 /// ## Hot restart
 ///
@@ -676,52 +688,32 @@ bool get _assertsEnabled {
 /// fields — per isolate on the VM, per heap on web — and hot restart resets
 /// exactly that, so a restarted app runs its *first* init. The web transport
 /// depends on it: `_reapOrphanedWorkers` treats `!isInstalled` as "the first
-/// init of this heap" (hot_restart_workers_test.dart). A restart that did
-/// re-enter with the same arguments finds a no-op, not an exception.
+/// init of this heap" (hot_restart_workers_test.dart).
 class Frustrate {
-  /// The platform transport, once built. Retained for the life of the isolate
-  /// even while something else is active: [reset] restores this object, and a
-  /// handle minted under it stays disposable through it the whole time.
-  static FrustrateRuntime? _installed;
+  static final Map<FrustrateBridge, _BridgeSlot> _slots = {};
 
-  /// What [instance] returns. Starts as [_installed] and moves with
-  /// [activate]/[reset].
-  static FrustrateRuntime? _active;
+  /// The last bridge [of] answered and its runtime: the cache that makes the
+  /// lookup one identity compare in an app whose calls name one bridge at a
+  /// time. Generated code names a `const`, so the same bridge is the same
+  /// object. Cleared by every slot change.
+  static FrustrateBridge? _lastBridge;
+  static FrustrateRuntime? _lastRuntime;
 
-  /// [FrustrateRuntime.bridgeIdentity] of [_active], cached so the debug-only
-  /// handle check is a static load and an identity compare rather than a
-  /// virtual call. Null exactly when nothing is active.
-  static Object? _activeBridge;
+  /// The identity of the installed transport — every platform runtime
+  /// [install] accepts belongs to it.
+  static Object? _transport;
 
-  /// The first bridge identity this isolate ever made active, and the two
-  /// things that turn on it.
-  ///
-  /// *In a build without asserts* it is the **only** identity allowed: any
-  /// change away from it is refused by [_setActive], so a handle can never
-  /// meet a bridge that did not mint it. That is a stronger guarantee than
-  /// catching the mismatch at the point of use, and it is what pays for the
-  /// per-handle stamp being debug-only.
-  ///
-  /// *With asserts on* it is what an unstamped handle is taken to have been
-  /// minted under ([stampHandleBridge]).
-  ///
-  /// Set once, on the first assignment of a non-null identity; never cleared,
-  /// because a `reset` to nothing does not un-mint the handles that exist.
-  static Object? _firstBridge;
-
-  /// Whether [_activeBridge] has ever moved *away* from a non-null value —
-  /// to a different bridge, or to nothing.
+  /// Whether any slot's identity has ever moved *away* from a non-null value —
+  /// to a different one, or to nothing.
   ///
   /// The fast path for the debug check: while this is false, every live handle
-  /// was minted under whatever is active now, so [checkHandleBridge] needs no
-  /// side table. "Or to nothing" is not tidiness — `activate(F)`, mint,
-  /// `reset()` with nothing installed, `activate(G)` leaves F's handles facing
-  /// G, and treating the trip through null as "no swap" would let them
-  /// through.
+  /// was minted under what is active now, so [checkHandleBridge] needs no side
+  /// table. "Or to nothing" is not tidiness — `activate(F)`, mint, `reset()`
+  /// with nothing installed, `activate(G)` leaves F's handles facing G, and
+  /// treating the trip through null as "no swap" would let them through.
   ///
   /// Read only from inside an `assert`. It is still *written* in a build
-  /// without asserts — a `reset` to nothing is allowed there, and is a swap by
-  /// this definition — which costs one static word per isolate and nothing per
+  /// without asserts, which costs one static word per isolate and nothing per
   /// handle.
   static bool _bridgeSwapped = false;
 
@@ -738,46 +730,93 @@ class Frustrate {
   static Object? _source;
   static String? _sourceDescription;
 
-  static FrustrateRuntime get instance {
-    final i = _active;
-    if (i == null) {
-      throw StateError(
-        'Frustrate has not been initialized; call the platform init '
-        '(on native, FrustrateNative.init with the generated bridge library) before '
-        'using generated bindings',
-      );
-    }
-    return i;
+  /// The runtime [bridge]'s generated bindings send calls to. Throws a
+  /// [StateError] when nothing serves it.
+  static FrustrateRuntime of(FrustrateBridge bridge) {
+    if (identical(bridge, _lastBridge)) return _lastRuntime!;
+    return _ofSlow(bridge);
   }
 
-  /// The bridge a live handle is checked against
-  /// ([FrustrateRuntime.bridgeIdentity] of the active runtime), or null when
-  /// nothing is active.
+  static FrustrateRuntime _ofSlow(FrustrateBridge bridge) {
+    final runtime = _slots[bridge]?.active;
+    if (runtime == null) throw _notServed(bridge);
+    _lastBridge = bridge;
+    _lastRuntime = runtime;
+    return runtime;
+  }
+
+  static StateError _notServed(FrustrateBridge bridge) {
+    final source = _sourceDescription;
+    if (source == null) {
+      return StateError(
+        'Frustrate has not been initialized; call the platform init '
+        '(on native, FrustrateNative.init with the generated bridge library) '
+        'before using generated bindings',
+      );
+    }
+    return StateError(
+      'frustrate: $bridge is not initialized. This isolate runs the library '
+      'loaded from $source; on native, pass the generated bridge library of '
+      '${bridge.crate} to FrustrateNative.init, and on web, link the bridge '
+      'into the module FrustrateWeb.init loads. Bridges used together are '
+      'composed into one library with frustrate_library.',
+    );
+  }
+
+  /// The active runtime when exactly one bridge is active — the shape of
+  /// every app with one bridge. With several, name the one you mean with [of].
+  static FrustrateRuntime get instance {
+    final active = activeRuntimes.toList();
+    if (active.length == 1) return active.single;
+    if (active.isEmpty) {
+      throw StateError(
+        'Frustrate has not been initialized; call the platform init '
+        '(on native, FrustrateNative.init with the generated bridge library) '
+        'before using generated bindings',
+      );
+    }
+    throw StateError(
+      'frustrate: ${active.length} bridges are active '
+      '(${[for (final r in active) r.servedBridge].join(', ')}), so '
+      'Frustrate.instance cannot tell which one you mean. Name it: '
+      'Frustrate.of(frustrateBridge), with the frustrateBridge of the '
+      'bindings you want.',
+    );
+  }
+
+  /// Every active runtime, one per bridge that has one.
+  static Iterable<FrustrateRuntime> get activeRuntimes => [
+    for (final slot in _slots.values)
+      if (slot.active case final runtime?) runtime,
+  ];
+
+  /// [FrustrateRuntime.bridgeIdentity] of [bridge]'s active runtime, or null
+  /// when nothing serves it.
   ///
-  /// A static, deliberately: the debug check reads it on every handle use, and
-  /// a getter that went through the active runtime would turn that into a
-  /// virtual call on an interface that a decorator makes polymorphic.
-  static Object? get activeBridge => _activeBridge;
+  /// A static, deliberately: the debug checks read it, and a getter that went
+  /// through the active runtime would make them a virtual call on an
+  /// interface that a decorator makes polymorphic.
+  static Object? identityOf(FrustrateBridge bridge) => _slots[bridge]?.identity;
 
   /// Whether a **platform transport** is installed in this isolate.
   ///
   /// Diagnostic, and the web transport's "is this heap's first init" test —
-  /// which is why it reports the installed slot and not the active one. A page
-  /// running a fake has never built a wasm module, so the orphaned workers of a
-  /// previous heap are still that init's to reap.
-  ///
-  /// A platform init asks [initializedFrom] instead, because the answer it
-  /// needs is not "is anything installed" but "is *this* installed".
-  static bool get isInstalled => _installed != null;
+  /// which is why it reports the installed transport and not what is active. A
+  /// page running a fake has never built a wasm module, so the orphaned
+  /// workers of a previous heap are still that init's to reap.
+  static bool get isInstalled => _transport != null;
 
   /// The repeated-init decision, taken by a platform init **before it
   /// constructs anything**.
   ///
   /// Returns true when a transport built from [source] is already installed:
-  /// the caller must return immediately, having built nothing. Returns false
-  /// when this isolate has no transport yet. Throws a [StateError] when a
-  /// *different* bridge is installed (see the contract on [Frustrate]);
-  /// [description] is how this call's bridge is named in that message.
+  /// the caller must return immediately, having built nothing. With nothing
+  /// installed it returns whether [bridge] is already served (by a fake — see
+  /// "Init while a fake is active" on [Frustrate]); without a [bridge] that is
+  /// false, and the caller decides once it knows which bridges it would
+  /// serve. Throws a [StateError] when a transport built from something else
+  /// is installed; [description] is how this call's library is named in that
+  /// message.
   ///
   /// **Deciding here rather than inside [install] is load-bearing.** [install]
   /// is idempotent, but its argument is evaluated first, so an init that got
@@ -786,67 +825,80 @@ class Frustrate {
   /// re-registering on the same port *replaces* the response value — the
   /// isolate would then report an id no live callback invocation carries and
   /// the sweep would miss every one of them.
-  static bool initializedFrom(Object source, String description) {
+  static bool initializedFrom(
+    Object source,
+    String description, {
+    FrustrateBridge? bridge,
+  }) {
     final installed = _source;
     if (installed == null) {
-      // Nothing installed, but something *active*: a test declared a fake (or
-      // any other non-platform runtime) and a later code path is lazily
-      // ensuring the bridge is up. Init is an ensure, so the honest answer is
-      // "it is up" — the caller returns having built nothing, and a widget
-      // that calls `FrustrateNative.init(bridge)` on first build does not load
-      // a library that has no reason to exist under `flutter test`.
-      //
-      // Narrower than "nothing installed" on purpose: with both slots empty
-      // this is a genuine first init and must proceed, which is what the
-      // fresh-isolate pin in init_contract_test.dart says.
-      return _active != null;
+      return bridge != null && isServed(bridge);
     }
     if (installed == source) return true;
     throw StateError(
       'frustrate: already initialized from $_sourceDescription, and this '
-      'call asks for $description. The first bridge stays installed and '
-      'every call keeps going to it, so a second init naming a different '
-      'bridge is a bug rather than a way to swap bridges — there is one '
-      'transport per isolate (per page on web) and it is chosen once. '
-      'Calling init again with the SAME bridge is fine and does nothing.',
+      'call asks for $description. An isolate (a page, on web) runs one Rust '
+      'runtime, loaded once, and every call keeps going to it. A bridge '
+      'built into a separate library cannot join it: compose the bridges '
+      'into one library with frustrate_library and initialize each from '
+      'that. Calling init again with the SAME library is fine and does '
+      'nothing.',
     );
   }
 
-  /// Install the platform transport, recording what it was built from so a
-  /// later init can be answered by [initializedFrom].
+  /// Whether something answers [bridge]'s calls.
+  static bool isServed(FrustrateBridge bridge) =>
+      _slots[bridge]?.active != null;
+
+  /// Install the platform runtime for its [FrustrateRuntime.servedBridge],
+  /// recording what the transport was built from so a later init can be
+  /// answered by [initializedFrom].
   ///
-  /// Idempotent per isolate. The `??=`-shaped first-wins here is the backstop
-  /// for two inits racing (web's is asynchronous, so two concurrent first
-  /// inits can both pass [initializedFrom]); the ordinary sequential case never
-  /// reaches it, because the guard already sent the second call home.
+  /// Idempotent per bridge. Every runtime it accepts belongs to one transport
+  /// (its [FrustrateRuntime.bridgeIdentity]): one from another transport is
+  /// ignored. That first-wins is the backstop for two inits racing (web's is
+  /// asynchronous, so two concurrent first inits can both pass
+  /// [initializedFrom]); the ordinary sequential case never reaches it,
+  /// because the guard already sent the second call home.
   static void install(
     FrustrateRuntime runtime, {
     required Object source,
     required String description,
   }) {
-    if (_installed != null) return;
-    _installed = runtime;
-    _source = source;
-    _sourceDescription = description;
+    final transport = runtime.bridgeIdentity;
+    if (_transport == null) {
+      _transport = transport;
+      _source = source;
+      _sourceDescription = description;
+    } else if (!identical(_transport, transport)) {
+      return;
+    }
+    final slot = _slotFor(runtime.servedBridge);
+    if (slot.installed != null) return;
+    slot.installed = runtime;
     // Only when nothing is active. A platform init that runs while a fake is
     // active must not silently repoint the bindings at the real bridge
     // mid-suite; it fills the installed slot so [reset] has somewhere to go,
     // and the fake keeps serving until the caller says otherwise.
-    if (_active == null) {
-      _setActive(runtime, 'install');
+    if (slot.active == null) {
+      _setActive(slot, runtime, 'install');
     }
   }
 
-  /// Make [runtime] what [instance] returns — a fake for a test, a decorator
-  /// for tracing or metrics.
+  static _BridgeSlot _slotFor(FrustrateBridge bridge) =>
+      _slots[bridge] ??= _BridgeSlot(bridge);
+
+  /// Make [runtime] what its bridge's bindings call — a fake for a test, a
+  /// decorator for tracing or metrics. Other bridges are untouched.
   ///
-  /// Refused with a [StateError] unless the active runtime is empty or the
-  /// installed platform transport. **One active runtime, declared**: composing
-  /// a decorator over a fake is `activate(Traced(fake))`, written by the
-  /// caller in the order they meant, rather than a stack this assembled behind
-  /// their back from two independent `initBridge()` helpers.
+  /// Refused with a [StateError] unless that bridge's active runtime is empty
+  /// or its installed platform runtime. **One active runtime per bridge,
+  /// declared**: composing a decorator over a fake is
+  /// `activate(Traced(fake))`, written by the caller in the order they meant,
+  /// rather than a stack this assembled behind their back from two
+  /// independent `initBridge()` helpers.
   ///
-  /// **Quiescence.** When [runtime] is a different *bridge* from the outgoing
+  /// **Quiescence.** When [runtime] has a different identity from the outgoing
   /// one ([FrustrateRuntime.bridgeIdentity]), the outgoing runtime must owe no
   /// completion and hold no open channel, or this throws naming what is left
   /// (including [FrustrateRuntime.openChannelLabels]). Both are things a swap
@@ -854,49 +906,50 @@ class Frustrate {
   /// at any more, and a Rust producer keeps feeding a channel whose consumer
   /// has been swapped out from under it. Worse, a call that settles after the
   /// swap decodes its response — and a handle in that response would be minted
-  /// with a raw from one bridge and stamped with another's identity.
+  /// with a raw from one runtime and stamped with another's identity. A
+  /// platform runtime counts only its own bridge's work, so faking one bridge
+  /// does not wait for another.
   ///
-  /// When [runtime] is the *same* bridge — a decorator going on — nothing is
+  /// When [runtime] keeps the identity — a decorator going on — nothing is
   /// stranded and nothing is checked. Handles, hosts and channels are stamped
-  /// with a bridge, not with a runtime object, so a live app with an open
+  /// with an identity, not with a runtime object, so a live app with an open
   /// stream can gain and lose a tracing decorator freely. Keying the rule on
   /// the runtime object instead would make a decorator uninstallable in
   /// exactly the app that wanted one.
   ///
-  /// **A build with asserts off allows one bridge identity per isolate, and
-  /// refuses any change to it.** The per-handle stamp that tells one bridge's
-  /// handle from another's lives inside `assert`s, so such a build carries
-  /// none of it; the cause is refused there instead of the consequence being
-  /// caught, by a [StateError] naming both bridges. Both `activate` and
-  /// [reset] are held to that rule. So activating a *fake* needs asserts on —
-  /// `dart test`, `flutter test` and every debug app already have them
-  /// (`--enable-asserts` otherwise). A decorator is not a bridge change and is
-  /// never refused, because `DelegatingRuntime` and `DelegatingActorHost`
-  /// forward [FrustrateRuntime.bridgeIdentity].
+  /// **A build with asserts off allows one identity per bridge, and refuses
+  /// any change to it.** The per-handle stamp that tells one runtime's handle
+  /// from another's lives inside `assert`s, so such a build carries none of
+  /// it; the cause is refused there instead of the consequence being caught,
+  /// by a [StateError] naming both. Both `activate` and [reset] are held to
+  /// that rule. So activating a *fake* needs asserts on — `dart test`,
+  /// `flutter test` and every debug app already have them (`--enable-asserts`
+  /// otherwise). A decorator is never refused, because `DelegatingRuntime`
+  /// and `DelegatingActorHost` forward [FrustrateRuntime.bridgeIdentity].
   ///
-  /// **What it does not do** is invalidate the outgoing bridge's handles.
+  /// **What it does not do** is invalidate the outgoing runtime's handles.
   /// They cannot be enumerated (a handle collected without `dispose()` never
   /// reports), so where asserts are on each one refuses at the point of use and
-  /// says so ([staleBridgeHandle]); they stay disposable through the transport
-  /// that minted it, and become usable again when that bridge is active.
-  ///
-  /// Scoped per isolate (per page on web), like [install].
+  /// says so ([staleBridgeHandle]); they stay disposable through the runtime
+  /// that minted it, and become usable again when it is active.
   static void activate(FrustrateRuntime runtime) {
-    final outgoing = _active;
-    if (outgoing != null && !identical(outgoing, _installed)) {
+    final slot = _slotFor(runtime.servedBridge);
+    final outgoing = slot.active;
+    if (outgoing != null && !identical(outgoing, slot.installed)) {
       throw StateError(
         'frustrate: $outgoing is already active, so activating $runtime '
         'would stack one runtime on another. Frustrate.reset() first, or '
         'compose them yourself and activate the composition — there is one '
-        'active runtime and it is chosen in one place.',
+        'active runtime per bridge and it is chosen in one place.',
       );
     }
     _requireQuiescent(outgoing, runtime.bridgeIdentity, 'activate');
-    _setActive(runtime, 'activate');
+    _setActive(slot, runtime, 'activate');
   }
 
-  /// Put the installed platform transport back in front of the bindings, or
-  /// empty the active slot when nothing is installed. Idempotent.
+  /// Put each bridge's installed platform runtime back in front of its
+  /// bindings, or empty its active slot when nothing is installed — every
+  /// bridge, or only [bridge]. Idempotent.
   ///
   /// Never rebuilds a transport: the installed one is retained for the life of
   /// the isolate precisely so this can restore it. A test that wants a
@@ -904,34 +957,27 @@ class Frustrate {
   /// `init_contract_test.dart` already uses.
   ///
   /// Held to both of [activate]'s rules, and for the same reasons: quiescence,
-  /// and — where asserts are off — one bridge identity per isolate, which a
-  /// reset away from a fake that was activated first would change.
-  static void reset() {
-    final outgoing = _active;
-    if (outgoing == null) return;
-    final target = _installed;
-    _requireQuiescent(outgoing, target?.bridgeIdentity, 'reset');
-    _setActive(target, 'reset');
+  /// and — where asserts are off — one identity per bridge, which a reset away
+  /// from a fake that was activated first would change. Every bridge it
+  /// resets is checked before any is changed.
+  static void reset([FrustrateBridge? bridge]) {
+    final slots = [
+      for (final slot in _slots.values)
+        if (bridge == null || slot.bridge == bridge)
+          if (slot.active != null) slot,
+    ];
+    for (final slot in slots) {
+      _requireQuiescent(slot.active, slot.installed?.bridgeIdentity, 'reset');
+      _refuseIdentityChange(slot, slot.installed, 'reset');
+    }
+    for (final slot in slots) {
+      _setActive(slot, slot.installed, 'reset');
+    }
   }
 
-  /// The one door to [_active] and [_activeBridge] — [install], [activate] and
-  /// [reset] all come through here, so the bridge-identity bookkeeping cannot
-  /// be bypassed by a fourth writer added later.
-  ///
-  /// **It refuses a bridge-identity change in a build without asserts**, and
-  /// that refusal is what lets the per-handle stamp be debug-only. The
-  /// argument, in one line: the thing a stale handle does is dereference a raw
-  /// on a transport that never issued it, and if bridge identity cannot change
-  /// then no handle can ever meet one. So instead of catching the consequence
-  /// at every use in every build, the cause is refused once, here, in the
-  /// build that could not have caught it.
-  ///
-  /// Production is unaffected, because the only swap a shipping app performs
-  /// is putting a decorator on or taking it off, and a decorator forwards
-  /// [FrustrateRuntime.bridgeIdentity] — same bridge, no change, no refusal
-  /// (`DelegatingRuntime`, `DelegatingActorHost`). What is refused is
-  /// activating a *fake*, which is a test doing it in a vehicle that turned
-  /// asserts off.
+  /// The one door to a slot's active runtime — [install], [activate] and
+  /// [reset] all come through here, so the identity bookkeeping cannot be
+  /// bypassed by a fourth writer added later.
   ///
   /// Note what routing [install] through here catches that a check written
   /// inside [activate] would not: `activate(fake)`, `reset()` to nothing, then
@@ -939,38 +985,65 @@ class Frustrate {
   /// fake still alive, and it is refused — after the init built its transport,
   /// which is the price of deciding here rather than earlier, and is a corner
   /// only reachable in a build without asserts that ran a fake.
-  static void _setActive(FrustrateRuntime? runtime, String verb) {
+  static void _setActive(
+    _BridgeSlot slot,
+    FrustrateRuntime? runtime,
+    String verb,
+  ) {
     final incoming = runtime?.bridgeIdentity;
-    final first = _firstBridge;
     // Decide before mutating: a refused swap is not a swap, and must leave
     // every slot as it found them.
-    if (incoming != null && first != null && !identical(incoming, first)) {
-      if (!_assertsEnabled) {
-        throw StateError(
-          'frustrate: $verb would make $runtime active, which is a different '
-          'bridge from $first — and this build has asserts off, so it cannot '
-          'tell a handle minted by one from a handle minted by the other. '
-          'That check is the per-handle stamp, which costs nothing here '
-          'precisely because a build like this one cannot reach a bridge '
-          'change at all. Sending a raw to a transport that never issued it '
-          'is not something the wire can catch, so the swap is refused '
-          'instead of being allowed to become a bad dereference later. Run '
-          'with asserts on (--enable-asserts; dart test and flutter test '
-          'already do) if this is a test. A tracing or metrics decorator is '
-          'not a bridge change and is always allowed.',
-        );
-      }
-    }
-    if (!identical(incoming, _activeBridge) && _activeBridge != null) {
+    _refuseIdentityChange(slot, runtime, verb);
+    if (!identical(incoming, slot.identity) && slot.identity != null) {
       _bridgeSwapped = true;
     }
-    _firstBridge ??= incoming;
-    _active = runtime;
-    _activeBridge = incoming;
+    slot.first ??= incoming;
+    slot.active = runtime;
+    slot.identity = incoming;
+    _lastBridge = null;
+    _lastRuntime = null;
   }
 
-  /// The shared half of [activate] and [reset]: a swap that changes bridge
-  /// identity is refused while the outgoing runtime still has live work.
+  /// **Refuse an identity change in a build without asserts**, which is what
+  /// lets the per-handle stamp be debug-only. The argument, in one line: the
+  /// thing a stale handle does is dereference a raw on a transport that never
+  /// issued it, and if a bridge's identity cannot change then no handle can
+  /// ever meet one. So instead of catching the consequence at every use in
+  /// every build, the cause is refused once, here, in the build that could not
+  /// have caught it.
+  ///
+  /// Production is unaffected, because the only swap a shipping app performs
+  /// is putting a decorator on or taking it off, and a decorator forwards
+  /// [FrustrateRuntime.bridgeIdentity]. What is refused is activating a
+  /// *fake*, which is a test doing it in a vehicle that turned asserts off.
+  static void _refuseIdentityChange(
+    _BridgeSlot slot,
+    FrustrateRuntime? runtime,
+    String verb,
+  ) {
+    final incoming = runtime?.bridgeIdentity;
+    final first = slot.first;
+    if (incoming == null || first == null || identical(incoming, first)) {
+      return;
+    }
+    if (_assertsEnabled) return;
+    throw StateError(
+      'frustrate: $verb would make $runtime active for ${slot.bridge}, which '
+      'is a different runtime from the one it started on — and this build '
+      'has asserts off, so it cannot tell a handle minted by one from a '
+      'handle minted by the other. That check is the per-handle stamp, which '
+      'costs nothing here precisely because a build like this one cannot '
+      'reach such a change at all. Sending a raw to a transport that never '
+      'issued it is not something the wire can catch, so the swap is refused '
+      'instead of being allowed to become a bad dereference later. Run with '
+      'asserts on (--enable-asserts; dart test and flutter test already do) '
+      'if this is a test. A tracing or metrics decorator is not such a change '
+      'and is always allowed.',
+    );
+  }
+
+  /// The shared half of [activate] and [reset]: a swap that changes identity
+  /// is refused while the outgoing runtime still has live work.
   ///
   /// "In flight" means the transport owes a completion. A response that has
   /// already settled its future but whose caller has not yet resumed to decode
@@ -979,21 +1052,50 @@ class Frustrate {
   /// decode site rather than reading the active slot at the mint.
   static void _requireQuiescent(
     FrustrateRuntime? outgoing,
-    Object? incomingBridge,
+    Object? incomingIdentity,
     String verb,
   ) {
     if (outgoing == null) return;
-    if (identical(outgoing.bridgeIdentity, incomingBridge)) return;
+    if (identical(outgoing.bridgeIdentity, incomingIdentity)) return;
     final calls = outgoing.inFlightCallCount;
     final open = outgoing.openChannelCount;
     if (calls == 0 && open == 0) return;
     throw StateError(
-      'frustrate: $verb would change which bridge is active while $outgoing '
-      'still has $calls call(s) in flight and $open open '
-      'channel(s) ${outgoing.openChannelLabels}. An in-flight call would '
-      'answer into a transport '
-      'nothing points at, and a handle in its response would be minted '
-      'against the wrong bridge. Await the calls and end the streams first.',
+      'frustrate: $verb would change which runtime serves '
+      '${outgoing.servedBridge} while $outgoing still has $calls call(s) in '
+      'flight and $open open channel(s) ${outgoing.openChannelLabels}. An '
+      'in-flight call would answer into a transport nothing points at, and a '
+      'handle in its response would be minted against the wrong runtime. '
+      'Await the calls and end the streams first.',
     );
   }
+}
+
+/// One bridge's two slots ([Frustrate]) and the identity bookkeeping beside
+/// them.
+final class _BridgeSlot {
+  final FrustrateBridge bridge;
+
+  /// The platform runtime for this bridge, once installed. Retained for the
+  /// life of the isolate even while something else is active: [Frustrate.reset]
+  /// restores it, and a handle minted under it stays disposable through it the
+  /// whole time.
+  FrustrateRuntime? installed;
+
+  /// What [Frustrate.of] returns for this bridge.
+  FrustrateRuntime? active;
+
+  /// [FrustrateRuntime.bridgeIdentity] of [active], cached so the debug-only
+  /// checks are a load and an identity compare rather than a virtual call.
+  /// Null exactly when nothing is active.
+  Object? identity;
+
+  /// The first identity this bridge ever had active. *In a build without
+  /// asserts* it is the only one allowed ([Frustrate._refuseIdentityChange]);
+  /// with asserts on, it is what an unstamped handle of this bridge was minted
+  /// under ([stampHandleBridge]). Never cleared, because a `reset` to nothing
+  /// does not un-mint the handles that exist.
+  Object? first;
+
+  _BridgeSlot(this.bridge);
 }

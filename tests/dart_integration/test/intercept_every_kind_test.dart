@@ -298,13 +298,13 @@ void main() {
     async.dispose();
     expect(census.seen, [
       'sync TextDoc.new',
-      'attach frustrate_drop_TextDoc',
+      'attach frustrate_test_api_drop_TextDoc',
       'async TextDoc.load',
-      'attach frustrate_drop_TextDoc',
-      'detach frustrate_drop_TextDoc',
-      'drop frustrate_drop_TextDoc',
-      'detach frustrate_drop_TextDoc',
-      'drop frustrate_drop_TextDoc',
+      'attach frustrate_test_api_drop_TextDoc',
+      'detach frustrate_test_api_drop_TextDoc',
+      'drop frustrate_test_api_drop_TextDoc',
+      'detach frustrate_test_api_drop_TextDoc',
+      'drop frustrate_test_api_drop_TextDoc',
     ]);
   });
 

@@ -114,7 +114,7 @@ fn call_sync(fn_id: u32, req: &[u8]) -> Vec<u8> {
     // finding and is not one.
     let mut out = [0u8; 8192];
     let n = unsafe {
-        crate::frustrate_generated::frustrate_call_sync(
+        crate::frustrate_generated::frustrate_test_api_call_sync(
             fn_id,
             req.as_ptr(),
             req.len() as u64,
@@ -161,27 +161,27 @@ type Reclaim = unsafe extern "C" fn(*mut core::ffi::c_void);
 fn reclaim_table() -> BTreeMap<&'static str, Reclaim> {
     use crate::frustrate_generated as g;
     BTreeMap::from_iter([
-        ("Abacus", g::frustrate_drop_Abacus as Reclaim),
-        ("Chit", g::frustrate_drop_Chit as Reclaim),
-        ("CountingStore", g::frustrate_drop_CountingStore as Reclaim),
-        ("Counter", g::frustrate_drop_Counter as Reclaim),
-        ("Greeter", g::frustrate_drop_Greeter as Reclaim),
-        ("Jar", g::frustrate_drop_Jar as Reclaim),
-        ("Ledger", g::frustrate_drop_Ledger as Reclaim),
-        ("LiveProbe", g::frustrate_drop_LiveProbe as Reclaim),
-        ("LockProbe", g::frustrate_drop_LockProbe as Reclaim),
-        ("Note", g::frustrate_drop_Note as Reclaim),
-        ("ReentrantProbe", g::frustrate_drop_ReentrantProbe as Reclaim),
-        ("RobotGreeter", g::frustrate_drop_RobotGreeter as Reclaim),
-        ("Scene", g::frustrate_drop_Scene as Reclaim),
-        ("Slip", g::frustrate_drop_Slip as Reclaim),
-        ("Snapshot", g::frustrate_drop_Snapshot as Reclaim),
-        ("Store", g::frustrate_drop_Store as Reclaim),
-        ("Tag", g::frustrate_drop_Tag as Reclaim),
-        ("Tally", g::frustrate_drop_Tally as Reclaim),
-        ("Tape", g::frustrate_drop_Tape as Reclaim),
-        ("TextDoc", g::frustrate_drop_TextDoc as Reclaim),
-        ("Vault", g::frustrate_drop_Vault as Reclaim),
+        ("Abacus", g::frustrate_test_api_drop_Abacus as Reclaim),
+        ("Chit", g::frustrate_test_api_drop_Chit as Reclaim),
+        ("CountingStore", g::frustrate_test_api_drop_CountingStore as Reclaim),
+        ("Counter", g::frustrate_test_api_drop_Counter as Reclaim),
+        ("Greeter", g::frustrate_test_api_drop_Greeter as Reclaim),
+        ("Jar", g::frustrate_test_api_drop_Jar as Reclaim),
+        ("Ledger", g::frustrate_test_api_drop_Ledger as Reclaim),
+        ("LiveProbe", g::frustrate_test_api_drop_LiveProbe as Reclaim),
+        ("LockProbe", g::frustrate_test_api_drop_LockProbe as Reclaim),
+        ("Note", g::frustrate_test_api_drop_Note as Reclaim),
+        ("ReentrantProbe", g::frustrate_test_api_drop_ReentrantProbe as Reclaim),
+        ("RobotGreeter", g::frustrate_test_api_drop_RobotGreeter as Reclaim),
+        ("Scene", g::frustrate_test_api_drop_Scene as Reclaim),
+        ("Slip", g::frustrate_test_api_drop_Slip as Reclaim),
+        ("Snapshot", g::frustrate_test_api_drop_Snapshot as Reclaim),
+        ("Store", g::frustrate_test_api_drop_Store as Reclaim),
+        ("Tag", g::frustrate_test_api_drop_Tag as Reclaim),
+        ("Tally", g::frustrate_test_api_drop_Tally as Reclaim),
+        ("Tape", g::frustrate_test_api_drop_Tape as Reclaim),
+        ("TextDoc", g::frustrate_test_api_drop_TextDoc as Reclaim),
+        ("Vault", g::frustrate_test_api_drop_Vault as Reclaim),
     ]
     .into_iter()
     // The generated fixture's opaques, derived by the same run that wrote
@@ -833,7 +833,7 @@ fn is_generated_shape(f: &Function) -> bool {
 fn the_embedded_interface_is_the_one_the_glue_was_generated_from() {
     assert_eq!(
         frustrate_codegen::hash::schema_hash(ir()),
-        crate::frustrate_generated::frustrate_schema_hash(),
+        crate::frustrate_generated::frustrate_test_api_schema_hash(),
     );
 }
 
