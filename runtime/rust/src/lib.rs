@@ -65,6 +65,9 @@ pub mod handle;
 /// `--cfg=frustrate_hot_patch` (`frustrate_hot_patchable`, `-c dbg`).
 #[cfg(all(frustrate_hot_patch, not(target_family = "wasm")))]
 pub mod hot_patch;
+/// The idle barrier's count of queued and running work. Its exports exist
+/// only under `--cfg=frustrate_idle_barrier` (`frustrate_idle_barrier_library`).
+mod idle;
 /// The one slot an embedder registers a value into, shared by every hook that
 /// offers one. Private: a bridge sees each hook's own `register`, never the
 /// primitive underneath.

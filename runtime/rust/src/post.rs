@@ -60,6 +60,8 @@ pub use native::mark_gone_for_test;
 /// (see [`native::init`]).
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) use native::init;
+#[cfg(all(frustrate_idle_barrier, not(target_family = "wasm")))]
+pub(crate) use native::post_int;
 
 /// The crate's lock for process-global test state. Three things take it, and
 /// the third is the one that keeps being missed.
@@ -466,6 +468,13 @@ mod native {
         }
     }
 
+    /// Post one integer to `port`. False means the port is closed or its
+    /// isolate is gone.
+    #[cfg(frustrate_idle_barrier)]
+    pub(crate) fn post_int(port: i64, value: i64) -> bool {
+        dl::post_int(port, value)
+    }
+
     /// The slice of `dart_api_dl` frustrate needs, mirrored by hand.
     ///
     /// This is the price of the module-level choice above, and the only place
@@ -706,6 +715,20 @@ mod native {
                     _ => None,
                 }
             }
+        }
+
+        /// Post `value` to `port` as a Dart `int`.
+        #[cfg(frustrate_idle_barrier)]
+        pub fn post_int(port: i64, value: i64) -> bool {
+            let Some(api) = API.get() else { return false };
+            let mut message = CObject {
+                ty: K_INT64,
+                value: CValue { _size: [0; 5] },
+            };
+            message.value.as_int64 = value;
+            // Safety: `message` is a fully initialized integer, and the VM
+            // only reads it.
+            unsafe { (api.post)(port, &mut message) }
         }
 
         /// Post `[call_id, payload]` to `port`. False means the port is closed

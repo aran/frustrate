@@ -905,3 +905,28 @@ dart_test(
         "@pub_deps//:test",
     ],
 )
+
+# The idle barrier's Dart side. The first test resolves the bridge to the test
+# API built with the barrier (`bindings_idle`); the second uses the ordinary
+# build and checks that the barrier is refused there.
+dart_test(
+    name = "idle_barrier_test",
+    main = "test/idle_barrier_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings_idle",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+dart_test(
+    name = "idle_barrier_absent_test",
+    main = "test/idle_barrier_absent_test.dart",
+    srcs = ["test/init_native.dart"],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+    ],
+)

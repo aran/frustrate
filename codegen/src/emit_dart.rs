@@ -255,6 +255,9 @@ const RUNTIME_EXPORTS: &[&str] = &[
     "frustrate_actor_cancel_deferred",
     "frustrate_actor_reap",
     "frustrate_manual_drain",
+    "frustrate_idle_notify",
+    "frustrate_idle_pending",
+    "frustrate_idle_generation",
 ];
 
 /// The fixed exports this bridge's glue defines under its crate name

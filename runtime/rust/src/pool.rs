@@ -435,11 +435,17 @@ mod native {
 
     /// Run `job` on the frustrate pool.
     pub fn spawn(job: impl FnOnce() + Send + 'static) {
+        // Dropped after the job, unwinding or not, so its answer is posted
+        // before it stops being counted.
+        let pending = crate::idle::Pending::begin();
         pool()
             .sender
             .lock()
             .unwrap()
-            .send(Box::new(job))
+            .send(Box::new(move || {
+                let _pending = pending;
+                job();
+            }))
             .expect("frustrate pool is gone");
     }
 }

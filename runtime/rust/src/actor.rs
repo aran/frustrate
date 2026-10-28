@@ -23,7 +23,13 @@ use std::sync::{Mutex, OnceLock};
 type Job = Box<dyn FnOnce() -> Option<crate::codec::FramedWriter> + Send>;
 
 enum Msg {
-    Call { call_id: u64, job: Job },
+    /// `pending` is the call's share of the idle barrier's count, held until
+    /// it is answered or dropped unrun (idle.rs).
+    Call {
+        call_id: u64,
+        job: Job,
+        pending: crate::idle::Pending,
+    },
     Stop,
     /// Drop the object *and* stop — the reclaim path for a handle nobody
     /// disposed. [`Msg::Stop`] cannot do this job: it releases the executor
@@ -234,7 +240,11 @@ pub fn spawn_host() -> u64 {
                     // contract.) `None` means the job detached its completion (a
                     // deferred method) — the executor task it spawned owns the
                     // answer now.
-                    Msg::Call { call_id, job } => {
+                    Msg::Call {
+                        call_id,
+                        job,
+                        pending: _pending,
+                    } => {
                         // A cancel that reached this call while it was queued
                         // claimed the reservation `submit` made, and owns the
                         // answer (`executor::holds` — a peek, sound because an
@@ -342,6 +352,9 @@ pub fn submit(
     // arrives, and a job that reaches `executor::holds` before the reservation
     // exists would be dropped as if it had been cancelled.
     crate::executor::reserve(call_id);
+    // This frame may answer the call itself (a stopped host, below), after the
+    // message holding the call's own share has been dropped.
+    let _answering = crate::idle::Pending::begin();
     let tx = {
         let mut map = hosts().lock().unwrap();
         match map.get_mut(&host) {
@@ -361,6 +374,7 @@ pub fn submit(
             .send(Msg::Call {
                 call_id,
                 job: Box::new(job),
+                pending: crate::idle::Pending::begin(),
             })
             .is_err(),
         None => true,

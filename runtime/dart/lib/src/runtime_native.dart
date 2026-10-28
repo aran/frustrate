@@ -86,6 +86,10 @@ typedef _SchemaHashC = Uint64 Function();
 typedef _SchemaHashDart = int Function();
 typedef _ManualDrainC = Uint8 Function();
 typedef _ManualDrainDart = int Function();
+typedef _IdleNotifyC = Void Function(Int64);
+typedef _IdleNotifyDart = void Function(int);
+typedef _IdleReadC = Uint64 Function();
+typedef _IdleReadDart = int Function();
 
 /// The native library that serves a bridge's exports, resolved by name.
 ///
@@ -247,6 +251,89 @@ class FrustrateNative {
     }
     return () => drain() != 0;
   }
+
+  /// The installed bridge's idle barrier, for a test harness that waits for
+  /// no Rust work to be queued or running.
+  ///
+  /// Only a bridge built with the idle barrier has one
+  /// (`frustrate_idle_barrier_library` in `@frustrate//bazel:idle_barrier.bzl`).
+  ///
+  /// Throws a [StateError] when no bridge was installed through this class, or
+  /// when the installed one was built without the barrier.
+  static IdleBarrier idleBarrier() {
+    final transport = _transport;
+    if (transport == null) {
+      throw StateError(
+        'frustrate: idleBarrier() needs an installed bridge; '
+        'call FrustrateNative.init first.',
+      );
+    }
+    final library = transport._primary;
+    try {
+      return IdleBarrier._(
+        library
+            .lookup('frustrate_idle_notify')
+            .cast<NativeFunction<_IdleNotifyC>>()
+            .asFunction<_IdleNotifyDart>(),
+        library
+            .lookup('frustrate_idle_pending')
+            .cast<NativeFunction<_IdleReadC>>()
+            .asFunction<_IdleReadDart>(),
+        library
+            .lookup('frustrate_idle_generation')
+            .cast<NativeFunction<_IdleReadC>>()
+            .asFunction<_IdleReadDart>(),
+      );
+    } on ArgumentError {
+      throw StateError(
+        'frustrate: $_description was built without the idle barrier, so '
+        'it counts no work. Build it through frustrate_idle_barrier_library '
+        '(@frustrate//bazel:idle_barrier.bzl).',
+      );
+    }
+  }
+}
+
+/// How much Rust work the runtime has queued or running, and when none is.
+///
+/// The work counted is every job on the runtime's thread pool (an async call,
+/// a poll of an `async fn`) and every call sent to an actor, from when it is
+/// queued until it is answered. A task suspended on something outside Rust (a
+/// Dart timer, an answer from Dart) is not counted until it is woken, and a
+/// thread the bridge's own code starts is never counted.
+///
+/// Process-wide: work for every isolate is in the one count.
+final class IdleBarrier {
+  IdleBarrier._(this._notify, this._pending, this._generation);
+
+  final _IdleNotifyDart _notify;
+  final _IdleReadDart _pending;
+  final _IdleReadDart _generation;
+
+  /// Completes with the [generation] at a moment when no work was queued or
+  /// running.
+  ///
+  /// Every answer Rust posted before that moment has been delivered, and its
+  /// handler run, before this completes. Work may have started since: read
+  /// [pending] and [generation] in the same turn to learn whether it has. A
+  /// zero [pending] and an unchanged [generation] mean no job has started
+  /// since the moment this reports.
+  Future<int> whenIdle() {
+    final completer = Completer<int>();
+    late final RawReceivePort port;
+    port = RawReceivePort((Object? generation) {
+      port.close();
+      completer.complete(generation! as int);
+    }, 'frustrate.idle');
+    _notify(port.sendPort.nativePort);
+    return completer.future;
+  }
+
+  /// How many jobs are queued or running now.
+  int get pending => _pending();
+
+  /// How many jobs have ever been queued.
+  int get generation => _generation();
 }
 
 /// The one native transport of an isolate: the completion port and the

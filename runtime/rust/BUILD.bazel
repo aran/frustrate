@@ -70,6 +70,9 @@ rust_library(
     rustc_flags = select({
         "//bazel:manual_scheduler_build": ["--cfg=frustrate_manual_scheduler"],
         "//conditions:default": [],
+    }) + select({
+        "//bazel:idle_barrier_build": ["--cfg=frustrate_idle_barrier"],
+        "//conditions:default": [],
     }),
     visibility = ["//visibility:public"],
     deps = [
@@ -160,6 +163,19 @@ rust_test(
     crate = ":frustrate",
     edition = "2021",
     rustc_flags = ["--cfg=frustrate_manual_scheduler"],
+    target_compatible_with = select({
+        "@platforms//os:wasi": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
+
+# The same crate with the idle barrier compiled in, for its own tests and so
+# that a build carrying it is checked against the rest of the suite.
+rust_test(
+    name = "frustrate_idle_barrier_test",
+    crate = ":frustrate",
+    edition = "2021",
+    rustc_flags = ["--cfg=frustrate_idle_barrier"],
     target_compatible_with = select({
         "@platforms//os:wasi": ["@platforms//:incompatible"],
         "//conditions:default": [],

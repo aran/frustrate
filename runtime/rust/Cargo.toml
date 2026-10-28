@@ -17,6 +17,8 @@ path = "src/lib.rs"
 # (executor.rs, `arrange_drain`); it is native-only and a wasm build carrying it
 # is a compile error. `frustrate_hot_patch` is set only by
 # `frustrate_hot_patchable`, for `-c dbg`, and compiles in `hot_patch`.
+# `frustrate_idle_barrier` is set only by `--//bazel:idle_barrier` and counts
+# queued and running work for a test harness (idle.rs).
 # Declaring them keeps cargo's default `--check-cfg` from calling this crate's
 # own hand-written gates an unexpected cfg. (Bazel passes no `--check-cfg` at
 # all, so the lint is inert there.)
@@ -25,7 +27,7 @@ path = "src/lib.rs"
 # the same declaration from its build script, which `frustrate_codegen::generate`
 # prints as `cargo::rustc-check-cfg=…` — see `CHECK_CFG_DIRECTIVE` in
 # codegen/src/lib.rs. The runtime has no build script to print it from.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frustrate_block_check)', 'cfg(frustrate_manual_scheduler)', 'cfg(frustrate_hot_patch)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frustrate_block_check)', 'cfg(frustrate_manual_scheduler)', 'cfg(frustrate_hot_patch)', 'cfg(frustrate_idle_barrier)'] }
 
 [features]
 # Threaded web: real worker threads on one shared linear memory. Requires a

@@ -228,6 +228,23 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
+# Build the runtime with the idle barrier (`--cfg frustrate_idle_barrier`;
+# runtime/rust/src/idle.rs): a count of queued and running work, and a post to
+# a Dart port when it reaches zero, so a test harness can wait for nothing to be
+# running. Defaults False, and a build without it carries no count. Native-only,
+# and refused alongside :manual_scheduler.
+bool_flag(
+    name = "idle_barrier",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "idle_barrier_build",
+    flag_values = {":idle_barrier": "True"},
+    visibility = ["//visibility:public"],
+)
+
 # "frustrate's `wasm-threads` cargo feature is on" — which is *not* the same
 # question as :wasm_threads_build above, and the difference is the whole reason
 # the block-check flow needs no platform of its own.
