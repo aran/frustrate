@@ -23,9 +23,9 @@ window.addEventListener('unhandledrejection', (e) =>
   report('unhandledrejection: ' + (e.reason && e.reason.stack || e.reason)));
 
 try {
-  const { compileStreaming, instantiate, invoke } = await import('./web_bench.mjs');
+  const { compileStreaming } = await import('./web_bench.mjs');
   const compiled = await compileStreaming(fetch('web_bench.wasm'));
-  invoke(await instantiate(compiled, {}));
+  (await compiled.instantiate({})).invokeMain();
 } catch (e) {
   report('bootstrap: ' + (e && e.stack || e));
 }
