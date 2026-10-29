@@ -356,6 +356,21 @@ frustrate_block_check(
     slow = ["rule_test_fixture::slow"],
 )
 
+# The same claim checked for IO on wasip1, where std's files and polls are
+# `wasi_snapshot_preview1` imports. Stock std, so no `manual` tag: this one
+# runs on every checkout. It checks no waits; the target above does.
+frustrate_block_check(
+    name = "fixture_io_check",
+    bridge = ":bridge",
+    crate = ":fixture_shared",
+    platform = "//bazel:wasm32_wasi",
+    slow_imports = [
+        "wasi_snapshot_preview1.path_*",
+        "wasi_snapshot_preview1.poll_oneoff",
+        "wasi_snapshot_preview1.sock_*",
+    ],
+)
+
 # Every half of the rule's contract, under one label: the caller-run claim
 # above, whose root reaches a whole body; the **dispatched** ones in
 # `async_fixture/`, whose bodies are settled by placement and whose roots hold

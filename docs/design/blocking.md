@@ -90,8 +90,11 @@ because freeing a handle runs its `Drop` on the thread that frees it.
 ## Slow work
 
 A wait is not the only way to stall the caller. `frustrate_block_check`'s
-`slow` names functions that do slow work (a project's own marker),
-and a claimed body may not reach them either. They are settled on the same
+`slow` names functions that do slow work (a project's own marker), and
+`slow_imports` names host imports; a claimed body may not reach either. IO is
+checked through imports on a wasip1 build, where std's files and polls are
+`wasi_snapshot_preview1` calls that cannot be inlined away; that build has no
+atomics, so it checks no waits, and pairs with the threaded check for those. They are settled on the same
 terms as a wait: placement settles a dispatched or actor body because it runs
 off the caller wherever there is another thread. Single-threaded web has no
 other thread, so a dispatched body there runs on the main thread, slow or not.

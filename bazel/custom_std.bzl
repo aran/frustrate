@@ -240,7 +240,13 @@ rust_toolchain(
     # flavour's std was built with, read from its own manifest: a +atomics
     # std requires +atomics app code, so the flags are a toolchain property
     # and must come from the same place the std did.
-    extra_rustc_flags = {rustflags},
+    # The block check's link filter, named here rather than by the check's
+    # transition because this toolchain's sysroot is where it lives: a stock
+    # toolchain building a check artifact links with plain rust-lld.
+    extra_rustc_flags = {rustflags} + select({{
+        "{block_check_build}": ["-Clinker=frustrate-link-filter"],
+        "//conditions:default": [],
+    }}),
     iso_date = "{iso_date}",
     linker = select({{
         "{block_check_build}": "//:linker_{exec_triple}",

@@ -45,7 +45,8 @@ value-returning `DartFunction` on a non-`async fn` (FR0049). On web,
 `bazel/wasm_block_check` proves at link time that no `memory.atomic.wait` is
 reachable from the claimed item, nor any function under a path in
 `frustrate_block_check`'s `slow` (your own `#[inline(never)]` slow-work
-marker); green
+marker), nor any host import in `slow_imports` (on `//bazel:wasm32_wasi`, the
+`wasi_snapshot_preview1` calls behind files and polls); green
 is sound, red can be a false alarm. To hold every sync member of a bridge to
 this, put `bridge_file!(no_block)` in each of its files.
 **On native the claim is trusted, not verified.** A body split by `#[cfg]` is

@@ -416,13 +416,6 @@ def frustrate_library(name, bridges, crate_name = None, visibility = None, **kwa
 _BLOCK_CHECK_FLAG = str(Label("//bazel:block_check"))
 _EXTRA_RUSTC_FLAGS = str(Label("@rules_rust//rust/settings:extra_rustc_flags"))
 
-# The check configuration's linker: rust-lld with the export list cut back to
-# the check roots. Read //bazel/wasm_block_check/link_filter.rs for what it
-# does and what it cannot break. A bare name, found on the PATH rustc gives a
-# linker: the custom-std toolchains place it in their sysroot, built for the
-# host each action runs on.
-_LINK_FILTER = "frustrate-link-filter"
-
 def _wasm_platform_transition_impl(settings, attr):
     # The whole transition. Everything a target platform needs beyond its
     # constraints — the rules_rust channel for the threaded build, a C
@@ -482,17 +475,15 @@ def _block_check_transition_impl(settings, attr):
         # with `-Dwarnings` — deliberately, since a diagnostic artifact should
         # not be able to fail for a lint about code it exists to delete.
         #
-        # `-Clinker`: the export filter. rustc hands wasm-ld one explicit
-        # `--export` argument per exported symbol, dependency rlibs' included,
-        # so the cfg above cannot reach a `#[wasm_bindgen]` export and the
-        # filter cuts it off the link line instead. Part of the configuration
-        # rather than per-target, and unconditional rather than only where a
-        # graph needs it, so the filter's fail-closed check runs on every check
-        # build.
+        # The export filter, which cuts dependency rlibs' `#[wasm_bindgen]`
+        # exports off the link line, is not here: frustrate's custom-std
+        # toolchains, which carry it in their sysroot, add its `-Clinker=`
+        # under //bazel:block_check themselves (custom_std.bzl). A stock
+        # toolchain links with rust-lld, and the scanner refuses any export
+        # that is not a check root.
         _EXTRA_RUSTC_FLAGS: [
             "--cfg=frustrate_block_check",
             "-Adead_code",
-            "-Clinker=" + _LINK_FILTER,
         ],
         # Turns //runtime/rust's `wasm-threads` feature off while the platform
         # above keeps the +atomics std on.
@@ -1052,6 +1043,7 @@ def _frustrate_block_check_impl(ctx):
         inputs = [module, census],
         outputs = [marker],
         arguments = [a for p in ctx.attr.slow for a in ["--slow", p]] +
+                    [a for p in ctx.attr.slow_imports for a in ["--slow-import", p]] +
                     ["--claims", census.path, module.path, str(ctx.label), marker.path],
         mnemonic = "FrustrateWasmBlockCheck",
         progress_message = "checking no_block claims in %{label}",
@@ -1095,10 +1087,11 @@ frustrate_block_check = rule(
           "changes.** The artifact is scanned, never executed or served: its " +
           "roots call the generated glue with an empty request buffer, which " +
           "would fail at run time and does not matter, because what is being " +
-          "asked is which code is *linked*. Tag a target that has a `crate` " +
-          "`manual` — it needs the locally built +atomics std (run " +
-          "`bazel run //toolchain/custom_std:build` first), and a `manual` " +
-          "target's own build_test must be tagged too.\n\n" +
+          "asked is which code is *linked*. On the default platform, tag a " +
+          "target that has a `crate` `manual` — it needs the locally built " +
+          "+atomics std (run `bazel run //toolchain/custom_std:build` " +
+          "first), and a `manual` target's own build_test must be tagged " +
+          "too. On //bazel:wasm32_wasi it needs neither.\n\n" +
           "**The transition overwrites `--@rules_rust//rust/settings:" +
           "extra_rustc_flags` for everything under this target.** Whatever a " +
           "build passed on the command line is gone in this configuration, " +
@@ -1183,23 +1176,42 @@ frustrate_block_check = rule(
                   "caller wherever there is another thread to run it on. A " +
                   "marker must stay a function of its own: mark it " +
                   "`#[inline(never)]`, because even `#[inline]` vanishes at " +
-                  "opt-level 0. std's IO cannot be named this way on " +
-                  "`wasm32-unknown-unknown`: `std::fs` and `std::net` are " +
-                  "stubs there and inline away. A misspelt path matches nothing and " +
+                  "opt-level 0. std's IO cannot be named this way: its " +
+                  "functions inline away. Check IO with `slow_imports` on " +
+                  "//bazel:wasm32_wasi. A misspelt path matches nothing and " +
                   "stays green: try a new path once by calling it from a " +
                   "claimed member and watching the target go red.\n\n" +
                   "Ignored without `crate`: a claims-only target scans " +
                   "nothing.",
         ),
+        "slow_imports": attr.string_list(
+            doc = "Host functions a claimed body may not call, as " +
+                  "`<module>.<field>` with an optional trailing `*`: " +
+                  "`wasi_snapshot_preview1.path_*`. On a wasip1 build this " +
+                  "is how IO is checked, because std reaches files and " +
+                  "polls through these imports and an import cannot be " +
+                  "inlined away. `path_*` covers every file opened by " +
+                  "name, `poll_oneoff` every sleep and poll, `sock_*` the " +
+                  "sockets wasip1 has; it has no `connect`, so std's " +
+                  "`TcpStream::connect` is a stub there that fails at once. " +
+                  "Do not name `fd_write` or `fd_read`: std's panic hook " +
+                  "writes to stderr through a trait object, so the check " +
+                  "cannot tell a claimed body's call from the hook's and " +
+                  "reports that it cannot verify.",
+        ),
         "platform": attr.label(
             default = Label("//bazel:wasm32_threads"),
-            doc = "The target platform. The default is the only one that " +
-                  "answers the question: `memory.atomic.wait32` exists only " +
-                  "in a `+atomics` build, so on a single-threaded platform a " +
-                  "body that locks a `Mutex` produces no wait instruction and " +
-                  "the check is green for a reason that has nothing to do " +
-                  "with the claim. Override only for another platform whose " +
-                  "std is genuinely `+atomics`.\n\n" +
+            doc = "The target platform. The default is the one that " +
+                  "checks waits: `memory.atomic.wait32` exists only in a " +
+                  "`+atomics` build, so on a single-threaded platform a body " +
+                  "that locks a `Mutex` produces no wait instruction.\n\n" +
+                  "//bazel:wasm32_wasi checks `slow` and `slow_imports` " +
+                  "instead, and nothing about waits. It builds with the " +
+                  "stock std rules_rust fetches, so unlike the default it " +
+                  "needs no locally built std and no `manual` tag. It suits " +
+                  "a bridge that ships on wasip1, whose cfgs it matches. A " +
+                  "module built without `+atomics` and given no slow names " +
+                  "is refused, because its green would say nothing.\n\n" +
                   "The platform carries //bazel:wasm_threads_enabled and the " +
                   "transition sets //bazel:block_check, which is what turns " +
                   "frustrate's own `wasm-threads` feature off underneath it: " +
