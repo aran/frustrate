@@ -5,6 +5,7 @@ load(
     "//bazel:defs.bzl",
     "frustrate_block_check",
     "frustrate_bridge_library",
+    "frustrate_native_block_check",
     "frustrate_bridge_outputs",
     "frustrate_wasm_module",
     "frustrate_wasm_opt",
@@ -369,6 +370,23 @@ frustrate_block_check(
         "wasi_snapshot_preview1.poll_oneoff",
         "wasi_snapshot_preview1.sock_*",
     ],
+)
+
+# The same claim checked over each native platform's IR, built from this host.
+# Stock toolchain, so no `manual` tag.
+frustrate_native_block_check(
+    name = "fixture_native_check",
+    bridge = ":bridge",
+    crate = ":fixture_shared",
+    platforms = [
+        "//bazel:android_aarch64",
+        "//bazel:android_x86_64",
+        "//bazel:ios_aarch64",
+        "//bazel:linux_aarch64",
+        "//bazel:linux_x86_64",
+        "//bazel:macos_aarch64",
+    ],
+    slow_externs = ["open"],
 )
 
 # Every half of the rule's contract, under one label: the caller-run claim

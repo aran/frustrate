@@ -20,7 +20,8 @@ rust_test(
 )
 
 # The `#[bridge(no_block)]` gate: it decodes a check artifact's code section and
-# fails if a claimed body can reach `memory.atomic.wait` or a `--slow` path. See main.rs for the
+# fails if a claimed body can reach `memory.atomic.wait` or a `--slow` path.
+# With `--ir` it reads a native build's whole-program LLVM IR instead (ir.rs). See main.rs for the
 # decision procedure, the panic-path exemption and what green does not claim.
 #
 # Zero dependencies, matching //bazel/wasm_std_check and
@@ -30,7 +31,7 @@ rust_test(
 # identical binary.
 rust_binary(
     name = "wasm_block_check",
-    srcs = ["main.rs"],
+    srcs = ["ir.rs", "libc.rs", "main.rs"],
     edition = "2021",
     rustc_flags = ["-Dwarnings"],
     visibility = ["//visibility:public"],

@@ -107,6 +107,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
 
+mod ir;
+mod libc;
+
 /// Every function export of a check artifact must start with this.
 ///
 /// Codegen emits one `#[cfg(frustrate_block_check)] #[no_mangle] pub extern "C"
@@ -335,11 +338,13 @@ impl SlowImport {
 struct Sinks {
     paths: Vec<SlowPath>,
     imports: Vec<SlowImport>,
+    /// Native externals, for the IR check ([`ir`]).
+    externs: Vec<ir::SlowExtern>,
 }
 
 impl Sinks {
     fn is_empty(&self) -> bool {
-        self.paths.is_empty() && self.imports.is_empty()
+        self.paths.is_empty() && self.imports.is_empty() && self.externs.is_empty()
     }
 
     fn text(&self) -> String {
@@ -347,6 +352,7 @@ impl Sinks {
             .iter()
             .map(SlowPath::text)
             .chain(self.imports.iter().map(SlowImport::text))
+            .chain(self.externs.iter().map(ir::SlowExtern::text))
             .map(|t| format!("`{t}`"))
             .collect::<Vec<_>>()
             .join(", ")
@@ -364,7 +370,7 @@ impl Sinks {
 /// to the module holding the impl. Either way the item's own crate comes
 /// first.
 fn own_path(sym: &str) -> Vec<String> {
-    let text = readable(sym);
+    let text = raw_path(sym);
     if !sym.starts_with("_ZN") {
         return text.split("::").map(str::to_string).collect();
     }
@@ -1003,6 +1009,23 @@ fn parse_names(body: &[u8], m: &mut Module) -> Result<(), String> {
 /// unchanged: `frustrate_check_block_0_tag_join` contains digits that are not
 /// lengths.
 fn readable(sym: &str) -> String {
+    let raw = raw_path(sym);
+    if !sym.starts_with("_ZN") {
+        return raw;
+    }
+    // Legacy escapes a trait impl's `<T as Trait>` and generic arguments
+    // inside one identifier.
+    raw.replace("$LT$", "<")
+        .replace("$GT$", ">")
+        .replace("$u20$", " ")
+        .replace("$RF$", "&")
+        .replace("$C$", ",")
+        .replace("..", "::")
+}
+
+/// [`readable`] before legacy's escapes are undone: the identifiers joined by
+/// `::`, which is what [`own_path`] splits.
+fn raw_path(sym: &str) -> String {
     if !sym.starts_with("_ZN") && !sym.starts_with("_R") {
         return sym.to_string();
     }
@@ -1500,69 +1523,8 @@ fn run_with(
                 .join("\n")
         ));
     }
-    // Control 3: the roots are the ones claimed. With a census this is an
-    // equality in both directions, which is strictly sharper than "at least
-    // one root": losing *some* roots is otherwise invisible, and the module
-    // would be scanned — and pass — over whatever remained.
-    match claims {
-        Some(c) => {
-            let missing: Vec<&(String, String)> = c
-                .roots()
-                .filter(|(sym, _)| !root_names.contains(sym))
-                .collect();
-            if !missing.is_empty() {
-                return Err(format!(
-                    "wasm_block_check: {label} is missing the check root of {} \
-                     claim(s) the census lists:\n\n{}\n\n\
-                     A root is emitted for every artifact-settled \
-                     `#[bridge(no_block)]` member, so either `--cfg \
-                     frustrate_block_check` never reached rustc — in which case \
-                     the module's real exports were suppressed by something else \
-                     and nothing below would mean anything — or the module and \
-                     the census were generated from different sources. Rebuild \
-                     both.",
-                    missing.len(),
-                    missing
-                        .iter()
-                        .map(|(sym, display)| format!("  {display} — expected `{sym}`"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ));
-            }
-            let extra: Vec<&String> = root_names
-                .iter()
-                .filter(|n| !c.roots().any(|(sym, _)| sym == *n))
-                .collect();
-            if !extra.is_empty() {
-                return Err(format!(
-                    "wasm_block_check: {label} exports check root(s) the census \
-                     does not claim:\n\n{}\n\n\
-                     The module and the census disagree about what is claimed, so \
-                     a scan over these roots answers a question nobody asked. \
-                     Rebuild both from the same sources.",
-                    extra
-                        .iter()
-                        .map(|n| format!("  {n}"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ));
-            }
-        }
-        None => {
-            if roots.is_empty() {
-                return Err(format!(
-                    "wasm_block_check: {label} exports no `{ROOT_PREFIX}*` function, so \
-                     this check covers nothing and its silence means nothing.\n\
-                     \n\
-                     Either no member in this module is `#[bridge(no_block)]` — claim \
-                     one, or drop the check target — or the artifact was built without \
-                     `--cfg frustrate_block_check`, in which case the roots were never \
-                     emitted and the module's real exports were suppressed by something \
-                     else."
-                ));
-            }
-        }
-    }
+    // Control 3: the roots are the ones claimed.
+    match_census(&root_names, claims, label)?;
 
     // Control 4: there is something to find. A module built without atomics
     // holds no wait instruction, so with no slow names its green would be
@@ -1598,6 +1560,39 @@ fn run_with(
     live_roots.extend(cut.iter().copied());
     let live = reach(&m, &live_roots, &BTreeSet::new());
     let live_pruned = reach(&m, &traversal_roots, &cut);
+
+    // Control 5: every full root still reaches its member. A root calls its
+    // member's glue with an empty request; an optimizer that sees the decode
+    // fail deletes the body after it, and the scan would pass every member
+    // that takes an argument.
+    if let Some(c) = claims {
+        let folded: Vec<String> = c
+            .artifact
+            .iter()
+            .filter_map(|(sym, display)| {
+                let at = root_names.iter().position(|n| n == sym)?;
+                let glue = format!("call_{}", &sym[ROOT_PREFIX.len()..]);
+                let reaches = reach(&m, &[roots[at]], &BTreeSet::new()).iter().any(|f| {
+                    m.names
+                        .get(f)
+                        .is_some_and(|n| own_path(n).last().is_some_and(|l| *l == glue))
+                });
+                (!reaches).then(|| format!("  {display}"))
+            })
+            .take(MEMBER_CAP)
+            .collect();
+        if !folded.is_empty() {
+            return Err(format!(
+                "wasm_block_check: cannot verify {label}: these roots no longer \
+                 reach their member's glue:\n\n{}\n\n\
+                 The check artifact was optimized: a flag outside the check's \
+                 configuration (a crate's own `rustc_flags`, say) raised its \
+                 opt-level, and the optimizer deleted the member bodies the \
+                 scan exists to read. Build the check at opt-level 0.",
+                folded.join("\n")
+            ));
+        }
+    }
 
     let waits: Vec<Finding> = m
         .bodies
@@ -1749,7 +1744,7 @@ fn run_with(
     } else {
         format!(
             ", checked against {} slow name(s) ({})",
-            sinks.paths.len() + sinks.imports.len(),
+            sinks.paths.len() + sinks.imports.len() + sinks.externs.len(),
             sinks.text()
         )
     };
@@ -1862,6 +1857,73 @@ fn run_with(
 /// How many members a red verdict gives a full path for. The rest are named
 /// with the site they reach, so the verdict is still the whole inventory.
 const WITNESSED: usize = 32;
+
+/// Control 3 of both scanners: the roots are the ones claimed. With a census
+/// this is an equality in both directions, which is strictly sharper than "at
+/// least one root": losing *some* roots is otherwise invisible, and the
+/// artifact would be scanned — and pass — over whatever remained.
+fn match_census(root_names: &[String], claims: Option<&Claims>, label: &str) -> Result<(), String> {
+    match claims {
+        Some(c) => {
+            let missing: Vec<&(String, String)> = c
+                .roots()
+                .filter(|(sym, _)| !root_names.contains(sym))
+                .collect();
+            if !missing.is_empty() {
+                return Err(format!(
+                    "wasm_block_check: {label} is missing the check root of {} \
+                     claim(s) the census lists:\n\n{}\n\n\
+                     A root is emitted for every artifact-settled \
+                     `#[bridge(no_block)]` member, so either `--cfg \
+                     frustrate_block_check` never reached rustc — in which case \
+                     the module's real exports were suppressed by something else \
+                     and nothing below would mean anything — or the module and \
+                     the census were generated from different sources. Rebuild \
+                     both.",
+                    missing.len(),
+                    missing
+                        .iter()
+                        .map(|(sym, display)| format!("  {display} — expected `{sym}`"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ));
+            }
+            let extra: Vec<&String> = root_names
+                .iter()
+                .filter(|n| !c.roots().any(|(sym, _)| sym == *n))
+                .collect();
+            if !extra.is_empty() {
+                return Err(format!(
+                    "wasm_block_check: {label} exports check root(s) the census \
+                     does not claim:\n\n{}\n\n\
+                     The module and the census disagree about what is claimed, so \
+                     a scan over these roots answers a question nobody asked. \
+                     Rebuild both from the same sources.",
+                    extra
+                        .iter()
+                        .map(|n| format!("  {n}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ));
+            }
+        }
+        None => {
+            if root_names.is_empty() {
+                return Err(format!(
+                    "wasm_block_check: {label} exports no `{ROOT_PREFIX}*` function, so \
+                     this check covers nothing and its silence means nothing.\n\
+                     \n\
+                     Either no member in this module is `#[bridge(no_block)]` — claim \
+                     one, or drop the check target — or the artifact was built without \
+                     `--cfg frustrate_block_check`, in which case the roots were never \
+                     emitted and the module's real exports were suppressed by something \
+                     else."
+                ));
+            }
+        }
+    }
+    Ok(())
+}
 
 /// A shortest path from the roots to the nearest of `targets` over the pruned
 /// graph, for the message.
@@ -2387,9 +2449,15 @@ fn main() -> ExitCode {
     // parsing below never sees them.
     let mut args: Vec<String> = Vec::new();
     let mut slow = Sinks::default();
+    // `--ir`: the input is a native build's LLVM IR, not a wasm module.
+    let mut ir_mode = false;
     let mut raw = std::env::args();
     while let Some(a) = raw.next() {
-        if a != "--slow" && a != "--slow-import" {
+        if a == "--ir" {
+            ir_mode = true;
+            continue;
+        }
+        if a != "--slow" && a != "--slow-import" && a != "--slow-extern" {
             args.push(a);
             continue;
         }
@@ -2397,10 +2465,10 @@ fn main() -> ExitCode {
             .next()
             .ok_or_else(|| format!("wasm_block_check: `{a}` wants a value"))
             .and_then(|v| {
-                if a == "--slow" {
-                    slow.paths.push(SlowPath::parse(&v)?);
-                } else {
-                    slow.imports.push(SlowImport::parse(&v)?);
+                match a.as_str() {
+                    "--slow" => slow.paths.push(SlowPath::parse(&v)?),
+                    "--slow-import" => slow.imports.push(SlowImport::parse(&v)?),
+                    _ => slow.externs.push(ir::SlowExtern::parse(&v)?),
                 }
                 Ok(())
             });
@@ -2439,6 +2507,8 @@ fn main() -> ExitCode {
     let usage = "usage: wasm_block_check [--slow <path> | --slow-import <module.field>]... \
          <module.wasm> <label> [marker-out]\n\
          \x20      wasm_block_check [--slow ... ] --claims <census> <module.wasm> <label> [marker-out]\n\
+         \x20      wasm_block_check --ir [--slow <path> | --slow-extern <symbol>]... \
+         [--claims <census>] <module.ll> <label> [marker-out]\n\
          \x20      wasm_block_check --claims-only <census> <label> [marker-out]\n\
          \x20      wasm_block_check --report <module.wasm> [label]";
     let (verdict, marker) = match args.get(1).map(String::as_str) {
@@ -2468,7 +2538,11 @@ fn main() -> ExitCode {
                         args[3]
                     ))
                 } else {
-                    run_with(&args[3], &args[4], Some(&claims), &slow)
+                    if ir_mode {
+                        ir::run_ir(&args[3], &args[4], Some(&claims), &slow)
+                    } else {
+                        run_with(&args[3], &args[4], Some(&claims), &slow)
+                    }
                 }
             });
             (v, args.get(5))
@@ -2484,6 +2558,7 @@ fn main() -> ExitCode {
             eprintln!("{usage}");
             return ExitCode::FAILURE;
         }
+        _ if args.len() >= 3 && ir_mode => (ir::run_ir(&args[1], &args[2], None, &slow), args.get(3)),
         _ if args.len() >= 3 => (run_with(&args[1], &args[2], None, &slow), args.get(3)),
         _ => {
             eprintln!("{usage}");
@@ -2542,6 +2617,7 @@ mod tests {
 
     /// A defined function: its name-section name and its instruction bytes
     /// (locals and the trailing `end` are added here).
+    #[derive(Clone)]
     struct Fun {
         name: String,
         code: Vec<u8>,
@@ -2572,7 +2648,7 @@ mod tests {
         ]
     }
 
-    #[derive(Default)]
+    #[derive(Default, Clone)]
     struct Build {
         /// Function imports, which shift the whole index space.
         imports: Vec<(&'static str, &'static str)>,
@@ -2711,6 +2787,30 @@ mod tests {
             run(p.to_str().unwrap(), "//pkg:target.wasm")
         }
 
+        /// This module with each check root calling a glue function named as
+        /// codegen names it, `…::frustrate_generated::call_{id}_{name}`, the
+        /// way a real root does: what the census-matched gate requires.
+        fn with_glue(&self) -> Build {
+            let mut b = self.clone();
+            let base = b.imports.len() + b.funcs.len();
+            let mut added = 0;
+            for (name, kind, idx) in self.exports.iter() {
+                let Some(rest) = name.strip_prefix(ROOT_PREFIX) else { continue };
+                if *kind != 0 {
+                    continue;
+                }
+                let glue = format!("call_{rest}");
+                let sym = format!("_RNvNtCs1_7fixture19frustrate_generated{}{glue}", glue.len());
+                b.funcs.push(fun(&sym, vec![0x01]));
+                let at = *idx as usize - b.imports.len();
+                let mut code = call(base + added);
+                code.extend(b.funcs[at].code.clone());
+                b.funcs[at].code = code;
+                added += 1;
+            }
+            b
+        }
+
         /// The gate with `--slow` paths and an optional census.
         fn check_slow(&self, slow: &[&str], rows: Option<&str>) -> Result<String, String> {
             use std::sync::atomic::{AtomicU64, Ordering};
@@ -2718,8 +2818,9 @@ mod tests {
             let dir = std::env::temp_dir().join(format!("wasm_block_slow_{}", std::process::id()));
             std::fs::create_dir_all(&dir).unwrap();
             let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
-            std::fs::write(&p, self.wasm()).unwrap();
+            std::fs::write(&p, self.with_glue().wasm()).unwrap();
             let sinks = Sinks {
+                externs: Vec::new(),
                 paths: slow
                     .iter()
                     .filter(|t| !t.contains('.'))
@@ -2757,7 +2858,7 @@ mod tests {
             let dir = std::env::temp_dir().join(format!("wasm_block_claims_{}", std::process::id()));
             std::fs::create_dir_all(&dir).unwrap();
             let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
-            std::fs::write(&p, self.wasm()).unwrap();
+            std::fs::write(&p, self.with_glue().wasm()).unwrap();
             let c = census(rows)?;
             c.refuse_empty("//pkg:target.wasm")?;
             if c.root_count() == 0 {
@@ -3853,5 +3954,19 @@ mod tests {
         b.features = Some(&["atomics", "bulk-memory"]);
         let ok = b.check().unwrap();
         assert!(ok.contains("clean") && !ok.contains("without `+atomics`"), "{ok}");
+    }
+
+    #[test]
+    fn a_root_that_no_longer_reaches_its_glue_is_refused() {
+        // `clean()` without `with_glue`: the root calls nothing, as an
+        // optimizer leaves it once it has proved the decode fails.
+        let dir = std::env::temp_dir().join(format!("wasm_block_folded_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("m.wasm");
+        std::fs::write(&p, clean().wasm()).unwrap();
+        let c = census("artifact 0 tag_join").unwrap();
+        let e = run_with(p.to_str().unwrap(), "//pkg:t", Some(&c), &Sinks::default()).unwrap_err();
+        assert!(e.contains("no longer reach their member's glue"), "{e}");
+        assert!(e.contains("  tag_join"), "{e}");
     }
 }

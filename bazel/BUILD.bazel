@@ -1,4 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load(":native_block_check.bzl", "no_cc_allocator")
 
 # frustrate_wasm_module's default platform. Stable Rust, single-threaded
 # wasm — the charter's default web execution model. Needs no `flags`: the
@@ -316,3 +317,31 @@ platform(
     ],
     visibility = ["//visibility:public"],
 )
+
+# The native platforms frustrate_native_block_check proves claims for, one per
+# OS and CPU a Flutter app ships on. Its `platforms` names them; each analysis
+# builds only the bridge crate for its platform.
+[
+    platform(
+        name = "%s_%s" % (os, cpu),
+        constraint_values = [
+            "@platforms//os:" + os,
+            "@platforms//cpu:" + cpu,
+        ] + extra,
+        visibility = ["//visibility:public"],
+    )
+    for os, cpu, extra in [
+        ("android", "aarch64", []),
+        ("android", "x86_64", []),
+        # rules_rust tells an iOS device's toolchain from a simulator's by
+        # this constraint.
+        ("ios", "aarch64", ["@apple_support//constraints:device"]),
+        ("linux", "aarch64", []),
+        ("linux", "x86_64", []),
+        ("macos", "aarch64", []),
+    ]
+]
+
+# The allocator library the native analyses' builds give rules_rust's Rust
+# toolchain in place of its C one (native_block_check.bzl says why).
+no_cc_allocator(name = "no_block_check_allocator")

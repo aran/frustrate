@@ -49,10 +49,13 @@ marker), nor any host import in `slow_imports` (on `//bazel:wasm32_wasi`, the
 `wasi_snapshot_preview1` calls behind files and polls); green
 is sound, red can be a false alarm. To hold every sync member of a bridge to
 this, put `bridge_file!(no_block)` in each of its files.
-**On native the claim is trusted, not verified.** A body split by `#[cfg]` is
-checked only in its wasm arm, so a native arm that takes a `Mutex` makes the
-claim true on web and false on native. [design/blocking.md](design/blocking.md)
-has the full argument.
+On native, `frustrate_native_block_check` proves the same over each
+platform's whole-program LLVM IR: no claimed member reaches a C library call
+that waits (`pthread_mutex_lock`, `dispatch_semaphore_wait`, a futex wait, …),
+a `slow` path, or a C function in `slow_externs`. It knows the waits of
+Apple's libSystem, Android's bionic and glibc, and builds every platform's IR
+from any host. Each check sees only its own target's `#[cfg]` arm.
+[design/blocking.md](design/blocking.md) has the full argument.
 
 ## `native_only`
 

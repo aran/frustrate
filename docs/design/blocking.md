@@ -94,7 +94,22 @@ A wait is not the only way to stall the caller. `frustrate_block_check`'s
 `slow_imports` names host imports; a claimed body may not reach either. IO is
 checked through imports on a wasip1 build, where std's files and polls are
 `wasi_snapshot_preview1` calls that cannot be inlined away; that build has no
-atomics, so it checks no waits, and pairs with the threaded check for those. They are settled on the same
+atomics, so it checks no waits, and pairs with the threaded check for those.
+
+## Native
+
+`frustrate_native_block_check` settles claims over a native build for each
+platform it names: the bridge crate compiled for the platform with fat LTO, its
+whole-program LLVM IR scanned for calls to the platform's C library's waits
+(Apple's libSystem, Android's bionic, glibc; on Linux std's locks are futexes,
+read as the `syscall` they make). Only the crate is built for the platform and
+the IR is written without linking, so every platform's analysis runs from any
+host with the platform's Rust std. The IR attributes every address-take to the function or constant
+that makes it, so unlike the wasm scan it follows `dyn` calls instead of
+refusing them. frustrate's own registries take a `std::sync` lock natively
+where threaded wasm spins; those sections are bounded, the stall is the same
+either way, and the scanner names them rather than following them
+(`bazel/wasm_block_check/ir.rs`). They are settled on the same
 terms as a wait: placement settles a dispatched or actor body because it runs
 off the caller wherever there is another thread. Single-threaded web has no
 other thread, so a dispatched body there runs on the main thread, slow or not.

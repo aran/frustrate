@@ -9,6 +9,9 @@ bazel_dep(name = "rules_rust", version = "0.75.0")
 bazel_dep(name = "rules_dart", version = "0.7.3")
 bazel_dep(name = "platforms", version = "1.1.0")
 
+# For the constraint that marks an iOS device platform (//bazel:ios_aarch64).
+bazel_dep(name = "apple_support", version = "2.9.1")
+
 # build_test, for the Bazel rule tests in //tests/bazel_rules. Already in the
 # resolved graph (a transitive dep of rules_rust); declared direct so
 # @bazel_skylib is visible from the root module.
@@ -33,6 +36,21 @@ use_repo(multitool, "multitool")
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2021",
+    # rules_rust's defaults, and the std of every platform the native
+    # no_block analyses build for (//bazel:BUILD.bazel). Replaces the
+    # default list.
+    extra_target_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "wasm32-unknown-unknown",
+        "wasm32-wasip1",
+        "wasm32-wasip2",
+        "aarch64-apple-ios",
+        "aarch64-linux-android",
+        "x86_64-linux-android",
+    ],
     versions = ["1.99.1"],
 )
 use_repo(rust, "rust_toolchains")

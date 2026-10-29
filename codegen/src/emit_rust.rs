@@ -401,10 +401,15 @@ pub fn claim_census(iface: &Interface) -> String {
 /// middle of it — cannot move those windows.
 ///
 /// The artifact is scanned, never executed. So each root only has to be
-/// type-correct and to keep the right code linker-live: `ByteReader::new(&[])`
+/// type-correct and to keep the right code linker-live: an empty request
 /// decodes nothing and would fail at runtime, which does not matter and is why
 /// no request bytes are synthesised. What matters is that the call edge exists,
 /// so lld keeps whatever the root names and everything that reaches from it.
+///
+/// The empty slice goes through `black_box`. A literal one lets an optimizer
+/// prove the first decode fails and delete the member's body after it, which
+/// turns the scan green for every member that takes an argument; a project
+/// whose own flags raise the check build's opt-level did exactly that.
 ///
 /// # Two shapes, because a claim is settled in two ways
 ///
@@ -476,7 +481,7 @@ fn emit_block_checks(out: &mut String, iface: &Interface) {
             Settlement::Artifact => {
                 let _ = write!(
                     out,
-                    "    let mut r = ByteReader::new(&[]);\n    \
+                    "    let mut r = ByteReader::new(core::hint::black_box::<&[u8]>(&[]));\n    \
                      let _ = call_{}_{}(&mut r);\n",
                     f.fn_id, f.name
                 );
@@ -586,7 +591,7 @@ fn returned_opaques<'a>(iface: &'a Interface, f: &'a Function) -> Vec<&'a str> {
 /// `black_box(0)` rather than a bare `0` so no optimizer can decide the call
 /// dereferences null, prove the block unreachable, and delete the very edge the
 /// scan is looking for. The artifact is scanned and never executed, so the
-/// argument only has to keep the edge — the same reason `ByteReader::new(&[])`
+/// argument only has to keep the edge — the same reason a root's empty request
 /// decodes nothing.
 ///
 /// **Residual: a `dyn` opaque crosses a vtable.** Its inner glue drops

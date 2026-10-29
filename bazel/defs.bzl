@@ -18,6 +18,7 @@ so a bridge crate declared as a bare cdylib had unit tests and nothing else.
 
 load("@rules_dart//dart:providers.bzl", "DartCodeAssetInfo")
 load("@rules_rust//rust:defs.bzl", "rust_common", "rust_library", "rust_shared_library")
+load(":native_block_check.bzl", _frustrate_native_block_check = "frustrate_native_block_check")
 
 FrustrateBridgeInfo = provider(
     doc = "What `frustrate_bridge` generated bindings for: the code-asset id they resolve the bridge library by, and what a bridge naming it in `models` reads.",
@@ -415,6 +416,7 @@ def frustrate_library(name, bridges, crate_name = None, visibility = None, **kwa
 # generated BUILD files.
 _BLOCK_CHECK_FLAG = str(Label("//bazel:block_check"))
 _EXTRA_RUSTC_FLAGS = str(Label("@rules_rust//rust/settings:extra_rustc_flags"))
+_EXTRA_RUSTC_FLAG = str(Label("@rules_rust//rust/settings:extra_rustc_flag"))
 
 def _wasm_platform_transition_impl(settings, attr):
     # The whole transition. Everything a target platform needs beyond its
@@ -485,6 +487,10 @@ def _block_check_transition_impl(settings, attr):
             "--cfg=frustrate_block_check",
             "-Adead_code",
         ],
+        # The repeatable flag reaches rustc after the list above, so a
+        # project's `-Copt-level` there (a `.bazelrc` line, say) would beat
+        # the debug build pinned above. Appended, so it stays last.
+        _EXTRA_RUSTC_FLAG: settings[_EXTRA_RUSTC_FLAG] + ["-Copt-level=0"],
         # Turns //runtime/rust's `wasm-threads` feature off while the platform
         # above keeps the +atomics std on.
         # //bazel:BUILD.bazel has the full argument; the short version is that
@@ -495,10 +501,11 @@ def _block_check_transition_impl(settings, attr):
 
 _block_check_transition = transition(
     implementation = _block_check_transition_impl,
-    inputs = [],
+    inputs = [_EXTRA_RUSTC_FLAG],
     outputs = [
         "//command_line_option:platforms",
         "//command_line_option:compilation_mode",
+        _EXTRA_RUSTC_FLAG,
         _EXTRA_RUSTC_FLAGS,
         _BLOCK_CHECK_FLAG,
     ],
@@ -1230,3 +1237,5 @@ frustrate_block_check = rule(
         ),
     },
 )
+
+frustrate_native_block_check = _frustrate_native_block_check
