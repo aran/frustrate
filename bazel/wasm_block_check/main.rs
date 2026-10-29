@@ -1,5 +1,5 @@
 //! Fail the build when a `#[bridge(no_block)]` body can reach
-//! `memory.atomic.wait32/64`.
+//! `memory.atomic.wait32/64`, or a function under a `--slow` path.
 //!
 //! `no_block` is the author's claim that a body never waits, transitively, on
 //! any thread. Codegen cannot see through a call
@@ -10,7 +10,9 @@
 //!
 //! # How it decides
 //!
-//! Per wait-containing function `W`, in order:
+//! A **site** is a function holding a wait instruction or matching a `--slow`
+//! path ([`SlowPath`]); the procedure is the same for both. Per site `W`, in
+//! order:
 //!
 //! 1. **Start-function exemption.** `W` is the module's start function (section
 //!    8), nothing `call`s it, it is not exported and it is not table-resident.
@@ -224,6 +226,99 @@ const FATAL_ENTRIES: &[FatalEntry] = &[
 /// wakes, it never blocks, and it is legal on the main thread.
 const WAIT32: &str = "memory.atomic.wait32";
 const WAIT64: &str = "memory.atomic.wait64";
+
+/// A function the project names as slow work (`--slow <path>`): a claimed
+/// body may no more reach it than a wait.
+///
+/// Written as a Rust path and matched, whole segments only, against the
+/// leading segments of each function's demangled path ([`own_path`]). So
+/// `std::fs` matches `std::fs::read` and `std::fs::File::open` but not
+/// `std::fsx`, and `app::main_thread::slow` matches that function and its
+/// closures. The leading segments are where the item is *written*: a method in
+/// `impl Read for File` inside `std::fs` matches `std::fs`; a function generic
+/// over `std::fs::File` written elsewhere does not.
+///
+/// A marker function must survive as a function of its own, so
+/// `#[inline(never)]`: even `#[inline]` vanishes from an opt-level 0 artifact.
+/// For the same reason std's IO cannot be named on `wasm32-unknown-unknown`,
+/// where `std::fs` and `std::net` are stubs that inline away.
+///
+/// A path that names nothing matches nothing. That is the one silence this
+/// cannot close: a clean artifact is one in which the named functions are
+/// absent, so absence cannot also be the evidence of a misspelling.
+struct SlowPath(Vec<String>);
+
+impl SlowPath {
+    fn parse(text: &str) -> Result<SlowPath, String> {
+        let segs: Vec<String> = text.split("::").map(str::to_string).collect();
+        let ident = |s: &String| {
+            !s.is_empty()
+                && !s.starts_with(|c: char| c.is_ascii_digit())
+                && s.chars().all(|c| c.is_alphanumeric() || c == '_')
+        };
+        if !segs.iter().all(ident) {
+            return Err(format!(
+                "wasm_block_check: `--slow {text}` is not a Rust path. Write the \
+                 path to a module or function, segments joined by `::`, with no \
+                 generics or leading `::` — `std::fs`, `my_crate::io::save`."
+            ));
+        }
+        if matches!(segs[0].as_str(), "crate" | "self" | "super") {
+            return Err(format!(
+                "wasm_block_check: `--slow {text}` starts with `{}`, which no \
+                 symbol carries. Start it with the crate's name as rustc sees it \
+                 (hyphens become underscores).",
+                segs[0]
+            ));
+        }
+        Ok(SlowPath(segs))
+    }
+
+    fn matches(&self, path: &[String]) -> bool {
+        path.len() >= self.0.len() && self.0.iter().zip(path).all(|(a, b)| a == b)
+    }
+
+    fn text(&self) -> String {
+        self.0.join("::")
+    }
+}
+
+/// The path a symbol's item is written at, segment by segment: the leading
+/// identifiers of [`readable`], which v0 mangling emits outermost-first before
+/// any generic arguments or instantiating crate.
+///
+/// Legacy mangling packs a trait impl's `<Type as Trait>` into one escaped
+/// identifier and a generic type's arguments into its own segment
+/// (`Vec$LT$T$GT$`). Both are unpacked to the type's own path, so legacy
+/// attributes a trait method to the implementing type where v0 attributes it
+/// to the module holding the impl. Either way the item's own crate comes
+/// first.
+fn own_path(sym: &str) -> Vec<String> {
+    let text = readable(sym);
+    if !sym.starts_with("_ZN") {
+        return text.split("::").map(str::to_string).collect();
+    }
+    let unescape = |s: &str| {
+        s.trim_start_matches('_')
+            .replace("$LT$", "<")
+            .replace("$GT$", ">")
+            .replace("$u20$", " ")
+            .replace("$RF$", "&")
+            .replace("..", "::")
+    };
+    let mut out = Vec::new();
+    for (n, seg) in text.split("::").enumerate() {
+        let seg = unescape(seg);
+        if n == 0 && seg.starts_with('<') {
+            let inner = seg[1..].trim_start_matches('&').trim_start_matches("mut ");
+            let ty = inner.split([' ', '<', '>']).next().unwrap_or("");
+            out.extend(ty.split("::").filter(|s| !s.is_empty()).map(str::to_string));
+            continue;
+        }
+        out.push(seg.split('<').next().unwrap_or("").to_string());
+    }
+    out
+}
 
 // --------------------------------------------------------------- decoding --
 
@@ -807,6 +902,7 @@ fn readable(sym: &str) -> String {
     if !sym.starts_with("_ZN") && !sym.starts_with("_R") {
         return sym.to_string();
     }
+    let v0 = sym.starts_with("_R");
     let b = sym.as_bytes();
     let mut out: Vec<String> = Vec::new();
     let mut i = 0;
@@ -825,8 +921,10 @@ fn readable(sym: &str) -> String {
                 }
             };
             let mut s = j;
-            if s < b.len() && b[s] == b'_' {
-                s += 1; // v0's separator before an identifier starting with `_`
+            if v0 && s < b.len() && b[s] == b'_' {
+                // v0's separator before an identifier starting with `_` or a
+                // digit. In legacy the `_` belongs to the identifier.
+                s += 1;
             }
             let e = s + len;
             if e > b.len() {
@@ -960,10 +1058,14 @@ fn side_condition(
 
 // -------------------------------------------------------------- the verdict --
 
-/// A wait site and why it survived.
+/// A site — a function holding a wait instruction or named slow — and what it
+/// is.
 struct Finding {
     func: u32,
-    kinds: Vec<&'static str>,
+    kinds: Vec<String>,
+    /// Holds a wait instruction, as opposed to only being named slow. Only a
+    /// wait can be the start function's own barrier.
+    waits: bool,
 }
 
 // ------------------------------------------------------------- the census --
@@ -1225,12 +1327,19 @@ fn claims_only(label: &str, c: &Claims) -> Result<String, String> {
     ))
 }
 
-/// The gate with no census: every control it can apply from the module alone.
+/// The gate with no census and no slow paths: every control it can apply from
+/// the module alone.
+#[cfg(test)]
 fn run(path: &str, label: &str) -> Result<String, String> {
-    run_with(path, label, None)
+    run_with(path, label, None, &[])
 }
 
-fn run_with(path: &str, label: &str, claims: Option<&Claims>) -> Result<String, String> {
+fn run_with(
+    path: &str,
+    label: &str,
+    claims: Option<&Claims>,
+    slow: &[SlowPath],
+) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     let m = parse(&bytes)?;
 
@@ -1376,15 +1485,23 @@ fn run_with(path: &str, label: &str, claims: Option<&Claims>) -> Result<String, 
         .bodies
         .iter()
         .enumerate()
-        .filter(|(_, s)| !s.waits.is_empty())
-        .map(|(n, s)| Finding {
-            func: m.func_imports + n as u32,
-            kinds: {
-                let mut k = s.waits.clone();
-                k.sort_unstable();
-                k.dedup();
-                k
-            },
+        .filter_map(|(n, s)| {
+            let func = m.func_imports + n as u32;
+            let mut kinds: Vec<String> = s.waits.iter().map(|k| k.to_string()).collect();
+            kinds.sort_unstable();
+            kinds.dedup();
+            let waits = !kinds.is_empty();
+            if !slow.is_empty() {
+                if let Some(name) = m.names.get(&func) {
+                    let path = own_path(name);
+                    kinds.extend(
+                        slow.iter()
+                            .filter(|p| p.matches(&path))
+                            .map(|p| format!("named slow by `{}`", p.text())),
+                    );
+                }
+            }
+            (!kinds.is_empty()).then_some(Finding { func, kinds, waits })
         })
         .collect();
 
@@ -1402,7 +1519,8 @@ fn run_with(path: &str, label: &str, claims: Option<&Claims>) -> Result<String, 
 
     for w in &waits {
         // 1. The start function's own barrier.
-        if m.start == Some(w.func)
+        if w.waits
+            && m.start == Some(w.func)
             && !called.contains(&w.func)
             && !exported.contains(&w.func)
             && !m.table.contains(&w.func)
@@ -1417,18 +1535,40 @@ fn run_with(path: &str, label: &str, claims: Option<&Claims>) -> Result<String, 
         }
         // 2. Present but unexplained.
         if !live.contains(&w.func) {
+            // Where the indirect entry probably is: the table-resident functions
+            // that call down to the site. A trait object or a function pointer
+            // is the usual way in.
+            let mut entries: Vec<String> = back_reach(&rev, w.func, &BTreeSet::new())
+                .into_iter()
+                .filter(|f| m.table.contains(f))
+                .map(|f| format!("  {}", m.label(f)))
+                .collect();
+            let more = entries.len().saturating_sub(MEMBER_CAP);
+            entries.truncate(MEMBER_CAP);
+            if more > 0 {
+                entries.push(format!("  … {more} more"));
+            }
+            let entries = if entries.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "\n\nIndirectly callable functions that call down to it, \
+                     where a `dyn` call or a function pointer may enter:\n\n{}",
+                    entries.join("\n")
+                )
+            };
             return Err(format!(
                 "wasm_block_check: cannot verify {label}.\n\
                  \n\
-                 `{}` contains {} but no `call` path reaches it — not from a \
-                 check root, not from the start function, not from a fatal entry. \
-                 Something keeps it alive that this tool does not model: a \
+                 `{}` ({}) is in the module but no `call` path reaches it — not \
+                 from a check root, not from the start function, not from a fatal \
+                 entry. Something keeps it alive that this tool does not model: a \
                  `call_indirect` through the table, or a relocation lld could not \
                  prove dead. The direct-call graph cannot account for it, so the \
-                 fatal-path exemption cannot be argued for it either.\n\
+                 fatal-path exemption cannot be argued for it either.{entries}\n\
                  \n\
-                 Refusing rather than passing: a wait instruction whose liveness \
-                 is unexplained is precisely the case a green result must not \
+                 Refusing rather than passing: a site whose liveness is \
+                 unexplained is precisely the case a green result must not \
                  cover.",
                 m.label(w.func),
                 w.kinds.join(" and ")
@@ -1473,10 +1613,19 @@ fn run_with(path: &str, label: &str, claims: Option<&Claims>) -> Result<String, 
         exempt_fatal += 1;
     }
 
+    let slow_note = if slow.is_empty() {
+        String::new()
+    } else {
+        format!(
+            ", checked against {} slow path(s) ({})",
+            slow.len(),
+            slow.iter().map(|p| format!("`{}`", p.text())).collect::<Vec<_>>().join(", ")
+        )
+    };
     if red.is_empty() {
         return Ok(format!(
-            "wasm_block_check: {label} is clean — {} `no_block` root(s), {} wait \
-             site(s) exempt on the fatal-path rule, {} on the start function{}.",
+            "wasm_block_check: {label} is clean — {} `no_block` root(s){slow_note}, \
+             {} site(s) exempt on the fatal-path rule, {} on the start function{}.",
             roots.len(),
             exempt_fatal,
             exempt_start,
@@ -1484,56 +1633,104 @@ fn run_with(path: &str, label: &str, claims: Option<&Claims>) -> Result<String, 
         ));
     }
 
-    let mut msg = format!(
-        "wasm_block_check: {label}: a `#[bridge(no_block)]` body reaches \
-         `memory.atomic.wait`.\n\n"
-    );
-    for w in &red {
-        msg.push_str(&format!(
-            "  {} — {}\n",
-            m.label(w.func),
-            w.kinds.join(", ")
-        ));
-        let mut callers: Vec<u32> = rev.get(&w.func).cloned().unwrap_or_default();
-        callers.sort_unstable();
-        callers.dedup();
-        for c in callers.iter().filter(|c| live_pruned.contains(*c)) {
-            msg.push_str(&format!("      called by  {}\n", m.label(*c)));
+    // Grouped by member, because that is the unit an author fixes: one slow
+    // marker reached from forty members is forty findings, not one. Each
+    // member gets the shortest path to the nearest site it reaches.
+    let red_set: BTreeSet<u32> = red.iter().map(|w| w.func).collect();
+    let kinds_of = |f: u32| -> String {
+        red.iter()
+            .find(|w| w.func == f)
+            .map(|w| w.kinds.join(", "))
+            .unwrap_or_default()
+    };
+    let display = |sym: &str| -> String {
+        claims
+            .and_then(|c| c.roots().find(|(s, _)| s == sym).map(|(_, d)| d.clone()))
+            .unwrap_or_else(|| sym.to_string())
+    };
+    let mut members: Vec<(String, Vec<u32>, usize)> = Vec::new();
+    let mut attributed: BTreeSet<u32> = BTreeSet::new();
+    for (r, sym) in roots.iter().zip(&root_names) {
+        let reached: BTreeSet<u32> = reach(&m, &[*r], &cut)
+            .intersection(&red_set)
+            .copied()
+            .collect();
+        if let Some(path) = witness(&m, &[*r], &reached, &cut) {
+            attributed.extend(reached.iter().copied());
+            members.push((display(sym), path, reached.len()));
         }
-        if let Some(path) = witness(&m, &traversal_roots, w.func, &cut) {
-            msg.push_str("      from a claimed root:\n");
-            for (n, f) in path.iter().enumerate() {
-                msg.push_str(&format!("        {}{}\n", "  ".repeat(n.min(8)), m.label(*f)));
+    }
+
+    let mut msg = format!(
+        "wasm_block_check: {label}: {} `#[bridge(no_block)]` member(s) reach a \
+         wait instruction{}.\n\n",
+        members.len(),
+        if slow.is_empty() { "" } else { " or a function named slow" }
+    );
+    for (n, (who, path, sites)) in members.iter().enumerate() {
+        let last = *path.last().unwrap();
+        if n >= WITNESSED {
+            if n == WITNESSED {
+                msg.push_str("  Without paths:\n");
             }
+            msg.push_str(&format!("  {who} — reaches {}\n", m.label(last)));
+            continue;
+        }
+        msg.push_str(&format!("  {who}\n      reaches {} — {}\n", m.label(last), kinds_of(last)));
+        if *sites > 1 {
+            msg.push_str(&format!("      and {} other site(s)\n", sites - 1));
+        }
+        for (d, f) in path.iter().enumerate() {
+            msg.push_str(&format!("        {}{}\n", "  ".repeat(d.min(8)), m.label(*f)));
         }
         msg.push('\n');
     }
+    for w in red.iter().filter(|w| !attributed.contains(&w.func)) {
+        // Live only from the start function: no member to name.
+        msg.push_str(&format!(
+            "  {} — {}, reached from the start function\n",
+            m.label(w.func),
+            w.kinds.join(", ")
+        ));
+    }
     msg.push_str(
-        "The path above is not a panic path: it is what a claimed body does when \
-         nothing has gone\nwrong. On threaded wasm this traps on the browser's \
-         main thread and stalls a worker\nanywhere else.\n\
+        "\nThese paths are not panic paths: they are what a claimed body does \
+         when nothing has gone\nwrong. A claimed member's caller may be the \
+         main thread, where a wait traps on threaded\nwasm and stalls \
+         elsewhere, and where slow work stalls the UI.\n\
          \n\
          Three ways out, in the order they are usually right:\n\
          \n\
-         1. Take the wait out of the body — a lock-free structure, or move the \
-         state behind an\n   Actor so the ownership, not a mutex, does the \
-         serialising.\n\
-         2. Make the body `async` and `.await` instead: the executor yields to \
-         the event loop\n   where a lock would have parked the thread.\n\
-         3. Drop the claim. `no_block` is a promise to a caller; withdrawing it \
-         is honest, and\n   `on_contention` plus `Capabilities::blocking_allowed` \
-         already describe a body that\n   may block.\n\
+         1. Take it out of the body — a lock-free structure, or state behind \
+         an Actor so the\n   ownership, not a mutex, does the serialising; \
+         slow work moved behind a member that\n   is not `sync`.\n\
+         2. Make the member `async`: the body is dispatched off the caller, \
+         and an `.await`\n   yields where a lock would have parked the thread.\n\
+         3. Drop the claim. `no_block` is a promise to a caller; withdrawing \
+         it is honest, and\n   `on_contention` plus \
+         `Capabilities::blocking_allowed` already describe a body that\n   \
+         may block.\n\
          \n",
     );
-    msg.push_str("Waits behind these entries are exempt, and were not counted above:\n");
+    msg.push_str("Sites behind these entries are exempt, and were not counted above:\n");
     for f in FATAL_ENTRIES {
         msg.push_str(&format!("  {} — {}.\n", f.what, f.why));
     }
     Err(msg)
 }
 
-/// A shortest root-to-wait path over the pruned graph, for the message.
-fn witness(m: &Module, roots: &[u32], target: u32, cut: &BTreeSet<u32>) -> Option<Vec<u32>> {
+/// How many members a red verdict gives a full path for. The rest are named
+/// with the site they reach, so the verdict is still the whole inventory.
+const WITNESSED: usize = 32;
+
+/// A shortest path from the roots to the nearest of `targets` over the pruned
+/// graph, for the message.
+fn witness(
+    m: &Module,
+    roots: &[u32],
+    targets: &BTreeSet<u32>,
+    cut: &BTreeSet<u32>,
+) -> Option<Vec<u32>> {
     let mut prev: BTreeMap<u32, u32> = BTreeMap::new();
     let mut seen: BTreeSet<u32> = BTreeSet::new();
     let mut queue: std::collections::VecDeque<u32> = std::collections::VecDeque::new();
@@ -1543,7 +1740,7 @@ fn witness(m: &Module, roots: &[u32], target: u32, cut: &BTreeSet<u32>) -> Optio
         }
     }
     while let Some(f) = queue.pop_front() {
-        if f == target {
+        if targets.contains(&f) {
             let mut path = vec![f];
             let mut at = f;
             while let Some(p) = prev.get(&at) {
@@ -1824,11 +2021,12 @@ fn report(path: &str, label: &str) -> Result<String, String> {
         .map(|(n, s)| Finding {
             func: m.func_imports + n as u32,
             kinds: {
-                let mut k = s.waits.clone();
+                let mut k: Vec<String> = s.waits.iter().map(|k| k.to_string()).collect();
                 k.sort_unstable();
                 k.dedup();
                 k
             },
+            waits: true,
         })
         .collect();
 
@@ -1925,7 +2123,7 @@ fn report(path: &str, label: &str) -> Result<String, String> {
             sources.truncate(WITNESS_CAP);
             for (what, idx) in sources {
                 out.push_str(&format!("      via {what}:\n"));
-                match witness(&m, &[idx], w.func, &cut) {
+                match witness(&m, &[idx], &BTreeSet::from([w.func]), &cut) {
                     Some(p) => {
                         for (d, f) in p.iter().enumerate() {
                             out.push_str(&format!("        {}{}\n", "  ".repeat(d.min(8)), m.label(*f)));
@@ -2044,7 +2242,26 @@ fn decode_body(instrs: &[u8]) -> Result<Scan, String> {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().collect();
+    // `--slow <path>`, repeatable and anywhere on the line, adds a named sink
+    // to the gate shapes; the positional parsing below never sees it.
+    let mut args: Vec<String> = Vec::new();
+    let mut slow: Vec<SlowPath> = Vec::new();
+    let mut raw = std::env::args();
+    while let Some(a) = raw.next() {
+        if a != "--slow" {
+            args.push(a);
+            continue;
+        }
+        match raw.next().ok_or_else(|| "wasm_block_check: `--slow` wants a path".to_string())
+            .and_then(|p| SlowPath::parse(&p))
+        {
+            Ok(p) => slow.push(p),
+            Err(e) => {
+                eprintln!("{e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     if let Err(e) = self_test() {
         eprintln!("wasm_block_check: {e}");
         return ExitCode::FAILURE;
@@ -2072,8 +2289,8 @@ fn main() -> ExitCode {
     // The three gate shapes. `--claims` is what both real drivers pass; the
     // bare positional form is kept because it is what a hand run reaches for,
     // and it is the only one whose verdict rests on the module alone.
-    let usage = "usage: wasm_block_check <module.wasm> <label> [marker-out]\n\
-         \x20      wasm_block_check --claims <census> <module.wasm> <label> [marker-out]\n\
+    let usage = "usage: wasm_block_check [--slow <path>]... <module.wasm> <label> [marker-out]\n\
+         \x20      wasm_block_check [--slow <path>]... --claims <census> <module.wasm> <label> [marker-out]\n\
          \x20      wasm_block_check --claims-only <census> <label> [marker-out]\n\
          \x20      wasm_block_check --report <module.wasm> [label]";
     let (verdict, marker) = match args.get(1).map(String::as_str) {
@@ -2103,7 +2320,7 @@ fn main() -> ExitCode {
                         args[3]
                     ))
                 } else {
-                    run_with(&args[3], &args[4], Some(&claims))
+                    run_with(&args[3], &args[4], Some(&claims), &slow)
                 }
             });
             (v, args.get(5))
@@ -2119,7 +2336,7 @@ fn main() -> ExitCode {
             eprintln!("{usage}");
             return ExitCode::FAILURE;
         }
-        _ if args.len() >= 3 => (run(&args[1], &args[2]), args.get(3)),
+        _ if args.len() >= 3 => (run_with(&args[1], &args[2], None, &slow), args.get(3)),
         _ => {
             eprintln!("{usage}");
             return ExitCode::FAILURE;
@@ -2334,6 +2551,19 @@ mod tests {
             run(p.to_str().unwrap(), "//pkg:target.wasm")
         }
 
+        /// The gate with `--slow` paths and an optional census.
+        fn check_slow(&self, slow: &[&str], rows: Option<&str>) -> Result<String, String> {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let dir = std::env::temp_dir().join(format!("wasm_block_slow_{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
+            std::fs::write(&p, self.wasm()).unwrap();
+            let slow: Vec<SlowPath> = slow.iter().map(|t| SlowPath::parse(t).unwrap()).collect();
+            let c = rows.map(census).transpose()?;
+            run_with(p.to_str().unwrap(), "//pkg:target.wasm", c.as_ref(), &slow)
+        }
+
         /// The same module through `--report`. Separate from [`Self::check`]
         /// because the two are meant to disagree about what is acceptable
         /// input: `check` rejects a module without check roots, `report`
@@ -2366,7 +2596,7 @@ mod tests {
                     c.who()
                 ));
             }
-            run_with(p.to_str().unwrap(), "//pkg:target.wasm", Some(&c))
+            run_with(p.to_str().unwrap(), "//pkg:target.wasm", Some(&c), &[])
         }
     }
 
@@ -2507,7 +2737,7 @@ mod tests {
         let b = panic_shaped(call(1));
         let ok = b.check().unwrap();
         assert!(ok.contains("clean"), "{ok}");
-        assert!(ok.contains("1 wait site(s) exempt on the fatal-path rule"), "{ok}");
+        assert!(ok.contains("1 site(s) exempt on the fatal-path rule"), "{ok}");
     }
 
     /// The discrimination that makes the rule worth having: the same wait site,
@@ -2523,8 +2753,11 @@ mod tests {
         };
         let e = b.check().unwrap_err();
         assert!(e.contains("futex_wait"), "{e}");
-        assert!(e.contains("not a panic path"), "{e}");
-        assert!(e.contains("from a claimed root"), "shows the witness: {e}");
+        assert!(e.contains("not panic paths"), "{e}");
+        assert!(
+            e.contains("        frustrate_check_block_0_tag_join\n"),
+            "shows the witness from the root: {e}"
+        );
     }
 
     /// The alloc-error hook is a fatal entry in its own right. It has to be:
@@ -2823,7 +3056,7 @@ mod tests {
         };
         let e = b.check().unwrap_err();
         assert!(e.contains("futex_wait"), "{e}");
-        assert!(e.contains("not a panic path"), "read as a finding, not as a parse failure: {e}");
+        assert!(e.contains("not panic paths"), "read as a finding, not as a parse failure: {e}");
     }
 
     #[test]
@@ -3250,7 +3483,132 @@ mod tests {
             ..Default::default()
         };
         let e = b.check_claims("artifact 0 tag_join\nplacement 5 Node::send").unwrap_err();
-        assert!(e.contains("reaches `memory.atomic.wait`"), "{e}");
-        assert!(e.contains("from a claimed root"), "{e}");
+        assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a wait"), "{e}");
+        // The census names the member; the path still starts at its root.
+        assert!(e.contains("  tag_join\n      reaches "), "{e}");
+        assert!(e.contains("        frustrate_check_block_0_tag_join\n"), "{e}");
+    }
+
+    // ---- slow paths ---------------------------------------------------
+
+    const SLOW_MARK: &str = "_RNvNtCsgIThcpvLFmw_7example11main_thread4slow";
+    const JUDGE: &str = "_RNvNtCsgIThcpvLFmw_7example6access5judge";
+
+    #[test]
+    fn own_path_is_the_items_path_in_both_manglings() {
+        let p = |s: &str| own_path(s).join("::");
+        assert_eq!(p(SLOW_MARK), "example::main_thread::slow");
+        // v0 inherent impl, instantiated in another crate: the impl's module
+        // and type first, the instantiating crate after.
+        assert!(
+            p("_RNvMs5_NtCs6jEIwG9Ob0J_5alloc7raw_vecNtB5_11RawVecInner14grow_amortizedCs6uIOFUfKMfT_9frustrate")
+                .starts_with("alloc::raw_vec::RawVecInner::grow_amortized"),
+        );
+        // v0 generic instance: the function first, its type arguments after.
+        assert!(p("_RINvNtCs1_4mine3api7processNtNtCs2_3std2fs4FileE").starts_with("mine::api::process"));
+        // Legacy trait impl and generic type, unpacked to the type's path.
+        assert_eq!(
+            p("_ZN47_$LT$std..fs..File$u20$as$u20$std..io..Read$GT$4read17h0123456789abcdefE"),
+            "std::fs::File::read"
+        );
+        assert_eq!(p("_ZN5alloc3vec16Vec$LT$T$C$A$GT$4push17h0123456789abcdefE"), "alloc::vec::Vec::push");
+    }
+
+    #[test]
+    fn a_slow_path_matches_whole_leading_segments() {
+        let fs = SlowPath::parse("std::fs").unwrap();
+        let seg = |s: &str| s.split("::").map(str::to_string).collect::<Vec<_>>();
+        assert!(fs.matches(&seg("std::fs::read")));
+        assert!(fs.matches(&seg("std::fs")));
+        assert!(!fs.matches(&seg("std::fsx::read")));
+        assert!(!fs.matches(&seg("mine::std::fs::read")));
+        assert!(!fs.matches(&seg("std")));
+    }
+
+    #[test]
+    fn a_slow_path_that_cannot_name_a_symbol_is_refused() {
+        for bad in ["crate::io::save", "self::x", "::std::fs", "std::fs::read<T>", "std::", ""] {
+            assert!(SlowPath::parse(bad).is_err(), "{bad}");
+        }
+    }
+
+    /// Two members, one of which reaches the slow marker through ordinary
+    /// code. Indices: 0 root a, 1 root b, 2 judge, 3 slow, 4 panic_fmt.
+    fn two_members(a_code: Vec<u8>) -> Build {
+        Build {
+            funcs: vec![
+                fun("frustrate_check_block_1_render", a_code),
+                fun("frustrate_check_block_2_title", call(4)),
+                fun(JUDGE, call(3)),
+                fun(SLOW_MARK, vec![0x01]),
+                fun(PANIC_FMT, vec![0x01]),
+            ],
+            exports: vec![
+                ("frustrate_check_block_1_render".into(), 0, 0),
+                ("frustrate_check_block_2_title".into(), 0, 1),
+            ],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_member_that_reaches_a_slow_function_is_named_with_its_path() {
+        let e = two_members(call(2))
+            .check_slow(
+                &["example::main_thread::slow"],
+                Some("artifact 1 Doc::render\nartifact 2 Doc::title"),
+            )
+            .unwrap_err();
+        assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a wait instruction or a function named slow"), "{e}");
+        assert!(e.contains("  Doc::render\n      reaches example::main_thread::slow — named slow by `example::main_thread::slow`"), "{e}");
+        assert!(e.contains("example::access::judge"), "the path runs through the caller: {e}");
+        assert!(!e.contains("Doc::title"), "the clean member is not listed: {e}");
+    }
+
+    #[test]
+    fn a_module_prefix_names_everything_under_it() {
+        let e = two_members(call(2)).check_slow(&["example::access"], None).unwrap_err();
+        assert!(e.contains("reaches example::access::judge — named slow by `example::access`"), "{e}");
+    }
+
+    #[test]
+    fn a_slow_function_no_member_reaches_is_absent_and_clean() {
+        // The marker exists only because the panic funnel calls it.
+        let mut b = two_members(call(4));
+        b.funcs[4].code = call(3);
+        b.funcs.push(fun(BEGIN_UNWIND, call(3)));
+        b.funcs[4].code = call(5);
+        let ok = b.check_slow(&["example::main_thread::slow"], None).unwrap();
+        assert!(ok.contains("clean"), "{ok}");
+        assert!(ok.contains("checked against 1 slow path(s) (`example::main_thread::slow`)"), "{ok}");
+        assert!(ok.contains("1 site(s) exempt on the fatal-path rule"), "{ok}");
+    }
+
+    #[test]
+    fn without_slow_paths_a_slow_function_is_ordinary_code() {
+        let ok = two_members(call(2)).check_slow(&[], None).unwrap();
+        assert!(ok.contains("clean"), "{ok}");
+    }
+
+    #[test]
+    fn a_slow_function_reached_only_indirectly_is_refused_with_the_entry() {
+        // judge is table-resident and nothing calls it: a `dyn` method.
+        let mut b = two_members(vec![0x01]);
+        b.elements = vec![2];
+        let e = b.check_slow(&["example::main_thread::slow"], None).unwrap_err();
+        assert!(e.contains("cannot verify"), "{e}");
+        assert!(e.contains("example::main_thread::slow` (named slow by"), "{e}");
+        assert!(e.contains("Indirectly callable functions that call down to it"), "{e}");
+        assert!(e.contains("  example::access::judge"), "{e}");
+    }
+
+    #[test]
+    fn a_wait_and_a_slow_function_are_both_findings() {
+        let mut b = two_members(call(2));
+        b.funcs[1].code = call(5);
+        b.funcs.push(fun(FUTEX_WAIT, wait()));
+        let e = b.check_slow(&["example::main_thread::slow"], None).unwrap_err();
+        assert!(e.contains("2 `#[bridge(no_block)]` member(s)"), "{e}");
+        assert!(e.contains("reaches std::sys::pal::wasm::futex::futex_wait — memory.atomic.wait32"), "{e}");
     }
 }

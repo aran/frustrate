@@ -1051,7 +1051,8 @@ def _frustrate_block_check_impl(ctx):
         executable = ctx.executable._block_check,
         inputs = [module, census],
         outputs = [marker],
-        arguments = ["--claims", census.path, module.path, str(ctx.label), marker.path],
+        arguments = [a for p in ctx.attr.slow for a in ["--slow", p]] +
+                    ["--claims", census.path, module.path, str(ctx.label), marker.path],
         mnemonic = "FrustrateWasmBlockCheck",
         progress_message = "checking no_block claims in %{label}",
     )
@@ -1075,7 +1076,8 @@ frustrate_block_check = rule(
           "`--cfg frustrate_block_check` the **only** exports are one root per " +
           "artifact-settled member, so lld deletes everything those roots " +
           "cannot reach and //bazel/wasm_block_check asks whether a " +
-          "`memory.atomic.wait` is left. Read that binary's header for the " +
+          "`memory.atomic.wait`, or a function named in `slow`, is left. " +
+          "Read that binary's header for the " +
           "decision procedure, the panic-path exemption, and what green does " +
           "and does not claim.\n\n" +
           "**Two shapes, and which one a crate gets is a declaration in this " +
@@ -1166,6 +1168,28 @@ frustrate_block_check = rule(
                   "Omit it when every claim in the crate is settled by " +
                   "placement. Nothing under the transition is then built, so " +
                   "the target needs no +atomics std and no `manual` tag.",
+        ),
+        "slow": attr.string_list(
+            doc = "Rust paths to functions or modules that a claimed body " +
+                  "may not reach, any more than a wait: a project's own slow-" +
+                  "work marker (`my_crate::main_thread::slow`). Each " +
+                  "matches every function whose demangled " +
+                  "path starts with it, whole segments only; a method " +
+                  "belongs to the module its `impl` is written in. Start a " +
+                  "path with the crate's name, never `crate::`.\n\n" +
+                  "Settled on the same terms as a wait: only a sync member's " +
+                  "body and a dispatched member's caller-side residue are " +
+                  "scanned, because a dispatched or actor body runs off the " +
+                  "caller wherever there is another thread to run it on. A " +
+                  "marker must stay a function of its own: mark it " +
+                  "`#[inline(never)]`, because even `#[inline]` vanishes at " +
+                  "opt-level 0. std's IO cannot be named this way on " +
+                  "`wasm32-unknown-unknown`: `std::fs` and `std::net` are " +
+                  "stubs there and inline away. A misspelt path matches nothing and " +
+                  "stays green: try a new path once by calling it from a " +
+                  "claimed member and watching the target go red.\n\n" +
+                  "Ignored without `crate`: a claims-only target scans " +
+                  "nothing.",
         ),
         "platform": attr.label(
             default = Label("//bazel:wasm32_threads"),

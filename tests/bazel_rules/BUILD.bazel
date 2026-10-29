@@ -351,6 +351,9 @@ frustrate_block_check(
     name = "fixture_block_check",
     bridge = ":bridge",
     crate = ":fixture_shared",
+    # Proves only that the paths reach the scanner: nothing by this name
+    # exists. The fixture's own `api` here goes red, naming `add` and its path.
+    slow = ["rule_test_fixture::slow"],
 )
 
 # Every half of the rule's contract, under one label: the caller-run claim

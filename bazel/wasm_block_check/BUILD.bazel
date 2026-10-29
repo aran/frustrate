@@ -20,7 +20,7 @@ rust_test(
 )
 
 # The `#[bridge(no_block)]` gate: it decodes a check artifact's code section and
-# fails if a claimed body can reach `memory.atomic.wait`. See main.rs for the
+# fails if a claimed body can reach `memory.atomic.wait` or a `--slow` path. See main.rs for the
 # decision procedure, the panic-path exemption and what green does not claim.
 #
 # Zero dependencies, matching //bazel/wasm_std_check and

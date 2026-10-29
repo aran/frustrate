@@ -33,7 +33,8 @@ under `"error"` it throws. A wrong `"block"` is a UI stall no check will find.
 ## `no_block` (and `bridge_file!(no_block)`)
 
 **You assert** that main-thread Dart calling this member cannot be stalled:
-nothing the caller runs reaches a wait instruction. The claim covers the body
+nothing the caller runs reaches a wait instruction, or a function the check
+target names as slow. The claim covers the body
 together with where it runs, so a member whose body runs on another thread
 satisfies it whatever the body does. `bridge_file!(no_block)` claims every item
 in the file; per-item options cannot opt out.
@@ -42,7 +43,11 @@ in the file; per-item options cannot opt out.
 contradictions visible in a signature — `on_contention = "block"` (FR0048) and a
 value-returning `DartFunction` on a non-`async fn` (FR0049). On web,
 `bazel/wasm_block_check` proves at link time that no `memory.atomic.wait` is
-reachable from the claimed item; green is sound, red can be a false alarm.
+reachable from the claimed item, nor any function under a path in
+`frustrate_block_check`'s `slow` (your own `#[inline(never)]` slow-work
+marker); green
+is sound, red can be a false alarm. To hold every sync member of a bridge to
+this, put `bridge_file!(no_block)` in each of its files.
 **On native the claim is trusted, not verified.** A body split by `#[cfg]` is
 checked only in its wasm arm, so a native arm that takes a `Mutex` makes the
 claim true on web and false on native. [design/blocking.md](design/blocking.md)
