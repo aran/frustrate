@@ -3183,6 +3183,34 @@ impl Miner {
     /// Progress stream computed on this actor's executor: items relay out
     /// while the method is still running — real-time streaming during long
     /// CPU work, the capability the streams design pins on web.
+    /// Pushes `count` byte items of `size` bytes, as fast as `add` takes
+    /// them: the transport half of a snapshot stream, for the bench.
+    pub fn push_bytes(&mut self, count: i64, size: i64, sink: StreamSink<Vec<u8>>) {
+        let item = vec![7u8; size as usize];
+        for _ in 0..count {
+            if !sink.add(item.clone()) {
+                return;
+            }
+        }
+    }
+
+    /// Pushes `count` snapshots of `rows` rows each (about 52 bytes a row on
+    /// the wire): the same stream with the generated Dart decode on the
+    /// receiving isolate added, for the bench.
+    pub fn push_snapshots(&mut self, count: i64, rows: i64, sink: StreamSink<BenchSnapshot>) {
+        for version in 0..count {
+            let snapshot = BenchSnapshot {
+                version,
+                rows: (0..rows)
+                    .map(|id| BenchRow { id, rev: version, title: format!("document title {id:>16}") })
+                    .collect(),
+            };
+            if !sink.add(snapshot) {
+                return;
+            }
+        }
+    }
+
     pub fn mine_progress(&mut self, rounds: i64, n: i64, sink: StreamSink<i64>) {
         for _ in 0..rounds {
             self.calls += 1;
@@ -4564,6 +4592,21 @@ pub fn ledgers_equal(a: &Ledger, b: &Ledger) -> bool {
 /// The record shape, declared **here** rather than in the runtime. It has to
 /// be: codegen parses this crate's declared files and nothing else, so a
 /// struct the runtime supplied could never appear in a generated binding.
+/// One row of [`BenchSnapshot`].
+#[bridge(data)]
+pub struct BenchRow {
+    pub id: i64,
+    pub rev: i64,
+    pub title: String,
+}
+
+/// A versioned snapshot of rows, the shape an actor publishes to Dart.
+#[bridge(data)]
+pub struct BenchSnapshot {
+    pub version: i64,
+    pub rows: Vec<BenchRow>,
+}
+
 #[bridge(data)]
 pub struct LogLine {
     pub level: String,

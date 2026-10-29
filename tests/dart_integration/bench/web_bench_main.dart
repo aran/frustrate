@@ -192,7 +192,8 @@ class _Spec {
     this.bytes,
     this.note,
   }) : syncBody = body,
-       asyncBody = null;
+       asyncBody = null,
+       perBody = 1;
   _Spec.async(
     this.section,
     this.label,
@@ -200,6 +201,7 @@ class _Spec {
     Future<void> Function() body, {
     this.bytes,
     this.note,
+    this.perBody = 1,
   }) : syncBody = null,
        asyncBody = body;
 
@@ -208,6 +210,7 @@ class _Spec {
   final String axis;
   final int? bytes;
   final String? note;
+  final int perBody;
   final void Function()? syncBody;
   final Future<void> Function()? asyncBody;
 
@@ -220,6 +223,7 @@ class _Spec {
           asyncBody!,
           bytes: bytes,
           note: note,
+          perBody: perBody,
         );
 
   /// Pre-warm. V8 tiers wasm functions Liftoff->TurboFan on a call-count
@@ -798,6 +802,48 @@ Future<void> _run() async {
     }
   }
 
+  // S. a published-snapshot feed: items streamed out of an actor.
+  Future<void> burst<T>(
+    Future<void> Function(StreamController<T>) start,
+  ) async {
+    final c = StreamController<T>();
+    final got = c.stream.take(_burst).drain<void>();
+    await start(c);
+    await got;
+  }
+
+  for (final (label, size) in [('64 B', 64), ('50 KB', 50 * 1024)]) {
+    specs.add(
+      _Spec.async(
+        'S',
+        'Miner.pushBytes $label (actor stream, per item)',
+        'transport',
+        () => burst<Uint8List>(
+          (c) => miner.pushBytes(count: _burst, size: size, sink: c),
+        ),
+        bytes: size,
+        perBody: _burst,
+      ),
+    );
+  }
+  for (final (label, rows) in [('1 row', 1), ('1000 rows (~52 KB)', 1000)]) {
+    specs.add(
+      _Spec.async(
+        'S',
+        'Miner.pushSnapshots $label (actor stream, per item)',
+        'codec+transport',
+        () => burst<BenchSnapshot>(
+          (c) => miner.pushSnapshots(count: _burst, rows: rows, sink: c),
+        ),
+        bytes: rows * 52,
+        note:
+            'includes building the snapshot in Rust on the actor, and the '
+            'generated Dart decode on this isolate',
+        perBody: _burst,
+      ),
+    );
+  }
+
   // -- pre-warm everything, then measure ------------------------------------
   _log('specs=${specs.length}; pre-warming');
   for (final s in specs) {
@@ -897,6 +943,13 @@ List<String> _banner(Map<String, Object?> meta) => [
 ];
 
 const Map<String, String> _sections = {
+  'S':
+      'S. STREAM FROM AN ACTOR — axis: A PUBLISHED-SNAPSHOT FEED\n'
+      '   Miner pushes a burst of 16 items into a StreamController this isolate\n'
+      '   listens to; reported per item, from the call to the 16th delivery.\n'
+      '   pushBytes rows are transport alone. pushSnapshots rows add building\n'
+      '   the value in Rust and the generated Dart decode on this isolate,\n'
+      '   which is the main isolate: rows=1000 is about 52 KB on the wire.',
   'A':
       'A. ROUND-TRIP FLOOR — axis: BRIDGE OVERHEAD\n'
       '   Payload is ~0 and the Rust body is trivial. This is the cost of\n'
@@ -960,3 +1013,6 @@ const Map<String, String> _sections = {
       '   Its buffer is transferred, not structure-cloned (postMessage with a\n'
       '   transfer list), so no hidden clone is buried in these numbers.',
 };
+
+/// Items per stream burst in section S.
+const int _burst = 16;

@@ -159,7 +159,8 @@ Cell measureSync(
   return Cell(section, label, axis, bytes, iters, samples, note: note);
 }
 
-/// The async twin. `body` must await one full round trip.
+/// The async twin. `body` must await one full round trip. A body that does
+/// [perBody] units of work (a burst of stream items) is reported per unit.
 Future<Cell> measureAsync(
   String section,
   String label,
@@ -167,6 +168,7 @@ Future<Cell> measureAsync(
   Future<void> Function() body, {
   int? bytes,
   String? note,
+  int perBody = 1,
 }) async {
   final cal = Stopwatch()..start();
   var calls = 0;
@@ -188,9 +190,17 @@ Future<Cell> measureAsync(
       await body();
     }
     sw.stop();
-    samples.add(sw.elapsedMicroseconds / iters);
+    samples.add(sw.elapsedMicroseconds / (iters * perBody));
   }
-  return Cell(section, label, axis, bytes, iters, samples, note: note);
+  return Cell(
+    section,
+    label,
+    axis,
+    bytes,
+    iters * perBody,
+    samples,
+    note: note,
+  );
 }
 
 /// Pipelined throughput: [inFlight] calls issued back to back, then awaited
