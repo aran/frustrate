@@ -1,5 +1,4 @@
-load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@frustrate//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs", "frustrate_code_asset")
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_no_block_check")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 load("@rules_dart//dart:defs.bzl", "dart_library", "dart_test")
 load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
@@ -23,8 +22,7 @@ frustrate_bridge_outputs(
 )
 
 # Every `#[bridge(no_block)]` claim in src/api.rs is settled by placement, so
-# this target builds no wasm at all — no `crate`, no +atomics std, no `manual`
-# tag. Two kinds of placement: the `Node` actor's methods run on the actor's own
+# this target builds nothing — no `crate`, no +atomics std. Two kinds of placement: the `Node` actor's methods run on the actor's own
 # Worker, and `peer_id_for` is a free function whose body is handed to the pool,
 # which puts it off the main thread wherever a wait instruction exists.
 #
@@ -36,14 +34,9 @@ frustrate_bridge_outputs(
 #
 # //bridge/check_fixture is the other half: a claim whose body really is scanned
 # over this same wasm dependency set, which does build a module.
-frustrate_block_check(
+frustrate_no_block_check(
     name = "block_check",
     bridge = ":codegen",
-)
-
-build_test(
-    name = "block_check_build_test",
-    targets = [":block_check"],
 )
 
 # The bridge cdylib, shipped to each native platform as the bindings' code

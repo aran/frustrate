@@ -1,6 +1,6 @@
 load("@rules_dart//dart:defs.bzl", "dart_library")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_native_block_check", "frustrate_wasm_module")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_no_block_check", "frustrate_wasm_module")
 load("//bazel:idle_barrier.bzl", "frustrate_idle_barrier_library")
 load("//bazel:manual_scheduler.bzl", "frustrate_manual_scheduler_library")
 
@@ -30,21 +30,23 @@ frustrate_bridge_outputs(
     visibility = ["//tests:__subpackages__"],
 )
 
-# Every `no_block` claim here, over the native build. This is also what keeps
+# Every `no_block` claim here, over the native build: test_api ships native,
+# and its web build is single-threaded, which the native analyses cover. This is also what keeps
 # the scanner's list of frustrate's bounded runtime locks honest
 # (//bazel/wasm_block_check/ir.rs, BOUNDED): a runtime lock a member reaches
 # that the list does not cover turns this red.
-frustrate_native_block_check(
-    name = "test_api_native_block_check",
+frustrate_no_block_check(
+    name = "test_api_block_check",
     bridge = ":bridge",
     crate = ":test_api_shared",
     # Not Android or Linux: there std draws a `HashMap`'s keys from
     # `getrandom`, whose `/dev/urandom` fallback is a `OnceLock` that waits
     # while another thread opens it, and the stream registry builds its map
     # inside a member's call.
-    platforms = [
-        "//bazel:ios_aarch64",
-        "//bazel:macos_aarch64",
+    targets = [
+        "ios",
+        "macos",
+        "web",
     ],
 )
 

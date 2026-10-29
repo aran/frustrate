@@ -11,7 +11,7 @@ path = "src/lib.rs"
 [lints.rust]
 # These are build-mode cfgs, not features, and all default off.
 # `frustrate_block_check` is set only by `tools/check_block.dart` and the
-# `frustrate_block_check` Bazel rule, which build a module to scan and throw
+# `frustrate_no_block_check` Bazel rule, which build a module to scan and throw
 # away. `frustrate_manual_scheduler` is set only by `--//bazel:manual_scheduler`
 # and makes the executor's Scheduler enqueue-only so a host drives the drains
 # (executor.rs, `arrange_drain`); it is native-only and a wasm build carrying it

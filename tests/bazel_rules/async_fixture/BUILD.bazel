@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_no_block_check", "frustrate_bridge_outputs")
 
-# The dispatched half of frustrate_block_check's contract: two
+# The dispatched half of frustrate_no_block_check's contract: two
 # `#[bridge(no_block)]` `async fn`s whose bodies are settled by *placement*, one
 # with a caller-side residue and one without — so this package's census carries
 # both `placement-dispatch` and `artifact-residue`, and its root set is neither
@@ -42,15 +42,9 @@ rust_shared_library(
     deps = ["//runtime/rust:frustrate"],
 )
 
-# The gate. In the wildcard: it needs the locally built atomics std (`bazel run
-# //toolchain/custom_std:build` first), and a machine without one fails
-# here with that command in the error rather than passing over an unchecked
-# claim.
-#
-# Reached by the ordinary flow through the parent package's
-# `:block_check_build_test`, which names it alongside the sync fixture — one
-# label for "prove the block-check surface", rather than a second one anybody
-# has to discover. Hence the visibility.
+# The gate. Its `web_threads` analysis needs the locally built atomics std
+# (`bazel run //toolchain/custom_std:build` first); a machine without one
+# reports it SKIPPED.
 #
 # The red direction cannot be a Bazel target (Bazel has no way to assert an
 # action fails), so it is demonstrated by hand. Take a `static RwLock`'s write
@@ -69,9 +63,15 @@ rust_shared_library(
 # settled by placement and no root reaches it. That pair — user code on the
 # caller is scanned, the body is not — is the whole assertion of this package,
 # and either half alone would pass a rule that had collapsed into the other.
-frustrate_block_check(
+frustrate_no_block_check(
     name = "async_block_check",
     bridge = ":bridge",
     crate = ":async_fixture_shared",
-    visibility = ["//tests/bazel_rules:__pkg__"],
+    targets = [
+        "android",
+        "ios",
+        "linux",
+        "macos",
+        "web_threads",
+    ],
 )

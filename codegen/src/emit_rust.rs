@@ -358,7 +358,7 @@ impl Residue<'_> {
 /// claim is settled.
 ///
 /// Its readers are the two `no_block` drivers — `tools/check_block.dart` and
-/// the `frustrate_block_check` Bazel rule — by way of the scanner that owns the
+/// the `frustrate_no_block_check` Bazel rule — by way of the scanner that owns the
 /// verdict. It exists because neither driver can otherwise tell three states
 /// apart that must report differently: a claim set with nothing to prove (green
 /// with no artifact), a claim set whose roots are missing from the artifact (the
@@ -435,7 +435,7 @@ pub fn claim_census(iface: &Interface) -> String {
 /// actor have a residue: its request bytes are decoded on the actor's executor
 /// too, after the dispatch and never before it ([`ArmKind::Actor`]). This is
 /// also what makes the claim usable on a bridge whose check artifact cannot be
-/// built at all (`frustrate_block_check`'s doc, on wasm-bindgen strays).
+/// built at all (`frustrate_no_block_check`'s doc, on wasm-bindgen strays).
 ///
 /// `requires_native` members are skipped for a different reason — the claim is
 /// *unproven* there, not settled: their glue is `#[cfg]`'d out of wasm, so a
@@ -4776,7 +4776,7 @@ const NATIVE_ONLY_CFG: &str = "#[cfg(not(target_family = \"wasm\"))]\n";
 /// everything else.
 ///
 /// `frustrate_block_check` is set by nothing that ships — only by
-/// `tools/check_block.dart` and the `frustrate_block_check` Bazel rule, both of
+/// `tools/check_block.dart` and the `frustrate_no_block_check` Bazel rule, both of
 /// which build an artifact that is scanned and thrown away. With the cfg off
 /// this constant contributes no bytes, so production output is unchanged.
 ///

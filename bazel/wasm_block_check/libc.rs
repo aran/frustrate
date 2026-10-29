@@ -11,18 +11,29 @@
 //! direct call to `syscall` whose number is a constant in the IR is read as
 //! a call to an external named after the kernel call, as a path:
 //! `syscall::SYS_futex::FUTEX_WAIT_BITSET`, `syscall::SYS_gettid`
-//! ([`syscall_name`]). The lists use that name. A number the table does not
-//! know is `syscall::nr_<n>`; a number or a futex operation that is not a
-//! constant there is `unknown`. Any other reference to `syscall` stays the
-//! external `syscall`.
+//! ([`syscall_name`]). The lists and the IO classes use that name. A number
+//! the table does not know is `syscall::nr_<n>`; a number or a futex
+//! operation that is not a constant there is `unknown`. Any other reference
+//! to `syscall` stays the external `syscall`.
 
 /// One C library: the functions whose purpose is to block the calling thread
 /// until something else happens. std reaches its locks', condition
 /// variables' and thread parking's; the rest are there for dependencies that
-/// call the C library themselves. A trailing `*` matches a prefix.
+/// call the C library themselves. The readiness waits (`poll`, `select`,
+/// `kevent`, `epoll_wait`) are here rather than in an IO category because
+/// they are what wasip1's `poll_oneoff` is there, which that check counts as
+/// a wait. A trailing `*` matches a prefix.
 pub(crate) struct Libc {
     pub(crate) name: &'static str,
+    pub(crate) os: Os,
     pub(crate) waits: &'static [&'static str],
+}
+
+/// Which OS's IO calls a library's names map to ([`super::io`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Os {
+    Apple,
+    Linux,
 }
 
 impl Libc {
@@ -56,6 +67,7 @@ pub(crate) const KNOWN: &[&Libc] = &[&APPLE, &BIONIC, &GLIBC];
 
 pub(crate) const APPLE: Libc = Libc {
     name: "Apple's libSystem",
+    os: Os::Apple,
     waits: &[
         "pthread_mutex_lock",
         "pthread_cond_wait",
@@ -77,12 +89,25 @@ pub(crate) const APPLE: Libc = Libc {
         "nanosleep",
         "usleep",
         "sleep",
+        "pause",
+        "sigsuspend",
+        "waitpid",
+        "wait4",
+        "poll",
+        "select",
+        "select$DARWIN_EXTSN",
+        "pselect",
+        "pselect$DARWIN_EXTSN",
+        "kevent",
+        "kevent64",
+        "kevent_qos",
     ],
 };
 
 /// Android's bionic. std uses futexes for its locks here, as on glibc.
 pub(crate) const BIONIC: Libc = Libc {
     name: "Android's bionic",
+    os: Os::Linux,
     waits: &[
         "pthread_mutex_lock",
         "pthread_cond_wait",
@@ -96,6 +121,16 @@ pub(crate) const BIONIC: Libc = Libc {
         "clock_nanosleep",
         "usleep",
         "sleep",
+        "pause",
+        "sigsuspend",
+        "waitpid",
+        "waitid",
+        "wait4",
+        "poll",
+        "ppoll",
+        "select",
+        "epoll_wait",
+        "epoll_pwait",
         "syscall::SYS_futex::FUTEX_WAIT",
         "syscall::SYS_futex::FUTEX_WAIT_BITSET",
         "syscall::SYS_futex::FUTEX_LOCK_PI",
@@ -107,6 +142,7 @@ pub(crate) const BIONIC: Libc = Libc {
 /// glibc. std uses futexes for its locks here.
 pub(crate) const GLIBC: Libc = Libc {
     name: "glibc",
+    os: Os::Linux,
     waits: &[
         "pthread_mutex_lock",
         "pthread_cond_wait",
@@ -121,6 +157,17 @@ pub(crate) const GLIBC: Libc = Libc {
         "clock_nanosleep",
         "usleep",
         "sleep",
+        "pause",
+        "sigsuspend",
+        "waitpid",
+        "waitid",
+        "wait4",
+        "poll",
+        "ppoll",
+        "select",
+        "pselect",
+        "epoll_wait",
+        "epoll_pwait",
         "syscall::SYS_futex::FUTEX_WAIT",
         "syscall::SYS_futex::FUTEX_WAIT_BITSET",
         "syscall::SYS_futex::FUTEX_LOCK_PI",

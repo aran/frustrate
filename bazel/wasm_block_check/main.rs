@@ -1,6 +1,7 @@
 //! Fail the build when a `#[bridge(no_block)]` body can reach
 //! `memory.atomic.wait32/64`, a function under a `--slow` path, or an import
-//! matching `--slow-import`.
+//! that does IO in an `--io` category ([`io`]); on wasip1 (`--wasi`), also the
+//! import that waits there.
 //!
 //! `no_block` is the author's claim that a body never waits, transitively, on
 //! any thread. Codegen cannot see through a call
@@ -12,8 +13,8 @@
 //! # How it decides
 //!
 //! A **site** is a function holding a wait instruction, matching a `--slow`
-//! path ([`SlowPath`]), or an import matching `--slow-import`
-//! ([`SlowImport`]); the procedure is the same for all three. Per site `W`, in
+//! path ([`SlowPath`]), or an import that waits or does IO ([`io`]); the
+//! procedure is the same for all of them. Per site `W`, in
 //! order:
 //!
 //! 1. **Start-function exemption.** `W` is the module's start function (section
@@ -107,6 +108,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
 
+mod io;
 mod ir;
 mod libc;
 
@@ -288,72 +290,33 @@ impl SlowPath {
     }
 }
 
-/// A host function the project names as slow (`--slow-import
-/// <module>.<field>`): a call to a matching import is a site exactly as a call
-/// to a [`SlowPath`] function is. `<field>` may end in `*` to match a prefix,
-/// as in `wasi_snapshot_preview1.fd_*`.
-///
-/// This is how IO is checked. On `wasm32-wasip1` std's files, sockets and
-/// clocks are calls to `wasi_snapshot_preview1` imports, and an import cannot
-/// be inlined away: lld keeps one only while live code calls it.
-struct SlowImport {
-    module: String,
-    field: String,
-    prefix: bool,
-}
-
-impl SlowImport {
-    fn parse(text: &str) -> Result<SlowImport, String> {
-        let bad = || {
-            format!(
-                "wasm_block_check: `--slow-import {text}` is not `<module>.<field>`. \
-                 Name the import's module and field as the module's import section \
-                 spells them, with an optional trailing `*` on the field: \
-                 `wasi_snapshot_preview1.fd_*`."
-            )
-        };
-        let (module, field) = text.split_once('.').ok_or_else(bad)?;
-        let (field, prefix) = match field.strip_suffix('*') {
-            Some(f) => (f, true),
-            None => (field, false),
-        };
-        if module.is_empty() || (field.is_empty() && !prefix) || field.contains('*') {
-            return Err(bad());
-        }
-        Ok(SlowImport { module: module.into(), field: field.into(), prefix })
-    }
-
-    fn matches(&self, module: &str, field: &str) -> bool {
-        module == self.module
-            && if self.prefix { field.starts_with(&self.field) } else { field == self.field }
-    }
-
-    fn text(&self) -> String {
-        format!("{}.{}{}", self.module, self.field, if self.prefix { "*" } else { "" })
-    }
-}
-
 /// What a claimed body may not reach besides a wait instruction.
 #[derive(Default)]
 struct Sinks {
     paths: Vec<SlowPath>,
-    imports: Vec<SlowImport>,
-    /// Native externals, for the IR check ([`ir`]).
-    externs: Vec<ir::SlowExtern>,
+    /// IO categories ([`io`]), which each scan maps to its own target's calls.
+    io: Vec<&'static io::Category>,
+    /// The module targets wasip1, whose waits are imports
+    /// ([`io::WASI_WAITS`]) rather than instructions.
+    wasi: bool,
 }
 
 impl Sinks {
+    /// Whether a project named anything; the target's own waits are not
+    /// counted.
     fn is_empty(&self) -> bool {
-        self.paths.is_empty() && self.imports.is_empty() && self.externs.is_empty()
+        self.paths.is_empty() && self.io.is_empty()
+    }
+
+    fn count(&self) -> usize {
+        self.paths.len() + self.io.len()
     }
 
     fn text(&self) -> String {
         self.paths
             .iter()
-            .map(SlowPath::text)
-            .chain(self.imports.iter().map(SlowImport::text))
-            .chain(self.externs.iter().map(ir::SlowExtern::text))
-            .map(|t| format!("`{t}`"))
+            .map(|p| format!("`{}`", p.text()))
+            .chain(self.io.iter().map(|c| format!("IO `{}`", c.name)))
             .collect::<Vec<_>>()
             .join(", ")
     }
@@ -1527,16 +1490,17 @@ fn run_with(
     match_census(&root_names, claims, label)?;
 
     // Control 4: there is something to find. A module built without atomics
-    // holds no wait instruction, so with no slow names its green would be
-    // vacuous.
-    if m.atomics == Some(false) && sinks.is_empty() {
+    // holds no wait instruction, and unless it targets wasip1 (whose waits are
+    // imports) it has no other way to wait, so with no slow names its green
+    // would be vacuous.
+    if m.atomics == Some(false) && !sinks.wasi && sinks.is_empty() {
         return Err(format!(
-            "wasm_block_check: {label} was built without `+atomics`, so it can \
-             hold no wait instruction, and no slow names were given: this check \
-             covers nothing and its silence means nothing.\n\
+            "wasm_block_check: {label} was built without `+atomics` and not for \
+             wasip1, so it can hold no wait, and no slow names were given: this \
+             check covers nothing and its silence means nothing.\n\
              \n\
              Build the artifact on a `+atomics` platform to check waits, or name \
-             what a claimed body may not reach (`slow`, `slow_imports`)."
+             what a claimed body may not reach (`--slow`, `--io`)."
         ));
     }
 
@@ -1620,13 +1584,20 @@ fn run_with(
     // Imported functions have no body to hold a wait, only a name to match.
     let mut waits = waits;
     for (f, (module, field)) in m.imports.iter().enumerate() {
-        let kinds: Vec<String> = sinks
-            .imports
-            .iter()
-            .filter(|p| p.matches(module, field))
-            .map(|p| format!("imports `{module}.{field}`, named slow by `{}`", p.text()))
-            .collect();
+        let mut kinds: Vec<String> = Vec::new();
+        if sinks.wasi && io::wasi_wait(module, field) {
+            kinds.push(format!("imports `{module}.{field}`, which waits"));
+        }
+        kinds.extend(
+            sinks
+                .io
+                .iter()
+                .filter(|c| c.wasi_call(module, field))
+                .map(|c| format!("imports `{module}.{field}`, IO `{}`", c.name)),
+        );
         if !kinds.is_empty() {
+            // Not `waits`: that marks a wait instruction, which only the start
+            // function's own barrier may hold.
             waits.push(Finding { func: f as u32, kinds, waits: false });
         }
     }
@@ -1744,15 +1715,20 @@ fn run_with(
     } else {
         format!(
             ", checked against {} slow name(s) ({})",
-            sinks.paths.len() + sinks.imports.len() + sinks.externs.len(),
+            sinks.count(),
             sinks.text()
         )
     };
-    let no_waits = if m.atomics == Some(false) {
-        " The module was built without `+atomics`, so it can hold no wait \
-         instruction: this checked only the slow names."
-    } else {
-        ""
+    let no_waits = match (m.atomics == Some(false), sinks.wasi) {
+        (true, true) => {
+            " The module targets wasip1 without `+atomics`, so its waits are \
+             `poll_oneoff`, its only import that sleeps or polls."
+        }
+        (true, false) => {
+            " The module was built without `+atomics`, so it can hold no wait \
+             instruction: this checked only the slow names."
+        }
+        _ => "",
     };
     if red.is_empty() {
         return Ok(format!(
@@ -1797,6 +1773,7 @@ fn run_with(
         "wasm_block_check: {label}: {} `#[bridge(no_block)]` member(s) reach {}.\n\n",
         members.len(),
         match (m.atomics == Some(false), sinks.is_empty()) {
+            (true, _) if sinks.wasi => "a wait or a function named slow",
             (true, _) => "a function named slow",
             (false, true) => "a wait instruction",
             (false, false) => "a wait instruction or a function named slow",
@@ -2443,10 +2420,28 @@ fn decode_body(instrs: &[u8]) -> Result<Scan, String> {
     Ok(s)
 }
 
+/// The environment variable that makes this binary a test's runner: it names
+/// the verdict a check action wrote, which the runner prints. The verdict was
+/// reached at build time, so a red check fails the test's build and a test
+/// that runs at all is green; running it shows what was checked.
+const VERDICT_ENV: &str = "FRUSTRATE_NO_BLOCK_VERDICT";
+
 fn main() -> ExitCode {
-    // `--slow <path>` and `--slow-import <module.field>`, repeatable and
-    // anywhere on the line, add named sinks to the gate shapes; the positional
-    // parsing below never sees them.
+    if let Some(path) = std::env::var_os(VERDICT_ENV) {
+        return match std::fs::read_to_string(&path) {
+            Ok(text) => {
+                print!("{text}");
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("wasm_block_check: {}: {e}", path.to_string_lossy());
+                ExitCode::FAILURE
+            }
+        };
+    }
+    // `--slow <path>` and `--io <category>`, repeatable and anywhere on the
+    // line, add named sinks to the gate shapes; the positional parsing below
+    // never sees them.
     let mut args: Vec<String> = Vec::new();
     let mut slow = Sinks::default();
     // `--ir`: the input is a native build's LLVM IR, not a wasm module.
@@ -2457,7 +2452,12 @@ fn main() -> ExitCode {
             ir_mode = true;
             continue;
         }
-        if a != "--slow" && a != "--slow-import" && a != "--slow-extern" {
+        // `--wasi`: the module targets wasip1, so `poll_oneoff` is a wait.
+        if a == "--wasi" {
+            slow.wasi = true;
+            continue;
+        }
+        if a != "--slow" && a != "--io" {
             args.push(a);
             continue;
         }
@@ -2467,8 +2467,7 @@ fn main() -> ExitCode {
             .and_then(|v| {
                 match a.as_str() {
                     "--slow" => slow.paths.push(SlowPath::parse(&v)?),
-                    "--slow-import" => slow.imports.push(SlowImport::parse(&v)?),
-                    _ => slow.externs.push(ir::SlowExtern::parse(&v)?),
+                    _ => slow.io.push(io::parse(&v)?),
                 }
                 Ok(())
             });
@@ -2504,10 +2503,10 @@ fn main() -> ExitCode {
     // The three gate shapes. `--claims` is what both real drivers pass; the
     // bare positional form is kept because it is what a hand run reaches for,
     // and it is the only one whose verdict rests on the module alone.
-    let usage = "usage: wasm_block_check [--slow <path> | --slow-import <module.field>]... \
+    let usage = "usage: wasm_block_check [--wasi] [--slow <path> | --io <category>]... \
          <module.wasm> <label> [marker-out]\n\
-         \x20      wasm_block_check [--slow ... ] --claims <census> <module.wasm> <label> [marker-out]\n\
-         \x20      wasm_block_check --ir [--slow <path> | --slow-extern <symbol>]... \
+         \x20      wasm_block_check [--wasi] [--slow ... | --io ...] --claims <census> <module.wasm> <label> [marker-out]\n\
+         \x20      wasm_block_check --ir [--slow <path> | --io <category>]... \
          [--claims <census>] <module.ll> <label> [marker-out]\n\
          \x20      wasm_block_check --claims-only <census> <label> [marker-out]\n\
          \x20      wasm_block_check --report <module.wasm> [label]";
@@ -2532,8 +2531,8 @@ fn main() -> ExitCode {
                          placement, so {} can prove nothing.\n\
                          \n\
                          Build no artifact for it: drop `crate` from the check \
-                         target and it becomes a claims-only target, which needs \
-                         no wasm toolchain at all.",
+                         target and it checks the census alone, which needs no \
+                         toolchain at all.",
                         claims.who(),
                         args[3]
                     ))
@@ -2569,9 +2568,9 @@ fn main() -> ExitCode {
         Ok(report) => {
             println!("{report}");
             if let Some(marker) = marker {
-                // Bazel's declared output for the validation action; writing it
-                // is what lets a pass be cached. Nothing reads its contents.
-                if let Err(e) = std::fs::write(marker, b"ok\n") {
+                // Bazel's declared output for the check action; writing it is
+                // what lets a pass be cached. The test runner prints it.
+                if let Err(e) = std::fs::write(marker, format!("{report}\n")) {
                     eprintln!("wasm_block_check: writing {marker}: {e}");
                     return ExitCode::FAILURE;
                 }
@@ -2819,18 +2818,16 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
             std::fs::write(&p, self.with_glue().wasm()).unwrap();
+            // A category's name is an IO category; anything else a path.
+            // `--wasi` rides along as the name `wasi`.
             let sinks = Sinks {
-                externs: Vec::new(),
                 paths: slow
                     .iter()
-                    .filter(|t| !t.contains('.'))
+                    .filter(|t| io::parse(t).is_err() && **t != "wasi")
                     .map(|t| SlowPath::parse(t).unwrap())
                     .collect(),
-                imports: slow
-                    .iter()
-                    .filter(|t| t.contains('.'))
-                    .map(|t| SlowImport::parse(t).unwrap())
-                    .collect(),
+                io: slow.iter().filter_map(|t| io::parse(t).ok()).collect(),
+                wasi: slow.contains(&"wasi"),
             };
             let c = rows.map(census).transpose()?;
             run_with(p.to_str().unwrap(), "//pkg:target.wasm", c.as_ref(), &sinks)
@@ -3886,20 +3883,6 @@ mod tests {
 
     // ---- slow imports and modules without atomics ----------------------
 
-    #[test]
-    fn a_slow_import_matches_its_module_and_a_field_or_field_prefix() {
-        let p = SlowImport::parse("wasi_snapshot_preview1.path_*").unwrap();
-        assert!(p.matches("wasi_snapshot_preview1", "path_open"));
-        assert!(!p.matches("wasi_snapshot_preview1", "fd_write"));
-        assert!(!p.matches("env", "path_open"));
-        let exact = SlowImport::parse("wasi_snapshot_preview1.poll_oneoff").unwrap();
-        assert!(exact.matches("wasi_snapshot_preview1", "poll_oneoff"));
-        assert!(!exact.matches("wasi_snapshot_preview1", "poll_oneoff2"));
-        for bad in ["path_open", ".path_open", "wasi.", "wasi.pa*th"] {
-            assert!(SlowImport::parse(bad).is_err(), "{bad}");
-        }
-    }
-
     /// A wasip1-shaped module: one import, no atomics. Indices: 0 the
     /// import, 1 root, 2 a std file open, 3 panic_fmt.
     fn wasi_shaped(root_code: Vec<u8>) -> Build {
@@ -3919,13 +3902,10 @@ mod tests {
     #[test]
     fn a_member_that_calls_a_slow_import_is_named_with_its_path() {
         let e = wasi_shaped(call(2))
-            .check_slow(&["wasi_snapshot_preview1.path_*"], None)
+            .check_slow(&["files"], None)
             .unwrap_err();
         assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a function named slow."), "{e}");
-        assert!(
-            e.contains("imports `wasi_snapshot_preview1.path_open`, named slow by `wasi_snapshot_preview1.path_*`"),
-            "{e}"
-        );
+        assert!(e.contains("imports `wasi_snapshot_preview1.path_open`, IO `files`"), "{e}");
         assert!(e.contains("std::sys::fs::unix::File::open"), "the path runs through std: {e}");
     }
 
@@ -3937,7 +3917,7 @@ mod tests {
         b.funcs[2].code = call(2);
         b.funcs.push(fun(BEGIN_UNWIND, call(2)));
         b.funcs[2].code = call(4);
-        let ok = b.check_slow(&["wasi_snapshot_preview1.path_*"], None).unwrap();
+        let ok = b.check_slow(&["files"], None).unwrap();
         assert!(ok.contains("clean"), "{ok}");
         assert!(ok.contains("built without `+atomics`, so it can hold no wait instruction"), "{ok}");
     }
@@ -3946,6 +3926,18 @@ mod tests {
     fn a_module_without_atomics_and_without_slow_names_is_refused() {
         let e = wasi_shaped(vec![0x01]).check_slow(&[], None).unwrap_err();
         assert!(e.contains("covers nothing"), "{e}");
+    }
+
+    #[test]
+    fn on_wasip1_poll_oneoff_is_a_wait_with_nothing_named() {
+        let mut b = wasi_shaped(call(2));
+        b.imports = vec![("wasi_snapshot_preview1", "poll_oneoff")];
+        let e = b.check_slow(&["wasi"], None).unwrap_err();
+        assert!(e.contains("reach a wait or a function named slow"), "{e}");
+        assert!(e.contains("imports `wasi_snapshot_preview1.poll_oneoff`, which waits"), "{e}");
+        // Without the import, the same module is clean, and says what it checked.
+        let ok = wasi_shaped(vec![0x01]).check_slow(&["wasi"], None).unwrap();
+        assert!(ok.contains("its waits are `poll_oneoff`"), "{ok}");
     }
 
     #[test]

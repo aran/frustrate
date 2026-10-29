@@ -147,7 +147,7 @@ pub struct Node {
 /// legal here only because it runs on the actor. //bridge/check_fixture is the
 /// measurement.
 ///
-/// So the claim is settled by placement, and `frustrate_block_check` proves it
+/// So the claim is settled by placement, and `frustrate_no_block_check` proves it
 /// without building anything — which is the only way it could be proved here.
 /// This graph pulls wasm-bindgen structurally, and a check artifact of it would
 /// carry 2393 exports the check `cfg` cannot suppress. See //bridge:block_check.

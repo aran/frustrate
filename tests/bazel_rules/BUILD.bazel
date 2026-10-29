@@ -3,10 +3,9 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_shared_library", "rust_test")
 load(
     "//bazel:defs.bzl",
-    "frustrate_block_check",
     "frustrate_bridge_library",
-    "frustrate_native_block_check",
     "frustrate_bridge_outputs",
+    "frustrate_no_block_check",
     "frustrate_wasm_module",
     "frustrate_wasm_opt",
 )
@@ -328,83 +327,44 @@ build_test(
     targets = [":fixture_custom.wasm"],
 )
 
-# frustrate_block_check contract: the same crate again, under a transition that
-# keeps //bazel:wasm32_threads' +atomics std but turns frustrate's own
-# `wasm-threads` feature off (//bazel:block_check), builds a module whose only
-# exports are the `#[bridge(no_block)]` roots — and the scanner runs over it as
-# a validation action and passes. `src/api.rs`'s `add` carries the claim.
+# frustrate_no_block_check contract: the same crate under every analysis. Each
+# builds the crate in a configuration whose only exports are the
+# `#[bridge(no_block)]` roots (`src/api.rs`'s `add` carries the claim) and runs
+# the scanner over it at build time, so each analysis is a test that builds
+# only when its verdict is green:
 #
-# In the wildcard, deliberately, unlike the threaded fixture above. It needs the
-# locally built +atomics std, so a machine that has never run
-# `bazel run //toolchain/custom_std:build` fails here — with that command in
-# the error. That is the trade: a loud, instructive failure on a fresh checkout
-# beats a `manual` tag that silently covers nothing on every checkout.
+# - `.<os>_<cpu>`: each native platform's whole-program IR, built from this
+#   host.
+# - `.web_threads`: //bazel:wasm32_threads' +atomics std with frustrate's
+#   `wasm-threads` feature off (//bazel:block_check). Needs the locally built
+#   std; SKIPPED until `bazel run //toolchain/custom_std:build` stages it.
+# - `.wasi`: wasip1 with the stock std, where IO is `wasi_snapshot_preview1`
+#   imports.
 #
-# What this cannot assert is the *red* direction, for the reason
-# `wasm_std_check_test` gives above: Bazel has no way to assert that an action
-# fails, so a target that genuinely fails cannot live in the wildcard. Unlike
-# the std check there is no `off` switch to build one anyway with — the rule's
-# whole surface is "prove the claims" — so the red path is demonstrated by hand
-# (put a `Mutex::lock` in `add`'s body and build this target) rather than
-# fenced. The scanner's own unit tests in //bazel/wasm_block_check cover the
-# decision procedure against hand-built modules.
-frustrate_block_check(
+# `slow` names a path nothing defines, so it proves only that paths reach every
+# analysis; `io` likewise reaches the native analyses and wasi. The red
+# direction cannot be
+# a target, because Bazel cannot assert that an action fails: put a
+# `Mutex::lock` in `add`'s body and every analysis that runs goes red, naming
+# `add` and its path. The scanner's unit tests in //bazel/wasm_block_check cover
+# the decision procedure against hand-built modules.
+frustrate_no_block_check(
     name = "fixture_block_check",
     bridge = ":bridge",
     crate = ":fixture_shared",
-    # Proves only that the paths reach the scanner: nothing by this name
-    # exists. The fixture's own `api` here goes red, naming `add` and its path.
+    io = [
+        "files",
+        "network",
+        "process",
+    ],
     slow = ["rule_test_fixture::slow"],
-)
-
-# The same claim checked for IO on wasip1, where std's files and polls are
-# `wasi_snapshot_preview1` imports. Stock std, so no `manual` tag: this one
-# runs on every checkout. It checks no waits; the target above does.
-frustrate_block_check(
-    name = "fixture_io_check",
-    bridge = ":bridge",
-    crate = ":fixture_shared",
-    platform = "//bazel:wasm32_wasi",
-    slow_imports = [
-        "wasi_snapshot_preview1.path_*",
-        "wasi_snapshot_preview1.poll_oneoff",
-        "wasi_snapshot_preview1.sock_*",
-    ],
-)
-
-# The same claim checked over each native platform's IR, built from this host.
-# Stock toolchain, so no `manual` tag.
-frustrate_native_block_check(
-    name = "fixture_native_check",
-    bridge = ":bridge",
-    crate = ":fixture_shared",
-    platforms = [
-        "//bazel:android_aarch64",
-        "//bazel:android_x86_64",
-        "//bazel:ios_aarch64",
-        "//bazel:linux_aarch64",
-        "//bazel:linux_x86_64",
-        "//bazel:macos_aarch64",
-    ],
-    slow_externs = ["open"],
-)
-
-# Every half of the rule's contract, under one label: the caller-run claim
-# above, whose root reaches a whole body; the **dispatched** ones in
-# `async_fixture/`, whose bodies are settled by placement and whose roots hold
-# only what the caller is left running; and the **synchronous locked** one in
-# `locked_fixture/`, the only root that scans a lock guard's release. Each
-# subpackage says why it is a separate crate.
-#
-# Manual for the usual reason (the +atomics std is built locally and never
-# checked in), so "reached by the ordinary flow" means this one label builds
-# every block-check target there is — not that any of them joins the wildcard.
-build_test(
-    name = "block_check_build_test",
     targets = [
-        ":fixture_block_check",
-        "//tests/bazel_rules/async_fixture:async_block_check",
-        "//tests/bazel_rules/locked_fixture:locked_block_check",
+        "android",
+        "ios",
+        "linux",
+        "macos",
+        "web_threads",
+        "wasi",
     ],
 )
 

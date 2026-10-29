@@ -76,43 +76,6 @@ const ENDINGS: &[(&[&str], &str)] = &[(
      locks, then sends",
 )];
 
-/// A native external a project names as slow (`--slow-extern
-/// <symbol>[*]`): `open`, `connect`, `getaddrinfo`. On native, IO is a call to
-/// the C library, kept as an external declaration.
-pub(crate) struct SlowExtern {
-    name: String,
-    prefix: bool,
-}
-
-impl SlowExtern {
-    pub(crate) fn parse(text: &str) -> Result<SlowExtern, String> {
-        let (name, prefix) = match text.strip_suffix('*') {
-            Some(n) => (n, true),
-            None => (text, false),
-        };
-        if name.is_empty() || name.contains(['*', '.', ':']) {
-            return Err(format!(
-                "wasm_block_check: `--slow-extern {text}` is not a C symbol. Name \
-                 the external function as the C library spells it, with an \
-                 optional trailing `*`: `open`, `getaddrinfo`, `sendto`."
-            ));
-        }
-        Ok(SlowExtern { name: name.into(), prefix })
-    }
-
-    fn matches(&self, sym: &str) -> bool {
-        if self.prefix {
-            sym.starts_with(&self.name)
-        } else {
-            sym == self.name
-        }
-    }
-
-    pub(crate) fn text(&self) -> String {
-        format!("{}{}", self.name, if self.prefix { "*" } else { "" })
-    }
-}
-
 /// One LLVM IR module, as a graph over its symbols.
 struct Ir {
     names: Vec<String>,
@@ -376,10 +339,10 @@ pub(crate) fn run_ir(
             }
             k.extend(
                 sinks
-                    .externs
+                    .io
                     .iter()
-                    .filter(|p| p.matches(n))
-                    .map(|p| format!("named slow by `{}`", p.text())),
+                    .filter(|c| c.native_call(libc.os, n))
+                    .map(|c| format!("IO `{}`", c.name)),
             );
         } else {
             k.extend(
@@ -485,7 +448,7 @@ pub(crate) fn run_ir(
         "wasm_block_check: {label}: {} `#[bridge(no_block)]` member(s) reach a \
          native wait{} on `{}`.\n\n",
         members.len(),
-        if sinks.is_empty() { "" } else { " or a function named slow" },
+        if sinks.is_empty() { "" } else { " or a function named slow or IO" },
         ir.triple
     );
     for (n, (who, path, sites)) in members.iter().enumerate() {
@@ -574,7 +537,7 @@ mod tests {
 
     const HEAD: &str = "target triple = \"arm64-apple-macosx11.0.0\"\n";
 
-    fn check(body: &str, slow: &[&str], externs: &[&str]) -> Result<String, String> {
+    fn check(body: &str, slow: &[&str], io: &[&str]) -> Result<String, String> {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!("ir_block_check_{}", std::process::id()));
@@ -583,8 +546,8 @@ mod tests {
         std::fs::write(&p, format!("{HEAD}{body}")).unwrap();
         let sinks = Sinks {
             paths: slow.iter().map(|t| super::super::SlowPath::parse(t).unwrap()).collect(),
-            imports: Vec::new(),
-            externs: externs.iter().map(|t| SlowExtern::parse(t).unwrap()).collect(),
+            io: io.iter().map(|t| super::super::io::parse(t).unwrap()).collect(),
+            wasi: false,
         };
         run_ir(p.to_str().unwrap(), "//pkg:target", None, &sinks)
     }
@@ -658,13 +621,14 @@ mod tests {
     }
 
     #[test]
-    fn slow_externs_and_paths_are_sinks_too() {
+    fn io_categories_and_paths_are_sinks_too() {
         let body = format!(
             "{ROOT}define void @_RNvCs1_7example6render() {{\n  call i32 @open(ptr %0)\n  ret void\n}}\ndeclare i32 @open(ptr)\n"
         );
         assert!(check(&body, &[], &[]).is_ok());
-        let e = check(&body, &[], &["open"]).unwrap_err();
-        assert!(e.contains("reaches open — named slow by `open`"), "{e}");
+        assert!(check(&body, &[], &["network"]).is_ok());
+        let e = check(&body, &[], &["files"]).unwrap_err();
+        assert!(e.contains("reaches open — IO `files`"), "{e}");
         let e = check(&body, &["example::render"], &[]).unwrap_err();
         assert!(e.contains("named slow by `example::render`"), "{e}");
     }
@@ -720,12 +684,16 @@ mod tests {
     }
 
     /// A module for `triple`, written out and scanned.
-    fn run_triple(triple: &str, body: &str) -> Result<String, String> {
+    fn run_triple(triple: &str, body: &str, io: &[&str]) -> Result<String, String> {
         let dir = std::env::temp_dir().join(format!("ir_block_triple_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let p = dir.join(format!("{triple}-{}.ll", body.len()));
+        let p = dir.join(format!("{triple}-{}-{}.ll", body.len(), io.len()));
         std::fs::write(&p, format!("target triple = \"{triple}\"\n{body}")).unwrap();
-        run_ir(p.to_str().unwrap(), "//pkg:t", None, &Sinks::default())
+        let sinks = Sinks {
+            io: io.iter().map(|t| super::super::io::parse(t).unwrap()).collect(),
+            ..Sinks::default()
+        };
+        run_ir(p.to_str().unwrap(), "//pkg:t", None, &sinks)
     }
 
     /// A Linux member that makes `syscall`s: what each is read as.
@@ -745,18 +713,30 @@ mod tests {
             ("aarch64-unknown-linux-android", 98),
         ] {
             let wake = format!("  %1 = call i64 (i64, ...) @syscall(i64 noundef {futex}, ptr %0, i32 noundef 129, i32 noundef 1)\n");
-            assert!(run_triple(triple, &linux(&wake)).is_ok(), "{triple}");
+            assert!(run_triple(triple, &linux(&wake), &[]).is_ok(), "{triple}");
             let wait = format!(
                 "  %2 = call i64 (i64, ...) @syscall(i64 noundef {futex}, ptr %0, i32 noundef 137, i32 noundef 0, ptr null, ptr null, i32 noundef -1)\n"
             );
-            let e = run_triple(triple, &linux(&format!("{wake}{wait}"))).unwrap_err();
+            let e = run_triple(triple, &linux(&format!("{wake}{wait}")), &[]).unwrap_err();
             assert!(e.contains("reaches syscall::SYS_futex::FUTEX_WAIT_BITSET — waits"), "{triple}: {e}");
         }
     }
 
+    /// A kernel call std makes through `syscall` is in its IO class by name.
+    #[test]
+    fn a_syscall_is_in_an_io_class() {
+        let e = run_triple(
+            "aarch64-unknown-linux-gnu",
+            &linux("  %1 = call i64 (i64, ...) @syscall(i64 noundef 291, i32 %d, ptr %p, i32 0, i32 4095, ptr %b)\n"),
+            &["files"],
+        )
+        .unwrap_err();
+        assert!(e.contains("reaches syscall::SYS_statx — IO `files`"), "{e}");
+    }
+
     #[test]
     fn a_target_without_a_classified_c_library_is_refused() {
-        let e = run_triple("x86_64-unknown-linux-musl", ROOT).unwrap_err();
+        let e = run_triple("x86_64-unknown-linux-musl", ROOT, &[]).unwrap_err();
         assert!(e.contains("only for Apple's libSystem, Android's bionic, glibc"), "{e}");
     }
 }

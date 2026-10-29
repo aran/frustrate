@@ -154,6 +154,17 @@ _ROOT_BUILD = """\
 {toolchains}{stdlib}
 """
 
+# Whether the flavour has been staged at all, for frustrate_no_block_check: an
+# analysis needing a std this checkout never built is made incompatible, so
+# `bazel test //...` reports it SKIPPED rather than failing. A target's own
+# `target_compatible_with` is what Bazel checks before analysing its
+# dependencies, so this is a loaded value rather than a target to depend on. A
+# staged std that is stale or wrong is still staged: building against it fails
+# with the builder's command, because someone meant to use it.
+_STAGED_BZL = """\
+STAGED = {staged}
+"""
+
 _ROOT_TOOLCHAIN = """\
 toolchain(
     name = "toolchain_{triple}",
@@ -204,7 +215,7 @@ rust_stdlib_filegroup(
 )
 {linkers}"""
 
-# Each toolchain's linker under `frustrate_block_check`: rust-lld, with the
+# Each toolchain's linker under `frustrate_no_block_check`: rust-lld, with the
 # block check's link filter beside it in the sysroot, where the check's
 # `-Clinker=` finds it. Every other build links with rust-lld alone and never
 # builds the filter. Here rather than in //impl because a file's place in the
@@ -346,8 +357,9 @@ def _custom_std_repo_impl(rctx):
             stdlib = stdlib,
         )
 
-    def refuse(body):
+    def refuse(body, staged = True):
         rctx.file("BUILD.bazel", root_build(""))
+        rctx.file("staged.bzl", _STAGED_BZL.format(staged = staged))
         rctx.file("impl/BUILD.bazel", body)
 
     if not manifest.exists:
@@ -356,7 +368,7 @@ def _custom_std_repo_impl(rctx):
             builder = _BUILDER,
             facilities = facilities,
             key = key,
-        ))
+        ), staged = False)
         return
 
     m = json.decode(rctx.read(manifest))
@@ -395,6 +407,7 @@ def _custom_std_repo_impl(rctx):
             _LIB_DIR + "/" + name,
         )
 
+    rctx.file("staged.bzl", _STAGED_BZL.format(staged = True))
     rctx.file("BUILD.bazel", root_build(_ROOT_STDLIB.format(
         toolchain_bzl = _label("@rules_rust//rust:toolchain.bzl"),
         sysroot_linker_bzl = _label("//bazel:sysroot_linker.bzl"),

@@ -33,29 +33,29 @@ under `"error"` it throws. A wrong `"block"` is a UI stall no check will find.
 ## `no_block` (and `bridge_file!(no_block)`)
 
 **You assert** that main-thread Dart calling this member cannot be stalled:
-nothing the caller runs reaches a wait instruction, or a function the check
-target names as slow. The claim covers the body
+nothing the caller runs reaches a wait, a function the check target names as
+slow, or IO it names. The claim covers the body
 together with where it runs, so a member whose body runs on another thread
 satisfies it whatever the body does. `bridge_file!(no_block)` claims every item
 in the file; per-item options cannot opt out.
 
 **What is checked:** codegen never sees bodies, so it catches only the two
 contradictions visible in a signature — `on_contention = "block"` (FR0048) and a
-value-returning `DartFunction` on a non-`async fn` (FR0049). On web,
-`bazel/wasm_block_check` proves at link time that no `memory.atomic.wait` is
-reachable from the claimed item, nor any function under a path in
-`frustrate_block_check`'s `slow` (your own `#[inline(never)]` slow-work
-marker), nor any host import in `slow_imports` (on `//bazel:wasm32_wasi`, the
-`wasi_snapshot_preview1` calls behind files and polls); green
-is sound, red can be a false alarm. To hold every sync member of a bridge to
-this, put `bridge_file!(no_block)` in each of its files.
-On native, `frustrate_native_block_check` proves the same over each
-platform's whole-program LLVM IR: no claimed member reaches a C library call
-that waits (`pthread_mutex_lock`, `dispatch_semaphore_wait`, a futex wait, …),
-a `slow` path, or a C function in `slow_externs`. It knows the waits of
-Apple's libSystem, Android's bionic and glibc, and builds every platform's IR
-from any host. Each check sees only its own target's `#[cfg]` arm.
-[design/blocking.md](design/blocking.md) has the full argument.
+value-returning `DartFunction` on a non-`async fn` (FR0049).
+`frustrate_no_block_check` proves the rest, once per target the bridge ships
+on: no claimed member reaches a wait, a function under a path in its `slow`
+(your own `#[inline(never)]` slow-work marker, or a third-party function), or
+IO in a class in its `io` (`files`, `network`, `process`, which frustrate maps
+to each target's calls). For each native platform (Android, iOS, Linux with
+glibc, macOS) it scans that platform's build's whole-program LLVM IR for its C
+library's waits, building every platform's IR from any host; on threaded web,
+the wasm module for `memory.atomic.wait`; on wasip1, for `poll_oneoff`.
+Single-threaded web has no wait to find, and the native analyses cover its
+portable code. Green is
+sound, red can be a false alarm. To hold every sync member of a bridge to
+this, put `bridge_file!(no_block)` in each of its files. Each analysis sees
+only its own target's `#[cfg]` arm. [design/blocking.md](design/blocking.md)
+has the full argument.
 
 ## `native_only`
 

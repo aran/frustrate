@@ -3,7 +3,7 @@
 //!
 //! Reached only through `-Clinker=`, in the `--cfg frustrate_block_check`
 //! configuration: `tools/check_block.dart` sets it for the cargo flow and
-//! `frustrate_block_check`'s transition for the Bazel one. Nothing that ships is
+//! `frustrate_no_block_check`'s wasm transition for the Bazel one. Nothing that ships is
 //! linked through it.
 //!
 //! The check artifact's premise is **exports == roots**: the module's only

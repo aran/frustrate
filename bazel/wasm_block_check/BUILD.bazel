@@ -3,8 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 # The check configuration's linker: rust-lld with the export list cut back to
 # the check roots, so "the only exports are the roots" survives a crate graph
 # whose dependency rlibs carry `#[wasm_bindgen]` exports. The custom-std
-# toolchains put it in their sysroot, built for each execution host, and
-# `frustrate_block_check`'s transition names it with `-Clinker=`.
+# toolchains put it in their sysroot, built for each execution host, and each
+# names it with `-Clinker=` under //bazel:block_check.
 rust_binary(
     name = "link_filter",
     srcs = ["link_filter.rs"],
@@ -27,11 +27,11 @@ rust_test(
 # Zero dependencies, matching //bazel/wasm_std_check and
 # //codegen:frustrate_codegen_bin as exec tools: a crate would drag the
 # @frustrate_crates hub into every consumer's exec configuration. It is also a cargo workspace
-# member, so `tools/check_block.dart` and the Bazel validation action run the
+# member, so `tools/check_block.dart` and the Bazel check action run the
 # identical binary.
 rust_binary(
     name = "wasm_block_check",
-    srcs = ["ir.rs", "libc.rs", "main.rs"],
+    srcs = ["io.rs", "ir.rs", "libc.rs", "main.rs"],
     edition = "2021",
     rustc_flags = ["-Dwarnings"],
     visibility = ["//visibility:public"],

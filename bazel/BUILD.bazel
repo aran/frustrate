@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load(":native_block_check.bzl", "no_cc_allocator")
+load(":no_block_check.bzl", "no_cc_allocator")
 
 # frustrate_wasm_module's default platform. Stable Rust, single-threaded
 # wasm — the charter's default web execution model. Needs no `flags`: the
@@ -79,6 +79,19 @@ platform(
         ":wasm_std_custom",
     ],
     flags = ["--@rules_rust//rust/toolchain/channel=nightly"],
+    visibility = ["//visibility:public"],
+)
+
+# Required by frustrate_no_block_check's `web_threads` analysis on a checkout
+# whose +atomics std has not been staged, and carried by no platform, so that
+# analysis is incompatible there and `bazel test` reports it SKIPPED. Naming the
+# test directly says it did not satisfy this constraint. Stage the std with
+# `bazel run //toolchain/custom_std:build`.
+constraint_setting(name = "wasm_threads_std")
+
+constraint_value(
+    name = "wasm_threads_std_staged",
+    constraint_setting = ":wasm_threads_std",
     visibility = ["//visibility:public"],
 )
 
@@ -185,7 +198,7 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
-# Set only under frustrate_block_check's transition (//bazel:defs.bzl): this
+# Set only under frustrate_no_block_check's wasm transition (no_block_check.bzl): this
 # build is the throwaway `--cfg frustrate_block_check` artifact whose only
 # exports are the `#[bridge(no_block)]` check roots, never something that ships.
 #
@@ -318,8 +331,8 @@ platform(
     visibility = ["//visibility:public"],
 )
 
-# The native platforms frustrate_native_block_check proves claims for, one per
-# OS and CPU a Flutter app ships on. Its `platforms` names them; each analysis
+# The native platforms frustrate_no_block_check proves claims for, one per OS
+# and CPU a Flutter app ships on. Its `targets` names the OS; each analysis
 # builds only the bridge crate for its platform.
 [
     platform(
@@ -343,5 +356,5 @@ platform(
 ]
 
 # The allocator library the native analyses' builds give rules_rust's Rust
-# toolchain in place of its C one (native_block_check.bzl says why).
+# toolchain in place of its C one (no_block_check.bzl says why).
 no_cc_allocator(name = "no_block_check_allocator")

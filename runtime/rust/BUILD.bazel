@@ -50,7 +50,7 @@ rust_library(
     # need nothing — this is the only place the feature exists under Bazel.
     #
     # :wasm_threads_feature_build, not :wasm_threads_build, and the two differ
-    # in exactly one configuration: frustrate_block_check's, which builds ON the
+    # in exactly one configuration: frustrate_no_block_check's, which builds ON the
     # threaded platform (it needs the +atomics std, or there is no wait
     # instruction to find) with the feature OFF (so the artifact's only exports
     # are the check roots and the only waits are ones a claimed body reaches).

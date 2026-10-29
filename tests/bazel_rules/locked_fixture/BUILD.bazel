@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_no_block_check", "frustrate_bridge_outputs")
 
-# The **synchronous locked** half of frustrate_block_check's contract: a
+# The **synchronous locked** half of frustrate_no_block_check's contract: a
 # `#[bridge(no_block)]` claim whose body takes and releases a lock guard in the
 # caller's own frame, so the root reaches that release and the scan decides it.
 # No other fixture here scans a lock. src/api.rs says why this is a crate of its
@@ -31,7 +31,8 @@ rust_shared_library(
     deps = ["//runtime/rust:frustrate"],
 )
 
-# The gate, reached through the parent package's `:block_check_build_test`.
+# The gate. Its `web_threads` analysis is SKIPPED where the atomics std is not
+# staged.
 #
 # What it decides that no other block-check target does: whether releasing a
 # lock guard on the calling thread reaches a wait instruction. It is the
@@ -49,9 +50,15 @@ rust_shared_library(
 # The positive control is the member beside it: `bump` is dispatched, so no root
 # reaches its body and a wait there would stay green. That pair is the same one
 # `async_fixture` makes, over a lock instead of a `static`.
-frustrate_block_check(
+frustrate_no_block_check(
     name = "locked_block_check",
     bridge = ":bridge",
     crate = ":locked_fixture_shared",
-    visibility = ["//tests/bazel_rules:__pkg__"],
+    targets = [
+        "android",
+        "ios",
+        "linux",
+        "macos",
+        "web_threads",
+    ],
 )

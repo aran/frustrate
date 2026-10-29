@@ -1,5 +1,4 @@
-load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@frustrate//bazel:defs.bzl", "frustrate_block_check", "frustrate_bridge_outputs")
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 
 # The `#[bridge(no_block)]` gate over the iroh crate graph. src/api.rs says why
@@ -22,7 +21,7 @@ frustrate_bridge_outputs(
 #
 # `manual`, unlike frustrate's own check fixtures: a host build would drag the
 # native iroh graph in to prove nothing. It is reached only through
-# `frustrate_block_check`'s transition, which builds it for
+# `frustrate_no_block_check`'s `web_threads` analysis, which builds it for
 # `@frustrate//bazel:wasm32_threads`.
 rust_shared_library(
     name = "check_fixture",
@@ -44,10 +43,8 @@ rust_shared_library(
     ],
 )
 
-# In the wildcard, on the same trade `@frustrate//tests/bazel_rules` takes: it
-# needs the locally built +atomics std, so a machine that has never run
-# `bazel run //toolchain/custom_std:build` fails here with that command in
-# the error rather than skipping a gate. It also needs the getrandom annotation
+# It needs the locally built +atomics std, so a machine that has never run
+# `bazel run //toolchain/custom_std:build` reports it SKIPPED. It also needs the getrandom annotation
 # in //:MODULE.bazel, without which the graph fails to build under `+atomics`
 # with an E0433 naming neither frustrate nor this package.
 #
@@ -83,13 +80,9 @@ rust_shared_library(
 # dispatched member whose body is handed to the pool. Both bodies reach the
 # `OnceLock` above and both claims are true, which is why //bridge:block_check
 # settles that whole surface without building anything.
-frustrate_block_check(
+frustrate_no_block_check(
     name = "block_check",
     bridge = ":codegen",
     crate = ":check_fixture",
-)
-
-build_test(
-    name = "block_check_build_test",
-    targets = [":block_check"],
+    targets = ["web_threads"],
 )

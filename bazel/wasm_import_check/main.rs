@@ -57,7 +57,7 @@
 //!
 //! There is deliberately no way to switch this off. A module that trips it
 //! cannot be instantiated by frustrate's runtime at all, so no valid target
-//! needs the exemption — the same stance `frustrate_block_check` takes, and for
+//! needs the exemption — the same stance `frustrate_no_block_check` takes, and for
 //! the same reason.
 //!
 //! The wasm parsing here is a third copy of a decode that also lives in
