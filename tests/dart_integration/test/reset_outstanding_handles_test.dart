@@ -40,9 +40,9 @@
 ///   * a stranded handle is still **disposable**, and disposing it reaches the
 ///     transport that minted it. For an actor this is why the check sits on
 ///     the generated receiver read and not on `ActorHost.call`: `dispose()`
-///     dispatches a drop *through the host*, and Rust's `Msg::Stop` does not
-///     drop the object, so a refusal at the host would leak every actor
-///     disposed after a reset;
+///     dispatches a drop *through the host*. A refusal at the host would
+///     leave every actor disposed after a reset to its executor's stop, which
+///     drops it as a leak rather than as a dispose;
 ///   * a stranded handle is **valid again** once its bridge is active. Nothing
 ///     was invalidated, only put out of reach.
 @Timeout(Duration(minutes: 2))
@@ -276,8 +276,8 @@ void main() {
       // The trap the design names: `dispose()` reads `_raw` directly and
       // dispatches the drop *through the host*, whose transport is still the
       // real one. Refusing at `ActorHost.call` instead of at the receiver read
-      // would turn this into a leaked Rust object on a released executor,
-      // because `Msg::Stop` deliberately does not drop it.
+      // would skip the orderly drop, leaving the object to the executor's
+      // stop, which ends its channels as leaked.
       await miner.dispose();
     },
   );

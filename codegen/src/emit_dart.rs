@@ -4277,9 +4277,9 @@ fn emit_actor(out: &mut String, iface: &Interface, o: &OpaqueDecl, web: bool) {
          \x20 /// belongs to. An actor has no OpaqueHandleBase to carry that stamp\n\
          \x20 /// (its identity here is the host, not the object), so the check\n\
          \x20 /// lives on the read. NOT on `_host.call`: dispose() reads `_raw`\n\
-         \x20 /// directly and dispatches the drop through the host, and\n\
-         \x20 /// `Msg::Stop` does not drop the object — refusing at the host\n\
-         \x20 /// would leak every actor disposed after a reset.\n\
+         \x20 /// directly and dispatches the drop through the host. Refusing at\n\
+         \x20 /// the host would leave every actor disposed after a reset to the\n\
+         \x20 /// executor's stop, which drops it as a leak, not as a dispose.\n\
          \x20 ///\n\
          \x20 /// Inside an `assert`, like the opaque half: a build with asserts\n\
          \x20 /// off cannot change bridge identity at all, because\n\

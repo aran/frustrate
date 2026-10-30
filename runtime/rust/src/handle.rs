@@ -482,50 +482,66 @@ pub fn alias_check(entries: &[(Option<u64>, Use)]) -> Result<(), Aliased> {
     Ok(())
 }
 
-// ---- Actor: Box<T>, owned by an executor ----
+// ---- Actor: an entry in its executor's object table ----
 //
-// The same raw Box as Confined — an actor body has exclusive access by
-// construction, because its executor is the only place actor bodies run. What
-// differs is who can free it. Every other model's handle is reachable from the
-// Dart object that owns it, so a `NativeFinalizer` can pass the pointer back.
-// An actor's pointer reaches Rust only inside a *call*, and a handle nobody
-// disposed makes no more calls. So the executor is told, at construction, how
-// to drop what it holds; the finalizer then only needs the host id.
+// An actor's handle is a slot id in its executor's table (objects.rs), not a
+// pointer. Every helper here runs on that executor, because an actor's
+// constructor, members and drop are all calls dispatched there: the host thread
+// natively, the worker's instance on web. The table, not the Dart handle, is
+// what owns the object, which is what lets the executor drop an object nobody
+// disposed (actor.rs, on stop).
 
-/// Box `value` and arm its executor's teardown, so an undisposed handle is
-/// still reclaimed when the host is reaped.
+/// Put `value` in the current executor's table and return its slot id.
 ///
-/// `type_name` is the actor type, used only for the leak diagnostic — reaching
-/// the teardown at all proves `dispose()` was never called, and the type name
-/// is the only identity available to say whose.
+/// `type_name` is the actor type, used only for the leak diagnostic: an object
+/// still in the table when its executor stops was never disposed, and the type
+/// name is the only identity available to say whose.
 ///
-/// Runs on the host thread: the generated constructor body is itself a job on
-/// that executor.
+/// No `Send` bound: the object is created, used and dropped on one executor.
 pub fn actor_new<T: 'static>(value: T, type_name: &'static str) -> u64 {
-    let h = Box::into_raw(Box::new(value)) as u64;
-    #[cfg(not(target_family = "wasm"))]
-    crate::actor::arm_teardown(move || {
-        // `finalize_scope`, not a bare drop: this path runs only when nobody
-        // disposed the handle, so any channel the object still holds must
-        // terminate as *leaked* naming `type_name`, the way an undisposed
-        // opaque handle's does. A bare drop would close them silently, which
-        // reads to the app exactly like an orderly shutdown.
-        crate::stream::finalize_scope(type_name, || unsafe { actor_drop::<T>(h) })
-    });
-    #[cfg(target_family = "wasm")]
-    let _ = type_name; // the web executor is a Worker; termination reclaims it
-    h
+    crate::objects::insert(value, type_name)
 }
 
-/// # Safety
-/// `h` must be a live handle created by `actor_new::<T>`; never used after.
+/// The actor at `slot`, shared.
 ///
-/// Disarms the executor's teardown first, so a `Reap` arriving behind an
-/// orderly drop finds an empty slot instead of freeing the same Box twice.
-pub unsafe fn actor_drop<T>(h: u64) {
-    #[cfg(not(target_family = "wasm"))]
-    crate::actor::disarm_teardown();
-    drop(Box::from_raw(h as *mut T));
+/// Panics if the current executor's table has no `T` at `slot`.
+///
+/// # Safety
+/// No `&mut` to the same object may be live for `'a`. An executor runs one
+/// call at a time and each call takes its receiver once, which is what makes
+/// this hold for generated glue.
+pub unsafe fn actor_ref<'a, T: 'static>(slot: u64) -> &'a T {
+    &*crate::objects::get::<T>(slot)
+}
+
+/// The actor at `slot`, exclusive.
+///
+/// Panics if the current executor's table has no `T` at `slot`.
+///
+/// # Safety
+/// No other reference to the same object may be live for `'a`; see
+/// [`actor_ref`].
+#[allow(clippy::mut_from_ref)]
+pub unsafe fn actor_mut<'a, T: 'static>(slot: u64) -> &'a mut T {
+    &mut *crate::objects::get::<T>(slot)
+}
+
+/// Take the actor at `slot` out of its executor's table, for a consuming
+/// member: this frame owns the `Box`, and the object with it.
+///
+/// Panics if the current executor's table has no `T` at `slot`. Not `unsafe`:
+/// the table hands out each object at most once, and a slot it no longer
+/// holds misses loudly.
+pub fn actor_take<T: 'static>(slot: u64) -> Box<T> {
+    crate::objects::remove::<T>(slot)
+}
+
+/// Drop the actor at `slot`, for the orderly `dispose()`.
+///
+/// A plain drop, not a finalization: `dispose()` was called, so a channel the
+/// object still holds closes rather than reporting a leak.
+pub fn actor_drop<T: 'static>(slot: u64) {
+    drop(actor_take::<T>(slot));
 }
 
 // ---- Frozen: Arc<T> ----
@@ -686,7 +702,7 @@ pub unsafe fn locked_drop<T>(h: u64) {
 // `Finalizable` cannot be sent. `Ok` therefore also implies the lock's waiter
 // queue is empty: a waiter would be inside a call holding a clone.
 
-/// Adopt the object behind a confined or actor handle: this frame owns the
+/// Adopt the object behind a confined handle: this frame owns the
 /// `Box`, and the object with it.
 ///
 /// Returns the `Box` rather than the value, so that `self: Box<Self>` has
@@ -695,28 +711,16 @@ pub unsafe fn locked_drop<T>(h: u64) {
 /// through it (`*box_x`), which costs nothing.
 ///
 /// Unlike the other two, nothing can refuse: a confined object has one isolate
-/// and synchronous calls, and an actor's consuming call queues behind
-/// everything already sent. There is no `*_take` beside this one. Resident's
-/// consume is [`resident_adopt`], which can refuse — see [`confined_ref`].
+/// and synchronous calls. There is no `*_take` beside this one. Resident's
+/// consume is [`resident_adopt`], which can refuse — see [`confined_ref`]. An
+/// actor's consume is [`actor_take`], which takes the object out of its
+/// executor's table.
 ///
 /// # Safety
-/// `h` must be a live handle created by `confined_new::<T>`/`actor_new::<T>`
-/// whose Dart side has given it up; never used after.
+/// `h` must be a live handle created by `confined_new::<T>` whose Dart side
+/// has given it up; never used after.
 pub unsafe fn confined_adopt<T>(h: u64) -> Box<T> {
     Box::from_raw(h as *mut T)
-}
-
-/// Disarm the current actor executor's teardown, for a consuming member.
-///
-/// An actor's teardown is armed at construction ([`actor_new`]) so that an
-/// undisposed handle is still reclaimed when the host is reaped. A consuming
-/// member takes the object out from under it, so the slot has to be emptied
-/// first or a `Reap` arriving behind the call frees the same `Box` twice —
-/// the same ordering [`actor_drop`] keeps, split out because a take is not a
-/// drop.
-pub fn actor_disarm() {
-    #[cfg(not(target_family = "wasm"))]
-    crate::actor::disarm_teardown();
 }
 
 /// Adopt the `Arc` behind a frozen handle: takes the strong count Dart held,
@@ -879,10 +883,8 @@ mod tests {
     fn actor_new_takes_a_thread_affine_type() {
         struct Affine(std::rc::Rc<std::cell::Cell<i64>>);
         let h = actor_new(Affine(std::rc::Rc::new(std::cell::Cell::new(7))), "Affine");
-        unsafe {
-            assert_eq!(confined_ref::<Affine>(h).0.get(), 7);
-            actor_drop::<Affine>(h);
-        }
+        assert_eq!(unsafe { actor_ref::<Affine>(h) }.0.get(), 7);
+        actor_drop::<Affine>(h);
     }
 
     #[test]

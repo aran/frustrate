@@ -72,6 +72,9 @@ mod idle;
 /// offers one. Private: a bridge sees each hook's own `register`, never the
 /// primitive underneath.
 mod hook;
+/// The table of objects an actor's executor hosts, keyed by slot id. Private:
+/// generated glue reaches it through `handle::actor_*`.
+mod objects;
 /// Rust's `log` facade → a Dart `Stream`: register a sink and every
 /// `log::info!` in the crate graph becomes an item on it.
 pub mod logging;
@@ -224,7 +227,6 @@ pub unsafe extern "C" fn frustrate_buffer_free(ptr: *mut u8, len: u64, cap: u64)
 ///     lazily and fail at the first `cancel()` — an `ArgumentError` from
 ///     `lookupFunction` on native, a missing-export throw on web, both far from
 ///     the skew that caused them.
-///
 /// Bumped rather than renamed, unlike `frustrate_init_dl`: the export whose
 /// shape changed is `frustrate_call_sync`, which codegen emits per bridge
 /// crate, so a rename would have to be spelled by the generator and would say

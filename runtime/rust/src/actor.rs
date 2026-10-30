@@ -1,9 +1,9 @@
 //! Native actor hosts: one dedicated thread per actor instance.
 //!
 //! An actor host is a FIFO of jobs drained by its own OS thread — the
-//! native analog of the web's worker-hosted wasm instance. The actor
-//! object (a raw Box, see the generated `actor_N_*` glue) is created,
-//! used, and dropped exclusively on this thread, so actor types need no
+//! native analog of the web's worker-hosted wasm instance. The objects the
+//! actor hosts live in this thread's object table (objects.rs) and are
+//! created, used, and dropped exclusively on it, so actor types need no
 //! `Send`/`Sync` and no locks: serialization is the executor itself.
 //!
 //! Not compiled for wasm: there the host is a Worker driving its own
@@ -30,34 +30,17 @@ enum Msg {
         job: Job,
         pending: crate::idle::Pending,
     },
+    /// The executor's last message. Everything queued before it runs first;
+    /// then the host drops every object still in its table and exits.
+    ///
+    /// One message for the orderly `dispose()` and for the reap of a handle
+    /// nobody disposed: after an orderly dispose the table is already empty
+    /// (the dispatched drop emptied it), so draining it is the reap's work and
+    /// a no-op for the dispose.
     Stop,
-    /// Drop the object *and* stop — the reclaim path for a handle nobody
-    /// disposed. [`Msg::Stop`] cannot do this job: it releases the executor
-    /// while leaving the object alive, which is correct only because an
-    /// orderly `dispose()` has already dropped it through the dispatched drop.
-    Reap,
 }
 
 thread_local! {
-    /// How this host thread drops its object, or `None` once something has.
-    ///
-    /// The object's pointer lives nowhere else on this side — `hosts()` maps an
-    /// id to a `Sender`, and the Dart heap holds the pointer as `int? _raw`,
-    /// which a hot restart discards. So the executor has to remember how to
-    /// free what it owns, or nothing can.
-    ///
-    /// Thread-local rather than a field in `hosts()` for two reasons: the object
-    /// is constructed *later* than the host (the constructor body is itself a
-    /// job), so there is nothing to record at spawn; and construction, drop and
-    /// reap all run on this thread, so a thread-local needs no lock and imposes
-    /// no `Send` bound on a closure that captures a raw `Box` pointer — which is
-    /// what keeps the module's "used and dropped exclusively on this thread"
-    /// invariant true.
-    ///
-    /// One slot per thread is enough: the checker confines actor handles to
-    /// actor constructors, so one instance is one executor.
-    static TEARDOWN: Cell<Option<Box<dyn FnOnce()>>> = const { Cell::new(None) };
-
     /// The id of the host this thread IS (0 elsewhere). Set once at thread
     /// birth; read by `deferred::spawn_deferred`, which runs only inside a
     /// dispatched job and needs to know which host's registry to record the
@@ -75,20 +58,6 @@ pub(crate) fn current_host() -> u64 {
         "frustrate: spawn_deferred called outside an actor executor — bridge bug"
     );
     id
-}
-
-/// Record how to drop this host's object. Called on the host thread by the
-/// generated constructor, through `handle::actor_new`.
-pub fn arm_teardown(f: impl FnOnce() + 'static) {
-    TEARDOWN.with(|slot| slot.set(Some(Box::new(f))));
-}
-
-/// Forget the teardown because the object is being dropped by the orderly
-/// path. Called on the host thread by the generated dispatched drop, *before*
-/// it drops, so that a [`Msg::Reap`] racing behind it finds the slot empty
-/// rather than dropping a second time.
-pub fn disarm_teardown() {
-    TEARDOWN.with(|slot| slot.take());
 }
 
 /// A live executor, and the isolate that owns it.
@@ -235,11 +204,10 @@ pub fn spawn_host() -> u64 {
                     // already converted to envelopes inside. Answering the call
                     // can still run user code — freeing a reply nobody took
                     // runs its handles' `Drop` — so both answer paths below
-                    // catch, and this loop never unwinds out of an answer. (The
-                    // `Reap` arm below deliberately does, which is its own
-                    // contract.) `None` means the job detached its completion (a
-                    // deferred method) — the executor task it spawned owns the
-                    // answer now.
+                    // catch, and this loop never unwinds out of an answer.
+                    // `None` means the job detached its completion (a deferred
+                    // method) — the executor task it spawned owns the answer
+                    // now.
                     Msg::Call {
                         call_id,
                         job,
@@ -285,41 +253,12 @@ pub fn spawn_host() -> u64 {
                             }
                         }
                     }
-                    Msg::Stop => break,
-                    Msg::Reap => {
-                        // An empty slot is the ordinary already-dropped case,
-                        // not an error: the dispatched drop disarmed it. Break
-                        // either way — the point of a Reap is that this thread
-                        // stops existing.
-                        //
-                        // The `break` is the mechanism only when something
-                        // still holds a `Sender`. In the ordinary path `reap`
-                        // has already removed the map's — the last one — so
-                        // `rx.recv()` would end this loop by itself; the tests
-                        // hold a clone precisely so the two cannot be confused.
-                        //
-                        // Caught only to report it, then resumed: a panicking
-                        // user `Drop` still unwinds out of this closure and
-                        // kills this thread, which is exactly what was being
-                        // asked for. `resume_unwind` does not re-run the panic
-                        // hook, so nothing is printed twice, and the thread
-                        // dies on the same payload it would have. The
-                        // `frustrate_finalize_*` exports cannot even do this —
-                        // a panic there crosses `extern "C"`.
-                        //
-                        // Without the catch this is the one panic in the
-                        // runtime that answers no call at all, so it reached
-                        // neither side of the bridge: a crash reporter would
-                        // see a clean process while an actor's teardown was
-                        // blowing up.
-                        if let Some(teardown) = TEARDOWN.with(|slot| slot.take()) {
-                            if let Err(payload) =
-                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(teardown))
-                            {
-                                crate::panic::observed(crate::panic::message(&*payload));
-                                std::panic::resume_unwind(payload);
-                            }
-                        }
+                    Msg::Stop => {
+                        // After an orderly dispose the table is empty; otherwise
+                        // each object drops as a leak, naming its type, and a
+                        // panicking `Drop` is reported without stranding the
+                        // rest (objects.rs).
+                        crate::objects::drain();
                         break;
                     }
                 }
@@ -340,9 +279,8 @@ pub fn spawn_host() -> u64 {
 /// would claim nothing. The reservation is resolved by whoever answers — the host
 /// loop above, the prefix's hand-off (`executor::spawn_reserved`), or a
 /// cancel. The one path that resolves none of those is a host thread that dies
-/// with messages still behind it (a panicking user `Drop` during teardown;
-/// `Stop`/`Reap` both ride *behind* the queue, so every ordinary teardown
-/// still dequeues), and that leaks one map entry per stranded call.
+/// with messages still behind it, which the `Stop` that ends every host rides
+/// behind, so every ordinary teardown still dequeues them.
 pub fn submit(
     host: u64,
     call_id: u64,
@@ -398,7 +336,8 @@ pub fn host_count() -> usize {
     hosts().lock().unwrap().len()
 }
 
-/// Stop the host after currently queued calls drain (FIFO). Idempotent.
+/// Stop the host after currently queued calls drain (FIFO), dropping
+/// whatever is still in its object table. Idempotent.
 ///
 /// Also sweeps the host's deferred registry — a belt: an orderly `dispose()`
 /// has already cancelled each outstanding deferred through
@@ -414,7 +353,7 @@ pub fn shutdown(host: u64) {
     cancel_deferred_for(host);
 }
 
-/// Drop the object and release the executor, for a handle nobody disposed.
+/// Drop the objects and release the executor, for a handle nobody disposed.
 /// Idempotent, and a no-op for an id that was already reaped or shut down.
 ///
 /// **Called from a `NativeFinalizer` callback**, which runs on an arbitrary
@@ -431,7 +370,7 @@ pub fn shutdown(host: u64) {
 /// a leak pin can see the difference.
 pub fn reap(host: u64) {
     if let Some(Host { tx, .. }) = hosts().lock().unwrap().remove(&host) {
-        let _ = tx.send(Msg::Reap);
+        let _ = tx.send(Msg::Stop);
     }
     // Nobody disposed this handle, so nothing enumerated its deferred
     // completions either — drop their futures (and everything they captured).
@@ -453,7 +392,7 @@ pub fn reap(host: u64) {
 /// just died, so it will never run. What does survive is the exit-port notice
 /// ([`crate::post::handle_exit`]), which is where this is called from.
 ///
-/// Each host is sent `Reap`, exactly as a finalizer would — the object drops on
+/// Each host is sent `Stop`, exactly as a finalizer would — the object drops on
 /// its own executor, running the user's `Drop`, and the thread exits. Hosts of
 /// *other* isolates are untouched, which is why the attribution in [`Host`]
 /// has to exist at all rather than this reaping everything.
@@ -483,7 +422,7 @@ pub fn reap_isolate(isolate: u32) {
         cancel_deferred_for(*id);
     }
     for tx in doomed {
-        let _ = tx.send(Msg::Reap);
+        let _ = tx.send(Msg::Stop);
     }
 }
 
@@ -620,28 +559,43 @@ mod tests {
         );
     }
 
-    /// A panicking user `Drop` during teardown still kills the host thread —
-    /// and is reported to the panic listener on its way out.
+    /// Increments a counter when dropped, as an actor object would be.
+    struct Counted(&'static AtomicUsize);
+    impl Drop for Counted {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    /// A panicking user `Drop` during teardown is reported to the panic
+    /// listener, the rest of the table still drops, and the host thread
+    /// exits.
     ///
     /// This is the one panic in the runtime that answers no call at all, so
-    /// without the report it reaches neither side of the bridge. The arm
-    /// catches only to report and then `resume_unwind`s, which is why the
-    /// thread-exit assertion below is the other half of the test: it holds the
-    /// deliberate "this kills the thread" behaviour that the catch could
-    /// silently have taken away.
+    /// without the report it reaches neither side of the bridge.
     #[test]
-    fn a_panicking_teardown_is_reported_and_still_kills_the_host_thread() {
+    fn a_panicking_teardown_is_reported_and_the_host_thread_still_exits() {
         let _serial = crate::post::test_lock();
         drain_completions();
         let reports = crate::panic::record_for_tests();
         static EXITS: AtomicUsize = AtomicUsize::new(0);
+        static DROPS: AtomicUsize = AtomicUsize::new(0);
+        struct Grenade;
+        impl Drop for Grenade {
+            fn drop(&mut self) {
+                panic!("a user Drop exploded during teardown");
+            }
+        }
         let host = spawn_host();
         let before = host_count();
 
-        // Armed from the host thread, like a generated constructor body.
+        // Minted on the host thread, like a generated constructor body. The
+        // grenade is newer, so it drops first: the panic must not strand what
+        // drains after it.
         let (tx, rx) = channel::<()>();
         submit(host, 0, move || {
-            arm_teardown(|| panic!("a user Drop exploded during teardown"));
+            crate::handle::actor_new(Counted(&DROPS), "Counted");
+            crate::handle::actor_new(Grenade, "Grenade");
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
             tx.send(()).unwrap();
             Some(FramedWriter::from_bytes(vec![]))
@@ -649,29 +603,22 @@ mod tests {
         rx.recv().unwrap();
 
         reap(host);
-        await_count(
-            &EXITS,
-            1,
-            "the host thread survived a panicking teardown: the catch that \
-             reports it swallowed the unwind instead of resuming it",
-        );
+        await_count(&EXITS, 1, "the host thread never exited");
         crate::panic::unregister();
 
         assert_eq!(host_count(), before - 1, "reap must free the map entry");
+        assert_eq!(DROPS.load(Ordering::SeqCst), 1, "the drain stopped at the panic");
         assert_eq!(
             reports.lock().unwrap().as_slice(),
             ["a user Drop exploded during teardown"],
-            "a panic that killed an actor host thread was reported nowhere"
+            "a panic in an actor's teardown was reported nowhere"
         );
     }
 
-    /// The teardown runs exactly once, and every later reap is a no-op rather
-    /// than a second drop.
+    /// A reap drops what nobody disposed exactly once, and every later stop is
+    /// a no-op rather than a second drop.
     #[test]
     fn reap_drops_once_and_is_idempotent() {
-        // These submit jobs, and `submit` responds through the process-global
-        // post callback. Nothing here asserts on posts, but a concurrent
-        // post-using test would see the completions — so serialize.
         let _serial = crate::post::test_lock();
         drain_completions();
         static DROPS: AtomicUsize = AtomicUsize::new(0);
@@ -679,22 +626,18 @@ mod tests {
         let host = spawn_host();
         let before = host_count();
 
-        // Arm from the host thread, which is where a generated constructor
-        // body runs — arming from the test thread would set the wrong slot.
         let (tx, rx) = channel::<()>();
         submit(host, 0, move || {
-            arm_teardown(|| {
-                DROPS.fetch_add(1, Ordering::SeqCst);
-            });
+            crate::handle::actor_new(Counted(&DROPS), "Counted");
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
             tx.send(()).unwrap();
             Some(FramedWriter::from_bytes(vec![]))
         });
         rx.recv().unwrap();
-        assert_eq!(DROPS.load(Ordering::SeqCst), 0, "arming must not drop");
+        assert_eq!(DROPS.load(Ordering::SeqCst), 0, "minting must not drop");
 
         reap(host);
-        await_count(&DROPS, 1, "the teardown never ran");
+        await_count(&DROPS, 1, "the reap never dropped the object");
         await_count(&EXITS, 1, "the host thread never exited");
         assert_eq!(host_count(), before - 1, "reap must free the map entry");
 
@@ -805,16 +748,10 @@ mod tests {
         reap(host);
     }
 
-    /// A reap racing behind an orderly drop finds an empty slot. The thread
-    /// must still exit — "nothing to drop" is not "nothing to do".
-    ///
-    /// **Holds a `Sender` clone across the reap**, without which this asserts
-    /// nothing: `reap` removes the map's Sender, and that alone ends
-    /// `rx.recv()`, so the loop would exit alike whether or not `Msg::Reap`
-    /// breaks it. Written the obvious way first, and the negative check caught
-    /// it — deleting the `break` left the test green.
+    /// An orderly dispose drops the object through the dispatched drop, and
+    /// the stop behind it finds an empty table: one drop, not two.
     #[test]
-    fn reap_with_a_disarmed_slot_still_exits() {
+    fn a_disposed_object_is_not_dropped_again_by_the_stop() {
         let _serial = crate::post::test_lock();
         drain_completions();
         static DROPS: AtomicUsize = AtomicUsize::new(0);
@@ -822,26 +759,21 @@ mod tests {
         let host = spawn_host();
         let before = host_count();
 
-        let (tx, rx) = channel::<()>();
+        let (tx, rx) = channel::<u64>();
         submit(host, 0, move || {
-            arm_teardown(|| {
-                DROPS.fetch_add(1, Ordering::SeqCst);
-            });
-            // What the generated dispatched drop does before it frees the Box.
-            disarm_teardown();
+            tx.send(crate::handle::actor_new(Counted(&DROPS), "Counted")).unwrap();
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
-            tx.send(()).unwrap();
             Some(FramedWriter::from_bytes(vec![]))
         });
-        rx.recv().unwrap();
-
-        // Keep a Sender alive so the channel cannot close underneath the test.
-        // Now the ONLY thing that can end that loop is `Msg::Reap` breaking it.
-        let _keepalive = hosts().lock().unwrap().get(&host).map(|h| h.tx.clone()).expect("live");
-
-        reap(host);
-        await_count(&EXITS, 1, "an empty slot must not keep the thread alive");
-        assert_eq!(DROPS.load(Ordering::SeqCst), 0, "the drop already ran");
+        let slot = rx.recv().unwrap();
+        // What the generated dispatched drop does.
+        submit(host, 1, move || {
+            crate::handle::actor_drop::<Counted>(slot);
+            Some(FramedWriter::from_bytes(vec![]))
+        });
+        shutdown(host);
+        await_count(&EXITS, 1, "a stop must end the thread");
+        assert_eq!(DROPS.load(Ordering::SeqCst), 1, "dropped twice, or never");
         assert_eq!(host_count(), before - 1);
     }
 

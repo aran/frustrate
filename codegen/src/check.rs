@@ -4934,7 +4934,7 @@ fn check_function(
                 code: "FR0039",
                 message: format!(
                     "{ctx}: an actor constructor cannot return `Deferred` — the \
-                     constructor materializes the instance (and arms its teardown) on \
+                     constructor materializes the instance (and puts it in its table) on \
                      the executor before any other message can run, so there is no \
                      instance to release while it waits. Construct fast, then do slow \
                      setup in a deferred method after `spawn`"

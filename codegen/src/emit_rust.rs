@@ -1353,33 +1353,31 @@ fn encode_owned(out: &mut String, iface: &Interface, ty: &Type, expr: &str, dept
                     format!("handle::locked_new::<{path}>({expr})"),
                     Some(format!("handle::locked_drop::<{path}>")),
                 ),
-                // An actor object is the same raw Box as Confined, but the
-                // constructor also arms its executor's teardown — the handle
-                // is the only thing that can reach this pointer again, so an
-                // undisposed one would strand the object with no way back.
-                // The type name is carried for the leak diagnostic.
+                // An actor object goes into its executor's object table, and
+                // the handle is its slot id. The table owns it, so an
+                // undisposed one is still dropped when the executor stops. The
+                // type name is carried for the leak diagnostic.
                 //
                 // No ledger entry, and the reason is what the *other* route
                 // says rather than a thread hazard. FR0015 keeps an actor
                 // handle out of every channel payload in both directions, so
                 // the only place one is minted is a reply, and every path that
-                // turns such a reply away runs on the actor's own host thread
-                // (`actor.rs`'s loop, and the worker's own instance on web) —
-                // the very thread whose teardown `handle::actor_new` armed. So
-                // the object stays reachable either way, and the question is
-                // only which route frees it.
+                // turns such a reply away runs on the actor's own executor
+                // (`actor.rs`'s loop, and the worker's own instance on web),
+                // whose table holds the object. So the object stays reachable
+                // either way, and the question is only which route frees it.
                 //
-                // The armed teardown frees through `stream::finalize_scope`
-                // (handle.rs), so an object still holding channels ends them as
-                // *leaked*, naming the type. `handle::actor_drop` on its own
-                // would close them silently, which reads to the app exactly
-                // like an orderly shutdown. That is what a ledger entry would
-                // cost, and it buys only promptness: a dead isolate's refusal
-                // reaches `post::deliver` → `mark_gone` → `actor::reap_isolate`,
-                // which sends `Reap` to every host that isolate owned (each
-                // attributed at `actor::submit`), and a cancel that claims the
-                // answer instead leaves the object in the host's slot until the
-                // host's own Dart handle is reaped.
+                // The stopping executor drains its table through
+                // `stream::finalize_scope` (objects.rs), so an object still
+                // holding channels ends them as *leaked*, naming the type.
+                // `handle::actor_drop` on its own would close them silently,
+                // which reads to the app exactly like an orderly shutdown. That
+                // is what a ledger entry would cost, and it buys only
+                // promptness: a dead isolate's refusal reaches `post::deliver`
+                // → `mark_gone` → `actor::reap_isolate`, which stops every host
+                // that isolate spawned, and a cancel that claims the answer
+                // instead leaves the object in the table until the host's own
+                // Dart handle is reaped.
                 Model::Actor => (
                     format!("handle::actor_new::<{path}>({expr}, \"{n}\")"),
                     None,
@@ -3770,8 +3768,9 @@ fn lend_positions(
 /// The `Box`-held accessor for one model: `&T`, `&mut T`, or the owning
 /// `Box<T>` a consume adopts.
 ///
-/// Confined and actor share one set, because for them the acquisition *is* the
-/// pointer deref. Resident has its own because it is not: a resident
+/// Confined's acquisition *is* the pointer deref, and an actor's is a lookup
+/// by slot in its executor's object table. Resident has its own because it is
+/// not a plain deref either: a resident
 /// acquisition first checks that the calling thread is the one that built the
 /// object (`frustrate::resident` — a Dart isolate is not pinned to an OS
 /// thread, and a resident value has no `Send` to license the move). Splitting
@@ -3780,6 +3779,8 @@ fn box_accessor(model: Model, mutable: bool) -> &'static str {
     match (model, mutable) {
         (Model::Resident, true) => "resident_mut",
         (Model::Resident, false) => "resident_ref",
+        (Model::Actor, true) => "actor_mut",
+        (Model::Actor, false) => "actor_ref",
         (_, true) => "confined_mut",
         (_, false) => "confined_ref",
     }
@@ -3789,6 +3790,7 @@ fn box_accessor(model: Model, mutable: bool) -> &'static str {
 fn box_adopter(model: Model) -> &'static str {
     match model {
         Model::Resident => "resident_adopt",
+        Model::Actor => "actor_take",
         _ => "confined_adopt",
     }
 }
@@ -4188,11 +4190,13 @@ fn acquire_handle(
             }
             format!("&{mu}*{dyn_deref}guard_{name}")
         }
-        // Actor receivers deref on the actor's executor (the only place
-        // actor bodies run), with exclusive access by construction — the
-        // raw-Box helpers fit exactly.
+        // An actor receiver is a slot in its executor's object table, looked
+        // up on that executor (the only place actor bodies run). The lookup
+        // panics on a stale or foreign slot. Exclusive by construction: the
+        // executor runs one call at a time, and the receiver is its only
+        // handle.
         (Model::Actor, _) => {
-            let acc = if mutable { "confined_mut" } else { "confined_ref" };
+            let acc = if mutable { "actor_mut" } else { "actor_ref" };
             let _ = write!(
                 prelude,
                 "    let {name} = unsafe {{ handle::{acc}::<{path}>({read}) }};\n"
@@ -4246,14 +4250,16 @@ fn take_handle(
     let boxed = usage == Acquire::ConsumeBox;
     let mut adopt = String::new();
     match model {
-        Model::Confined | Model::Resident | Model::Actor => {
-            // An actor's teardown is armed at construction so an undisposed
-            // handle is still reclaimed when the host is reaped. The object is
-            // leaving here, so disarm first or a `Reap` behind this call frees
-            // the same `Box` twice.
-            if model == Model::Actor {
-                adopt.push_str("    frustrate::handle::actor_disarm();\n");
-            }
+        // Out of its executor's table: the table hands each object out at most
+        // once, and a slot it no longer holds misses loudly, so nothing here
+        // is `unsafe`.
+        Model::Actor => {
+            let _ = write!(
+                adopt,
+                "    let box_{name} = handle::actor_take::<{path}>({read});\n"
+            );
+        }
+        Model::Confined | Model::Resident => {
             let _ = write!(
                 adopt,
                 "    let box_{name} = unsafe {{ handle::{adopter}::<{path}>({read}) }};\n",
@@ -4719,7 +4725,7 @@ fn emit_actor_call(out: &mut String, iface: &Interface, f: &Function) {
             "fn actor_{}_{}(r: &mut ByteReader) -> Outcome {{\n\
              \x20   let h = r.read_handle();\n\
              {ASSERT_CONSUMED}\
-             \x20   unsafe {{ handle::actor_drop::<{path}>(h) }};\n\
+             \x20   handle::actor_drop::<{path}>(h);\n\
              \x20   Outcome::Ok(FramedWriter::status(envelope::STATUS_OK))\n\
              }}\n\n",
             f.fn_id, f.name
@@ -6349,15 +6355,17 @@ mod tests {
         );
         assert!(plain.contains("D::into_n(*box_this)"), "{plain}");
         assert!(code.contains("D::into_n(box_this)"), "{code}");
-        // An actor empties its teardown slot first, or a reap behind the call
-        // frees the same Box twice.
+        // An actor takes its object out of its executor's table, so a stop
+        // behind the call finds nothing left to drop.
         let code = emit_src(
             "#[bridge(actor)] pub struct A { n: i64 }\n\
              #[bridge] impl A { pub fn new() -> Self { todo!() } pub fn into_n(self) -> i64 { self.n } }",
         );
-        let take = code.find("handle::confined_adopt::<crate::api::A>").expect("take");
-        let disarm = code.find("handle::actor_disarm()").expect("disarm");
-        assert!(disarm < take, "the teardown is disarmed before the take\n{code}");
+        assert!(
+            code.contains("let box_this = handle::actor_take::<crate::api::A>(h_this);"),
+            "{code}"
+        );
+        assert!(!code.contains("confined_adopt::<crate::api::A>"), "{code}");
     }
 
     /// A contended take on a **pool** arm cannot answer from the prelude —
@@ -7881,10 +7889,10 @@ mod tests {
 
     /// An **actor** handle records no drop. FR0015 keeps it out of every
     /// channel, so the only place one is minted is a reply, and a refused reply
-    /// leaves the object under the host's armed teardown — which frees it
-    /// through `finalize_scope`, ending its channels as *leaked* where a bare
-    /// `actor_drop` from a ledger would have closed them silently. See the
-    /// emitter's arm.
+    /// leaves the object in its executor's table, which drops it when the
+    /// executor stops, through `finalize_scope`: its channels end as *leaked*,
+    /// where a bare `actor_drop` from a ledger would have closed them
+    /// silently. See the emitter's arm.
     #[test]
     fn an_actor_handle_mints_without_a_ledger_entry() {
         let code = emit_src(
