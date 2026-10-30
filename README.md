@@ -40,9 +40,13 @@ the Rust side. Anything without a first-class mapping crosses through a declared
 bytes codec (e.g. protobuf) you supply. Generated data classes get value
 equality, `copyWith` and `toString`.
 
-**A declared representation per type.** Beyond sending serialized data between
-Dart and Rust, you can call methods on Rust objects through a handle, in one
-of five models chosen to match the complexity of your scenario:
+**Objects through handles, built from data and calls.** A handle adds no
+capability of its own. Rust keeps the object in a table, an id crosses as data,
+and a generated Dart class turns each method into a call that carries the id
+and frees the object through `dispose()` or a `Finalizer`. Generating it gets
+lifetimes, threads and consumption right where hand-written ids would not. The
+model you declare picks how the object is held, matched to the complexity of
+your scenario:
 
 - **Confined** — `Box<T>`, one owner, used from one isolate. Requires `Send`.
   Sync methods run on the caller; no async.
