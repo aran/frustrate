@@ -89,7 +89,6 @@ mod returning {
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::mpsc::{channel, Sender};
     use crate::bounded::Lock;
     use std::sync::Arc;
     use std::task::{Context, Poll, Waker};
@@ -120,12 +119,25 @@ mod returning {
 
     /// A parked invocation awaiting its Dart response. Two shapes share ONE
     /// registry and ONE `frustrate_callback_respond` export: the blocking
-    /// [`DartFunction::call`] parks a worker thread on an mpsc channel; the
+    /// [`DartFunction::call`] parks a worker thread until its answer is filled in; the
     /// cooperative [`DartFunction::call_async`] parks a future on the
     /// executor task's waker. `respond` routes by the shape it finds.
     enum Waiter {
-        Blocking(Sender<Vec<u8>>),
+        Blocking(Arc<Lock<Answer>>, std::thread::Thread),
         Async(Arc<Lock<Slot>>),
+    }
+
+    /// Where a blocked [`DartFunction::call`] finds its answer: `None` until
+    /// one arrives, then the response, or `None` inside when the isolate that
+    /// owed it is gone. The answering thread fills it and unparks the caller,
+    /// so neither side holds anything but the bounded lock, briefly.
+    struct Answer(Option<Option<Vec<u8>>>);
+
+    /// Give a blocked caller its answer and wake it.
+    fn answer(slot: &Lock<Answer>, thread: &std::thread::Thread, answer: Option<Vec<u8>>) {
+        let displaced = slot.with(|a| a.0.replace(answer));
+        drop(displaced);
+        thread.unpark();
     }
 
     /// One registered invocation: the waiter, plus the isolate that owes it a
@@ -198,10 +210,9 @@ mod returning {
         let orphans: Vec<Waiter> = orphans.into_iter().map(|r| r.into_inner().waiter).collect();
         for waiter in orphans {
             match waiter {
-                // Dropping the sender makes the blocked `recv` fail, which
-                // `call` turns into an attributable panic on the enclosing
-                // bridge call.
-                Waiter::Blocking(tx) => drop(tx),
+                // An empty answer, which `call` turns into an attributable
+                // panic on the enclosing bridge call.
+                Waiter::Blocking(slot, thread) => answer(&slot, &thread, None),
                 Waiter::Async(slot) => {
                     let waker = slot.with(|g| {
                         g.response =
@@ -311,7 +322,7 @@ mod returning {
         /// producer's refusal, or died with the invocation already queued. The
         /// last of those used to need a probe loop here; the isolate now
         /// reports its own death (`post::handle_exit`) and this is a plain
-        /// `recv` again.
+        /// park again.
         ///
         /// Contract (checked): only from pool or actor context. The
         /// checker already rejects `DartFunction` params on sync members;
@@ -336,10 +347,10 @@ mod returning {
             let mut w = invocation_writer();
             w.write_handle(invocation);
             (self.encode)(arg, &mut w);
-            let (tx, rx) = channel();
+            let slot = Arc::new(Lock::new(Answer(None)));
             let entry = Outside::new(Registered {
                 isolate: isolate_of(self.end.id),
-                waiter: Waiter::Blocking(tx),
+                waiter: Waiter::Blocking(Arc::clone(&slot), std::thread::current()),
             });
             let displaced = with_invocations(|m| m.insert(invocation, entry));
             drop(displaced.map(Outside::into_inner));
@@ -347,24 +358,28 @@ mod returning {
                 // `deliver` has already given back what the argument minted:
                 // it never reached Dart, so no wrapper will ever dispose it.
                 //
-                // The consumer isolate is gone, so nothing will ever fill `rx`.
+                // The consumer isolate is gone, so nothing will ever answer.
                 // Retire the entry and fail here rather than parking this
                 // worker thread forever.
                 // Bound out: dropping a `Registered` inside the critical
-                // section would run `Waiter`'s drop there — a `Sender` drop
-                // unparks a blocked receiver, an `Arc<Lock<Slot>>` drop can
-                // free a `Waker`. Neither belongs under a spin lock.
+                // section would run `Waiter`'s drop there — an
+                // `Arc<Lock<Slot>>` drop can free a `Waker`. Neither belongs under a spin lock.
                 let orphan = with_invocations(|m| m.remove(&invocation));
                 drop(orphan.map(Outside::into_inner));
                 panic!("frustrate: {DEAD_CONSUMER}");
             }
-            // A closed channel means the waiter was taken by
-            // `fail_invocations_for`, i.e. `post::mark_gone` ran for this
-            // isolate — because it reported its own exit, or because a post to
-            // it was refused. Nothing else can close it.
-            let resp = rx
-                .recv()
-                .unwrap_or_else(|_| panic!("frustrate: {DEAD_CONSUMER}"));
+            // Parked until answered; `park` may return spuriously, so the
+            // answer is what ends the loop. An empty answer means the waiter
+            // was taken by `fail_invocations_for`, i.e. `post::mark_gone` ran
+            // for this isolate — because it reported its own exit, or because
+            // a post to it was refused. Nothing else answers empty.
+            let resp = loop {
+                if let Some(answer) = slot.with(|a| a.0.take()) {
+                    break answer;
+                }
+                std::thread::park();
+            }
+            .unwrap_or_else(|| panic!("frustrate: {DEAD_CONSUMER}"));
             decode_response(&resp, self.decode, self.decode_err)
         }
 
@@ -634,9 +649,7 @@ mod returning {
         // already reported. Route by the waiter's shape.
         let waiter = with_invocations(|m| m.remove(&invocation)).map(|r| r.into_inner().waiter);
         match waiter {
-            Some(Waiter::Blocking(tx)) => {
-                let _ = tx.send(bytes);
-            }
+            Some(Waiter::Blocking(slot, thread)) => answer(&slot, &thread, Some(bytes)),
             Some(Waiter::Async(slot)) => {
                 // Take the waker and release the slot BEFORE waking: a native
                 // wake may immediately schedule a re-poll on another thread

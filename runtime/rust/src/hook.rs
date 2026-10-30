@@ -68,14 +68,8 @@
 //! than theirs: `take`/`replace` an `Option`, or clone an `Arc`. Never an
 //! allocation, never user code, never a poll.
 //!
-//! `executor::Lock`'s per-target split — `std::sync::Mutex` off `+atomics`
-//! wasm, `Lock` on it — was considered and is wrong *here*, for a reason
-//! specific to this module rather than a preference. That split leaves the two
-//! arms exercised by disjoint configurations: the host suite and Miri only ever
-//! see the `Mutex` arm, and the spin arm is covered by nothing until a wasm
-//! consumer exists. One implementation on every target is exactly what
-//! `spin.rs` says its own existence is for, and it is what puts this algorithm
-//! under `cargo miri test -p frustrate --lib hook::`.
+//! The slot is the bounded lock (bounded.rs), so its sections are proven by
+//! the native no_block check like every other registry's.
 //!
 //! Two lock-free shapes were also considered. An `AtomicPtr` swap cannot hold
 //! an `Arc<dyn Fn…>` (a fat pointer), and boxing to make it thin turns every

@@ -655,28 +655,14 @@ pub(crate) fn init_global() {
     let _ = global();
 }
 
-/// The cell the global executor lives in.
-///
-/// `OnceLock` wherever the target has no wait instruction; [`crate::spin::RaceOnce`]
-/// on wasm with `+atomics`. Same seam and same key as [`Lock`], for the same
-/// reason: `OnceLock::get_or_init` parks on its cold path, and where parking
-/// lowers to `memory.atomic.wait32` the browser main thread traps instead of
-/// waiting. The generalisation of `callback::INVOCATIONS`, which is const-built
-/// rather than behind a `OnceLock` and says so; an `Executor` owns boxed
-/// closures and cannot be const-built, so it needs a cell that initialises
-/// without waiting rather than no cell at all.
-///
-/// Where parking is legal, `OnceLock` is the better primitive and stays: it
-/// really does run its initialiser once, whereas `RaceOnce` may build a value
-/// per racing thread and publish one. That cost is worth paying only to buy
-/// something, and off `+atomics` there is nothing to buy.
-///
-/// A type alias rather than two `global()` bodies — the per-config choice is
-/// which primitive, never what the function does.
-#[cfg(not(all(target_family = "wasm", target_feature = "atomics")))]
-type ExecCell = std::sync::OnceLock<Executor>;
-
-#[cfg(all(target_family = "wasm", target_feature = "atomics"))]
+/// The cell the global executor lives in: [`crate::spin::RaceOnce`] on every
+/// target. `OnceLock::get_or_init` parks a thread that arrives while another
+/// is initialising, and the caller here can be the main isolate's thread
+/// (every actor and async call reserves its id through [`global`]): on
+/// `+atomics` wasm that parking traps, and natively it is a wait the no_block
+/// check would rightly count. `RaceOnce` never waits; its cost is that racing
+/// threads may each build an `Executor`, which is three allocations and no
+/// observable effect, and all but one are dropped.
 type ExecCell = crate::spin::RaceOnce<Executor>;
 
 /// The process/page-global executor. Its completion hook is

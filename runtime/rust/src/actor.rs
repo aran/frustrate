@@ -45,11 +45,12 @@
 //! instance through the ordinary exports, and the Dart side posts to it.
 
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
+use crate::bounded::{Lock, Outside};
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::c_void;
 use std::ptr::{null_mut, NonNull};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::Arc;
 use std::thread::Thread;
 
 /// One dispatched call body. `Some(reply)` is the response envelope the loop
@@ -263,12 +264,11 @@ static NEXT_HOST: AtomicU64 = AtomicU64::new(1);
 /// caller thread takes this lock: a call reaches its host through the pointer
 /// the Dart side holds.
 ///
-/// A plain `std::sync::Mutex`: on wasm this file does not exist, and on native
-/// every thread that takes it may park.
-fn hosts() -> &'static Mutex<HashMap<u64, Arc<Host>>> {
-    static HOSTS: OnceLock<Mutex<HashMap<u64, Arc<Host>>>> = OnceLock::new();
-    HOSTS.get_or_init(|| Mutex::new(HashMap::new()))
-}
+/// The bounded lock, because `reap_isolate` reaches it from `post::mark_gone`,
+/// which a post from the main isolate's thread can run. Entries are
+/// [`Outside`]: the last `Arc` to a host drops it, which must not happen
+/// under the lock.
+static HOSTS: Lock<BTreeMap<u64, Outside<Arc<Host>>>> = Lock::new(BTreeMap::new());
 
 /// Outstanding deferred completions by owning host: what a stopping host
 /// cancels, the calls whose futures are live on the cooperative executor
@@ -279,32 +279,26 @@ fn hosts() -> &'static Mutex<HashMap<u64, Arc<Host>>> {
 /// dropped — completion, cancellation, and a panicking poll all end there.
 /// Swept by the host thread when it stops ([`cancel_deferred_for`]).
 ///
-/// A `std::sync::Mutex` for the reason [`hosts`] is one: `Deferred<T>` exists
-/// only on actor members (FR0038), so nothing on a web main instance reaches
-/// it, and natively its takers are the host thread and whichever thread drops
-/// a deferred future.
-fn deferred() -> &'static Mutex<HashMap<u64, HashSet<u64>>> {
-    static DEFERRED: OnceLock<Mutex<HashMap<u64, HashSet<u64>>>> = OnceLock::new();
-    DEFERRED.get_or_init(|| Mutex::new(HashMap::new()))
-}
+/// The bounded lock: its takers are the host thread and whichever thread
+/// drops a deferred future, which under the manual scheduler can be the main
+/// isolate's.
+static DEFERRED: Lock<BTreeMap<u64, BTreeSet<u64>>> = Lock::new(BTreeMap::new());
 
 pub(crate) fn register_deferred(host: u64, call_id: u64) {
-    deferred()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .entry(host)
-        .or_default()
-        .insert(call_id);
+    DEFERRED.with(|map| {
+        map.entry(host).or_default().insert(call_id);
+    });
 }
 
 pub(crate) fn unregister_deferred(host: u64, call_id: u64) {
-    let mut map = deferred().lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some(set) = map.get_mut(&host) {
-        set.remove(&call_id);
-        if set.is_empty() {
-            map.remove(&host);
+    DEFERRED.with(|map| {
+        if let Some(set) = map.get_mut(&host) {
+            set.remove(&call_id);
+            if set.is_empty() {
+                map.remove(&host);
+            }
         }
-    }
+    });
 }
 
 /// Cancel every outstanding deferred completion of `host`, when it stops.
@@ -319,12 +313,10 @@ pub(crate) fn unregister_deferred(host: u64, call_id: u64) {
 /// Runs on the host thread after its last call, so it also catches a deferred
 /// prefix that was still queued when the stop was requested.
 fn cancel_deferred_for(host: u64) {
-    let ids: Vec<u64> = {
-        let mut map = deferred().lock().unwrap_or_else(PoisonError::into_inner);
-        map.remove(&host)
-            .map(|set| set.into_iter().collect())
-            .unwrap_or_default()
-    };
+    let ids: Vec<u64> = DEFERRED
+        .with(|map| map.remove(&host))
+        .map(|set| set.into_iter().collect())
+        .unwrap_or_default();
     for id in ids {
         crate::executor::cancel(id);
     }
@@ -390,10 +382,9 @@ fn run(host: Arc<Host>) {
     // So a deferred prefix dispatched here can name its own host
     // (`current_host`) without the job carrying the id.
     CURRENT_HOST.with(|c| c.set(host.id));
-    hosts()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .insert(host.id, Arc::clone(&host));
+    let entry = Outside::new(Arc::clone(&host));
+    let displaced = HOSTS.with(|map| map.insert(host.id, entry));
+    drop(displaced.map(Outside::into_inner));
     // After entering the registry, not before: an exit notice either finds
     // this host there, or was delivered before it entered, and then the
     // isolate is already marked gone here. Both orders hold because the
@@ -475,10 +466,8 @@ fn stop(host: &Host, behind: impl Iterator<Item = Msg>) {
     }
     // Claim-only on this thread: the futures drop on later executor drains.
     cancel_deferred_for(host.id);
-    hosts()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .remove(&host.id);
+    let removed = HOSTS.with(|map| map.remove(&host.id));
+    drop(removed.map(Outside::into_inner));
     // Last, because it runs user `Drop`s. After an orderly dispose the table
     // is empty; otherwise each object drops as a leak, naming its type, and a
     // panicking `Drop` is reported without stranding the rest.
@@ -542,14 +531,13 @@ pub fn host_count() -> usize {
 /// thread inside an `extern "C"` frame. One short lock, poison-tolerant, then
 /// lock-free posts.
 pub fn reap_isolate(isolate: u32) {
-    let doomed: Vec<Arc<Host>> = hosts()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .values()
-        .filter(|h| h.isolate == isolate)
-        .cloned()
-        .collect();
-    for host in doomed {
+    let doomed: Vec<Outside<Arc<Host>>> = HOSTS.with(|map| {
+        map.values()
+            .filter(|h| h.isolate == isolate)
+            .map(|h| Outside::new(Arc::clone(h)))
+            .collect()
+    });
+    for host in doomed.into_iter().map(Outside::into_inner) {
         host.request_stop();
     }
 }
@@ -616,6 +604,7 @@ pub unsafe extern "C" fn frustrate_actor_reap(token: *mut c_void) {
 mod tests {
     use super::*;
     use crate::codec::FramedWriter;
+    use std::sync::Mutex;
     use std::sync::mpsc::channel;
 
     // One test fn, serialized with other post-using tests via
@@ -716,7 +705,7 @@ mod tests {
     /// from its own thread after spawn returns.
     fn await_registered(host: &Arc<Host>) {
         await_true(
-            || hosts().lock().unwrap().contains_key(&host.id),
+            || HOSTS.with(|m| m.contains_key(&host.id)),
             "the host thread never entered the registry",
         );
     }
@@ -896,7 +885,7 @@ mod tests {
         );
         assert_eq!(host_count(), before, "it counted itself out");
         await_true(
-            || !hosts().lock().unwrap().contains_key(&host.id),
+            || !HOSTS.with(|m| m.contains_key(&host.id)),
             "the stopped host never left the registry",
         );
     }
@@ -1067,7 +1056,7 @@ mod tests {
             "no answer is owed to a reaped handle's call"
         );
         await_true(
-            || deferred().lock().unwrap().get(&host.id).is_none(),
+            || DEFERRED.with(|m| m.get(&host.id).is_none()),
             "the host's registry entry must not outlive the reap",
         );
     }
@@ -1276,7 +1265,7 @@ mod tests {
             "the canceller owns the answer, so nothing may respond for 701"
         );
         await_true(
-            || deferred().lock().unwrap().get(&host.id).is_none(),
+            || DEFERRED.with(|m| m.get(&host.id).is_none()),
             "the deferred registration must be released with the refused body",
         );
         host.request_stop();
@@ -1294,16 +1283,16 @@ mod tests {
         let seen = recording_posts();
         let host = spawn_host(0);
         await_registered(&host);
-        {
-            let _hosts = hosts().lock().unwrap();
-            let _deferred = deferred().lock().unwrap();
-            unsafe {
-                submit(Arc::as_ptr(&host) as *const c_void, 801, || {
-                    Some(FramedWriter::from_bytes(vec![0]))
-                })
-            };
-            await_true(|| seen.lock().unwrap().contains(&801), "the call never answered");
-        }
+        HOSTS.with(|_| {
+            DEFERRED.with(|_| {
+                unsafe {
+                    submit(Arc::as_ptr(&host) as *const c_void, 801, || {
+                        Some(FramedWriter::from_bytes(vec![0]))
+                    })
+                };
+                await_true(|| seen.lock().unwrap().contains(&801), "the call never answered");
+            })
+        });
         host.request_stop();
     }
 
@@ -1390,7 +1379,7 @@ mod tests {
             "a call behind the stop was never answered",
         );
         await_true(
-            || !hosts().lock().unwrap().contains_key(&host.id),
+            || !HOSTS.with(|m| m.contains_key(&host.id)),
             "the stopped host never left the registry",
         );
         // The inbox is closed now, so this one is refused on this thread.

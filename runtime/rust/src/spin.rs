@@ -203,16 +203,6 @@ impl<T> Drop for Held<'_, T> {
 /// construction is side-effect-free and cheap — building an `Executor` is
 /// three allocations and no observable effect. The fast path is exactly
 /// `OnceLock`'s, one acquire load, and no path waits on any thread.
-///
-/// Compiled on every target although only `+atomics` wasm selects it
-/// (`executor::ExecCell`), for the reason the module docs give for `SpinLock`:
-/// that is what puts the algorithm under these unit tests and under
-/// `cargo miri test -p frustrate --lib spin`. Hence the conditional `dead_code`
-/// allowance, conditional so dead-code checking stays live where it is used.
-#[cfg_attr(
-    not(all(target_family = "wasm", target_feature = "atomics")),
-    allow(dead_code)
-)]
 pub(crate) struct RaceOnce<T> {
     /// Null until some thread publishes; after that, a `Box<T>` this cell owns
     /// and never replaces.
@@ -233,10 +223,6 @@ unsafe impl<T: Send + Sync> Sync for RaceOnce<T> {}
 // Safety: moving the cell moves the value it owns, and nothing else.
 unsafe impl<T: Send> Send for RaceOnce<T> {}
 
-#[cfg_attr(
-    not(all(target_family = "wasm", target_feature = "atomics")),
-    allow(dead_code)
-)]
 impl<T> RaceOnce<T> {
     /// An empty cell, in a `const` context — so a `static` needs no
     /// initialiser, the property that keeps `pool::QUEUE` unwedgeable.
