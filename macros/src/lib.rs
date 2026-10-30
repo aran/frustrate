@@ -179,3 +179,65 @@ pub fn bridge(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn bridge_file(_input: TokenStream) -> TokenStream {
     TokenStream::new()
 }
+
+/// `#[frustrate::no_block(allow)]` on a function of your own: a claimed
+/// `no_block` member that reaches it is fine there, and the check does not
+/// follow into it. See `docs/ANNOTATIONS.md`, "Silencing a finding".
+///
+/// Accepts exactly `(allow)`, on a free function, a method or a generic
+/// function. In an ordinary build the function is emitted unchanged. Under
+/// `--cfg frustrate_block_check` (the no_block check's build) it is
+/// `#[inline(never)]`, and its body begins with a call to
+/// `frustrate::__no_block_allow`, which the native scanner reads as a stop
+/// point. A call in the body survives every generic instantiation, which a
+/// static could not; `inline(never)` keeps the call from moving into a
+/// caller, which would widen the silence to the caller.
+#[proc_macro_attribute]
+pub fn no_block(attr: TokenStream, item: TokenStream) -> TokenStream {
+    use proc_macro::{Delimiter, Group, TokenTree};
+
+    let fail =
+        |msg: &str| -> TokenStream { format!("::core::compile_error!({msg:?});").parse().unwrap() };
+    let mut args = attr.into_iter();
+    match (args.next(), args.next()) {
+        (Some(TokenTree::Ident(i)), None) if i.to_string() == "allow" => {}
+        _ => return fail("`#[frustrate::no_block(...)]` on a function takes exactly `(allow)`"),
+    }
+
+    let mut trees: Vec<TokenTree> = item.clone().into_iter().collect();
+    let has_body =
+        matches!(trees.last(), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Brace);
+    let is_fn = trees
+        .iter()
+        .any(|t| matches!(t, TokenTree::Ident(i) if i.to_string() == "fn"));
+    if !has_body || !is_fn {
+        return fail("`#[frustrate::no_block(allow)]` goes on a function with a body");
+    }
+    let is_const = trees
+        .iter()
+        .take_while(|t| !matches!(t, TokenTree::Ident(i) if i.to_string() == "fn"))
+        .any(|t| matches!(t, TokenTree::Ident(i) if i.to_string() == "const"));
+    if is_const {
+        return fail("`#[frustrate::no_block(allow)]` cannot go on a `const fn`");
+    }
+    let Some(TokenTree::Group(body)) = trees.pop() else {
+        unreachable!("checked above")
+    };
+    let marker: TokenStream = "::frustrate::__no_block_allow();".parse().unwrap();
+    let mut marked_body = marker;
+    marked_body.extend(body.stream());
+    let mut marked: TokenStream = trees.into_iter().collect();
+    let mut new_body = Group::new(Delimiter::Brace, marked_body);
+    new_body.set_span(body.span());
+    marked.extend([TokenTree::Group(new_body)]);
+
+    let mut out: TokenStream = "#[cfg(not(frustrate_block_check))]".parse().unwrap();
+    out.extend(item);
+    out.extend(
+        "#[cfg(frustrate_block_check)] #[inline(never)]"
+            .parse::<TokenStream>()
+            .unwrap(),
+    );
+    out.extend(marked);
+    out
+}

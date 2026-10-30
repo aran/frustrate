@@ -13,6 +13,20 @@
 
 pub use frustrate_macros::bridge;
 pub use frustrate_macros::bridge_file;
+pub use frustrate_macros::no_block;
+
+/// What `#[frustrate::no_block(allow)]` makes a function call first, in the
+/// no_block check's build only. It does nothing and is never inlined, so the
+/// native scanner finds the call in the function that made it; the export
+/// name is how it knows this function.
+#[doc(hidden)]
+#[cfg(frustrate_block_check)]
+#[inline(never)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(export_name = "frustrate_no_block_allow"))]
+pub fn __no_block_allow() {
+    // An empty side effect, so no optimizer deletes the call as pure.
+    core::hint::black_box(());
+}
 
 /// The six representation keywords, spelled as types so a use site may name
 /// one explicitly wherever a bridged type name may appear — `fn f(doc:

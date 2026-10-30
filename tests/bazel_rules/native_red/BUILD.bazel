@@ -14,6 +14,8 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 #              registers its destructor under the loader's lock -> red
 # - silenced:  two members call a C function, one silenced -> the other only
 # - stale:     a member's silence silences nothing         -> an error
+# - marked:    a member reaches a wait through a marked function -> passes
+# - stale_marker: a marked function silences nothing           -> an error
 # - logger:    the member logs through `log::set_logger`'s   -> cannot verify
 # - callback:  the member calls a `Box<dyn Fn>` in a static  -> cannot verify
 # - hashmap:   the member builds a `HashMap`, whose keys std draws through
@@ -37,9 +39,11 @@ dart_test(
         "//tests/bazel_rules/native_red/external:artifacts",
         "//tests/bazel_rules/native_red/hashmap:artifacts",
         "//tests/bazel_rules/native_red/logger:artifacts",
+        "//tests/bazel_rules/native_red/marked:artifacts",
         "//tests/bazel_rules/native_red/memchr:artifacts",
         "//tests/bazel_rules/native_red/optimized:artifacts",
         "//tests/bazel_rules/native_red/silenced:artifacts",
+        "//tests/bazel_rules/native_red/stale_marker:artifacts",
         "//tests/bazel_rules/native_red/stale:artifacts",
         "//tests/bazel_rules/thread_local_fixture:artifacts",
     ],

@@ -139,6 +139,31 @@ void main() {
     expect(err, contains('`sqlite3_step` on plain'));
   });
 
+  test('a wait behind a function marked no_block(allow) passes, listed', () {
+    final (code, out) = red('marked', mac);
+    expect(code, 0, reason: out);
+    expect(
+      out,
+      contains(
+        '`native_red_marked::api::lock_uncontended_here` in every claim '
+        '(`#[frustrate::no_block(allow)]`)',
+      ),
+    );
+  });
+
+  test('a marked function with nothing to silence fails the check', () {
+    final (code, err) = red('stale_marker', mac);
+    expect(code, isNot(0), reason: err);
+    expect(err, contains('silence(s) silence nothing'));
+    expect(
+      err,
+      contains(
+        '`native_red_stale_marker::api::plus_one` '
+        '(`#[frustrate::no_block(allow)]`)',
+      ),
+    );
+  });
+
   test('a member that logs through an installed logger cannot be verified', () {
     final (code, err) = red('logger', mac);
     expect(code, isNot(0), reason: err);

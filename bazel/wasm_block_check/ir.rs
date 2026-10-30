@@ -51,8 +51,14 @@
 //!
 //! **Silences.** Any finding is silenced by naming what it names: `--allow <name>` (the check target's `allow`)
 //! for every claim, or a census `allow` row (`no_block(allow(...))` in
-//! source) for one member. Each applied silence is listed in the verdict, and one that
-//! silences nothing is an error, so a silence cannot outlive what it was for.
+//! source) for one member. A function can also be silenced whole: one marked
+//! `#[frustrate::no_block(allow)]` calls [`MARKER`] first, and a function
+//! that calls it is a stop point: no claim's traversal enters it, so it and
+//! everything it reaches are excluded, the bounded lock's section proof
+//! included. Each applied silence is listed in the verdict, and one that
+//! silences nothing is an error (for a marked function: one a claimed member
+//! reaches, whose subtree holds no finding), so a silence cannot outlive what
+//! it was for. A marked function no claim reaches is ignored.
 //!
 //! # What green does not cover
 //!
@@ -79,6 +85,11 @@ use super::{match_census, own_path, readable, Claims, Sinks, FATAL_ENTRIES, ROOT
 /// The export name `runtime/rust/src/bounded.rs` gives the bounded lock's
 /// acquire in the check build.
 pub(crate) const ACQUIRE: &str = "frustrate_bounded_lock_acquire";
+
+/// The export name `runtime/rust/src/lib.rs` gives the marker that
+/// `#[frustrate::no_block(allow)]` makes a function call first, in the check
+/// build.
+pub(crate) const MARKER: &str = "frustrate_no_block_allow";
 
 /// Statics a call may be made through without a finding: what is in them
 /// is installed by code frustrate knows, and why it cannot stall the caller.
@@ -436,6 +447,30 @@ fn is_member(path: &[String], krate: &str, want: &[String], display: &[&str]) ->
     parent.iter().all(|p| between.iter().any(|s| s == p))
 }
 
+/// A marked function's path, one for all its instances. `own_path` puts a v0
+/// generic instance's type arguments after the function's path; the function's
+/// own path is the crate and one name per `N<ns>` before it, which is read off
+/// a free function's mangling (`_RI`, then `N<ns>`s, then `C`). A symbol of
+/// another shape (an instance of a generic method, say) keeps all its
+/// segments, so each of its instances stands alone.
+fn marked_key(sym: &str) -> (String, bool) {
+    let mut path = own_path(sym);
+    let mut grouped = true;
+    if let Some(rest) = sym.strip_prefix("_RI") {
+        let b = rest.as_bytes();
+        let mut n = 0;
+        while b.get(2 * n) == Some(&b'N') && b.get(2 * n + 1).is_some_and(|c| c.is_ascii_lowercase()) {
+            n += 1;
+        }
+        if b.get(2 * n) == Some(&b'C') {
+            path.truncate(n + 1);
+        } else {
+            grouped = false;
+        }
+    }
+    (path.join("::"), grouped)
+}
+
 /// One bounded-lock section that fails its proof, with the path to why.
 struct DirtySection {
     section: u32,
@@ -452,6 +487,7 @@ fn prove_bounded(
     acquire: u32,
     kinds: &BTreeMap<u32, (Verdict, String)>,
     fatal: &BTreeSet<u32>,
+    marked: &BTreeSet<u32>,
     known: &[(u32, &[&str])],
 ) -> Vec<DirtySection> {
     let mut dirty = Vec::new();
@@ -471,7 +507,7 @@ fn prove_bounded(
     let mut cut = fatal.clone();
     cut.insert(acquire);
     let sections: Vec<u32> = (0..ir.names.len() as u32)
-        .filter(|f| *f != acquire && ir.refs[*f as usize].contains(&acquire))
+        .filter(|f| *f != acquire && !marked.contains(f) && ir.refs[*f as usize].contains(&acquire))
         .collect();
     for s in &sections {
         let reached = reach_vouched(ir, *s, &ir.refs, &cut, known);
@@ -564,6 +600,16 @@ pub(crate) fn run_ir(
         .filter(|a| ir.defined[*a as usize]);
     let mut cut = fatal.clone();
     cut.extend(acquire);
+    // Functions marked `#[frustrate::no_block(allow)]`: stop points for every
+    // traversal below except the control that a root reaches its member.
+    let marked: BTreeSet<u32> = match ir.index.get(MARKER) {
+        Some(m) => (0..ir.names.len() as u32)
+            .filter(|f| *f != *m && ir.defined[*f as usize] && ir.calls[*f as usize].contains(m))
+            .collect(),
+        None => BTreeSet::new(),
+    };
+    let mut stops = cut.clone();
+    stops.extend(&marked);
 
     // Control: every full root reaches its member's own function. The
     // crate's name is the one its glue (`<crate>::frustrate_generated::call_*`,
@@ -707,7 +753,11 @@ pub(crate) fn run_ir(
     };
 
     let dirty = match acquire {
-        Some(a) => prove_bounded(&ir, libc, a, &kinds, &fatal, &known),
+        Some(a) => {
+            let mut stops = fatal.clone();
+            stops.extend(&marked);
+            prove_bounded(&ir, libc, a, &kinds, &stops, &marked, &known)
+        }
         None => Vec::new(),
     };
     // A target silence is used if any section of the bounded lock reaches
@@ -715,8 +765,9 @@ pub(crate) fn run_ir(
     if let Some(a) = acquire {
         let mut sect_cut = fatal.clone();
         sect_cut.insert(a);
+        sect_cut.extend(&marked);
         for f in 0..ir.names.len() as u32 {
-            if f != a && ir.refs[f as usize].contains(&a) {
+            if f != a && !marked.contains(&f) && ir.refs[f as usize].contains(&a) {
                 for g in reach_vouched(&ir, f, &ir.refs, &sect_cut, &known) {
                     if target_silenced.contains(&g) {
                         used_target.insert(key_of[&g].clone());
@@ -733,6 +784,9 @@ pub(crate) fn run_ir(
     };
     let mut stale: Vec<String> = Vec::new();
     let mut silences: Vec<String> = Vec::new();
+    // Marked functions a claim reaches, by path: whether any of the
+    // instances holds a finding the marker keeps out of the verdict.
+    let mut marks: BTreeMap<String, bool> = BTreeMap::new();
 
     struct Finding {
         who: String,
@@ -743,7 +797,15 @@ pub(crate) fn run_ir(
     }
     let mut findings: Vec<Finding> = Vec::new();
     for (r, sym) in roots.iter().zip(&root_names) {
-        let closure = reach_vouched(&ir, *r, &ir.refs, &cut, &known);
+        let closure = reach_vouched(&ir, *r, &ir.refs, &stops, &known);
+        for m in marked.iter().filter(|m| closure.iter().any(|f| ir.refs[*f as usize].contains(m))) {
+            let (key, grouped) = marked_key(&ir.names[*m as usize]);
+            // An instance of a generic method is not grouped with its siblings,
+            // so it is never called stale: a sibling may hold the finding.
+            let live = !grouped || reach(*m, &ir.refs, &stops).iter().any(|f| kinds.contains_key(f));
+            let held = marks.entry(key).or_default();
+            *held |= live;
+        }
         for g in closure.iter().filter(|g| target_silenced.contains(g)) {
             used_target.insert(key_of[g].clone());
         }
@@ -779,8 +841,8 @@ pub(crate) fn run_ir(
         let worst = reached.iter().map(|f| kinds[f].0).min();
         if let Some(v) = worst {
             let targets: BTreeSet<u32> = reached.iter().copied().filter(|f| kinds[f].0 == v).collect();
-            let path = shortest(&ir.calls, &ir.calls, *r, &targets, &cut)
-                .or_else(|| shortest(&ir.refs, &ir.calls, *r, &targets, &cut))
+            let path = shortest(&ir.calls, &ir.calls, *r, &targets, &stops)
+                .or_else(|| shortest(&ir.refs, &ir.calls, *r, &targets, &stops))
                 .expect("a reached sink has a path");
             let last = path.last().unwrap().0;
             findings.push(Finding {
@@ -812,7 +874,7 @@ pub(crate) fn run_ir(
                 .copied()
                 .filter(|f| ir.refs[*f as usize].contains(&a))
                 .collect();
-            if let Some(path) = shortest(&ir.refs, &ir.calls, *r, &sections, &cut) {
+            if let Some(path) = shortest(&ir.refs, &ir.calls, *r, &sections, &stops) {
                 findings.push(Finding {
                     who: display(sym),
                     verdict: Verdict::CannotVerify,
@@ -845,6 +907,16 @@ pub(crate) fn run_ir(
             }
         }
     }
+    for (path, live) in &marks {
+        if *live {
+            silences.push(format!("  `{path}` in every claim (`#[frustrate::no_block(allow)]`)"));
+        } else {
+            stale.push(format!(
+                "  `{path}` (`#[frustrate::no_block(allow)]`): a claimed member reaches it, \
+                 but nothing it reaches is a finding"
+            ));
+        }
+    }
     for w in &sinks.allowed {
         if used_target.contains(w) {
             silences.push(format!("  `{w}` in every claim (the check target's `allow`)"));
@@ -860,7 +932,8 @@ pub(crate) fn run_ir(
             "wasm_block_check: {label}: {} silence(s) silence nothing:\n\n{}\n\n\
              A silence that matches nothing would hide whatever later comes to \
              match it, so it is an error rather than a no-op. Remove it, or \
-             correct what it names to what the check reports.",
+             correct what it names to what the check reports (for an attribute, \
+             remove `#[frustrate::no_block(allow)]` from the function).",
             stale.len(),
             stale.join("\n")
         ));
@@ -954,7 +1027,8 @@ pub(crate) fn run_ir(
          names what the check cannot see into: a function outside the\nRust \
          program not known not to wait, or an indirect call whose target may \
          come from outside it.\nIf a finding cannot stall the caller in practice, silence it: `no_block(allow(<name>))` on the\nmember, its impl or its file \
-         (`bridge_file!`), or `allow` in the check target for every claim.\n\
+         (`bridge_file!`), or `allow` in the check target for every claim, or put \
+         `#[frustrate::no_block(allow)]` on a function of your own that the member reaches.\n\
          \nNot followed, and not counted above:\n",
     );
     for f in FATAL_ENTRIES {
@@ -1304,6 +1378,80 @@ mod tests {
         assert!(e.contains("  b\n      cannot verify: reaches sqlite3_step"), "{e}");
     }
 
+
+    /// `#[frustrate::no_block(allow)]`: a function that calls the marker first.
+    const MARK: &str = "define void @frustrate_no_block_allow() {\n  ret void\n}\n";
+
+    fn marked(render_calls: &str, wrap_body: &str) -> String {
+        format!(
+            "{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n{render_calls}  ret void\n}}\n\
+             define void @_RNvCs1_7example4wrap() {{\n  call void @frustrate_no_block_allow()\n{wrap_body}  ret void\n}}\n\
+             {MARK}declare i32 @pthread_mutex_lock(ptr)\n"
+        )
+    }
+
+    #[test]
+    fn a_marked_function_is_a_stop_point_and_the_silence_is_listed() {
+        let wait = "  call i32 @pthread_mutex_lock(ptr %0)\n";
+        let call = "  call void @_RNvCs1_7example4wrap()\n";
+        let ok = run_text(&marked(call, wait), None, &Sinks::default()).unwrap();
+        assert!(ok.contains("clean"), "{ok}");
+        assert!(ok.contains("`example::wrap` in every claim (`#[frustrate::no_block(allow)]`)"), "{ok}");
+        // The same wait reached around the marked function is still a finding,
+        // and the marker is never one itself.
+        let both = format!("{call}{wait}");
+        let e = run_text(&marked(&both, wait), None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("reaches pthread_mutex_lock — waits"), "{e}");
+        assert!(!e.contains("frustrate_no_block_allow"), "{e}");
+    }
+
+    #[test]
+    fn a_marked_function_whose_subtree_holds_no_finding_fails_the_check() {
+        let e = run_text(
+            &marked("  call void @_RNvCs1_7example4wrap()\n", "  call ptr @malloc(i64 8)\n"),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap_err();
+        assert!(e.contains("silence nothing"), "{e}");
+        assert!(e.contains("`example::wrap` (`#[frustrate::no_block(allow)]`)"), "{e}");
+    }
+
+    #[test]
+    fn a_marked_function_no_claim_reaches_is_ignored() {
+        let ok = run_text(&marked("", "  call i32 @pthread_mutex_lock(ptr %0)\n"), None, &Sinks::default()).unwrap();
+        assert!(ok.contains("clean"), "{ok}");
+        assert!(!ok.contains("Silenced"), "{ok}");
+    }
+
+    /// Every instance of a generic function carries its own marker call; the
+    /// silence is one entry by path, and holds if any instance does.
+    #[test]
+    fn a_generic_marked_function_is_one_silence_across_its_instances() {
+        let text = format!(
+            "{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n  call void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4FileE()\n  call void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4PathE()\n  ret void\n}}\n\
+             define void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4FileE() {{\n  call void @frustrate_no_block_allow()\n  call i32 @pthread_mutex_lock(ptr %0)\n  ret void\n}}\n\
+             define void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4PathE() {{\n  call void @frustrate_no_block_allow()\n  ret void\n}}\n\
+             {MARK}declare i32 @pthread_mutex_lock(ptr)\n"
+        );
+        let ok = run_text(&text, None, &Sinks::default()).unwrap();
+        assert_eq!(ok.matches("`example::wrap` in every claim").count(), 1, "{ok}");
+    }
+
+    /// The bounded lock's section proof stops at a marked function, as a
+    /// target silence applies to it.
+    #[test]
+    fn the_bounded_locks_section_proof_stops_at_a_marked_function() {
+        let text = bounded(
+            "  call void @_RNvCs1_7example4wrap()\n",
+            &format!(
+                "define void @_RNvCs1_7example4wrap() {{\n  call void @frustrate_no_block_allow()\n  call i32 @nanosleep(ptr %0)\n  ret void\n}}\n{MARK}"
+            ),
+        );
+        let ok = run_text(&text, None, &Sinks::default()).unwrap();
+        assert!(ok.contains("the bounded lock's sections are all proven"), "{ok}");
+        assert!(ok.contains("`example::wrap` in every claim"), "{ok}");
+    }
 
     /// A call through a value loaded from a static: someone else installed
     /// it, so the check cannot say what it is.

@@ -568,10 +568,12 @@ def frustrate_no_block_check(
         and the panic report are such writes. //bazel/wasm_block_check/io.rs
         has the maps and what each covers.
       allow: For the native analyses: silences for every claim the target
-        checks. A name is what a finding says to silence it as. Silence one member's finding instead with
-        `no_block(allow(<name>))` in its `#[bridge(...)]`, its impl's, or its
-        file's `bridge_file!`. The check lists every silence it applied, and
-        fails on one that silences nothing.
+        checks, for code you cannot annotate. A name is what a finding says to silence
+        it as. In your own code, put `#[frustrate::no_block(allow)]` on the
+        function instead; for one member's finding, `no_block(allow(<name>))`
+        in its `#[bridge(...)]`, its impl's, or its file's `bridge_file!`. The
+        check lists every silence it applied, and fails on one that silences
+        nothing.
       **kwargs: Common attributes (`tags`, `visibility`, `size`, ...) for
         every test and the suite.
     """

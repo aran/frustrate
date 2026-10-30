@@ -70,6 +70,25 @@ dependency or the build decides. `name` is
 what the finding says to silence it as. The check lists every silence it
 applied, and a silence that matches nothing is an error.
 
+**Silencing a whole function:** `#[frustrate::no_block(allow)]` on a function
+of your own — free, a method or generic — means a claimed member that reaches
+it is fine there: the native check does not follow into it, so nothing it calls
+is a finding. It also takes the function out of the bounded lock's section
+proof. Use it for your own code, including a small wrapper that narrows a
+third-party call to one call site:
+
+```rust
+#[frustrate::no_block(allow)]
+fn lock_uncontended_here(m: &Mutex<State>) -> MutexGuard<'_, State> { m.lock().unwrap() }
+```
+
+Use the check target's `allow` for code you cannot annotate, and the member's
+`allow` as a convenience when the name is enough. In an ordinary build the
+function is unchanged; the attribute costs nothing in release. The attribute
+fails the check when a claimed member reaches the function but nothing under it
+would be a finding; a marked function no claim reaches is ignored. The native
+check reads it; the wasm checks do not.
+
 ## `native_only`
 
 **You assert** that this member, block or handle type cannot exist on web,
