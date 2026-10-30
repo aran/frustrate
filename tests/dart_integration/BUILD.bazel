@@ -210,6 +210,24 @@ dart_test(
     ],
 )
 
+# `Addr`: an actor posting closures to itself. Ordering, a job that only a
+# call between its slices can stop, how long a call waits behind such a job,
+# `Deferred` with `Addr::call`, the self-call panic, and dispose with slices
+# pending. Runs on web via web_test.
+dart_test(
+    name = "addr_test",
+    main = "test/addr_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
 # FrustrateCancelToken: cancelling an in-flight bridged `async fn`. The
 # assertion that matters is the Rust-side
 # drop sensor, not the rejected Dart future — a runtime that stopped listening

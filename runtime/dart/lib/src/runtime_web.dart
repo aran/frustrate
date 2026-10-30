@@ -749,10 +749,22 @@ final class _WebTransport {
                 .getProperty<JSFunction>(r'$frustrateStdFacilities'.toJS)
                 .callAsFunction(null, (() => _memory).toJS)!
             as JSObject;
+    // `Addr::post`, declared by a module whose actor takes an `Addr`. An
+    // `Addr` is made only on an actor's executor, which this instance is not,
+    // so reaching this is a bridge bug; supplied because instantiation
+    // resolves every import a module declares.
+    void selfPost() {
+      throw StateError(
+        'frustrate: Addr::post reached the page instance, which hosts no '
+        'actor — bridge bug',
+      );
+    }
+
     ns
       ..setProperty('post'.toJS, post)
       ..setProperty('panic'.toJS, panic)
-      ..setProperty('schedule_drain'.toJS, scheduleDrain);
+      ..setProperty('schedule_drain'.toJS, scheduleDrain)
+      ..setProperty('self_post'.toJS, selfPost.toJS);
     final imports = JSObject()..setProperty('frustrate'.toJS, ns);
     // The wasip1 host, from the glue (installed before this runs). A module
     // built for wasm32-unknown-unknown imports none of it and instantiation

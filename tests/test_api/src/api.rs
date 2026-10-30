@@ -24,7 +24,7 @@
 //! usage: a Confined text document, a Frozen snapshot, a Locked counter).
 
 use anyhow::{bail, Result};
-use frustrate::{bridge, Data, DartCallback, DartFunction, Deferred, Locked, StreamSink};
+use frustrate::{bridge, Addr, Data, DartCallback, DartFunction, Deferred, Locked, StreamSink};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -5989,6 +5989,28 @@ pub struct NoteCore {
     /// Where the job's scan is in the note, and what it has folded so far.
     job_pos: usize,
     job_acc: u64,
+    /// For the self-posted background job ([`NoteCore::start_background`]).
+    me: Addr<NoteCore>,
+    /// The running self-posted job, if any.
+    bg: Option<SelfPostedJob>,
+    /// Bumped by every start and stop, so a slice posted by an earlier run
+    /// finds itself stale and ends that run's chain.
+    bg_run: u64,
+}
+
+/// A background job running as slices the core posts to itself.
+struct SelfPostedJob {
+    slice_us: i64,
+    handler_ns: Vec<i64>,
+}
+
+/// What a self-posted background job did between its start and its stop.
+#[bridge(data)]
+pub struct BackgroundReport {
+    /// Each slice's handler time, in order, on the actor's own clock.
+    pub handler_ns: Vec<i64>,
+    /// Background jobs finished so far.
+    pub jobs_done: i64,
 }
 
 impl NoteCore {
@@ -5998,6 +6020,19 @@ impl NoteCore {
             at -= 1;
         }
         at
+    }
+
+    /// One self-posted slice, which posts the next one.
+    fn self_slice(&mut self, run: u64) {
+        let Some(slice_us) = self.bg.as_ref().filter(|_| run == self.bg_run).map(|j| j.slice_us)
+        else {
+            return;
+        };
+        let ack = self.background_slice(slice_us);
+        if let Some(job) = &mut self.bg {
+            job.handler_ns.push(ack.handler_ns);
+        }
+        self.me.post(move |core| core.self_slice(run));
     }
 
     fn publish_change(&mut self, origin: i64, offset: usize, deleted: usize, inserted: &str) -> i64 {
@@ -6020,7 +6055,7 @@ impl NoteCore {
     /// A note of `chars` characters of prose, mostly ASCII with some accented
     /// and CJK text, with the caret in the middle, and a background job that
     /// wants `job_us` microseconds of CPU.
-    pub fn new(chars: i64, job_us: i64) -> Self {
+    pub fn new(chars: i64, job_us: i64, me: Addr<NoteCore>) -> Self {
         const PROSE: &str = "The quick brown fox jumps over the lazy dog; café, naïve, 日本語のメモ. ";
         let text: String = PROSE.chars().cycle().take(chars.clamp(0, 1 << 24) as usize).collect();
         let mut core = NoteCore {
@@ -6033,6 +6068,9 @@ impl NoteCore {
             jobs_done: 0,
             job_pos: 0,
             job_acc: 0,
+            me,
+            bg: None,
+            bg_run: 0,
         };
         core.caret = core.floor_boundary(core.caret);
         core
@@ -6117,8 +6155,132 @@ impl NoteCore {
         SliceAck { handler_ns: core_clock_ns() - start, jobs_done: self.jobs_done }
     }
 
+    /// Run the background job as slices of at most `slice_us` that the core
+    /// posts to itself, back to back, until [`NoteCore::stop_background`].
+    /// Messages that arrive meanwhile run between slices.
+    pub fn start_background(&mut self, slice_us: i64) {
+        self.bg_run += 1;
+        self.bg = Some(SelfPostedJob { slice_us, handler_ns: Vec::new() });
+        let run = self.bg_run;
+        self.me.post(move |core| core.self_slice(run));
+    }
+
+    /// Stop the self-posted job and report its slices.
+    pub fn stop_background(&mut self) -> BackgroundReport {
+        self.bg_run += 1;
+        let job = self.bg.take();
+        BackgroundReport {
+            handler_ns: job.map(|j| j.handler_ns).unwrap_or_default(),
+            jobs_done: self.jobs_done,
+        }
+    }
+
     /// The note's length in UTF-8 bytes.
     pub fn len_bytes(&self) -> i64 {
         self.text.len() as i64
+    }
+}
+
+/// The `Addr` fixture (tests/dart_integration/test/addr_test.dart): an actor
+/// that posts closures to itself, keeping a log of what ran on it in order.
+#[bridge(actor)]
+pub struct Slicer {
+    me: Addr<Slicer>,
+    log: Vec<String>,
+    slices: i64,
+    /// CPU time each slice of the running job spends, in microseconds.
+    slice_us: i64,
+    /// Slices run since the last [`Slicer::slices_since`].
+    since: i64,
+    stop: bool,
+    done: Option<Arc<Gate>>,
+}
+
+impl Slicer {
+    /// One slice of [`Slicer::run_until_stopped`]'s job.
+    fn slice(&mut self) {
+        if self.stop {
+            if let Some(done) = self.done.take() {
+                done.open(self.slices);
+            }
+            return;
+        }
+        let deadline = core_clock_ns() + self.slice_us * 1000;
+        while core_clock_ns() < deadline {
+            std::hint::spin_loop();
+        }
+        self.slices += 1;
+        self.since += 1;
+        self.me.post(Slicer::slice);
+    }
+}
+
+#[bridge]
+impl Slicer {
+    pub fn new(me: Addr<Slicer>) -> Self {
+        Slicer { me, log: Vec::new(), slices: 0, slice_us: 0, since: 0, stop: false, done: None }
+    }
+
+    /// Note `label` in the log, as a call.
+    pub fn mark(&mut self, label: String) {
+        self.log.push(label);
+    }
+
+    /// Post a closure that notes `label` in the log.
+    pub fn post_mark(&mut self, label: String) {
+        self.me.post(move |s| s.log.push(label));
+    }
+
+    /// Everything noted, in the order it ran.
+    pub fn entries(&self) -> Vec<String> {
+        self.log.clone()
+    }
+
+    /// A job that never ends by itself: one slice after another, each
+    /// spending `slice_us` of CPU and posted by the last, until
+    /// [`Slicer::stop`] runs. Resolves to the number of slices that ran. Only
+    /// calls that run between slices can stop it.
+    pub fn run_until_stopped(&mut self, slice_us: i64) -> Deferred<i64> {
+        let done = Arc::new(Gate::default());
+        self.done = Some(Arc::clone(&done));
+        self.slice_us = slice_us.max(0);
+        self.stop = false;
+        self.me.post(Slicer::slice);
+        Deferred::new(async move { done.wait().await })
+    }
+
+    /// Slices run so far.
+    pub fn slices(&self) -> i64 {
+        self.slices
+    }
+
+    /// Slices run since the last call of this, so the number that ran
+    /// between two calls.
+    pub fn slices_since(&mut self) -> i64 {
+        std::mem::take(&mut self.since)
+    }
+
+    pub fn stop(&mut self) {
+        self.stop = true;
+    }
+
+    /// `Deferred` and `Addr` together: the deferred future applies `n` to the
+    /// actor through `Addr::call`, and answers with the new count.
+    pub fn add_later(&mut self, n: i64) -> Deferred<Result<i64, String>> {
+        let me = self.me.clone();
+        Deferred::new(async move {
+            me.call(move |s| {
+                s.slices += n;
+                s.slices
+            })
+            .await
+            .map_err(|gone| gone.to_string())
+        })
+    }
+
+    /// Wait on `Addr::call` inside a method body: the executor is the one
+    /// running this body, so the call can never be answered. Panics.
+    pub fn call_self_and_wait(&mut self) -> i64 {
+        pollster::block_on(self.me.call(|s| s.slices)).unwrap_or(-1)
     }
 }

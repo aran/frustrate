@@ -93,6 +93,35 @@ the executor and free the instance. The mechanics are documented in
   `StateError` naming the actor type. A call that has already answered keeps
   its answer.
 
+## Long work: `Addr`
+
+A method that must do long work on `self` can do it in slices. An actor
+constructor or method may declare an `Addr<Self>` parameter, which the executor
+supplies and Dart never sees. `addr.post(|a| ...)` queues a closure as a new
+message to the actor; each slice posts the next, and calls that arrive meanwhile
+run in between. `addr.call(|a| ...)` does the same and returns a future of the
+closure's result, for a `Deferred` future or a spawned task that must apply
+something to the actor. The mechanics are in `runtime/rust/src/addr.rs`.
+
+- **Order.** A post is a message of its own: it runs after the message that
+  posted it has finished, and posts run in the order they were made. Natively
+  it goes on the host's queue with the calls, so it runs after every message
+  already there and before every later one. On web each post is a task the
+  worker sends itself through a `MessageChannel` of its own, so the worker
+  returns to its event loop between posts and the browser runs whatever else
+  has arrived. Calls that reach the worker during a slice therefore run
+  before the job's next slice or soon after; `addr_test` measures how long a
+  call waits behind a job that keeps posting. Which of a call and a post runs
+  first is not fixed on web, so do not rely on it. (A `MessageChannel` rather
+  than `setTimeout(0)`, which browsers clamp to 4 ms once timers nest.)
+- **Teardown.** A closure whose turn comes after the actor was disposed or
+  consumed is dropped without running; so is one queued behind the stop, and
+  one posted to a stopped executor. `call` then resolves to `Err(Gone)`. On web
+  the worker's termination takes its waiting closures with it.
+- **No waiting on yourself.** Awaiting `call` on the actor's own executor
+  (a `block_on` in a method body) panics at once, because the executor that
+  would run the closure is the one waiting.
+
 ## The web channel: `postMessage` with transferred buffers
 
 A web actor is a Worker running a small JS loop and its own instance of the

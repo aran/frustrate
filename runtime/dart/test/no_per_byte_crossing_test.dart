@@ -84,7 +84,7 @@ const Set<String> _scalarReceivers = {
   // inline closure only because `toJS` rejects an all-throws closure (its
   // return type infers to `Never`), which is what puts them in this scan's
   // way at all — they move code, never bytes.
-  'stackChkFail',
+  'stackChkFail', 'selfPost',
 };
 
 /// Every byte crossing allowed to exist, as the exact trimmed source line.

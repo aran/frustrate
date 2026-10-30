@@ -2,8 +2,8 @@
 //!
 //! An actor's executor runs one message at a time. A method that must do long
 //! work can do a slice of it and [`post`](Addr::post) the rest as a closure:
-//! the closure is a new message, queued behind every message already waiting,
-//! so other callers' calls run between slices. A future running *off* the
+//! the closure is a new message, so calls that arrive meanwhile run between
+//! slices (see Ordering for how firmly). A future running *off* the
 //! executor (a `Deferred` completion, a `runtime::spawn` task) uses
 //! [`call`](Addr::call) to apply a result to the actor and get an answer back.
 //!
@@ -25,22 +25,19 @@
 //!
 //! # Ordering
 //!
-//! A posted closure is a message in the executor's one inbox, the same queue
-//! that holds the calls from Dart. So it runs after every message that was
-//! already in that inbox when it was posted, and before every message that
-//! arrives later. Posts from one sender run in post order.
+//! A posted closure is a new message: it runs after the message that posted
+//! it has finished, never inside it, and posts run in post order.
 //!
-//! - **Native:** the closure is pushed on the host's own queue (actor.rs).
-//! - **Web:** a closure cannot cross into the page, and the worker cannot add
-//!   to the queue the page's calls arrive on: a `MessagePort` has one sender,
-//!   and the HTML standard makes every port its own task source, so a token on
-//!   a second channel would be ordered against the calls only by browser
-//!   habit. So the closure waits in this instance's own queue, and a `self`
-//!   token goes to the page, which posts it back on the actor's one channel.
-//!   The token is then a message in that channel's FIFO like any call, and
-//!   each token runs the oldest waiting closure. A call the page sent before it
-//!   relayed the token runs first, which includes every call that had arrived
-//!   at the worker when the closure was posted.
+//! - **Native:** the closure is pushed on the host's own queue (actor.rs),
+//!   the same queue that holds the calls from Dart. It runs after every
+//!   message already there and before every later one.
+//! - **Web:** the closure waits in this instance's own queue, and the worker
+//!   posts itself a token on a channel of its own; each token, a task of its
+//!   own on the worker's event loop, runs the oldest waiting closure. The
+//!   browser picks between that channel and the one the calls arrive on, so a
+//!   call that has reached the worker runs between two slices in practice
+//!   (tests/dart_integration/test/addr_test.dart measures it), but its order
+//!   against a given post is not fixed.
 //!
 //! # Teardown
 //!
@@ -130,8 +127,9 @@ impl<A: 'static> Addr<A> {
     }
 
     /// Queue `f` as a message to this actor. It runs with `&mut` the actor
-    /// after every message already queued, or is dropped without running if
-    /// the actor is gone by then. Fire-and-forget.
+    /// after the message running now, if any, and every earlier post (see the
+    /// module docs' Ordering), or is dropped without running if the actor is
+    /// gone by then. Fire-and-forget.
     pub fn post(&self, f: impl FnOnce(&mut A) + Send + 'static) {
         let job: Posted = Box::new(move || match crate::objects::root::<A>() {
             // Safety: this closure runs as its own message on the executor
@@ -295,7 +293,7 @@ pub(crate) fn discard(job: Posted) {
 }
 
 /// The web half: the instance's own queue of closures, and the token that
-/// the page relays back on the actor's channel to run the oldest one.
+/// asks the worker to run the oldest one as a task of its own.
 #[cfg(target_family = "wasm")]
 mod web {
     use super::Posted;
@@ -310,7 +308,9 @@ mod web {
 
     #[link(wasm_import_module = "frustrate")]
     extern "C" {
-        /// Post one `self` token to the page, which relays it back.
+        /// Schedule one task on this worker that calls
+        /// [`frustrate_run_posted`] (the actor worker's `posted` channel in
+        /// frustrate.js).
         fn self_post();
     }
 
@@ -319,8 +319,8 @@ mod web {
         unsafe { self_post() };
     }
 
-    /// Run the oldest waiting closure: one per relayed token. Called by the
-    /// actor worker's pump on each `self` message.
+    /// Run the oldest waiting closure: one per token. Called by the actor
+    /// worker for each token on its `posted` channel.
     #[cfg(not(frustrate_block_check))]
     #[unsafe(no_mangle)]
     pub extern "C" fn frustrate_run_posted() {

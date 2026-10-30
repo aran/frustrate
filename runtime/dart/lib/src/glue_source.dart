@@ -442,6 +442,13 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
               'drain, which its blocking entry loop can never run — the ' +
               'threaded Scheduler must hand ready tasks to the pool');
         },
+        // Declared by a module whose actor takes an `Addr`, and reachable
+        // only from an actor instance: `Addr` is made only on an actor's
+        // executor. Supplied, throwing, for schedule_drain's reason.
+        self_post() {
+          throw new Error('frustrate: Addr::post reached a pool worker, ' +
+              'which hosts no actor — bridge bug');
+        },
       },
     };
     try {
@@ -488,6 +495,25 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
       } else {
         postMessage({ type: 'initError', message: lastPanic || String(err) });
       }
+      lastPanic = null;
+    }
+  };
+
+  // An actor's posts to itself (`Addr::post`). Each post sends one token
+  // through this worker-local channel, and each token, delivered as a task of
+  // its own, runs the oldest closure the instance has waiting. A task, not a
+  // microtask, so the event loop dispatches whatever else is ready (the
+  // page's calls) between two slices of a job that keeps posting; a
+  // MessageChannel rather than setTimeout(0), which browsers clamp to 4 ms
+  // once timers nest, an idle gap after every slice. A trap here belongs to
+  // no call, so it is reported the way a trap in executor plumbing is, under
+  // call id 0. Pool workers host no actor and never post to it.
+  const posted = new MessageChannel();
+  posted.port1.onmessage = () => {
+    try {
+      exports.frustrate_run_posted();
+    } catch (err) {
+      postMessage({ type: 'trap', callId: 0, message: lastPanic || String(err) });
       lastPanic = null;
     }
   };
@@ -549,6 +575,12 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
         spawn_worker() {
           throw new Error(
               'frustrate: actor instances must not spawn pool workers');
+        },
+        // `Addr::post` (runtime/rust/src/addr.rs): the closure waits in this
+        // instance, and this schedules a task of this worker's own to run
+        // it. See `posted` above.
+        self_post() {
+          posted.port2.postMessage(null);
         },
       } };
       // Threaded wasm modules import their memory; single-threaded ones export
