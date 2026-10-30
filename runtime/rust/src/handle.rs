@@ -499,8 +499,10 @@ pub fn alias_check(entries: &[(Option<u64>, Use)]) -> Result<(), Aliased> {
 /// name is the only identity available to say whose.
 ///
 /// No `Send` bound: the object is created, used and dropped on one executor.
+///
+/// The object becomes its executor's root, which `Addr<T>` posts run on.
 pub fn actor_new<T: 'static>(value: T, type_name: &'static str) -> u64 {
-    crate::objects::insert(value, type_name)
+    crate::objects::insert_root(value, type_name)
 }
 
 /// The actor at `slot`, shared.

@@ -389,6 +389,7 @@ impl Executor {
         // pool.rs). Native/threaded web unwind and never read it; the write is
         // uniform and harmless there.
         CURRENT_DRAIN_CALL.with(|c| c.set(call_id));
+        let was_draining = DRAINING.with(|d| d.replace(true));
         // `run()` polls the future once. It re-schedules itself internally if
         // woken during the poll (the notified-during-run race async_task owns),
         // so we never lose a wake. A panic in the user future propagates out of
@@ -433,6 +434,7 @@ impl Executor {
         // `drain_one` overwrites it before its own poll, so the stale window is
         // exactly "between the trap and its attribution".
         CURRENT_DRAIN_CALL.with(|c| c.set(0));
+        DRAINING.with(|d| d.set(was_draining));
         true
     }
 
@@ -790,6 +792,16 @@ thread_local! {
     /// (`panic=abort`) the clear is skipped, so it holds the trapping call for
     /// the host to read. See [`frustrate_current_drain_call`].
     static CURRENT_DRAIN_CALL: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Whether [`Executor::drain_one`] is polling a task on this thread. Its
+    /// own flag because a detached task polls under call id 0.
+    static DRAINING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether this thread is inside the cooperative executor's poll of a task.
+/// `Addr::call` reads it to tell an await the executor will resume when woken
+/// from one that holds the actor's executor while it waits.
+pub(crate) fn draining() -> bool {
+    DRAINING.with(|d| d.get())
 }
 
 /// The call id of the task this thread is currently polling (0 if none).

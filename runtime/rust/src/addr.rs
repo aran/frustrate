@@ -1,0 +1,336 @@
+//! `Addr<A>`: an actor's address for messages to itself.
+//!
+//! An actor's executor runs one message at a time. A method that must do long
+//! work can do a slice of it and [`post`](Addr::post) the rest as a closure:
+//! the closure is a new message, queued behind every message already waiting,
+//! so other callers' calls run between slices. A future running *off* the
+//! executor (a `Deferred` completion, a `runtime::spawn` task) uses
+//! [`call`](Addr::call) to apply a result to the actor and get an answer back.
+//!
+//! An actor receives its `Addr` as a context parameter: a constructor or
+//! method of the actor declares a parameter of type `Addr<Self>`, and the
+//! executor supplies it. It is not part of the Dart signature.
+//!
+//! ```ignore
+//! #[bridge] impl Indexer {
+//!     pub fn new(me: Addr<Indexer>) -> Indexer { Indexer { me, done: 0 } }
+//!
+//!     pub fn reindex(&mut self) -> Deferred<Result<u64, Gone>> {
+//!         let (tx, rx) = ...; // any oneshot
+//!         self.me.post(move |ix| ix.slice(tx));
+//!         Deferred::new(async move { rx.await.map_err(|_| Gone) })
+//!     }
+//! }
+//! ```
+//!
+//! # Ordering
+//!
+//! A posted closure is a message in the executor's one inbox, the same queue
+//! that holds the calls from Dart. So it runs after every message that was
+//! already in that inbox when it was posted, and before every message that
+//! arrives later. Posts from one sender run in post order.
+//!
+//! - **Native:** the closure is pushed on the host's own queue (actor.rs).
+//! - **Web:** a closure cannot cross into the page, and the worker cannot add
+//!   to the queue the page's calls arrive on: a `MessagePort` has one sender,
+//!   and the HTML standard makes every port its own task source, so a token on
+//!   a second channel would be ordered against the calls only by browser
+//!   habit. So the closure waits in this instance's own queue, and a `self`
+//!   token goes to the page, which posts it back on the actor's one channel.
+//!   The token is then a message in that channel's FIFO like any call, and
+//!   each token runs the oldest waiting closure. A call the page sent before it
+//!   relayed the token runs first, which includes every call that had arrived
+//!   at the worker when the closure was posted.
+//!
+//! # Teardown
+//!
+//! A posted closure runs on the actor's root object. If the root is gone when
+//! the closure's turn comes (disposed, consumed, or never built because its
+//! constructor panicked) the closure is dropped without running. Natively a
+//! post to a stopped executor, and every post still queued behind the stop, is
+//! dropped too; on web the worker's termination takes the queue with it. A
+//! dropped closure drops what it captured, so a channel it held tells its
+//! other end, and [`call`](Addr::call) resolves to `Err(Gone)`.
+//!
+//! # Panics
+//!
+//! A posted closure that panics is reported to the panic listener; natively
+//! the executor carries on with its next message. On web a panic aborts the
+//! actor's instance, as a panic in any of its calls does.
+//!
+//! Awaiting [`call`](Addr::call) on the executor's own thread, from anywhere
+//! but frustrate's cooperative executor (a `block_on` in a method body, say),
+//! panics at once: the answer needs the executor, which is busy running the
+//! waiter.
+
+use crate::bounded::{Lock, Outside};
+use std::future::Future;
+use std::marker::PhantomData;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll, Waker};
+
+/// A message to the executor, erased: it finds the root and runs on it, or
+/// is dropped without running if the root is gone.
+pub(crate) type Posted = Box<dyn FnOnce() + Send>;
+
+/// The address of an actor, for messages to itself. See the module docs.
+///
+/// `Clone + Send + Sync` whatever `A` is: an `Addr` carries no `A`, only the
+/// way to its executor, and the closures it posts are `Send`.
+pub struct Addr<A: 'static> {
+    #[cfg(not(target_family = "wasm"))]
+    host: Arc<crate::actor::Host>,
+    _root: PhantomData<fn() -> A>,
+}
+
+impl<A: 'static> Clone for Addr<A> {
+    fn clone(&self) -> Self {
+        Addr {
+            #[cfg(not(target_family = "wasm"))]
+            host: Arc::clone(&self.host),
+            _root: PhantomData,
+        }
+    }
+}
+
+impl<A: 'static> std::fmt::Debug for Addr<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Addr<{}>", std::any::type_name::<A>())
+    }
+}
+
+/// The actor an [`Addr::call`] was sent to is gone: it was disposed or
+/// consumed before the closure's turn, or its executor stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Gone;
+
+impl std::fmt::Display for Gone {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the actor is gone")
+    }
+}
+
+impl std::error::Error for Gone {}
+
+impl<A: 'static> Addr<A> {
+    /// The address of the executor this runs on. For generated glue, which
+    /// passes it as a context parameter; `A` is the actor type the glue names.
+    ///
+    /// Natively, panics off an actor's executor. On web it checks nothing: the
+    /// address names the instance it is made in, which for generated glue is
+    /// the actor's own.
+    #[doc(hidden)]
+    pub fn __here() -> Self {
+        Addr {
+            #[cfg(not(target_family = "wasm"))]
+            host: crate::actor::current(),
+            _root: PhantomData,
+        }
+    }
+
+    /// Queue `f` as a message to this actor. It runs with `&mut` the actor
+    /// after every message already queued, or is dropped without running if
+    /// the actor is gone by then. Fire-and-forget.
+    pub fn post(&self, f: impl FnOnce(&mut A) + Send + 'static) {
+        let job: Posted = Box::new(move || match crate::objects::root::<A>() {
+            // Safety: this closure runs as its own message on the executor
+            // that owns the root, so no other borrow of it is live (the
+            // argument `handle::actor_mut` rests on), and the borrow ends
+            // when `f` returns.
+            Some(root) => f(unsafe { &mut *root }),
+            None => drop(f),
+        });
+        self.send(job);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn send(&self, job: Posted) {
+        // Refused by a stopped host: dropped here, on the posting thread,
+        // which is why a posted closure must be `Send`.
+        if let Err(job) = self.host.post_posted(job) {
+            drop(job);
+        }
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn send(&self, job: Posted) {
+        web::post(job);
+    }
+
+    /// Run `f` on this actor as a message, and resolve to its result.
+    ///
+    /// For code off the executor that must apply something to the actor: a
+    /// `Deferred` future that finished slow I/O, or a `runtime::spawn` task.
+    /// Resolves to `Err(Gone)` if the closure is dropped without running.
+    ///
+    /// Polling the returned future on this actor's own executor, other than
+    /// from frustrate's cooperative executor, panics: it could only complete
+    /// once the poller let the executor go.
+    pub fn call<R: Send + 'static>(&self, f: impl FnOnce(&mut A) -> R + Send + 'static) -> Call<R> {
+        let slot = Arc::new(Lock::new(Slot {
+            value: None,
+            gone: false,
+            waker: None,
+        }));
+        let answer = Answer {
+            slot: Some(Arc::clone(&slot)),
+        };
+        self.post(move |root| answer.send(f(root)));
+        Call {
+            slot,
+            #[cfg(not(target_family = "wasm"))]
+            host: self.host.id(),
+        }
+    }
+}
+
+struct Slot<R> {
+    value: Option<R>,
+    /// The answer will never come: the closure was dropped unrun.
+    gone: bool,
+    waker: Option<Waker>,
+}
+
+/// The sending half of a [`Call`], moved into the posted closure. Dropping it
+/// unsent (the closure was dropped without running) resolves the call to
+/// `Err(Gone)`.
+struct Answer<R> {
+    /// Taken by [`send`](Answer::send), so a drop after sending finds nothing.
+    slot: Option<Arc<Lock<Slot<R>>>>,
+}
+
+impl<R> Answer<R> {
+    fn send(mut self, value: R) {
+        let slot = self.slot.take().expect("an Answer sends once");
+        let waker = slot.with(|s| {
+            s.value = Some(value);
+            s.waker.take().map(Outside::new)
+        });
+        if let Some(w) = waker {
+            w.into_inner().wake();
+        }
+    }
+}
+
+impl<R> Drop for Answer<R> {
+    fn drop(&mut self) {
+        let Some(slot) = self.slot.take() else { return };
+        let waker = slot.with(|s| {
+            s.gone = true;
+            s.waker.take().map(Outside::new)
+        });
+        if let Some(w) = waker {
+            w.into_inner().wake();
+        }
+    }
+}
+
+/// The answer to an [`Addr::call`].
+#[must_use = "a Call does nothing to the actor unless awaited; the closure runs either way"]
+pub struct Call<R> {
+    slot: Arc<Lock<Slot<R>>>,
+    #[cfg(not(target_family = "wasm"))]
+    host: u64,
+}
+
+impl<R> Call<R> {
+    /// Whether this poll is on the executor that must run the closure, by
+    /// something other than the cooperative executor. Natively that is the
+    /// host's own thread, which only ever runs messages. On web the instance
+    /// is the executor, and between messages it runs only the cooperative
+    /// executor's drains.
+    fn polled_by_its_own_executor(&self) -> bool {
+        #[cfg(not(target_family = "wasm"))]
+        let on_executor = crate::actor::current_host_id() == Some(self.host);
+        #[cfg(target_family = "wasm")]
+        let on_executor = true;
+        on_executor && !crate::executor::draining()
+    }
+}
+
+impl<R> Future for Call<R> {
+    type Output = Result<R, Gone>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.polled_by_its_own_executor() {
+            panic!(
+                "frustrate: Addr::call awaited on its own actor's executor, which can \
+                 never run the closure while it is waiting here; post the work with \
+                 Addr::post, or await the call from a Deferred future"
+            );
+        }
+        // Cloned before the section, and the waker it replaces dropped after.
+        let waker = cx.waker().clone();
+        let (poll, displaced) = self.slot.with(|s| {
+            if let Some(v) = s.value.take() {
+                (Poll::Ready(Ok(v)), Some(Outside::new(waker)))
+            } else if s.gone {
+                (Poll::Ready(Err(Gone)), Some(Outside::new(waker)))
+            } else {
+                (Poll::Pending, s.waker.replace(waker).map(Outside::new))
+            }
+        });
+        drop(displaced.map(Outside::into_inner));
+        poll
+    }
+}
+
+/// Run one posted message. Natively a panic is caught and reported, so the
+/// host goes on to its next message.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn run(job: Posted) {
+    if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)) {
+        crate::panic::observed(crate::panic::message(&*payload));
+    }
+}
+
+/// Drop a posted message unrun. Its captures' `Drop`s are user code, and a
+/// panic there is reported rather than allowed to end the host thread.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn discard(job: Posted) {
+    if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(job))) {
+        crate::panic::observed(crate::panic::message(&*payload));
+    }
+}
+
+/// The web half: the instance's own queue of closures, and the token that
+/// the page relays back on the actor's channel to run the oldest one.
+#[cfg(target_family = "wasm")]
+mod web {
+    use super::Posted;
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
+
+    thread_local! {
+        /// Closures waiting for their token, oldest first. One instance is
+        /// one executor, so this is that executor's queue.
+        static WAITING: RefCell<VecDeque<Posted>> = const { RefCell::new(VecDeque::new()) };
+    }
+
+    #[link(wasm_import_module = "frustrate")]
+    extern "C" {
+        /// Post one `self` token to the page, which relays it back.
+        fn self_post();
+    }
+
+    pub(super) fn post(job: Posted) {
+        WAITING.with(|q| q.borrow_mut().push_back(job));
+        unsafe { self_post() };
+    }
+
+    /// Run the oldest waiting closure: one per relayed token. Called by the
+    /// actor worker's pump on each `self` message.
+    #[cfg(not(frustrate_block_check))]
+    #[unsafe(no_mangle)]
+    pub extern "C" fn frustrate_run_posted() {
+        let job = WAITING.with(|q| q.borrow_mut().pop_front());
+        match job {
+            Some(job) => job(),
+            None => panic!("frustrate: a self token arrived with no closure waiting — bridge bug"),
+        }
+    }
+}
+
+#[cfg(all(test, not(target_family = "wasm")))]
+mod tests;

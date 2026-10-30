@@ -44,7 +44,6 @@
 //! Not compiled for wasm: there the host is a Worker driving its own
 //! instance through the ordinary exports, and the Dart side posts to it.
 
-use std::cell::Cell;
 use crate::bounded::{Lock, Outside};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::c_void;
@@ -66,6 +65,13 @@ enum Msg {
     Call {
         call_id: u64,
         job: Job,
+        pending: crate::idle::Pending,
+    },
+    /// A closure the actor posted to itself (`Addr::post`). It runs on the
+    /// root, or is dropped unrun if the root is gone. `pending` as for a call:
+    /// posted work is work the idle barrier counts.
+    Posted {
+        job: crate::addr::Posted,
         pending: crate::idle::Pending,
     },
     /// The executor's last message. Everything queued before it runs first;
@@ -197,8 +203,29 @@ impl Host {
         Ok(())
     }
 
+    /// This host's id.
+    pub(crate) fn id(&self) -> u64 {
+        self.id
+    }
+
+    /// Queue a closure the actor posted to itself, behind everything already
+    /// queued. Hands it back if the host has stopped.
+    pub(crate) fn post_posted(
+        &self,
+        job: crate::addr::Posted,
+    ) -> Result<(), crate::addr::Posted> {
+        let msg = Msg::Posted {
+            job,
+            pending: crate::idle::Pending::begin(),
+        };
+        self.post(msg).map_err(|msg| match msg {
+            Msg::Posted { job, .. } => job,
+            _ => unreachable!("post hands back the message it was given"),
+        })
+    }
+
     /// Ask the host to stop after what is already queued. Idempotent.
-    fn request_stop(&self) {
+    pub(crate) fn request_stop(&self) {
         if !self.stopping.swap(true, Ordering::AcqRel) {
             LIVE.fetch_sub(1, Ordering::Relaxed);
             // Only the host thread closes the inbox, and only after this Stop,
@@ -233,23 +260,32 @@ impl Host {
 }
 
 thread_local! {
-    /// The id of the host this thread IS (0 elsewhere). Set once at thread
-    /// birth; read by `deferred::spawn_deferred`, which runs only inside a
-    /// dispatched job and needs to know which host's registry to record the
-    /// call in — the job closure itself does not carry the host id.
-    static CURRENT_HOST: Cell<u64> = const { Cell::new(0) };
+    /// The host this thread IS (empty elsewhere). Set once at thread birth.
+    /// Read by `deferred::spawn_deferred`, which records the call in its
+    /// host's registry, and by `Addr::__here`, which needs the host to post
+    /// to; neither is handed the host by the job it runs in.
+    static CURRENT_HOST: std::cell::OnceCell<Arc<Host>> = const { std::cell::OnceCell::new() };
 }
 
 /// The host id of the executor thread this is called on. Panics off a host
 /// thread — only `deferred::spawn_deferred` calls it, and generated glue only
 /// reaches that from a dispatched actor job.
 pub(crate) fn current_host() -> u64 {
-    let id = CURRENT_HOST.with(|c| c.get());
-    assert!(
-        id != 0,
-        "frustrate: spawn_deferred called outside an actor executor — bridge bug"
-    );
-    id
+    current_host_id()
+        .expect("frustrate: spawn_deferred called outside an actor executor — bridge bug")
+}
+
+/// The id of the host this thread is, if it is one.
+pub(crate) fn current_host_id() -> Option<u64> {
+    CURRENT_HOST.with(|c| c.get().map(|h| h.id))
+}
+
+/// The host this thread is. Panics off a host thread: an `Addr` is built only
+/// by generated glue running on its actor's executor.
+pub(crate) fn current() -> Arc<Host> {
+    CURRENT_HOST.with(|c| c.get().map(Arc::clone)).expect(
+        "frustrate: an Addr can only be made on its actor's executor — bridge bug",
+    )
 }
 
 /// Hosts not yet asked to stop. Test support behind [`host_count`].
@@ -381,7 +417,9 @@ fn run(host: Arc<Host>) {
     crate::callback::enter_worker_context();
     // So a deferred prefix dispatched here can name its own host
     // (`current_host`) without the job carrying the id.
-    CURRENT_HOST.with(|c| c.set(host.id));
+    CURRENT_HOST.with(|c| {
+        let _ = c.set(Arc::clone(&host));
+    });
     let entry = Outside::new(Arc::clone(&host));
     let displaced = HOSTS.with(|map| map.insert(host.id, entry));
     drop(displaced.map(Outside::into_inner));
@@ -405,6 +443,7 @@ fn run(host: Arc<Host>) {
         while let Some(msg) = batch.next() {
             match msg {
                 Msg::Call { call_id, job, pending: _pending } => serve(call_id, job),
+                Msg::Posted { job, pending: _pending } => crate::addr::run(job),
                 Msg::Stop => {
                     stop(&host, batch);
                     return;
@@ -460,8 +499,12 @@ fn stop(host: &Host, behind: impl Iterator<Item = Msg>) {
     // Closing first means nothing posted from here on, by anyone, can land
     // in a queue nobody will drain: it is handed back to its sender instead.
     for msg in behind.chain(host.inbox.close()) {
-        if let Msg::Call { call_id, .. } = msg {
-            refuse(host.id, call_id);
+        match msg {
+            Msg::Call { call_id, .. } => refuse(host.id, call_id),
+            // Behind the stop, so the actor is disposed or about to be
+            // drained: dropped unrun, like a post that finds its root gone.
+            Msg::Posted { job, pending: _pending } => crate::addr::discard(job),
+            Msg::Stop => {}
         }
     }
     // Claim-only on this thread: the futures drop on later executor drains.
@@ -604,6 +647,7 @@ pub unsafe extern "C" fn frustrate_actor_reap(token: *mut c_void) {
 mod tests {
     use super::*;
     use crate::codec::FramedWriter;
+    use std::cell::Cell;
     use std::sync::Mutex;
     use std::sync::mpsc::channel;
 
@@ -766,7 +810,7 @@ mod tests {
         let (tx, rx) = channel::<()>();
         host.submit(0, move || {
             crate::handle::actor_new(Counted(&DROPS), "Counted");
-            crate::handle::actor_new(Grenade, "Grenade");
+            crate::objects::insert(Grenade, "Grenade");
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
             tx.send(()).unwrap();
             Some(FramedWriter::from_bytes(vec![]))
@@ -1328,7 +1372,7 @@ mod tests {
             for m in inbox.take() {
                 match m {
                     Msg::Call { call_id, .. } => got.push(call_id),
-                    Msg::Stop => unreachable!(),
+                    Msg::Posted { .. } | Msg::Stop => unreachable!(),
                 }
             }
             std::thread::yield_now();

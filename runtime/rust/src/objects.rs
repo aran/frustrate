@@ -62,6 +62,11 @@ struct Entry {
 }
 
 thread_local! {
+    /// The slot of this executor's root: the actor object its constructor
+    /// built, which an `Addr`'s posted closures run on. Zero until then. A
+    /// slot id is never reused, so once the root leaves the table this names
+    /// nothing for good.
+    static ROOT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     /// Keyed by slot id. A `BTreeMap` because ids increase with minting, so
     /// iteration order is minting order and [`drain`] can go newest first.
     static TABLE: RefCell<BTreeMap<u64, Entry>> = const { RefCell::new(BTreeMap::new()) };
@@ -81,6 +86,39 @@ pub(crate) fn insert<T: 'static>(value: T, label: &'static str) -> u64 {
     };
     TABLE.with(|t| t.borrow_mut().insert(slot, entry));
     slot
+}
+
+/// Put `value` in this executor's table as its root, and return its slot id.
+///
+/// An executor has one root: each actor constructor spawns its own executor.
+/// Panics on a second.
+pub(crate) fn insert_root<T: 'static>(value: T, label: &'static str) -> u64 {
+    let slot = insert(value, label);
+    ROOT.with(|r| {
+        assert!(
+            r.get() == 0,
+            "frustrate: a second actor root on one executor — bridge bug"
+        );
+        r.set(slot);
+    });
+    slot
+}
+
+/// This executor's root, if it is a `T` still in the table. `None` before the
+/// constructor has returned, and once the root has been dropped or taken.
+///
+/// Panics if the root is another type: an `Addr` names its actor's type, and
+/// generated glue builds it for the actor whose executor this is.
+pub(crate) fn root<T: 'static>() -> Option<*mut T> {
+    let slot = ROOT.with(|r| r.get());
+    if slot == 0 {
+        return None;
+    }
+    TABLE.with(|t| match t.borrow().get(&slot) {
+        Some(e) if e.type_id == TypeId::of::<T>() => Some(e.ptr as *mut T),
+        Some(e) => mismatch::<T>(slot, e.rust_type),
+        None => None,
+    })
 }
 
 /// The object at `slot`, which must be a `T`.
@@ -133,6 +171,12 @@ pub(crate) fn drain() {
             crate::panic::observed(crate::panic::message(&*payload));
         }
     }
+}
+
+/// This executor's root slot (0 before one is built).
+#[cfg(test)]
+pub(crate) fn root_slot() -> u64 {
+    ROOT.with(|r| r.get())
 }
 
 /// How many objects this executor's table holds.
@@ -273,8 +317,10 @@ mod tests {
     /// drop mints while it runs.
     #[test]
     fn drain_drops_newest_first_through_a_panic_and_what_drops_mint() {
-        // Its own thread, so the table starts empty and the panic listener
-        // registration is the only shared state.
+        // Its own thread, so the table starts empty. The panicking drop is
+        // reported to the process's panic listener, so this holds the lock
+        // the tests that record that listener hold.
+        let _serial = crate::post::test_lock();
         std::thread::spawn(|| {
             static ORDER: std::sync::Mutex<Vec<u32>> = std::sync::Mutex::new(Vec::new());
             static LATE: AtomicUsize = AtomicUsize::new(0);

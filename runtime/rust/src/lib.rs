@@ -52,6 +52,8 @@ pub type Actor<T> = T;
 
 #[cfg(not(target_family = "wasm"))]
 pub mod actor;
+/// `Addr<A>`: an actor's address for messages to itself.
+pub mod addr;
 pub mod codec;
 pub mod deferred;
 /// Rust handles to Dart objects — the dual of opaque handles. See the module
@@ -135,6 +137,7 @@ pub(crate) fn serialize_globals() -> std::sync::MutexGuard<'static, ()> {
 
 pub use callback::{DartCallback, DartFunction};
 pub use codec::BytesCodec;
+pub use addr::{Addr, Gone};
 pub use deferred::Deferred;
 pub use stream::{StreamClosed, StreamSink};
 
