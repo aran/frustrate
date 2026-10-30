@@ -169,6 +169,16 @@ impl Raw {
     }
 }
 
+/// A section that sleeps, compiled only into the no_block check's red fixture
+/// (//tests/bazel_rules/native_red), whose build alone sets this cfg: the
+/// fence that a section the member never runs still decides its verdict.
+#[cfg(frustrate_dirty_section_fixture)]
+#[unsafe(no_mangle)]
+pub extern "C" fn frustrate_dirty_section_fixture() {
+    static FIXTURE: Lock<()> = Lock::new(());
+    FIXTURE.with(|_| std::thread::sleep(std::time::Duration::from_millis(1)));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

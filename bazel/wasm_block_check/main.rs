@@ -203,12 +203,20 @@ struct FatalEntry {
     /// Unmangled spellings, matched by equality. `#[panic_handler]` produced a
     /// bare `rust_begin_unwind` symbol on older toolchains.
     exact: &'static [&'static str],
+    /// A path that is an entry, with all its items ([`own_path`]): for an
+    /// impl whose methods a mangled symbol spells around back-references, or
+    /// a generic function.
+    path: &'static [&'static str],
 }
 
 impl FatalEntry {
     fn matches(&self, sym: &str) -> bool {
         self.exact.contains(&sym)
             || (!self.segments.is_empty() && self.segments.iter().all(|s| sym.contains(*s)))
+            || (!self.path.is_empty() && {
+                let p = own_path(sym);
+                p.len() >= self.path.len() && self.path.iter().zip(&p).all(|(a, b)| a == b)
+            })
     }
 }
 
@@ -219,6 +227,7 @@ const FATAL_ENTRIES: &[FatalEntry] = &[
               hook's RwLock and the backtrace print lock",
         segments: &["rustc17rust_begin_unwind"],
         exact: &["rust_begin_unwind"],
+        path: &[],
     },
     FatalEntry {
         what: "std::alloc::default_alloc_error_hook",
@@ -226,6 +235,33 @@ const FATAL_ENTRIES: &[FatalEntry] = &[
               the wait is the backtrace print lock inside the report",
         segments: &["3std", "5alloc", "24default_alloc_error_hook"],
         exact: &[],
+        path: &[],
+    },
+    FatalEntry {
+        what: "std's foreign-exception abort (__rust_foreign_exception)",
+        why: "an exception from another language reached `catch_unwind`, and std \
+              aborts the process; the write is its last message",
+        segments: &["rustc24___rust_foreign_exception"],
+        exact: &[],
+        path: &[],
+    },
+    FatalEntry {
+        what: "std's unlocked stderr (`<std::sys::stdio::unix::Stderr as Write>`)",
+        why: "std writes to it without `io::stderr`'s lock only for a fatal \
+              runtime message before it aborts the process, and from the panic \
+              hook; every other writer takes that lock first, which is counted",
+        segments: &[],
+        exact: &[],
+        path: &["std", "sys", "stdio", "unix", "Stderr"],
+    },
+    FatalEntry {
+        what: "std's resume_unwind (std::panicking::resume_unwind)",
+        why: "it starts unwinding again with a panic's payload, which a caller \
+              holds only once a panic was caught; it raises without the hook, \
+              and the panic path is outside the check",
+        segments: &[],
+        exact: &[],
+        path: &["std", "panicking", "resume_unwind"],
     },
 ];
 
@@ -299,6 +335,9 @@ struct Sinks {
     /// The module targets wasip1, whose waits are imports
     /// ([`io::WASI_WAITS`]) rather than instructions.
     wasi: bool,
+    /// External functions (natively) the project vouches for: reaching one is
+    /// not "cannot verify". The project states why where it lists them.
+    trusted: Vec<String>,
 }
 
 impl Sinks {
@@ -1166,7 +1205,7 @@ struct Finding {
 /// reading a newer census would have to guess at a token it does not know — and
 /// the one guess that is cheap to make ("treat it as needing no artifact") is
 /// the one that turns a misconfigured build into a silent pass.
-const CENSUS_HEADER: &str = "frustrate-claim-census 2";
+const CENSUS_HEADER: &str = "frustrate-claim-census 3";
 
 /// The `#[bridge(no_block)]` claims of one bridge crate, and how each is
 /// settled — written by codegen (`emit_rust::claim_census`), read here.
@@ -1198,6 +1237,9 @@ struct Claims {
     /// Wants a root reaching the member's whole body:
     /// `(expected export name, display name)`.
     artifact: Vec<(String, String)>,
+    /// The path of each full root's member function, by root symbol, split
+    /// into segments: the root must reach a function with that path.
+    member_paths: BTreeMap<String, Vec<String>>,
     /// Wants a root reaching only the member's caller-side **residue** — the
     /// `BytesCodec::from_bytes` of its bridge-external parameters and the drop
     /// glue of the handles it hands out. Same shape as [`Claims::artifact`] and
@@ -1249,17 +1291,24 @@ impl Claims {
                 continue;
             }
             let mut f = line.split(' ');
-            let (Some(kind), Some(id), Some(name), None) =
-                (f.next(), f.next(), f.next(), f.next())
+            let (Some(kind), Some(id), Some(name), member, None) =
+                (f.next(), f.next(), f.next(), f.next(), f.next())
             else {
                 return Err(format!(
                     "wasm_block_check: {path}: cannot read `{line}`.\n\
-                     A census row is `<settlement> <fn_id> <name>`."
+                     A census row is `<settlement> <fn_id> <name>`, and an \
+                     `artifact` row adds the member's own function path."
                 ));
             };
             if id.parse::<u32>().is_err() {
                 return Err(format!(
                     "wasm_block_check: {path}: `{line}` has no numeric fn id."
+                ));
+            }
+            if member.is_some() != (kind == "artifact") {
+                return Err(format!(
+                    "wasm_block_check: {path}: `{line}`: an `artifact` row, and \
+                     only an `artifact` row, carries the member's function path."
                 ));
             }
             // The check root's symbol embeds the *bare* member name; the census
@@ -1269,9 +1318,12 @@ impl Claims {
                 "placement" => c.placement.push(name.to_string()),
                 "placement-dispatch" => c.placement_dispatch.push(name.to_string()),
                 "declared" => c.declared.push(name.to_string()),
-                "artifact" => c
-                    .artifact
-                    .push((format!("{ROOT_PREFIX}{id}_{bare}"), name.to_string())),
+                "artifact" => {
+                    let sym = format!("{ROOT_PREFIX}{id}_{bare}");
+                    let segs = member.unwrap_or_default().split("::").map(str::to_string).collect();
+                    c.member_paths.insert(sym.clone(), segs);
+                    c.artifact.push((sym, name.to_string()));
+                }
                 "artifact-residue" => c
                     .residue
                     .push((format!("{ROOT_PREFIX}{id}_{bare}"), name.to_string())),
@@ -2457,7 +2509,7 @@ fn main() -> ExitCode {
             slow.wasi = true;
             continue;
         }
-        if a != "--slow" && a != "--io" {
+        if a != "--slow" && a != "--io" && a != "--trust" {
             args.push(a);
             continue;
         }
@@ -2467,6 +2519,7 @@ fn main() -> ExitCode {
             .and_then(|v| {
                 match a.as_str() {
                     "--slow" => slow.paths.push(SlowPath::parse(&v)?),
+                    "--trust" => slow.trusted.push(v),
                     _ => slow.io.push(io::parse(&v)?),
                 }
                 Ok(())
@@ -2506,7 +2559,7 @@ fn main() -> ExitCode {
     let usage = "usage: wasm_block_check [--wasi] [--slow <path> | --io <category>]... \
          <module.wasm> <label> [marker-out]\n\
          \x20      wasm_block_check [--wasi] [--slow ... | --io ...] --claims <census> <module.wasm> <label> [marker-out]\n\
-         \x20      wasm_block_check --ir [--slow <path> | --io <category>]... \
+         \x20      wasm_block_check --ir [--slow <path> | --io <category> | --trust <symbol>]... \
          [--claims <census>] <module.ll> <label> [marker-out]\n\
          \x20      wasm_block_check --claims-only <census> <label> [marker-out]\n\
          \x20      wasm_block_check --report <module.wasm> [label]";
@@ -2828,6 +2881,7 @@ mod tests {
                     .collect(),
                 io: slow.iter().filter_map(|t| io::parse(t).ok()).collect(),
                 wasi: slow.contains(&"wasi"),
+                trusted: Vec::new(),
             };
             let c = rows.map(census).transpose()?;
             run_with(p.to_str().unwrap(), "//pkg:target.wasm", c.as_ref(), &sinks)
@@ -3574,14 +3628,18 @@ mod tests {
 
     #[test]
     fn a_census_that_cannot_be_read_is_never_read_as_no_claims() {
-        let bad = Claims::parse("artifact 0 tag_join", "x.claims").unwrap_err();
+        let bad = Claims::parse("artifact 0 tag_join m::tag_join", "x.claims").unwrap_err();
         assert!(bad.contains("is not a claim census"), "{bad}");
-        let newer = Claims::parse("frustrate-claim-census 3", "x.claims").unwrap_err();
+        let older = Claims::parse("frustrate-claim-census 2", "x.claims").unwrap_err();
+        assert!(older.contains("older than this scanner"), "{older}");
+        let newer = Claims::parse("frustrate-claim-census 4", "x.claims").unwrap_err();
         assert!(newer.contains("older than this scanner"), "{newer}");
         let torn = census("artifact tag_join").unwrap_err();
         assert!(torn.contains("<settlement> <fn_id> <name>"), "{torn}");
         let unnumbered = census("artifact x tag_join").unwrap_err();
         assert!(unnumbered.contains("no numeric fn id"), "{unnumbered}");
+        let pathless = census("artifact 0 tag_join").unwrap_err();
+        assert!(pathless.contains("carries the member's function path"), "{pathless}");
         let future = census("proven 0 tag_join").unwrap_err();
         assert!(future.contains("is not a settlement this tool knows"), "{future}");
     }
@@ -3600,7 +3658,7 @@ mod tests {
     #[test]
     fn a_claim_whose_root_is_missing_is_named() {
         let e = clean()
-            .check_claims("artifact 0 tag_join\nartifact 7 withdraw")
+            .check_claims("artifact 0 tag_join m::tag_join\nartifact 7 withdraw m::withdraw")
             .unwrap_err();
         assert!(e.contains("withdraw — expected `frustrate_check_block_7_withdraw`"), "{e}");
         assert!(e.contains("never reached rustc"), "{e}");
@@ -3620,7 +3678,7 @@ mod tests {
             ],
             ..clean()
         };
-        let e = b.check_claims("artifact 0 tag_join").unwrap_err();
+        let e = b.check_claims("artifact 0 tag_join m::tag_join").unwrap_err();
         assert!(e.contains("does not claim"), "{e}");
         assert!(e.contains("frustrate_check_block_4_elsewhere"), "{e}");
     }
@@ -3629,9 +3687,9 @@ mod tests {
     /// `Node::send` is exported as `frustrate_check_block_N_send`.
     #[test]
     fn a_qualified_name_matches_its_bare_root_symbol() {
-        let c = census("artifact 0 Tag::tag_join").unwrap();
+        let c = census("artifact 0 Tag::tag_join m::Tag::tag_join").unwrap();
         assert_eq!(c.artifact[0].0, ROOT);
-        let ok = clean().check_claims("artifact 0 Tag::tag_join").unwrap();
+        let ok = clean().check_claims("artifact 0 Tag::tag_join m::Tag::tag_join").unwrap();
         assert!(ok.contains("is clean"), "{ok}");
     }
 
@@ -3640,7 +3698,7 @@ mod tests {
     #[test]
     fn a_mixed_claim_set_reports_both_halves() {
         let r = clean()
-            .check_claims("artifact 0 tag_join\nplacement 5 Node::send\nplacement 6 Node::ticket")
+            .check_claims("artifact 0 tag_join m::tag_join\nplacement 5 Node::send\nplacement 6 Node::ticket")
             .unwrap();
         assert!(r.contains("1 `no_block` root(s)"), "{r}");
         assert!(r.contains("2 settled by placement"), "{r}");
@@ -3652,7 +3710,7 @@ mod tests {
     #[test]
     fn a_declared_only_claim_is_counted_not_hidden() {
         let r = clean()
-            .check_claims("artifact 0 tag_join\ndeclared 9 read_file")
+            .check_claims("artifact 0 tag_join m::tag_join\ndeclared 9 read_file")
             .unwrap();
         assert!(r.contains("1 native-only, so absent from the web surface"), "{r}");
     }
@@ -3688,7 +3746,7 @@ mod tests {
     /// an inference.
     #[test]
     fn a_claims_only_target_refuses_a_claim_that_needs_an_artifact() {
-        let c = census("placement 5 Node::send\nartifact 0 tag_join").unwrap();
+        let c = census("placement 5 Node::send\nartifact 0 tag_join m::tag_join").unwrap();
         let e = claims_only("//pkg:demo", &c).unwrap_err();
         assert!(e.contains("need artifact evidence"), "{e}");
         assert!(e.contains("  tag_join"), "{e}");
@@ -3751,7 +3809,7 @@ mod tests {
             exports: vec![root_export(0)],
             ..Default::default()
         };
-        let e = b.check_claims("artifact 0 tag_join\nplacement 5 Node::send").unwrap_err();
+        let e = b.check_claims("artifact 0 tag_join m::tag_join\nplacement 5 Node::send").unwrap_err();
         assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a wait"), "{e}");
         // The census names the member; the path still starts at its root.
         assert!(e.contains("  tag_join\n      reaches "), "{e}");
@@ -3825,7 +3883,7 @@ mod tests {
         let e = two_members(call(2))
             .check_slow(
                 &["example::main_thread::slow"],
-                Some("artifact 1 Doc::render\nartifact 2 Doc::title"),
+                Some("artifact 1 Doc::render m::Doc::render\nartifact 2 Doc::title m::Doc::title"),
             )
             .unwrap_err();
         assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a wait instruction or a function named slow"), "{e}");
@@ -3956,7 +4014,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("m.wasm");
         std::fs::write(&p, clean().wasm()).unwrap();
-        let c = census("artifact 0 tag_join").unwrap();
+        let c = census("artifact 0 tag_join m::tag_join").unwrap();
         let e = run_with(p.to_str().unwrap(), "//pkg:t", Some(&c), &Sinks::default()).unwrap_err();
         assert!(e.contains("no longer reach their member's glue"), "{e}");
         assert!(e.contains("  tag_join"), "{e}");

@@ -27,7 +27,7 @@ path = "src/lib.rs"
 # the same declaration from its build script, which `frustrate_codegen::generate`
 # prints as `cargo::rustc-check-cfg=…` — see `CHECK_CFG_DIRECTIVE` in
 # codegen/src/lib.rs. The runtime has no build script to print it from.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frustrate_block_check)', 'cfg(frustrate_manual_scheduler)', 'cfg(frustrate_hot_patch)', 'cfg(frustrate_idle_barrier)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frustrate_block_check)', 'cfg(frustrate_manual_scheduler)', 'cfg(frustrate_hot_patch)', 'cfg(frustrate_idle_barrier)', 'cfg(frustrate_dirty_section_fixture)'] }
 
 [features]
 # Threaded web: real worker threads on one shared linear memory. Requires a

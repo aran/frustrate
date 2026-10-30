@@ -31,18 +31,17 @@ frustrate_bridge_outputs(
 )
 
 # Every `no_block` claim here, over the native build: test_api ships native,
-# and its web build is single-threaded, which the native analyses cover. This is also what keeps
-# the scanner's list of frustrate's bounded runtime locks honest
-# (//bazel/wasm_block_check/ir.rs, BOUNDED): a runtime lock a member reaches
-# that the list does not cover turns this red.
+# and its web build is single-threaded.
 frustrate_no_block_check(
     name = "test_api_block_check",
     bridge = ":bridge",
     crate = ":test_api_shared",
+    # Not Linux: there a stream's drop reaches `frustrate::panic`'s
+    # thread-local, whose first use on a thread registers its destructor with
+    # glibc's `__cxa_thread_atexit_impl`, under the loader's lock.
     targets = [
         "android",
         "ios",
-        "linux",
         "macos",
         "web",
     ],

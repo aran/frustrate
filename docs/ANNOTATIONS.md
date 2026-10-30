@@ -47,12 +47,13 @@ on: no claimed member reaches a wait, a function under a path in its `slow`
 (your own `#[inline(never)]` slow-work marker, or a third-party function), or
 IO in a class in its `io` (`files`, `network`, `process`, which frustrate maps
 to each target's calls). For each native platform (Android, iOS, Linux with
-glibc, macOS) it scans that platform's build's whole-program LLVM IR for its C
-library's waits, building every platform's IR from any host; on threaded web,
-the wasm module for `memory.atomic.wait`; on wasip1, for `poll_oneoff`.
-Single-threaded web has no wait to find, and the native analyses cover its
-portable code. Green is
-sound, red can be a false alarm. To hold every sync member of a bridge to
+glibc, macOS) it reads that platform's build's whole-program LLVM IR, built
+from any host, and fails a member that reaches any C or OS function its C
+library is not known to return from without waiting, unless the target's
+`trusted` names it; on threaded web it scans the wasm module for
+`memory.atomic.wait`; on wasip1, for `poll_oneoff`. Red can be a false alarm.
+Green does not cover a call through a function pointer installed outside the
+member's reach (a logger, a hook), nor the panic path. To hold every sync member of a bridge to
 this, put `bridge_file!(no_block)` in each of its files. Each analysis sees
 only its own target's `#[cfg]` arm. [design/blocking.md](design/blocking.md)
 has the full argument.

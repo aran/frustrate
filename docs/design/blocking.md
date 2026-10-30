@@ -106,19 +106,25 @@ prove something there:
 
 - **native** (`android`, `ios`, `linux`, `macos`, one analysis per CPU): the
   bridge crate compiled for the platform with fat LTO, its whole-program LLVM
-  IR scanned for calls to the platform's C library's waits (Apple's libSystem,
-  Android's bionic, glibc; on Linux std's locks are futexes, read as the
-  `syscall` they make). Only the crate is built for the platform and the IR is
-  written without linking, so every native analysis runs from any host with
-  the platform's Rust std, and needs the platform's SDK or NDK only for a
-  dependency that compiles C. The IR attributes every address-take to
-  the function or constant that makes it, so unlike the wasm scan it follows
-  `dyn` calls instead of refusing them. It also covers every target's portable
-  code, which is why single-threaded web needs no analysis of its own: it has
-  no wait instruction at all. frustrate's own registries take a `std::sync`
-  lock natively where threaded wasm spins; those sections are bounded, the
-  stall is the same either way, and the scanner names them rather than
-  following them (`bazel/wasm_block_check/ir.rs`).
+  IR read from each claimed member's root. A call out of the Rust program
+  passes only if the platform's C library (Apple's libSystem, Android's bionic,
+  glibc) is known to return from it without waiting, or the check target lists
+  it in `trusted`; anything else is "cannot verify". Each library has its own
+  list, drawn from its implementation, so the same call can differ: glibc
+  registers a thread-local's destructor under the dynamic loader's lock, which
+  `dlopen` holds while it runs constructors, so there a member's first use of
+  such a thread-local is a wait. On Linux std's locks are futexes it reaches
+  through `syscall`, read as the call it makes (`syscall::SYS_futex::FUTEX_WAKE`
+  does not wait, `FUTEX_WAIT_BITSET` does). Only the crate is built for the
+  platform and the IR is written without linking, so every native analysis
+  runs from any host with the platform's Rust std, and needs the platform's
+  SDK or NDK only for a dependency that compiles C.
+  frustrate's registries share one lock type, `bounded::Lock`, whose wait is
+  exempt only because the scanner checks every critical section of it in the
+  program and finds none that waits or takes it again
+  (`bazel/wasm_block_check/ir.rs` has the procedure and what green does not
+  cover: an indirect call through a function pointer installed outside the
+  member's reach, and the panic path).
 - **threaded web**: the only analysis of the code a browser's main thread runs
   where a wait traps, including the arms only a wasm build compiles.
 - **wasip1**: for a bridge that ships there.
@@ -139,8 +145,9 @@ Analysing the call graph of the shipped module cannot be made sound.
 Monomorphised code shares a handful of wasm function signatures, so filtering
 `call_indirect` targets by type still admits nearly every table entry. The check
 instead builds a throwaway module whose only exports are the claimed members,
-and lets lld's dead-code elimination do the reachability conservatively. Green
-is sound; red can be a false alarm.
+and lets lld's dead-code elimination do the reachability conservatively. A call
+into an import ends the walk, so a JavaScript import that waits is not seen;
+red can be a false alarm.
 
 The predicate is stricter than the hazard on purpose. It asks for zero
 reachable waits, not "no wait the main thread could reach", so a claimed body

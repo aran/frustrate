@@ -226,13 +226,16 @@ def _native_check_transition_impl(settings, attr):
         # the scanner reads; rules_rust builds the dependencies as bitcode
         # for it.
         _LTO: "fat",
-        # The roots, and nothing else exported, exactly as on wasm.
+        # The roots. Natively the cfg adds them beside every production
+        # export rather than in place of them: the scanner walks the graph
+        # from the roots itself, and it needs the whole program to check
+        # every bounded-lock section.
         _EXTRA_RUSTC_FLAGS: [
             "--cfg=frustrate_block_check",
             "-Adead_code",
         ],
-        # As on wasm: appended, so a project's own `-Copt-level` cannot beat
-        # fastbuild's.
+        # For readable witness paths only: the roots take their inputs as
+        # parameters, so no opt-level can delete a body the scan should read.
         _EXTRA_RUSTC_FLAG: settings[_EXTRA_RUSTC_FLAG] + ["-Copt-level=0"],
     }
 
@@ -268,6 +271,13 @@ def _census(ctx):
 def _sink_args(ctx):
     return [a for p in ctx.attr.slow for a in ["--slow", p]] + \
            [a for c in ctx.attr.io for a in ["--io", c]]
+
+def _trust_args(ctx):
+    for symbol, why in ctx.attr.trusted.items():
+        if not why.strip():
+            fail("frustrate_no_block_check: `trusted` vouches for `%s` without saying why. " % symbol +
+                 "Give each entry the reason it cannot stall the caller.")
+    return [a for s in sorted(ctx.attr.trusted.keys()) for a in ["--trust", s]]
 
 def _verdict_test(ctx, inputs, arguments, mnemonic, extra_outputs = {}):
     """Run the scanner as a build action and make its verdict a test.
@@ -369,7 +379,7 @@ def _native_test_impl(ctx):
     return _verdict_test(
         ctx,
         [ir, census],
-        ["--ir"] + _sink_args(ctx) + ["--claims", census.path, ir.path],
+        ["--ir"] + _sink_args(ctx) + _trust_args(ctx) + ["--claims", census.path, ir.path],
         "FrustrateNativeBlockCheck",
     )
 
@@ -377,12 +387,66 @@ _native_test = rule(
     implementation = _native_test_impl,
     test = True,
     attrs = _SCANNER_ATTRS | _SINK_ATTRS | {
+        "trusted": attr.string_dict(),
         "crate": attr.label(
             mandatory = True,
             cfg = _native_check_transition,
             aspects = [_native_ir_aspect],
         ),
         "platform": attr.label(mandatory = True),
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
+    },
+)
+
+def _native_fixture_transition_impl(settings, attr):
+    out = {}
+    for platform in attr.platforms:
+        config = _native_check_transition_impl(settings, struct(platform = platform))
+        config[_EXTRA_RUSTC_FLAGS] = config[_EXTRA_RUSTC_FLAGS] + ["--cfg=" + c for c in attr.cfgs]
+        out[platform.name] = config
+    return out
+
+_native_fixture_transition = transition(
+    implementation = _native_fixture_transition_impl,
+    inputs = [_EXTRA_RUSTC_FLAG],
+    outputs = [
+        "//command_line_option:platforms",
+        _ALLOCATOR_LIBRARY,
+        "//command_line_option:compilation_mode",
+        _LTO,
+        _EXTRA_RUSTC_FLAGS,
+        _EXTRA_RUSTC_FLAG,
+    ],
+)
+
+def _native_artifacts_impl(ctx):
+    files = [_census(ctx)]
+    for platform, crate in ctx.split_attr.crate.items():
+        ir = ctx.actions.declare_file("%s/%s.ll" % (ctx.label.name, platform))
+        ctx.actions.symlink(output = ir, target_file = crate[OutputGroupInfo].frustrate_native_ir.to_list()[0])
+        files.append(ir)
+    return [DefaultInfo(files = depset(files))]
+
+# The native analysis's inputs with no verdict: the claim census, and the check
+# build's IR for each platform as `<name>/<platform>.ll`, for a test that runs
+# the scanner over a fixture it expects to fail
+# (//tests/bazel_rules/native_red:native_red_test).
+no_block_check_artifacts = rule(
+    implementation = _native_artifacts_impl,
+    attrs = {
+        "bridge": attr.label(mandatory = True, providers = [OutputGroupInfo]),
+        "crate": attr.label(
+            mandatory = True,
+            cfg = _native_fixture_transition,
+            aspects = [_native_ir_aspect],
+        ),
+        # Extra cfgs for every crate in the build, for a fixture that turns on
+        # test-only code in the runtime.
+        "cfgs": attr.string_list(),
+        # The platforms to build the IR for: any of the native analyses'.
+        "platforms": attr.label_list(mandatory = True),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
@@ -398,6 +462,7 @@ def frustrate_no_block_check(
         targets = None,
         slow = [],
         io = [],
+        trusted = {},
         **kwargs):
     """Settle every `#[bridge(no_block)]` claim in a bridge, for the targets it ships on.
 
@@ -406,8 +471,8 @@ def frustrate_no_block_check(
     `slow`, and no IO in an `io` class. Codegen settles what placement
     settles (an actor member's body, a dispatched member's body) and writes a
     claim census; the rest is settled here, over a throwaway build of `crate`
-    whose only exports are one root per claim
-    (docs/design/blocking.md). Nothing this builds ships.
+    with one root per claim (docs/design/blocking.md). Nothing this builds
+    ships.
 
     `targets` says where the bridge ships, and each analysis runs only where
     it proves something there. They are tests under `name`, a test_suite:
@@ -416,19 +481,20 @@ def frustrate_no_block_check(
       frustrate builds that OS for: `android_aarch64` and `android_x86_64`;
       `ios_aarch64` (a device); `linux_x86_64` and `linux_aarch64` (glibc);
       `macos_aarch64`. Each builds the crate for its platform with fat LTO
-      and scans the whole-program LLVM IR for its C library's waits (Apple's
-      libSystem, Android's bionic, glibc), `slow`, and `io`. Proves the
-      claims for that platform, and for every target's portable code,
-      single-threaded web's included. The test and the scanner run on the
-      host; only the crate is built for the platform, and rustc writes the
-      IR without linking, so every analysis runs from any host with no SDK,
-      NDK or C toolchain for the platform. What each needs is the platform's
-      Rust std: the root module's `rust.toolchain` lists the triple in
-      `extra_target_triples` (`aarch64-linux-android`, `x86_64-linux-android`,
-      `aarch64-apple-ios`, and the Linux and macOS triples rules_rust lists
-      by default), and the crate universe the bridge's dependencies come
-      from supports it. A dependency that compiles C for the platform also
-      needs the platform's C toolchain registered.
+      and scans the whole-program LLVM IR for `slow`, `io`, and any call out
+      of the Rust program that its C library (Apple's libSystem, Android's
+      bionic, glibc) is not known to return from without waiting; a C
+      dependency's function is "cannot verify" until `trusted` names it.
+      The test and the scanner run on the host; only the crate is built for
+      the platform, and rustc writes the IR without linking, so every
+      analysis runs from any host with no SDK, NDK or C toolchain for the
+      platform. What each needs is the platform's Rust std: the root
+      module's `rust.toolchain` lists the triple in `extra_target_triples`
+      (`aarch64-linux-android`, `x86_64-linux-android`, `aarch64-apple-ios`,
+      and the Linux and macOS triples rules_rust lists by default), and the
+      crate universe the bridge's dependencies come from supports it. A
+      dependency that compiles C for the platform also needs the platform's C
+      toolchain registered.
     - `web` → nothing of its own. Single-threaded wasm has no wait
       instruction (std panics where it would wait), its std IO is stubs and
       JavaScript IO is asynchronous; its portable code is the native
@@ -453,16 +519,14 @@ def frustrate_no_block_check(
     census and fails naming any claim that wants an artifact. A crate whose
     claims are all placed is refused with `crate`, for the same reason.
 
-    The analyses pin opt-level 0, because an optimized build inlines the
-    boundaries the scan names; they append `-Copt-level=0` to
-    `--@rules_rust//rust/settings:extra_rustc_flag`. A crate's own
-    `rustc_flags` and `per_crate_rustc_flag` reach rustc after it, so an
-    opt-level there still wins: the scanner refuses a build whose roots no
-    longer reach their member's glue, which catches the optimizer deleting
-    a body, not every inlining. Keep opt-level out of a bridge crate's own
-    flags. The configurations also replace `extra_rustc_flags` (a list, so a
-    transition can only replace it) with `--cfg=frustrate_block_check
-    -Adead_code`.
+    Each root takes its member's request bytes as parameters, so no
+    optimizer can delete a body behind a decode it proved fails, and a
+    native analysis refuses a root that does not reach its member's own
+    function. The analyses append `-Copt-level=0` to
+    `--@rules_rust//rust/settings:extra_rustc_flag` for readable witness
+    paths; a crate's own `rustc_flags` reach rustc after it. The
+    configurations also replace `extra_rustc_flags` (a list, so a transition
+    can only replace it) with `--cfg=frustrate_block_check -Adead_code`.
 
     For `web_threads`, the whole graph must build `+atomics`, and
     crate_universe resolves deps per triple, before RUSTFLAGS exist, so it
@@ -507,13 +571,19 @@ def frustrate_no_block_check(
         Writes to an open descriptor are in no class, because stdout, stderr
         and the panic report are such writes. //bazel/wasm_block_check/io.rs
         has the maps and what each covers.
+      trusted: For the native analyses: external functions (C symbols, as
+        the linker names them) a claimed body may reach though the scanner
+        cannot see into them, each mapped to why it cannot stall the caller.
+        Anything reached outside the Rust program that is neither here nor
+        on its C library's list of functions known not to wait
+        (//bazel/wasm_block_check/libc.rs) is "cannot verify".
       **kwargs: Common attributes (`tags`, `visibility`, `size`, ...) for
         every test and the suite.
     """
     if not crate:
-        if slow or io or targets != None:
+        if slow or io or trusted or targets != None:
             fail("frustrate_no_block_check: %s has no `crate`, so it builds " % name +
-                 "nothing and `slow`, `io` and `targets` would check nothing. " +
+                 "nothing and `slow`, `io`, `trusted` and `targets` would check nothing. " +
                  "Name the crate, or drop them.")
         _census_test(name = name, bridge = bridge, **kwargs)
         return
@@ -534,6 +604,9 @@ def frustrate_no_block_check(
     if io and not [t for t in analyses if t in _NATIVE or t == "wasi"]:
         fail("frustrate_no_block_check: %s names `io`, but only the native " % name +
              "targets and `wasi` check IO: a web build has none that blocks.")
+    if trusted and not [t for t in analyses if t in _NATIVE]:
+        fail("frustrate_no_block_check: %s names `trusted`, which only the " % name +
+             "native analyses read.")
 
     tags = kwargs.pop("tags", [])
     compatible = kwargs.pop("target_compatible_with", [])
@@ -551,6 +624,7 @@ def frustrate_no_block_check(
                 platform = Label("//bazel:%s_%s" % (os, cpu)),
                 slow = slow,
                 io = io,
+                trusted = trusted,
                 tags = tags,
                 target_compatible_with = compatible,
                 **kwargs

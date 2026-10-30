@@ -2,88 +2,101 @@
 //! LLVM IR of a native build rather than over a wasm module.
 //!
 //! The input is one module: the bridge crate built for one platform as a
-//! `staticlib` with fat LTO and `--emit=llvm-ir`, so std and every dependency
-//! are merged in from their bitcode, under `--cfg frustrate_block_check` so
-//! the only roots are the claimed members. On the native target a wait is a
-//! call into the C library (`pthread_mutex_lock`, `dispatch_semaphore_wait`,
-//! a futex wait through `syscall` on Linux, …), which the IR keeps as a call
-//! to an external declaration, so a wait is exact here in the way a wait
-//! instruction is on wasm. The target's C library ([`super::libc`], chosen by
-//! the module's `target triple`) says which externals wait; a module whose
-//! triple names no library the check knows is refused. On Linux a call to
-//! `syscall` is an external named after the kernel call it makes
-//! ([`libc::syscall_name`]).
+//! `staticlib` with fat LTO and `--emit=llvm-ir`, so std and every Rust
+//! dependency are merged in from their bitcode, under
+//! `--cfg frustrate_block_check`, which adds one root per
+//! claimed member and natively keeps every production export, so the whole
+//! program is present. On the native target a wait is a call into the OS, and
+//! the IR keeps every call out of the Rust program as a call to an external
+//! declaration.
 //!
 //! # How it decides
 //!
 //! The graph's edges are every symbol a function body or a global initialiser
 //! mentions: direct calls, and the address-takes that put a function in a
-//! vtable or a function pointer. Unlike a wasm table, every address-take is
-//! attributed to the function or constant that makes it, so following them is
-//! the conservative closure of what a root can run, with no "cannot verify"
-//! case: a sink that a root can reach only through a `dyn` call is reached.
+//! vtable or a function pointer. A root's closure is everything reachable
+//! along them.
 //!
-//! Per root, a sink in that closure is red, with the shortest path to it, by
-//! direct calls where one exists. Two kinds of edge are not followed:
+//! **Externals are allowed by name, never denied by name.** An external a
+//! closure reaches is fine only if the target's C library ([`super::libc`],
+//! chosen by the module's `target triple`) lists it as known not to wait,
+//! each group with why, or the project lists it with `--trust`. Any other
+//! external is "cannot verify", naming it: a C dependency, an OS call nobody
+//! has classified, a wait. A few std functions are vouched for by path
+//! ([`KNOWN_PATHS`]): the externals each lists are allowed where only it
+//! leads to them. The library's waits list only words the finding
+//! for the waits std reaches. A module whose triple names no library the
+//! check knows is refused. On Linux a call to `syscall` is an external named
+//! after the kernel call it makes ([`libc::syscall_name`]).
 //!
-//! - **Into the fatal entries** ([`super::FATAL_ENTRIES`]): a wait behind the
-//!   panic handler runs on a thread that is already failing.
-//! - **Into frustrate's endings** ([`ENDINGS`]): cleanup that runs after an
-//!   isolate has died and is documented never to block.
-//! - **From frustrate's bounded runtime locks into `std::sync`**
-//!   ([`BOUNDED`]): the runtime's own registries, whose critical sections are
-//!   container operations. On threaded wasm they are spin locks, which the
-//!   wasm check already accepts; a native `Mutex` holding the same section
-//!   stalls a caller exactly as long. Everything else those functions call is
-//!   followed. frustrate's own test bridge keeps this list honest: a new
-//!   runtime lock reached from a member turns its check red.
+//! **The bounded lock is the one sanctioned wait.** frustrate's registries
+//! share one lock type (`runtime/rust/src/bounded.rs`) whose acquire the check
+//! build exports as [`ACQUIRE`]. Its wait is bounded by the longest critical
+//! section any thread runs under it, so the edge into the acquire is not
+//! followed only when every section in the program is proven: every function
+//! that references the acquire (each `Lock::with` instance) must reach no
+//! wait, no slow or IO sink, no unvouched external and no second acquire, and
+//! the acquire itself must reach nothing but its library's acquire waits,
+//! the native `Mutex`'s lock. A root that
+//! reaches the lock while a section fails is "cannot verify", naming the
+//! section.
+//!
+//! **Each full root must reach its member's own function**, by the path the
+//! census carries. The roots take the request bytes as real parameters, so no
+//! optimizer can delete a body behind a decode it proved fails; this control
+//! is what catches a build where the member was still not reached.
+//!
+//! Not followed: edges into the fatal entries ([`super::FATAL_ENTRIES`]),
+//! the panic handler and the allocation-error hook.
+//!
+//! # What green does not cover
+//!
+//! - **Indirect calls through a value the closure did not produce.** An
+//!   address-take is attributed to the function or constant that makes it, so
+//!   a `dyn` call whose target the closure itself put in a vtable is followed.
+//!   A function pointer installed elsewhere and read back from a static (a
+//!   logger, a hook, a pointer from `dlsym` or the Dart API table) is not.
+//! - **The panic path**, cut at the fatal entries: a panicking member runs
+//!   std's hook, any installed hook, and the unwinder on its own thread.
+//! - **Termination**: a section's or a body's own loops.
 //!
 //! Green covers the one platform the module was built for. A body split by
 //! `#[cfg]` is checked in that arm only.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use super::libc;
+use super::libc::{self, Libc};
 use super::{match_census, own_path, readable, Claims, Sinks, FATAL_ENTRIES, ROOT_PREFIX};
 
-/// frustrate's runtime locks whose `std::sync` edges are not followed, and
-/// why each section is bounded. A path is a module or a function.
-const BOUNDED: &[(&[&str], &str)] = &[
-    (
-        &["frustrate", "bounded"],
-        "the lock every runtime registry takes, whose sections bounded.rs \
-         keeps to a container operation",
-    ),
-    (
-        &["frustrate", "spin"],
-        "the runtime's registry lock, whose sections spin.rs bounds to a \
-         container operation",
-    ),
-    (
-        &["frustrate", "resident"],
-        "the resident registry: one container operation per mint, use and \
-         reclaim",
-    ),
-    (
-        &["frustrate", "post", "native"],
-        "the isolate routing table: a lookup per delivery, an insert or \
-         removal per isolate",
-    ),
-];
-
 /// The export name `runtime/rust/src/bounded.rs` gives the bounded lock's
-/// acquire in the check build: a `frustrate::bounded` function that no
-/// mangled path names.
-const BOUNDED_ACQUIRE: &str = "frustrate_bounded_lock_acquire";
+/// acquire in the check build.
+pub(crate) const ACQUIRE: &str = "frustrate_bounded_lock_acquire";
 
-/// frustrate's runtime functions that are not followed at all, like the
-/// fatal entries: each runs only after something has already ended, and its
-/// documented contract is that it does not block.
-const ENDINGS: &[(&[&str], &str)] = &[(
-    &["frustrate", "post", "native", "mark_gone"],
-    "the cleanup after a post finds its isolate dead; it must not block (its \
-     contract, and that of `actor::reap_isolate` beneath it): short registry \
-     locks, then sends",
+/// std functions whose externals frustrate vouches for: each with the
+/// externals that are not a finding when the function is the only way a
+/// claim reaches them, and why. Anything else beneath it is a finding as
+/// anywhere, and so is a listed external the claim also reaches another way.
+/// A vouch outranks an IO category: what it waives is not IO whose time
+/// depends on a device or a filesystem.
+pub(crate) const KNOWN_PATHS: &[(&str, &[&str], &str)] = &[(
+    "std::sys::random::linux::hashmap_random_keys",
+    &[
+        "open",
+        "open64",
+        "read",
+        "poll",
+        "close",
+        "__xpg_strerror_r",
+        "syscall::SYS_futex::FUTEX_WAIT_BITSET",
+    ],
+    "std's `HashMap` keys on Linux and Android. It reads `/dev/urandom` only \
+     where the getrandom call is missing or refuses (ENOSYS, a seccomp \
+     filter, an unseeded pool on a kernel without GRND_INSECURE), and a read \
+     of `/dev/urandom` never waits for entropy. Its lock is the `OnceLock` \
+     that holds the open device, so a wait on it lasts one `open`. It asks \
+     for keys without waiting for the pool, which skips the `poll` of \
+     `/dev/random` and the `close` that follows it; `__xpg_strerror_r` \
+     describes an error on its way to a panic",
 )];
 
 /// One LLVM IR module, as a graph over its symbols.
@@ -262,8 +275,199 @@ fn parse(text: &str) -> Result<Ir, String> {
     Ok(ir)
 }
 
-fn path_starts(path: &[String], prefix: &[&str]) -> bool {
-    path.len() >= prefix.len() && prefix.iter().zip(path).all(|(a, b)| a == b)
+/// Whether a sink makes a claim red (it waits, or is named) or unprovable (it
+/// is outside what this check can see into).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Verdict {
+    Red,
+    CannotVerify,
+}
+
+/// What each function is as a sink, if anything.
+fn sink_kinds(ir: &Ir, libc: &Libc, paths: &[Vec<String>], sinks: &Sinks) -> BTreeMap<u32, (Verdict, String)> {
+    let mut kinds = BTreeMap::new();
+    for f in 0..ir.names.len() {
+        let n = &ir.names[f];
+        let mut red: Vec<String> = Vec::new();
+        let mut unknown = false;
+        if !ir.defined[f] {
+            if libc.waits(n) {
+                red.push("waits".into());
+            }
+            red.extend(
+                sinks
+                    .io
+                    .iter()
+                    .filter(|c| c.native_call(libc.os, n))
+                    .map(|c| format!("IO `{}`", c.name)),
+            );
+            unknown = red.is_empty() && !libc.no_wait(n) && !sinks.trusted.iter().any(|t| t == n);
+        } else {
+            red.extend(
+                sinks
+                    .paths
+                    .iter()
+                    .filter(|p| p.matches(&paths[f]))
+                    .map(|p| format!("named slow by `{}`", p.text())),
+            );
+        }
+        if !red.is_empty() {
+            kinds.insert(f as u32, (Verdict::Red, red.join(", ")));
+        } else if unknown {
+            kinds.insert(
+                f as u32,
+                (
+                    Verdict::CannotVerify,
+                    "outside the Rust program, and not known not to wait".into(),
+                ),
+            );
+        }
+    }
+    kinds
+}
+
+/// The functions of [`KNOWN_PATHS`] in the module, each with what it vouches
+/// for.
+fn known_paths(ir: &Ir, paths: &[Vec<String>]) -> Vec<(u32, &'static [&'static str])> {
+    (0..ir.names.len())
+        .filter(|f| ir.defined[*f])
+        .filter_map(|f| {
+            let p = paths[f].join("::");
+            KNOWN_PATHS.iter().find(|(k, _, _)| *k == p).map(|(_, ext, _)| (f as u32, *ext))
+        })
+        .collect()
+}
+
+/// What `start` reaches with `cut` cut, less the externals that only a
+/// function of [`KNOWN_PATHS`] leads to and that each such function it
+/// reaches them through vouches for.
+fn reach_vouched(
+    ir: &Ir,
+    start: u32,
+    edges: &[BTreeSet<u32>],
+    cut: &BTreeSet<u32>,
+    known: &[(u32, &[&str])],
+) -> BTreeSet<u32> {
+    let all = reach(start, edges, cut);
+    let inside: Vec<(BTreeSet<u32>, &[&str])> = known
+        .iter()
+        .filter(|(k, _)| all.contains(k))
+        .map(|(k, ext)| (reach(*k, edges, cut), *ext))
+        .collect();
+    if inside.is_empty() {
+        return all;
+    }
+    let mut around = cut.clone();
+    around.extend(known.iter().map(|(k, _)| *k).filter(|k| *k != start));
+    let outside = reach(start, edges, &around);
+    all.into_iter()
+        .filter(|f| {
+            outside.contains(f)
+                || ir.defined[*f as usize]
+                || !inside
+                    .iter()
+                    .filter(|(r, _)| r.contains(f))
+                    .all(|(_, ext)| ext.contains(&ir.names[*f as usize].as_str()))
+        })
+        .collect()
+}
+
+fn reach(start: u32, edges: &[BTreeSet<u32>], cut: &BTreeSet<u32>) -> BTreeSet<u32> {
+    let mut seen = BTreeSet::from([start]);
+    let mut stack = vec![start];
+    while let Some(f) = stack.pop() {
+        for c in &edges[f as usize] {
+            if !cut.contains(c) && seen.insert(*c) {
+                stack.push(*c);
+            }
+        }
+    }
+    seen
+}
+
+/// Whether `path` is a member's own function. `want` is the census's path
+/// from the crate root (`crate::api::Doc::render`) and `display` the member's
+/// name (`Doc::render`), whose segments end `want`; `krate` is the name rustc
+/// compiled the bridge crate under. The function is in `krate`, under the
+/// module, and ends with the name, with the parent type among the segments
+/// between: a generic parent's arguments, or the implementing type of a `dyn`
+/// parent's trait method, may stand around it.
+fn is_member(path: &[String], krate: &str, want: &[String], display: &[&str]) -> bool {
+    let Some((name, parent)) = display.split_last() else {
+        return false;
+    };
+    let module = &want[1..want.len().saturating_sub(display.len())];
+    let Some((first, rest)) = path.split_first() else {
+        return false;
+    };
+    if first != krate || !rest.starts_with(module) || rest.last().map(String::as_str) != Some(*name) {
+        return false;
+    }
+    let between = &rest[module.len()..rest.len() - 1];
+    parent.iter().all(|p| between.iter().any(|s| s == p))
+}
+
+/// One bounded-lock section that fails its proof, with the path to why.
+struct DirtySection {
+    section: u32,
+    path: Vec<(u32, bool)>,
+    why: String,
+}
+
+/// Prove the bounded lock's wait bounded: the acquire reaches only its own
+/// wait, and every section reaches no sink and no second acquire. Answers the
+/// sections that fail.
+fn prove_bounded(
+    ir: &Ir,
+    libc: &Libc,
+    acquire: u32,
+    kinds: &BTreeMap<u32, (Verdict, String)>,
+    fatal: &BTreeSet<u32>,
+    known: &[(u32, &[&str])],
+) -> Vec<DirtySection> {
+    let mut dirty = Vec::new();
+    let own: BTreeSet<u32> = reach(acquire, &ir.refs, fatal)
+        .into_iter()
+        .filter(|f| kinds.contains_key(f) && !libc.acquire_waits.contains(&ir.names[*f as usize].as_str()))
+        .collect();
+    if !own.is_empty() {
+        let path = shortest(&ir.refs, &ir.calls, acquire, &own, fatal).expect("reached");
+        let last = path.last().unwrap().0;
+        dirty.push(DirtySection {
+            section: acquire,
+            why: format!("the acquire itself reaches {} — {}", ir.label(last), kinds[&last].1),
+            path,
+        });
+    }
+    let mut cut = fatal.clone();
+    cut.insert(acquire);
+    let sections: Vec<u32> = (0..ir.names.len() as u32)
+        .filter(|f| *f != acquire && ir.refs[*f as usize].contains(&acquire))
+        .collect();
+    for s in &sections {
+        let reached = reach_vouched(ir, *s, &ir.refs, &cut, known);
+        let bad: BTreeSet<u32> = reached
+            .iter()
+            .copied()
+            .filter(|f| kinds.contains_key(f) || (*f != *s && ir.refs[*f as usize].contains(&acquire)))
+            .collect();
+        if bad.is_empty() {
+            continue;
+        }
+        let path = shortest(&ir.calls, &ir.calls, *s, &bad, &cut)
+            .or_else(|| shortest(&ir.refs, &ir.calls, *s, &bad, &cut))
+            .expect("reached");
+        let last = path.last().unwrap().0;
+        let why = match kinds.get(&last) {
+            Some((_, k)) => format!("reaches {} — {k}", ir.label(last)),
+            None => format!(
+                "takes a bounded lock again in {}, which can deadlock",
+                ir.label(last)
+            ),
+        };
+        dirty.push(DirtySection { section: *s, path, why });
+    }
+    dirty
 }
 
 /// Settle the claims of one native IR module.
@@ -279,8 +483,9 @@ pub(crate) fn run_ir(
     let Some(libc) = libc::for_triple(&ir.triple) else {
         return Err(format!(
             "wasm_block_check: {label} targets `{}`, and this check knows which \
-             C library calls wait only for {}. A wait set for another C library \
-             has to be drawn from its implementation before it can be trusted.",
+             C library calls do not wait only for {}. A list for another C \
+             library has to be drawn from its implementation before it can be \
+             trusted.",
             ir.triple,
             libc::KNOWN.iter().map(|l| l.name).collect::<Vec<_>>().join(", "),
         ));
@@ -317,100 +522,74 @@ pub(crate) fn run_ir(
     match_census(&root_names, claims, label)?;
 
     let paths: Vec<Vec<String>> = ir.names.iter().map(|n| own_path(n)).collect();
+    let kinds = sink_kinds(&ir, libc, &paths, sinks);
+    let known = known_paths(&ir, &paths);
 
-    // The bounded runtime locks' edges into std::sync.
-    for f in 0..ir.names.len() {
-        if !(BOUNDED.iter().any(|(p, _)| path_starts(&paths[f], p)) || ir.names[f] == BOUNDED_ACQUIRE) {
-            continue;
-        }
-        let into_sync = |c: &u32| {
-            let p = &paths[*c as usize];
-            path_starts(p, &["std", "sync"]) || path_starts(p, &["std", "sys", "sync"])
-        };
-        ir.refs[f].retain(|c| !into_sync(c));
-        ir.calls[f].retain(|c| !into_sync(c));
-    }
-
-    let cut: BTreeSet<u32> = (0..ir.names.len() as u32)
-        .filter(|f| {
-            FATAL_ENTRIES.iter().any(|e| e.matches(&ir.names[*f as usize]))
-                || ENDINGS.iter().any(|(p, _)| path_starts(&paths[*f as usize], p))
-        })
+    let fatal: BTreeSet<u32> = (0..ir.names.len() as u32)
+        .filter(|f| FATAL_ENTRIES.iter().any(|e| e.matches(&ir.names[*f as usize])))
         .collect();
+    let acquire = ir
+        .index
+        .get(ACQUIRE)
+        .copied()
+        .filter(|a| ir.defined[*a as usize]);
+    let mut cut = fatal.clone();
+    cut.extend(acquire);
 
-    // What each sink is.
-    let mut kinds: BTreeMap<u32, String> = BTreeMap::new();
-    for f in 0..ir.names.len() {
-        let n = &ir.names[f];
-        let mut k: Vec<String> = Vec::new();
-        if !ir.defined[f] {
-            if libc.waits(n) {
-                k.push("waits".into());
-            }
-            k.extend(
-                sinks
-                    .io
-                    .iter()
-                    .filter(|c| c.native_call(libc.os, n))
-                    .map(|c| format!("IO `{}`", c.name)),
-            );
-        } else {
-            k.extend(
-                sinks
-                    .paths
-                    .iter()
-                    .filter(|p| p.matches(&paths[f]))
-                    .map(|p| format!("named slow by `{}`", p.text())),
-            );
-        }
-        if !k.is_empty() {
-            kinds.insert(f as u32, k.join(", "));
-        }
-    }
-
-    let reach = |start: u32, edges: &Vec<BTreeSet<u32>>| -> BTreeSet<u32> {
-        let mut seen = BTreeSet::new();
-        let mut stack = vec![start];
-        seen.insert(start);
-        while let Some(f) = stack.pop() {
-            for c in &edges[f as usize] {
-                if !cut.contains(c) && seen.insert(*c) {
-                    stack.push(*c);
-                }
-            }
-        }
-        seen
-    };
-
-    // Control: every full root still reaches its member. A root calls its
-    // member's glue with an empty request; an optimizer that sees the decode
-    // fail deletes the body after it, and the scan would pass every member
-    // that takes an argument.
+    // Control: every full root reaches its member's own function. The
+    // crate's name is the one its glue (`<crate>::frustrate_generated::call_*`,
+    // which the root calls) was compiled under.
+    //
+    // A member of a `dyn` parent is called through the vtable of whatever
+    // object the handle holds, built wherever that object was made, so its
+    // own function is never in the root's closure. Its possible callees are
+    // every function in a vtable that implements that trait method, which v0
+    // mangling names `<Impl as Trait>::method`: the root gets an edge to each.
+    // Legacy mangling drops the trait from an impl's path, so a module with
+    // legacy symbols gets no such edges, and the member stays unverified.
+    let v0_only = !(0..ir.names.len()).any(|f| ir.defined[f] && ir.names[f].starts_with("_ZN"));
+    let address_taken: BTreeSet<u32> = (0..ir.names.len())
+        .flat_map(|g| ir.refs[g].difference(&ir.calls[g]).copied().collect::<Vec<_>>())
+        .collect();
+    // Roots that do not reach their member's own function, with its path: a
+    // finding of their own unless the root is red regardless.
+    let mut unreached: BTreeMap<String, String> = BTreeMap::new();
     if let Some(c) = claims {
-        let folded: Vec<String> = c
-            .artifact
-            .iter()
-            .filter_map(|(sym, display)| {
-                let r = *ir.index.get(sym)?;
-                let glue = format!("call_{}", &sym[ROOT_PREFIX.len()..]);
-                let reaches = reach(r, &ir.refs)
+        let mut unreached_found: Vec<(String, String)> = Vec::new();
+        for (sym, display) in &c.artifact {
+            let (Some(&r), Some(want)) = (ir.index.get(sym), c.member_paths.get(sym)) else {
+                continue;
+            };
+            let segs: Vec<&str> = display.split("::").collect();
+            let krate = ir.calls[r as usize].iter().find_map(|g| {
+                let p = &paths[*g as usize];
+                (p.len() == 3 && p[1] == super::GLUE_MODULE && p[2].starts_with("call_"))
+                    .then(|| p[0].clone())
+            });
+            let reached = krate.is_some_and(|k| {
+                reach(r, &ir.refs, &cut).iter().any(|f| {
+                    ir.defined[*f as usize] && is_member(&paths[*f as usize], &k, want, &segs)
+                })
+            });
+            if reached {
+                continue;
+            }
+            let implementers: Vec<u32> = if v0_only && segs.len() == 2 {
+                address_taken
                     .iter()
-                    .any(|f| paths[*f as usize].last().is_some_and(|l| *l == glue));
-                (!reaches).then(|| format!("  {display}"))
-            })
-            .take(super::MEMBER_CAP)
-            .collect();
-        if !folded.is_empty() {
-            return Err(format!(
-                "wasm_block_check: cannot verify {label}: these roots no longer \
-                 reach their member's glue:\n\n{}\n\n\
-                 The check build was optimized: a flag outside the check's \
-                 configuration (a crate's own `rustc_flags`, say) raised its \
-                 opt-level, and the optimizer deleted the member bodies the \
-                 scan exists to read. Build the check at opt-level 0.",
-                folded.join("\n")
-            ));
+                    .copied()
+                    .filter(|f| ir.defined[*f as usize] && paths[*f as usize].ends_with(&[segs[0].to_string(), segs[1].to_string()]))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            if implementers.is_empty() {
+                unreached_found.push((sym.clone(), want.join("::")));
+            } else {
+                ir.refs[r as usize].extend(implementers);
+            }
         }
+        unreached = unreached_found.into_iter().collect();
     }
 
     let display = |sym: &str| -> String {
@@ -419,86 +598,166 @@ pub(crate) fn run_ir(
             .unwrap_or_else(|| sym.to_string())
     };
 
-    let mut members: Vec<(String, Vec<(u32, bool)>, usize)> = Vec::new();
+    let dirty = match acquire {
+        Some(a) => prove_bounded(&ir, libc, a, &kinds, &fatal, &known),
+        None => Vec::new(),
+    };
+
+    struct Finding {
+        who: String,
+        verdict: Verdict,
+        path: Vec<(u32, bool)>,
+        why: String,
+        sites: usize,
+    }
+    let mut findings: Vec<Finding> = Vec::new();
     for (r, sym) in roots.iter().zip(&root_names) {
-        let reached: BTreeSet<u32> = reach(*r, &ir.refs)
-            .into_iter()
-            .filter(|f| kinds.contains_key(f))
-            .collect();
-        if reached.is_empty() {
+        let closure = reach_vouched(&ir, *r, &ir.refs, &cut, &known);
+        let reached: BTreeSet<u32> = closure.iter().copied().filter(|f| kinds.contains_key(f)).collect();
+        // Red ahead of unprovable: a wait is the finding when there is one.
+        let worst = reached.iter().map(|f| kinds[f].0).min();
+        if let Some(v) = worst {
+            let targets: BTreeSet<u32> = reached.iter().copied().filter(|f| kinds[f].0 == v).collect();
+            let path = shortest(&ir.calls, &ir.calls, *r, &targets, &cut)
+                .or_else(|| shortest(&ir.refs, &ir.calls, *r, &targets, &cut))
+                .expect("a reached sink has a path");
+            let last = path.last().unwrap().0;
+            findings.push(Finding {
+                who: display(sym),
+                verdict: v,
+                why: format!("reaches {} — {}", ir.label(last), kinds[&last].1),
+                path,
+                sites: reached.len(),
+            });
             continue;
         }
-        let path = shortest(&ir.calls, &ir.calls, *r, &reached, &cut)
-            .or_else(|| shortest(&ir.refs, &ir.calls, *r, &reached, &cut))
-            .expect("a reached sink has a path");
-        members.push((display(sym), path, reached.len()));
+        if let Some(want) = unreached.get(sym) {
+            findings.push(Finding {
+                who: display(sym),
+                verdict: Verdict::CannotVerify,
+                why: format!(
+                    "does not reach its own function `{want}`: it was inlined into \
+                     its glue (`#[inline(always)]`, or the crate's own opt-level), \
+                     or rustc names it otherwise, so the scan did not read its body"
+                ),
+                path: vec![(*r, true)],
+                sites: 1,
+            });
+            continue;
+        }
+        if let (Some(a), Some(d)) = (acquire, dirty.first()) {
+            let sections: BTreeSet<u32> = closure
+                .iter()
+                .copied()
+                .filter(|f| ir.refs[*f as usize].contains(&a))
+                .collect();
+            if let Some(path) = shortest(&ir.refs, &ir.calls, *r, &sections, &cut) {
+                findings.push(Finding {
+                    who: display(sym),
+                    verdict: Verdict::CannotVerify,
+                    why: format!(
+                        "takes the bounded lock, whose wait is unproven: the section \
+                         in {} {}",
+                        ir.label(d.section),
+                        d.why
+                    ),
+                    path,
+                    sites: 1,
+                });
+            }
+        }
     }
 
-    let mut named: Vec<String> = libc.waits.iter().map(|w| format!("`{w}`")).collect();
-    named.truncate(4);
     let sink_note = if sinks.is_empty() {
         String::new()
     } else {
         format!(", and {}", sinks.text())
     };
+    let trust_note = if sinks.trusted.is_empty() {
+        String::new()
+    } else {
+        format!(", trusting {}", sinks.trusted.iter().map(|t| format!("`{t}`")).collect::<Vec<_>>().join(", "))
+    };
 
-    if members.is_empty() {
+    if findings.is_empty() {
         return Ok(format!(
-            "wasm_block_check: {label} is clean — {} `no_block` root(s) on `{}`, \
-             checked against {}'s waits ({}, …){sink_note}{}.",
+            "wasm_block_check: {label} is clean — {} `no_block` root(s) on `{}` reach \
+             only externals known not to wait{trust_note}{sink_note}; {}{}.",
             roots.len(),
             ir.triple,
-            libc.name,
-            named.join(", "),
+            if acquire.is_some() {
+                "the bounded lock's sections are all proven"
+            } else {
+                "no bounded lock is present"
+            },
             claims.map(Claims::accounting).unwrap_or_default()
         ));
     }
 
+    findings.sort_by_key(|f| f.verdict);
+    let red = findings.iter().filter(|f| f.verdict == Verdict::Red).count();
     let mut msg = format!(
-        "wasm_block_check: {label}: {} `#[bridge(no_block)]` member(s) reach a \
-         native wait{} on `{}`.\n\n",
-        members.len(),
+        "wasm_block_check: {label}: on `{}`, {red} `#[bridge(no_block)]` member(s) \
+         reach a wait{} and {} cannot be verified.\n\n",
+        ir.triple,
         if sinks.is_empty() { "" } else { " or a function named slow or IO" },
-        ir.triple
+        findings.len() - red,
     );
-    for (n, (who, path, sites)) in members.iter().enumerate() {
-        let last = path.last().unwrap().0;
+    for (n, f) in findings.iter().enumerate() {
+        let last = f.path.last().unwrap().0;
         if n >= super::WITNESSED {
             if n == super::WITNESSED {
                 msg.push_str("  Without paths:\n");
             }
-            msg.push_str(&format!("  {who} — reaches {}\n", ir.label(last)));
+            msg.push_str(&format!("  {} — {}\n", f.who, f.why));
             continue;
         }
-        msg.push_str(&format!("  {who}\n      reaches {} — {}\n", ir.label(last), kinds[&last]));
-        if *sites > 1 {
-            msg.push_str(&format!("      and {} other site(s)\n", sites - 1));
+        let tag = match f.verdict {
+            Verdict::Red => "",
+            Verdict::CannotVerify => "cannot verify: ",
+        };
+        msg.push_str(&format!("  {}\n      {tag}{}\n", f.who, f.why));
+        if f.sites > 1 {
+            msg.push_str(&format!("      and {} other site(s)\n", f.sites - 1));
         }
-        for (d, (f, call)) in path.iter().enumerate() {
+        for (d, (g, call)) in f.path.iter().enumerate() {
             msg.push_str(&format!(
                 "        {}{}{}\n",
                 "  ".repeat(d.min(8)),
-                ir.label(*f),
+                ir.label(*g),
                 if *call || d == 0 { "" } else { "   (address taken: a `dyn` or fn-pointer call)" }
             ));
+        }
+        let _ = last;
+        msg.push('\n');
+    }
+    if let Some(d) = dirty.first() {
+        msg.push_str(&format!("The bounded lock's unproven section, {}:\n", ir.label(d.section)));
+        for (i, (g, _)) in d.path.iter().enumerate() {
+            msg.push_str(&format!("        {}{}\n", "  ".repeat(i.min(8)), ir.label(*g)));
+        }
+        if dirty.len() > 1 {
+            msg.push_str("  and the others:\n");
+            for d in dirty.iter().skip(1).take(super::WITNESSED) {
+                msg.push_str(&format!("    {}\n      {}\n", ir.label(d.section), d.why));
+            }
+            if dirty.len() > super::WITNESSED + 1 {
+                msg.push_str(&format!("    and {} more\n", dirty.len() - super::WITNESSED - 1));
+            }
         }
         msg.push('\n');
     }
     msg.push_str(
-        "A claimed member's caller may be the main isolate, where a wait \
-         stalls the UI for as\nlong as another thread holds what it waits for. \
-         Ways out: take the lock or the slow\ncall out of the body, make the \
-         member `async` so it is dispatched off the caller, or\ndrop the claim.\n\
-         \nNot followed, and not counted above:\n",
+        "A claimed member's caller may be the main isolate, where a wait stalls \
+         the UI for as\nlong as another thread holds what it waits for. Ways out: \
+         take the lock or the slow\ncall out of the body, make the member `async` \
+         so it is dispatched off the caller, or\ndrop the claim. \"Cannot verify\" \
+         names a function outside the Rust program that is\nnot known not to \
+         wait; if it cannot stall the caller, list it in the check target's\n\
+         `trusted` with why.\n\nNot followed, and not counted above:\n",
     );
     for f in FATAL_ENTRIES {
         msg.push_str(&format!("  {} — {}.\n", f.what, f.why));
-    }
-    for (p, why) in BOUNDED {
-        msg.push_str(&format!("  {}'s locks — {why}.\n", p.join("::")));
-    }
-    for (p, why) in ENDINGS {
-        msg.push_str(&format!("  {} — {why}.\n", p.join("::")));
     }
     Err(msg)
 }
@@ -541,25 +800,34 @@ fn shortest(
     None
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const HEAD: &str = "target triple = \"arm64-apple-macosx11.0.0\"\n";
 
-    fn check(body: &str, slow: &[&str], io: &[&str]) -> Result<String, String> {
+    fn run_text(text: &str, claims: Option<&Claims>, sinks: &Sinks) -> Result<String, String> {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!("ir_block_check_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join(format!("m{}.ll", NEXT.fetch_add(1, Ordering::Relaxed)));
-        std::fs::write(&p, format!("{HEAD}{body}")).unwrap();
-        let sinks = Sinks {
+        std::fs::write(&p, text).unwrap();
+        run_ir(p.to_str().unwrap(), "//pkg:target", claims, sinks)
+    }
+
+    fn sinks(slow: &[&str], io: &[&str], trusted: &[&str]) -> Sinks {
+        Sinks {
             paths: slow.iter().map(|t| super::super::SlowPath::parse(t).unwrap()).collect(),
             io: io.iter().map(|t| super::super::io::parse(t).unwrap()).collect(),
             wasi: false,
-        };
-        run_ir(p.to_str().unwrap(), "//pkg:target", None, &sinks)
+            trusted: trusted.iter().map(|t| t.to_string()).collect(),
+        }
+    }
+
+    fn check(body: &str, slow: &[&str], io: &[&str]) -> Result<String, String> {
+        run_text(&format!("{HEAD}{body}"), None, &sinks(slow, io, &[]))
     }
 
     const ROOT: &str = "define void @frustrate_check_block_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n";
@@ -575,14 +843,40 @@ mod tests {
             &[],
         )
         .unwrap_err();
-        assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a native wait"), "{e}");
+        assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a wait"), "{e}");
         assert!(e.contains("reaches pthread_mutex_lock — waits"), "{e}");
         assert!(e.contains("example::render"), "{e}");
     }
 
+    /// The inversion: an external nobody classified is not passed because it
+    /// is missing from a list of waits.
+    #[test]
+    fn an_external_not_known_not_to_wait_cannot_be_verified() {
+        let body = format!(
+            "{ROOT}define void @_RNvCs1_7example6render() {{\n  call i32 @sqlite3_step(ptr %0)\n  call ptr @malloc(i64 8)\n  ret void\n}}\n\
+             declare i32 @sqlite3_step(ptr)\ndeclare ptr @malloc(i64)\n"
+        );
+        let e = check(&body, &[], &[]).unwrap_err();
+        assert!(e.contains("cannot verify: reaches sqlite3_step"), "{e}");
+        assert!(!e.contains("reaches malloc"), "malloc is known not to wait: {e}");
+        let ok = run_text(&format!("{HEAD}{body}"), None, &sinks(&[], &[], &["sqlite3_step"])).unwrap();
+        assert!(ok.contains("trusting `sqlite3_step`"), "{ok}");
+    }
+
+    /// A spin loop's yield is a wait, and the target's `allow` cannot silence it.
+    #[test]
+    fn sched_yield_is_a_wait() {
+        let body = format!(
+            "{ROOT}define void @_RNvCs1_7example6render() {{\n  call i32 @sched_yield()\n  ret void\n}}\n\
+             declare i32 @sched_yield()\n"
+        );
+        let e = check(&body, &[], &[]).unwrap_err();
+        assert!(e.contains("reaches sched_yield — waits"), "{e}");
+        assert!(run_text(&format!("{HEAD}{body}"), None, &sinks(&[], &[], &["sched_yield"])).is_err());
+    }
+
     #[test]
     fn a_wait_reached_through_a_vtable_is_attributed_to_the_member() {
-        // render stores a vtable whose method locks: no direct call path.
         let e = check(
             &format!(
                 "{ROOT}define void @_RNvCs1_7example6render() {{\n  store ptr @vtable.0, ptr %x\n  ret void\n}}\n\
@@ -612,22 +906,68 @@ mod tests {
         assert!(ok.contains("clean — 1 `no_block` root(s)"), "{ok}");
     }
 
+    /// The bounded lock: `with` calls the acquire, then the section.
+    fn bounded(section_body: &str, elsewhere: &str) -> String {
+        format!(
+            "{HEAD}define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_9frustrate4with()\n  ret void\n}}\n\
+             define void @frustrate_bounded_lock_acquire() {{\n  call i32 @pthread_mutex_lock(ptr %0)\n  ret void\n}}\n\
+             define void @_RNvCs1_9frustrate4with() {{\n  call void @frustrate_bounded_lock_acquire()\n  call void @_RNvCs1_9frustrate7section()\n  call i32 @pthread_mutex_unlock(ptr %0)\n  ret void\n}}\n\
+             define void @_RNvCs1_9frustrate7section() {{\n{section_body}  ret void\n}}\n\
+             {elsewhere}\
+             declare i32 @pthread_mutex_lock(ptr)\ndeclare i32 @pthread_mutex_unlock(ptr)\ndeclare i32 @nanosleep(ptr)\n"
+        )
+    }
+
     #[test]
-    fn a_bounded_runtime_lock_is_not_followed_into_std_sync_only() {
-        let lock = "define void @_RNvNtCs1_9frustrate4spin4with() {\n  call void @_RNvNtNtNtCs2_3std4sync6poison5mutex4lock()\n  call void @_RNvCs1_7example4work()\n  ret void\n}\n\
-                    define void @_RNvNtNtNtCs2_3std4sync6poison5mutex4lock() {\n  call i32 @pthread_mutex_lock(ptr %0)\n  ret void\n}\n\
-                    declare i32 @pthread_mutex_lock(ptr)\n";
-        let root = "define void @frustrate_check_block_1_render() {\n  call void @_RNvNtCs1_9frustrate4spin4with()\n  ret void\n}\n";
-        let ok = check(&format!("{root}{lock}define void @_RNvCs1_7example4work() {{\n  ret void\n}}\n"), &[], &[]).unwrap();
-        assert!(ok.contains("clean"), "{ok}");
-        // What the section calls besides std::sync is still followed.
+    fn the_bounded_locks_wait_is_exempt_when_every_section_is_proven() {
+        let ok = run_text(
+            &bounded("  call ptr @malloc(i64 8)\n", "declare ptr @malloc(i64)\n"),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap();
+        assert!(ok.contains("the bounded lock's sections are all proven"), "{ok}");
+    }
+
+    #[test]
+    fn a_section_that_waits_is_red_through_the_member() {
+        let e = run_text(&bounded("  call i32 @nanosleep(ptr %0)\n", ""), None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("reaches nanosleep — waits"), "{e}");
+    }
+
+    /// The hole the old module-path exemption left: a section the member never
+    /// runs still holds the lock the member takes.
+    #[test]
+    fn a_section_elsewhere_that_waits_makes_every_member_taking_the_lock_unprovable() {
+        let elsewhere = "define void @_RNvCs1_9frustrate5other() {\n  call void @frustrate_bounded_lock_acquire()\n  call i32 @nanosleep(ptr %0)\n  ret void\n}\n";
+        let e = run_text(&bounded("", elsewhere), None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("cannot verify: takes the bounded lock, whose wait is unproven"), "{e}");
+        assert!(e.contains("frustrate::other"), "{e}");
+    }
+
+    #[test]
+    fn a_section_that_takes_the_lock_again_is_refused() {
+        let nested = "  call void @_RNvCs1_9frustrate5inner()\n";
+        let elsewhere = "define void @_RNvCs1_9frustrate5inner() {\n  call void @frustrate_bounded_lock_acquire()\n  ret void\n}\n";
+        let e = run_text(&bounded(nested, elsewhere), None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("takes a bounded lock again"), "{e}");
+    }
+
+    /// What the old scanner exempted by module path: frustrate's own code
+    /// calling into `std::sync`. Without the bounded lock's identity it is an
+    /// ordinary wait.
+    #[test]
+    fn a_runtime_function_taking_a_std_lock_is_an_ordinary_wait() {
         let e = check(
-            &format!("{root}{lock}define void @_RNvCs1_7example4work() {{\n  call i32 @nanosleep(ptr %0)\n  ret void\n}}\ndeclare i32 @nanosleep(ptr)\n"),
+            "define void @frustrate_check_block_1_render() {\n  call void @_RNvNtCs1_9frustrate8resident4live()\n  ret void\n}\n\
+             define void @_RNvNtCs1_9frustrate8resident4live() {\n  call void @_RNvNtNtCs2_3std4sync4once9call_once()\n  ret void\n}\n\
+             define void @_RNvNtNtCs2_3std4sync4once9call_once() {\n  call i32 @dispatch_semaphore_wait(ptr %0)\n  ret void\n}\n\
+             declare i32 @dispatch_semaphore_wait(ptr)\n",
             &[],
             &[],
         )
         .unwrap_err();
-        assert!(e.contains("reaches nanosleep — waits"), "{e}");
+        assert!(e.contains("reaches dispatch_semaphore_wait — waits"), "{e}");
     }
 
     #[test]
@@ -635,8 +975,8 @@ mod tests {
         let body = format!(
             "{ROOT}define void @_RNvCs1_7example6render() {{\n  call i32 @open(ptr %0)\n  ret void\n}}\ndeclare i32 @open(ptr)\n"
         );
-        assert!(check(&body, &[], &[]).is_ok());
-        assert!(check(&body, &[], &["network"]).is_ok());
+        let e = check(&body, &[], &[]).unwrap_err();
+        assert!(e.contains("cannot verify: reaches open"), "{e}");
         let e = check(&body, &[], &["files"]).unwrap_err();
         assert!(e.contains("reaches open — IO `files`"), "{e}");
         let e = check(&body, &["example::render"], &[]).unwrap_err();
@@ -669,47 +1009,49 @@ mod tests {
         assert!(e.contains("std::sync::lock"), "{e}");
     }
 
+    fn census(rows: &str) -> Claims {
+        Claims::parse(&format!("{}\ncrate example\n{rows}\n", super::super::CENSUS_HEADER), "c").unwrap()
+    }
+
     #[test]
-    fn a_root_folded_away_from_its_glue_is_refused() {
-        let claims = Claims::parse(
-            &format!("{}\ncrate example\nartifact 1 render\n", super::super::CENSUS_HEADER),
-            "c",
-        )
-        .unwrap();
-        let dir = std::env::temp_dir().join(format!("ir_block_folded_{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let run = |body: &str| {
-            let p = dir.join(format!("m{}.ll", body.len()));
-            std::fs::write(&p, format!("{HEAD}{body}")).unwrap();
-            run_ir(p.to_str().unwrap(), "//pkg:t", Some(&claims), &Sinks::default())
-        };
-        // What an optimizer leaves: the root panics on the empty request.
-        let folded = "define void @frustrate_check_block_1_render() {\n  call void @_RNvNtCs8_4core6option13expect_failed()\n  ret void\n}\n\
-                      define void @_RNvNtCs8_4core6option13expect_failed() {\n  ret void\n}\n";
-        let e = run(folded).unwrap_err();
-        assert!(e.contains("no longer reach their member's glue"), "{e}");
-        let kept = "define void @frustrate_check_block_1_render() {\n  call void @_RNvNtCs1_7example19frustrate_generated13call_1_render()\n  ret void\n}\n\
-                    define void @_RNvNtCs1_7example19frustrate_generated13call_1_render() {\n  ret void\n}\n";
-        assert!(run(kept).is_ok());
+    fn a_root_that_does_not_reach_its_member_is_refused() {
+        let claims = census("artifact 1 render crate::api::render");
+        // What an optimizer that proved the decode fails leaves behind.
+        let folded = format!(
+            "{HEAD}define void @frustrate_check_block_1_render(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated13call_1_render()\n  ret void\n}}\n\
+             define void @_RNvNtCs1_7example19frustrate_generated13call_1_render() {{\n  ret void\n}}\n"
+        );
+        let e = run_text(&folded, Some(&claims), &Sinks::default()).unwrap_err();
+        assert!(e.contains("cannot verify: does not reach its own function `crate::api::render`"), "{e}");
+        let kept = format!(
+            "{HEAD}define void @frustrate_check_block_1_render(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated13call_1_render()\n  ret void\n}}\n\
+             define void @_RNvNtCs1_7example19frustrate_generated13call_1_render() {{\n  call void @_RNvNtCs1_7example3api6render()\n  ret void\n}}\n\
+             define void @_RNvNtCs1_7example3api6render() {{\n  ret void\n}}\n"
+        );
+        let ok = run_text(&kept, Some(&claims), &Sinks::default());
+        assert!(ok.is_ok(), "{ok:?}");
     }
 
-    /// A module for `triple`, written out and scanned.
-    fn run_triple(triple: &str, body: &str, io: &[&str]) -> Result<String, String> {
-        let dir = std::env::temp_dir().join(format!("ir_block_triple_{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let p = dir.join(format!("{triple}-{}-{}.ll", body.len(), io.len()));
-        std::fs::write(&p, format!("target triple = \"{triple}\"\n{body}")).unwrap();
-        let sinks = Sinks {
-            io: io.iter().map(|t| super::super::io::parse(t).unwrap()).collect(),
-            ..Sinks::default()
-        };
-        run_ir(p.to_str().unwrap(), "//pkg:t", None, &sinks)
+    /// A `dyn` member's own function is wherever the handle's vtable points:
+    /// every implementation of the trait method in the program is a callee.
+    #[test]
+    fn a_dyn_members_implementations_are_its_callees() {
+        let claims = census("artifact 1 Shape::area crate::api::Shape::area");
+        let text = format!(
+            "{HEAD}define void @frustrate_check_block_1_area(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated11call_1_area()\n  ret void\n}}\n\
+             define void @_RNvNtCs1_7example19frustrate_generated11call_1_area() {{\n  %f = load ptr, ptr %v\n  call void %f()\n  ret void\n}}\n\
+             @vtable.0 = private constant <{{ ptr }}> <{{ ptr @_RNvXs_NtCs1_7example3apiNtB4_6CircleNtB4_5Shape4area }}>\n\
+             define void @_RNvXs_NtCs1_7example3apiNtB4_6CircleNtB4_5Shape4area() {{\n  call i32 @nanosleep(ptr %0)\n  ret void\n}}\n\
+             declare i32 @nanosleep(ptr)\n"
+        );
+        let e = run_text(&text, Some(&claims), &Sinks::default()).unwrap_err();
+        assert!(e.contains("Shape::area\n      reaches nanosleep — waits"), "{e}");
     }
 
-    /// A Linux member that makes `syscall`s: what each is read as.
-    fn linux(calls: &str) -> String {
+    /// A Linux module whose member makes `syscall`s: what each is read as.
+    fn linux(triple: &str, calls: &str) -> String {
         format!(
-            "{ROOT}define void @_RNvCs1_7example6render() {{\n{calls}  ret void\n}}\n\
+            "target triple = \"{triple}\"\n{ROOT}define void @_RNvCs1_7example6render() {{\n{calls}  ret void\n}}\n\
              declare i64 @syscall(i64 noundef, ...)\n"
         )
     }
@@ -723,30 +1065,109 @@ mod tests {
             ("aarch64-unknown-linux-android", 98),
         ] {
             let wake = format!("  %1 = call i64 (i64, ...) @syscall(i64 noundef {futex}, ptr %0, i32 noundef 129, i32 noundef 1)\n");
-            assert!(run_triple(triple, &linux(&wake), &[]).is_ok(), "{triple}");
+            assert!(run_text(&linux(triple, &wake), None, &Sinks::default()).is_ok(), "{triple}");
             let wait = format!(
                 "  %2 = call i64 (i64, ...) @syscall(i64 noundef {futex}, ptr %0, i32 noundef 137, i32 noundef 0, ptr null, ptr null, i32 noundef -1)\n"
             );
-            let e = run_triple(triple, &linux(&format!("{wake}{wait}")), &[]).unwrap_err();
+            let e = run_text(&linux(triple, &format!("{wake}{wait}")), None, &Sinks::default()).unwrap_err();
             assert!(e.contains("reaches syscall::SYS_futex::FUTEX_WAIT_BITSET — waits"), "{triple}: {e}");
         }
+    }
+
+    #[test]
+    fn a_syscall_whose_number_is_not_a_constant_cannot_be_verified() {
+        let e = run_text(
+            &linux("x86_64-unknown-linux-gnu", "  %1 = call i64 (i64, ...) @syscall(i64 noundef %n)\n"),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap_err();
+        assert!(e.contains("cannot verify: reaches syscall::unknown"), "{e}");
     }
 
     /// A kernel call std makes through `syscall` is in its IO class by name.
     #[test]
     fn a_syscall_is_in_an_io_class() {
-        let e = run_triple(
-            "aarch64-unknown-linux-gnu",
-            &linux("  %1 = call i64 (i64, ...) @syscall(i64 noundef 291, i32 %d, ptr %p, i32 0, i32 4095, ptr %b)\n"),
-            &["files"],
+        let e = run_text(
+            &linux("aarch64-unknown-linux-gnu", "  %1 = call i64 (i64, ...) @syscall(i64 noundef 291, i32 %d, ptr %p, i32 0, i32 4095, ptr %b)\n"),
+            None,
+            &sinks(&[], &["files"], &[]),
         )
         .unwrap_err();
         assert!(e.contains("reaches syscall::SYS_statx — IO `files`"), "{e}");
     }
 
+    /// The bounded lock's acquire on Linux waits in std's futex, which is the
+    /// one wait its exemption allows.
+    #[test]
+    fn the_bounded_locks_futex_wait_is_exempt_on_linux() {
+        let text = "target triple = \"x86_64-unknown-linux-gnu\"\n\
+             define void @frustrate_check_block_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n\
+             define void @_RNvCs1_7example6render() {\n  call void @_RNvCs1_9frustrate4with()\n  ret void\n}\n\
+             define void @frustrate_bounded_lock_acquire() {\n  %1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 137, i32 noundef 0, ptr null, ptr null, i32 noundef -1)\n  ret void\n}\n\
+             define void @_RNvCs1_9frustrate4with() {\n  call void @frustrate_bounded_lock_acquire()\n  %1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 129, i32 noundef 1)\n  ret void\n}\n\
+             declare i64 @syscall(i64 noundef, ...)\n";
+        let ok = run_text(text, None, &Sinks::default()).unwrap();
+        assert!(ok.contains("the bounded lock's sections are all proven"), "{ok}");
+        // Apple's acquire wait is no exemption on Linux.
+        let apple = text.replace(
+            "%1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 137, i32 noundef 0, ptr null, ptr null, i32 noundef -1)",
+            "%1 = call i32 @pthread_mutex_lock(ptr %0)",
+        ) + "declare i32 @pthread_mutex_lock(ptr)\n";
+        let e = run_text(&apple, None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("the acquire itself reaches pthread_mutex_lock"), "{e}");
+    }
+
     #[test]
     fn a_target_without_a_classified_c_library_is_refused() {
-        let e = run_triple("x86_64-unknown-linux-musl", ROOT, &[]).unwrap_err();
+        let e = run_text(
+            &format!("target triple = \"x86_64-unknown-linux-musl\"\n{ROOT}"),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap_err();
         assert!(e.contains("only for Apple's libSystem, Android's bionic, glibc"), "{e}");
+    }
+
+    /// std's `HashMap` keys on Linux: what std's fallback reaches is vouched
+    /// for, as the only way there, and only that.
+    #[test]
+    fn std_hashmap_keys_are_vouched_for_on_linux_and_only_their_externals() {
+        let keys = "_ZN3std3sys6random5linux19hashmap_random_keys17h0123456789abcdefE";
+        let module = |render: &str, keys_body: &str| {
+            linux(
+                "x86_64-unknown-linux-gnu",
+                &format!("  call void @{keys}()\n{render}"),
+            ) + &format!(
+                "define internal void @{keys}() {{\n{keys_body}  ret void\n}}\n\
+                 declare i32 @open64(ptr, i32, ...)\ndeclare i64 @read(i32, ptr, i64)\n\
+                 declare i32 @poll(ptr, i64, i32)\ndeclare i32 @close(i32)\n\
+                 declare i32 @nanosleep(ptr, ptr)\n"
+            )
+        };
+        let fallback = "  %fd = call i32 (ptr, i32, ...) @open64(ptr null, i32 0)\n  \
+                        %n = call i64 @read(i32 %fd, ptr null, i64 16)\n  \
+                        %p = call i32 @poll(ptr null, i64 1, i32 -1)\n  \
+                        %c = call i32 @close(i32 %fd)\n";
+        let ok = run_text(&module("", fallback), None, &Sinks::default()).unwrap();
+        assert!(ok.contains("is clean"), "{ok}");
+        let ok = run_text(&module("", fallback), None, &sinks(&[], &["files"], &[])).unwrap();
+        assert!(ok.contains("is clean"), "{ok}");
+        // Reached another way, a vouched-for external is a finding as anywhere.
+        let e = run_text(
+            &module("  %r = call i64 @read(i32 0, ptr null, i64 16)\n", fallback),
+            None,
+            &sinks(&[], &["files"], &[]),
+        )
+        .unwrap_err();
+        assert!(e.contains("reaches read — IO `files`"), "{e}");
+        // An external the vouch does not name is a finding beneath it too.
+        let e = run_text(
+            &module("", &format!("{fallback}  %s = call i32 @nanosleep(ptr null, ptr null)\n")),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap_err();
+        assert!(e.contains("reaches nanosleep — waits"), "{e}");
     }
 }

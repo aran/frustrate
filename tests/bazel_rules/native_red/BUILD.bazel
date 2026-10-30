@@ -1,0 +1,39 @@
+load("@rules_dart//dart:defs.bzl", "dart_test")
+
+# The native no_block check's red fence. Each subpackage builds one claimed
+# member the check must not pass, as the check's own inputs (the check build's
+# whole-program IR and the claim census) with no verdict attached, since Bazel
+# cannot assert that an action fails. native_red_test runs the real scanner over
+# them and asserts what it says:
+#
+# - external:  the member calls a C function             -> cannot verify
+# - optimized: the member locks a Mutex at opt-level 2   -> red, named by
+#              each C library's wait
+# - dirty:     another section of the bounded lock sleeps -> cannot verify
+# - hashmap:   the member builds a `HashMap`, whose keys std draws through
+#              a fallback the check vouches for                -> passes
+#
+# optimized and dirty are built for every native analysis's platform, so each
+# C library's lists and the bounded lock's acquire are proven red on real IR;
+# external for the platforms with a C toolchain registered here (it compiles
+# C); hashmap, which is about Linux's std, for the Linux and Android
+# platforms. macOS hosts only: external's macOS build compiles its C with Xcode.
+dart_test(
+    name = "native_red_test",
+    data = [
+        "//bazel/wasm_block_check",
+        "//tests/bazel_rules/native_red/dirty:artifacts",
+        "//tests/bazel_rules/native_red/external:artifacts",
+        "//tests/bazel_rules/native_red/hashmap:artifacts",
+        "//tests/bazel_rules/native_red/optimized:artifacts",
+    ],
+    main = "native_red_test.dart",
+    target_compatible_with = select({
+        "@platforms//os:macos": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)

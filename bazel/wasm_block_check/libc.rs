@@ -1,32 +1,40 @@
-//! The C libraries the native check knows: for each, the functions std and a
-//! dependency reach that wait. A module's `target triple` picks one
-//! ([`for_triple`]); a target whose C library is not here is refused.
+//! The C libraries the native check knows: for each, which of its functions
+//! return without waiting, which wait, and what the bounded lock's acquire
+//! waits in. A module's `target triple` picks one ([`for_triple`]); a target
+//! whose C library is not here is refused.
 //!
-//! Each list is drawn from that library's own implementation.
+//! "Wait" means: the call can keep the caller until another thread or the
+//! outside world does something. A call that only takes a lock its own
+//! implementation releases before returning, and that calls nothing back
+//! (the allocator), is not one.
+//!
+//! Each list is drawn from that library's own implementation, so a group
+//! shared between libraries is shared only where its reason holds for each.
 //!
 //! # `syscall`
 //!
 //! On Linux, glibc and bionic both, std makes some kernel calls through
 //! `syscall(2)`: futexes for its locks, `getrandom`, `statx` and others. A
 //! direct call to `syscall` whose number is a constant in the IR is read as
-//! a call to an external named after the kernel call, as a path:
-//! `syscall::SYS_futex::FUTEX_WAIT_BITSET`, `syscall::SYS_gettid`
-//! ([`syscall_name`]). The lists and the IO classes use that name. A number
-//! the table does not know is `syscall::nr_<n>`; a number or a futex
-//! operation that is not a constant there is `unknown`. Any other reference
-//! to `syscall` stays the external `syscall`.
+//! a call to an external named after the kernel call, as a path so that
+//! `trusted` can name it: `syscall::SYS_futex::FUTEX_WAKE`,
+//! `syscall::SYS_gettid` ([`syscall_name`]). The lists, the IO classes and
+//! `trusted` use that name. A number the table does not know is
+//! `syscall::nr_<n>`; a number or a futex operation that is not a constant
+//! there is `unknown`; no list knows either, so the call is "cannot verify".
+//! Any other reference to `syscall` stays the external `syscall`, which no
+//! list knows either.
 
-/// One C library: the functions whose purpose is to block the calling thread
-/// until something else happens. std reaches its locks', condition
-/// variables' and thread parking's; the rest are there for dependencies that
-/// call the C library themselves. The readiness waits (`poll`, `select`,
-/// `kevent`, `epoll_wait`) are here rather than in an IO category because
-/// they are what wasip1's `poll_oneoff` is there, which that check counts as
-/// a wait. A trailing `*` matches a prefix.
+/// One C library: its no-wait list by group, each with why, the waits std
+/// reaches through it (only how a finding is worded: anything off the no-wait
+/// list is already refused), and what the bounded lock's acquire, a
+/// `std::sync::Mutex` lock, may wait in. A trailing `*` matches a prefix.
 pub(crate) struct Libc {
     pub(crate) name: &'static str,
     pub(crate) os: Os,
+    pub(crate) no_wait: &'static [(&'static [&'static str], &'static str)],
     pub(crate) waits: &'static [&'static str],
+    pub(crate) acquire_waits: &'static [&'static str],
 }
 
 /// Which OS's IO calls a library's names map to ([`super::io`]).
@@ -37,6 +45,11 @@ pub(crate) enum Os {
 }
 
 impl Libc {
+    /// Whether an external is known not to wait.
+    pub(crate) fn no_wait(&self, name: &str) -> bool {
+        self.no_wait.iter().any(|(names, _)| listed(names, name))
+    }
+
     pub(crate) fn waits(&self, name: &str) -> bool {
         listed(self.waits, name)
     }
@@ -65,49 +78,212 @@ pub(crate) fn for_triple(triple: &str) -> Option<&'static Libc> {
 /// The libraries the check knows, for a refusal to name.
 pub(crate) const KNOWN: &[&Libc] = &[&APPLE, &BIONIC, &GLIBC];
 
+// Groups whose reason holds for every library here.
+
+const PURE: &[&str] = &[
+    "memcmp", "memcpy", "memmove", "memset", "memchr", "bcmp", "bzero", "strlen", "strnlen",
+    "strcmp", "strncmp", "strchr", "strrchr",
+];
+const PURE_WHY: &str = "pure functions over memory the caller passes";
+
+const MAPPINGS: (&[&str], &str) = (
+    &["mmap", "mmap64", "munmap", "mprotect", "madvise"],
+    "kernel calls that change this process's mappings and return",
+);
+
+const UNWIND_FRAME: (&[&str], &str) = (
+    &[
+        "_Unwind_GetIP", "_Unwind_GetIPInfo", "_Unwind_GetCFA", "_Unwind_GetLanguageSpecificData",
+        "_Unwind_GetRegionStart", "_Unwind_GetDataRelBase", "_Unwind_GetTextRelBase",
+        "_Unwind_SetGR", "_Unwind_SetIP", "_Unwind_DeleteException",
+    ],
+    "read or write the frame the unwinder hands a personality routine",
+);
+
+const SIGNALS: (&[&str], &str) = (
+    &["sigaction", "sigaltstack", "sigemptyset", "sigaddset", "signal", "pthread_sigmask"],
+    "set signal disposition or masks, and return",
+);
+
+const EXIT: (&[&str], &str) = (&["abort", "_exit"], "end the process without running anything else");
+
+const PTHREAD_RELEASE: &[&str] = &[
+    "pthread_mutex_unlock", "pthread_mutex_trylock", "pthread_mutex_init", "pthread_mutex_destroy",
+    "pthread_mutexattr_*", "pthread_cond_signal", "pthread_cond_broadcast", "pthread_cond_init",
+    "pthread_cond_destroy", "pthread_condattr_*", "pthread_rwlock_unlock",
+    "pthread_rwlock_tryrdlock", "pthread_rwlock_trywrlock", "pthread_rwlock_init",
+    "pthread_rwlock_destroy",
+];
+
 pub(crate) const APPLE: Libc = Libc {
     name: "Apple's libSystem",
     os: Os::Apple,
+    no_wait: &[
+        (
+            &[
+                "memcmp", "memcpy", "memmove", "memset", "memchr", "bcmp", "bzero", "strlen",
+                "strnlen", "strcmp", "strncmp", "strchr", "strrchr", "strerror_r",
+            ],
+            PURE_WHY,
+        ),
+        (
+            &[
+                "malloc", "calloc", "realloc", "free", "posix_memalign", "aligned_alloc",
+                "malloc_size", "malloc_usable_size", "valloc",
+            ],
+            "the system allocator: its locks guard only its own structures, are \
+             released before it returns, and it calls nothing back",
+        ),
+        MAPPINGS,
+        (
+            &[
+                "pthread_mutex_unlock", "pthread_mutex_trylock", "pthread_mutex_init",
+                "pthread_mutex_destroy", "pthread_mutexattr_*", "pthread_cond_signal",
+                "pthread_cond_broadcast", "pthread_cond_init", "pthread_cond_destroy",
+                "pthread_condattr_*", "pthread_rwlock_unlock", "pthread_rwlock_tryrdlock",
+                "pthread_rwlock_trywrlock", "pthread_rwlock_init", "pthread_rwlock_destroy",
+                "os_unfair_lock_unlock", "os_unfair_lock_trylock", "dispatch_semaphore_signal",
+                "dispatch_semaphore_create", "dispatch_release", "dispatch_retain",
+                "dispatch_time", "__ulock_wake", "os_sync_wake_by_address_*",
+            ],
+            "release, wake, try, create or destroy a lock; none of them waits",
+        ),
+        (
+            &[
+                "pthread_self", "pthread_threadid_np", "pthread_get_stackaddr_np",
+                "pthread_get_stacksize_np", "pthread_getspecific", "pthread_setspecific",
+                "pthread_key_create", "pthread_attr_*", "pthread_detach", "pthread_setname_np",
+                "_tlv_atexit", "__error",
+            ],
+            "read or set the calling thread's own state, or a thread's attributes",
+        ),
+        (
+            &[
+                "clock_gettime", "clock_gettime_nsec_np", "mach_absolute_time",
+                "mach_continuous_time", "mach_timebase_info", "gettimeofday", "time",
+                "getpid", "getppid", "getuid", "geteuid", "getgid", "getegid", "sysconf",
+                "_NSGetArgc", "_NSGetArgv", "_NSGetEnviron", "_NSGetExecutablePath",
+            ],
+            "read a clock, an id or a process constant; none waits for anything to \
+             happen",
+        ),
+        (
+            &["CCRandomGenerateBytes", "arc4random", "arc4random_buf", "arc4random_uniform", "getentropy"],
+            "kernel entropy, which on Apple platforms never blocks once the system \
+             has booted",
+        ),
+        UNWIND_FRAME,
+        SIGNALS,
+        EXIT,
+    ],
     waits: &[
         "pthread_mutex_lock",
         "pthread_cond_wait",
         "pthread_cond_timedwait",
-        "dispatch_semaphore_wait",
+        "pthread_cond_timedwait_relative_np",
         "pthread_rwlock_rdlock",
         "pthread_rwlock_wrlock",
         "pthread_join",
+        "dispatch_semaphore_wait",
+        "dispatch_sync",
+        "dispatch_sync_f",
+        "dispatch_group_wait",
         "os_unfair_lock_lock",
         "os_sync_wait_on_address",
-        "os_sync_wait_on_address_with_timeout",
-        "os_sync_wait_on_address_with_deadline",
         "__ulock_wait",
         "__ulock_wait2",
-        "dispatch_sync",
-        "dispatch_group_wait",
-        "semaphore_wait",
-        "sem_wait",
         "nanosleep",
         "usleep",
         "sleep",
+        "mach_wait_until",
         "pause",
         "sigsuspend",
         "waitpid",
         "wait4",
         "poll",
         "select",
-        "select$DARWIN_EXTSN",
-        "pselect",
-        "pselect$DARWIN_EXTSN",
         "kevent",
-        "kevent64",
-        "kevent_qos",
+        "flock",
+        // Not a wait itself, but only a spin loop waiting on another thread calls it.
+        "sched_yield",
     ],
+    // The native `Mutex` is a `pthread_mutex_t`.
+    acquire_waits: &["pthread_mutex_lock"],
 };
 
-/// Android's bionic. std uses futexes for its locks here, as on glibc.
+/// The futex operations that only wake waiters or read, on either Linux
+/// library: the kernel returns without waiting for anyone.
+const FUTEX_WAKES: &[&str] = &["syscall::SYS_futex::FUTEX_WAKE", "syscall::SYS_futex::FUTEX_WAKE_BITSET"];
+
+/// The kernel's own entropy call, made through the C library's wrapper or
+/// `syscall`. It blocks only until the kernel's pool is first initialised,
+/// which happens during boot, before an app can run.
+const LINUX_ENTROPY: (&[&str], &str) = (
+    &["getrandom", "syscall::SYS_getrandom"],
+    "kernel entropy, which blocks only until the kernel first seeds its pool, \
+     during boot and before any app runs",
+);
+
+/// The kernel's thread and CPU queries, the same call on either library.
+const LINUX_THREAD_IDS: &[&str] = &["gettid", "syscall::SYS_gettid", "sched_getaffinity"];
+
+/// Android's bionic. std uses futexes for its locks here, as on glibc, and
+/// keeps thread-local destructors in a pthread key rather than registering
+/// them with the C library.
+///
+/// Not on the list: `__system_property_get`, whose first read of a property
+/// area opens and maps it under bionic's own lock, and `dl_iterate_phdr`,
+/// which holds the linker's lock that `dlopen` holds while it runs a
+/// library's constructors.
 pub(crate) const BIONIC: Libc = Libc {
     name: "Android's bionic",
     os: Os::Linux,
+    no_wait: &[
+        (PURE, PURE_WHY),
+        (
+            // bionic's strerror_r copies from a fixed table; it has no locale.
+            &["strerror_r", "__strerror_r", "gai_strerror"],
+            "copy a fixed message for an error code; bionic has no message \
+             catalogs to load",
+        ),
+        (
+            &[
+                "malloc", "calloc", "realloc", "free", "posix_memalign", "aligned_alloc",
+                "memalign", "malloc_usable_size",
+            ],
+            "bionic's allocator (Scudo): its locks guard only its own structures, \
+             are released before it returns, and it calls nothing back",
+        ),
+        MAPPINGS,
+        (
+            PTHREAD_RELEASE,
+            "release, try, create or destroy a pthread lock; none of them waits",
+        ),
+        (FUTEX_WAKES, "wake a futex's waiters, which the kernel does without waiting"),
+        (
+            &[
+                "pthread_self", "pthread_getspecific", "pthread_setspecific", "pthread_key_create",
+                "pthread_key_delete", "pthread_attr_init", "pthread_attr_destroy",
+                "pthread_attr_setstacksize", "pthread_attr_getstack", "pthread_attr_getguardsize",
+                "pthread_detach", "__errno",
+            ],
+            "read or set the calling thread's own state, or a thread's attributes; \
+             bionic's pthread keys are a fixed array claimed with atomics",
+        ),
+        (LINUX_THREAD_IDS, "ask the kernel for a thread's id or CPU set"),
+        (
+            &[
+                "clock_gettime", "gettimeofday", "time", "getpid", "getppid", "getuid", "geteuid",
+                "getgid", "getegid", "getauxval",
+            ],
+            "read a clock, an id or a process constant; none waits for anything to \
+             happen",
+        ),
+        LINUX_ENTROPY,
+        UNWIND_FRAME,
+        SIGNALS,
+        EXIT,
+    ],
     waits: &[
         "pthread_mutex_lock",
         "pthread_cond_wait",
@@ -131,18 +307,71 @@ pub(crate) const BIONIC: Libc = Libc {
         "select",
         "epoll_wait",
         "epoll_pwait",
+        "flock",
+        "sched_yield",
         "syscall::SYS_futex::FUTEX_WAIT",
         "syscall::SYS_futex::FUTEX_WAIT_BITSET",
         "syscall::SYS_futex::FUTEX_LOCK_PI",
         "syscall::SYS_futex::FUTEX_LOCK_PI2",
         "syscall::SYS_futex::FUTEX_WAIT_REQUEUE_PI",
+        "dl_iterate_phdr",
     ],
+    // std's futex `Mutex`: a contended lock waits on the futex.
+    acquire_waits: &["syscall::SYS_futex::FUTEX_WAIT_BITSET"],
 };
 
-/// glibc. std uses futexes for its locks here.
+/// glibc. std uses futexes for its locks here, and registers thread-local
+/// destructors with `__cxa_thread_atexit_impl`.
+///
+/// Not on the list: `__xpg_strerror_r`, which translates its message through
+/// gettext and can load a message catalog under gettext's lock; `sysconf`,
+/// which reads `/sys` and `/proc` for some names; and `_Unwind_Backtrace`
+/// and `_Unwind_FindEnclosingFunction`, which walk the loaded objects with
+/// `dl_iterate_phdr`.
 pub(crate) const GLIBC: Libc = Libc {
     name: "glibc",
     os: Os::Linux,
+    no_wait: &[
+        (PURE, PURE_WHY),
+        (&["gai_strerror"], "return a fixed message for an error code"),
+        (
+            &[
+                "malloc", "calloc", "realloc", "free", "posix_memalign", "aligned_alloc",
+                "memalign", "malloc_usable_size", "valloc",
+            ],
+            "glibc's malloc: its arena locks guard only its own structures, are \
+             released before it returns, and it calls nothing back",
+        ),
+        MAPPINGS,
+        (
+            PTHREAD_RELEASE,
+            "release, try, create or destroy a pthread lock; none of them waits",
+        ),
+        (FUTEX_WAKES, "wake a futex's waiters, which the kernel does without waiting"),
+        (
+            &[
+                "pthread_self", "pthread_getspecific", "pthread_setspecific", "pthread_key_create",
+                "pthread_key_delete", "pthread_attr_init", "pthread_attr_destroy",
+                "pthread_attr_setstacksize", "pthread_attr_getstack", "pthread_attr_getguardsize",
+                "pthread_detach", "__errno_location",
+            ],
+            "read or set the calling thread's own state, or a thread's attributes; \
+             glibc's pthread keys are a fixed array claimed with atomics",
+        ),
+        (LINUX_THREAD_IDS, "ask the kernel for a thread's id or CPU set"),
+        (
+            &[
+                "clock_gettime", "gettimeofday", "time", "getpid", "getppid", "getuid", "geteuid",
+                "getgid", "getegid", "getauxval",
+            ],
+            "read a clock (through the vDSO), an id or a process constant; none \
+             waits for anything to happen",
+        ),
+        LINUX_ENTROPY,
+        UNWIND_FRAME,
+        SIGNALS,
+        EXIT,
+    ],
     waits: &[
         "pthread_mutex_lock",
         "pthread_cond_wait",
@@ -168,12 +397,20 @@ pub(crate) const GLIBC: Libc = Libc {
         "pselect",
         "epoll_wait",
         "epoll_pwait",
+        "flock",
+        "sched_yield",
         "syscall::SYS_futex::FUTEX_WAIT",
         "syscall::SYS_futex::FUTEX_WAIT_BITSET",
         "syscall::SYS_futex::FUTEX_LOCK_PI",
         "syscall::SYS_futex::FUTEX_LOCK_PI2",
         "syscall::SYS_futex::FUTEX_WAIT_REQUEUE_PI",
+        // Both take the dynamic loader's lock, which `dlopen` holds while it
+        // runs a library's constructors.
+        "__cxa_thread_atexit_impl",
+        "dl_iterate_phdr",
     ],
+    // std's futex `Mutex`: a contended lock waits on the futex.
+    acquire_waits: &["syscall::SYS_futex::FUTEX_WAIT_BITSET"],
 };
 
 /// The kernel calls std makes through `syscall`, by number, on the
@@ -326,13 +563,19 @@ mod tests {
         let op = "i64 noundef 202, ptr noundef %f, i32 noundef %op, i32 noundef 1)";
         assert_eq!(syscall_name("x86_64", op), "syscall::SYS_futex::unknown");
         assert_eq!(syscall_name("riscv64", "i64 noundef 98)"), "syscall::nr_98");
+        for libc in KNOWN {
+            for n in ["syscall::unknown", "syscall::SYS_futex::unknown", "syscall::nr_98", "syscall"] {
+                assert!(!libc.no_wait(n), "{} {n}", libc.name);
+            }
+        }
     }
 
-    /// A futex wait is a wait on both Linux libraries, and a wake is not.
+    /// A futex wake does not wait and a futex wait does, on both Linux
+    /// libraries, and the acquire may wait only in the wait.
     #[test]
     fn futex_operations_are_classified_on_both_linux_libraries() {
         for libc in [&BIONIC, &GLIBC] {
-            assert!(!libc.waits("syscall::SYS_futex::FUTEX_WAKE"), "{}", libc.name);
+            assert!(libc.no_wait("syscall::SYS_futex::FUTEX_WAKE"), "{}", libc.name);
             for w in [
                 "syscall::SYS_futex::FUTEX_WAIT",
                 "syscall::SYS_futex::FUTEX_WAIT_BITSET",
@@ -341,6 +584,48 @@ mod tests {
                 "syscall::SYS_futex::FUTEX_WAIT_REQUEUE_PI",
             ] {
                 assert!(libc.waits(w), "{} {w}", libc.name);
+                assert!(!libc.no_wait(w), "{} {w}", libc.name);
+            }
+            assert_eq!(libc.acquire_waits, ["syscall::SYS_futex::FUTEX_WAIT_BITSET"]);
+        }
+    }
+
+    #[test]
+    fn each_library_names_its_own_errno() {
+        assert!(APPLE.no_wait("__error"));
+        assert!(!APPLE.no_wait("__errno"));
+        assert!(BIONIC.no_wait("__errno"));
+        assert!(!BIONIC.no_wait("__errno_location"));
+        assert!(GLIBC.no_wait("__errno_location"));
+        assert!(!GLIBC.no_wait("__errno"));
+    }
+
+    /// glibc's `strerror_r` translates through gettext; bionic's copies from
+    /// a table.
+    #[test]
+    fn strerror_r_is_known_only_where_it_loads_nothing() {
+        assert!(BIONIC.no_wait("strerror_r"));
+        assert!(!GLIBC.no_wait("__xpg_strerror_r"));
+        assert!(!GLIBC.no_wait("strerror_r"));
+    }
+
+    #[test]
+    fn the_loader_lock_is_a_wait_on_glibc() {
+        assert!(GLIBC.waits("__cxa_thread_atexit_impl"));
+        assert!(!GLIBC.no_wait("__cxa_thread_atexit_impl"));
+        assert!(GLIBC.waits("dl_iterate_phdr"));
+        assert!(BIONIC.waits("dl_iterate_phdr"));
+    }
+
+    /// No name is both known not to wait and a wait in one library.
+    #[test]
+    fn no_list_contradicts_another() {
+        for libc in KNOWN {
+            for w in libc.waits {
+                assert!(!libc.no_wait(w), "{}: `{w}`", libc.name);
+            }
+            for a in libc.acquire_waits {
+                assert!(libc.waits(a), "{}: `{a}`", libc.name);
             }
         }
     }

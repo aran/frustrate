@@ -1,0 +1,45 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs")
+load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
+
+# A claimed member that calls a C function. See ../BUILD.bazel.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "native_red_external",
+    package_name = "native_red_external",
+    module_paths = ["crate::api"],
+)
+
+cc_library(
+    name = "step",
+    srcs = ["src/step.c"],
+)
+
+rust_shared_library(
+    name = "external_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "native_red_external",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    link_deps = [":step"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+no_block_check_artifacts(
+    name = "artifacts",
+    bridge = ":bridge",
+    crate = ":external_shared",
+    platforms = [
+        "//bazel:linux_aarch64",
+        "//bazel:linux_x86_64",
+        "//bazel:macos_aarch64",
+    ],
+    visibility = ["//tests/bazel_rules/native_red:__pkg__"],
+)
