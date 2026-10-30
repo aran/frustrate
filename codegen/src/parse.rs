@@ -94,6 +94,12 @@ pub struct BridgeAttr {
     /// method cannot be *more* blocking than the block that claims it. Also
     /// settable for a whole file with `frustrate::bridge_file!(no_block);`.
     pub no_block: bool,
+    /// `#[bridge(no_block(allow(name, ...)))]`: names the `no_block` check does
+    /// not hold against this member. Each is a path, stored as its segments
+    /// joined with `::`.
+    ///
+    /// Inherited file -> impl/trait -> method as a union ([`merge_allow`]).
+    pub allow: Vec<String>,
     /// Not an option the author writes inside `#[bridge(...)]`: set by
     /// [`bridge_attr`] when the item *also* carries a `#[cfg(...)]` or
     /// `#[cfg_attr(...)]`. Codegen never evaluates cfg predicates, so this is
@@ -164,6 +170,9 @@ pub fn parse_source_reporting(
             syn::Item::Fn(f) => {
                 if let Some(mut attr) = bridge_attr(&f.attrs)? {
                     attr.no_block |= file_attr.no_block;
+                    if attr.no_block {
+                        merge_allow(&mut attr.allow, &file_attr.allow);
+                    }
                     reject_no_eq(&attr, "function", &f.sig.ident.to_string())?;
                     reject_dart_interface(attr.dart_interface, "function", &f.sig.ident.to_string())?;
                     reject_inbound(
@@ -416,6 +425,8 @@ pub fn parse_source_reporting(
                     // existing block->method OR-merge carries it the rest of
                     // the way and there is only one inheritance rule.
                     impl_attr.no_block |= file_attr.no_block;
+                    let own_allow = impl_attr.allow.clone();
+                    merge_allow(&mut impl_attr.allow, &file_attr.allow);
                     reject_no_eq(&impl_attr, "impl block", "")?;
                     reject_dart_interface(impl_attr.dart_interface, "impl block", "")?;
                     reject_inbound(
@@ -426,12 +437,16 @@ pub fn parse_source_reporting(
                          is where a direction is said",
                     )?;
                     reject_representation(impl_attr.data, impl_attr.model, "impl block", "")?;
+                    let first = iface.functions.len();
                     parse_impl(im, &impl_attr, module_path, &mut iface)?;
+                    reject_stale_allow(&own_allow, &iface.functions[first..], "impl block")?;
                 }
             }
             syn::Item::Trait(t) => {
                 if let Some(mut attr) = bridge_attr(&t.attrs)? {
                     attr.no_block |= file_attr.no_block;
+                    let own_allow = attr.allow.clone();
+                    merge_allow(&mut attr.allow, &file_attr.allow);
                     reject_no_eq(&attr, "trait", &t.ident.to_string())?;
                     reject_dart_interface(attr.dart_interface, "trait", &t.ident.to_string())?;
                     reject_inbound(
@@ -443,7 +458,9 @@ pub fn parse_source_reporting(
                     )?;
                     require_representation(attr.data, attr.model, "trait", &t.ident.to_string())?;
                     reject_data_on_trait(attr.data, &t.ident.to_string())?;
+                    let first = iface.functions.len();
                     parse_trait(t, &attr, module_path, &mut iface)?;
+                    reject_stale_allow(&own_allow, &iface.functions[first..], "trait")?;
                 }
             }
             _ => {}
@@ -453,6 +470,7 @@ pub fn parse_source_reporting(
     // `bridge_file!` is that a reader can take one line at the top as covering
     // the file; a file with no bridged member covers nothing, which is either
     // a stale claim left behind by a move or one that landed in the wrong file.
+    reject_stale_allow(&file_attr.allow, &iface.functions, "file")?;
     if file_attr != BridgeAttr::default() && iface.functions.is_empty() {
         bail!(
             "`bridge_file!` in a file with no bridged function or method. The \
@@ -1313,6 +1331,72 @@ fn parse_bridge_file(file: &syn::File) -> Result<BridgeAttr> {
     Ok(out)
 }
 
+/// Union `outer` into `inner`.
+fn merge_allow(inner: &mut Vec<String>, outer: &[String]) {
+    for n in outer {
+        if !inner.contains(n) {
+            inner.push(n.clone());
+        }
+    }
+}
+
+/// A name written in an `allow(...)` on a scope (file, impl, trait) that no
+/// claimed member of that scope ended up carrying silences nothing, and is
+/// refused.
+fn reject_stale_allow(names: &[String], fns: &[Function], scope: &str) -> Result<()> {
+    for name in names {
+        if !fns.iter().any(|f| f.no_block_allow.contains(name)) {
+            bail!(
+                "`allow({name})` on this {scope} silences nothing: no member in this {scope} \
+                 claims `no_block`"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Read the argument of `no_block(...)`: exactly one `allow(...)` list.
+fn parse_no_block_args(l: &syn::MetaList, out: &mut Vec<String>) -> Result<()> {
+    let metas = l
+        .parse_args_with(Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated)
+        .map_err(|e| anyhow::anyhow!("`no_block(...)` takes `allow(...)`: {e}"))?;
+    let mut it = metas.iter();
+    match (it.next(), it.next()) {
+        (Some(syn::Meta::List(a)), None) if a.path.is_ident("allow") => parse_allow(a, out),
+        _ => bail!("`no_block(...)` takes exactly one argument, `allow(name, ...)`"),
+    }
+}
+
+/// Read `allow(name, ...)`: plain paths, stored as their segments joined with
+/// `::`, each at most once.
+fn parse_allow(l: &syn::MetaList, out: &mut Vec<String>) -> Result<()> {
+    let names = l
+        .parse_args_with(Punctuated::<syn::Path, syn::Token![,]>::parse_terminated)
+        .map_err(|e| anyhow::anyhow!("allow takes names only: {e}"))?;
+    if names.is_empty() {
+        bail!("`allow()` names nothing; list the names to allow, or drop it");
+    }
+    let mut seen: Vec<String> = Vec::new();
+    for path in names {
+        let mut segs = Vec::new();
+        for seg in &path.segments {
+            if !matches!(seg.arguments, syn::PathArguments::None) {
+                bail!("allow takes names only: no generic arguments in a name");
+            }
+            segs.push(seg.ident.to_string());
+        }
+        let name = segs.join("::");
+        if seen.contains(&name) {
+            bail!("allow({name}): named twice in one `allow(...)`");
+        }
+        seen.push(name);
+    }
+    for n in seen {
+        merge_allow(out, std::slice::from_ref(&n));
+    }
+    Ok(())
+}
+
 fn parse_bridge_option(meta: &syn::Meta, out: &mut BridgeAttr) -> Result<()> {
     match meta {
         syn::Meta::Path(p) if p.is_ident("sync") => out.sync = true,
@@ -1322,6 +1406,10 @@ fn parse_bridge_option(meta: &syn::Meta, out: &mut BridgeAttr) -> Result<()> {
         syn::Meta::Path(p) if p.is_ident("skip") => out.skip = true,
         syn::Meta::Path(p) if p.is_ident("native_only") => out.native_only = true,
         syn::Meta::Path(p) if p.is_ident("no_block") => out.no_block = true,
+        syn::Meta::List(l) if l.path.is_ident("no_block") => {
+            out.no_block = true;
+            parse_no_block_args(l, &mut out.allow)?;
+        }
         syn::Meta::Path(p) if p.is_ident("getter") => out.getter = true,
         // The six representation keywords. `data` sets the bare flag; the
         // five concurrency models go through `set_model`, which catches two
@@ -2415,6 +2503,7 @@ fn parse_impl(
             web_runtime_fail: impl_attr.web_runtime_fail,
             native_only: false,
             no_block: false,
+            allow: Vec::new(),
             cfg_gated: false,
         });
         // ...except these three, which are OR-merged rather than replaced.
@@ -2436,6 +2525,9 @@ fn parse_impl(
         reject_representation(attr.data, attr.model, "method", &m.sig.ident.to_string())?;
         attr.native_only |= impl_attr.native_only;
         attr.no_block |= impl_attr.no_block;
+        if attr.no_block {
+            merge_allow(&mut attr.allow, &impl_attr.allow);
+        }
         attr.cfg_gated |= impl_attr.cfg_gated;
         let mut f = parse_fn(
             &m.sig,
@@ -2605,6 +2697,7 @@ fn parse_trait(
             web_runtime_fail: attr.web_runtime_fail,
             native_only: false,
             no_block: false,
+            allow: Vec::new(),
             cfg_gated: false,
         });
         // See `parse_impl`: the keyword is refused on the member, not dropped.
@@ -2612,6 +2705,9 @@ fn parse_trait(
         // OR-merged, not replaced — see `parse_impl` for why.
         mattr.native_only |= attr.native_only;
         mattr.no_block |= attr.no_block;
+        if mattr.no_block {
+            merge_allow(&mut mattr.allow, &attr.allow);
+        }
         mattr.cfg_gated |= attr.cfg_gated;
         // Traits have no self-type wrapper position (they are always a
         // model, never `data` — FR0061 already refuses that), so this is
@@ -2885,6 +2981,7 @@ fn parse_fn(
         requires_native: false,
         native_only: attr.native_only,
         no_block: attr.no_block,
+        no_block_allow: attr.allow.clone(),
         cfg_gated: attr.cfg_gated,
         web_runtime_fail: attr.web_runtime_fail,
         rust_async,
@@ -3981,6 +4078,96 @@ mod tests {
         ] {
             parse_source(src, "crate::api")
                 .unwrap_or_else(|e| panic!("no_block must be valid here: {src}\n{e}"));
+        }
+    }
+
+    fn allow_of(iface: &Interface, name: &str) -> Vec<String> {
+        let f = iface.functions.iter().find(|f| f.name == name).unwrap();
+        f.no_block_allow.clone()
+    }
+
+    fn names(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn allow_parses_on_a_claimed_member() {
+        let iface = parse_source(
+            r#"#[bridge(sync, no_block(allow(sqlite3_step, ::log::emit)))]
+            pub fn f(x: i64) -> i64 { x }"#,
+            "crate::api",
+        )
+        .unwrap();
+        assert_eq!(allow_of(&iface, "f"), names(&["sqlite3_step", "log::emit"]));
+    }
+
+    #[test]
+    fn allow_is_inherited_file_impl_method_as_a_union() {
+        let iface = parse_source(
+            r#"
+            frustrate::bridge_file!(no_block(allow(a, b)));
+            #[bridge(confined)] pub struct D { x: i64 }
+            #[bridge(no_block(allow(b, d)))] impl D {
+                #[bridge(sync, no_block(allow(c)))] pub fn m(&self) -> i64 { 0 }
+                pub fn plain(&self) -> i64 { 0 }
+            }
+            "#,
+            "crate::api",
+        )
+        .unwrap();
+        let mut m = allow_of(&iface, "m");
+        m.sort();
+        assert_eq!(m, names(&["a", "b", "c", "d"]));
+        let mut p = allow_of(&iface, "plain");
+        p.sort();
+        assert_eq!(p, names(&["a", "b", "d"]));
+    }
+
+    #[test]
+    fn allow_on_a_scope_with_no_claimed_member_is_stale() {
+        for (src, scope) in [
+            (
+                r#"frustrate::bridge_file!(no_block(allow(a)));
+                   #[bridge(skip)] pub fn f(x: i64) -> i64 { x }"#,
+                "file",
+            ),
+            (
+                r#"#[bridge(confined)] pub struct D { x: i64 }
+                   #[bridge(no_block(allow(a)))] impl D {
+                       #[bridge(skip)] pub fn m(&self) {}
+                   }"#,
+                "impl block",
+            ),
+            (
+                r#"#[bridge(confined)] pub struct D { x: i64 }
+                   #[bridge(confined, no_block(allow(a)))] pub trait T {
+                       #[bridge(skip)] fn m(&self);
+                   }"#,
+                "trait",
+            ),
+        ] {
+            let msg = parse_source(src, "crate::api").expect_err(scope).to_string();
+            assert!(
+                msg.contains("`allow(a)`") && msg.contains("silences nothing") && msg.contains(scope),
+                "{scope}: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn allow_is_only_spelled_inside_no_block_and_takes_names_only() {
+        for bad in [
+            r#"#[bridge(sync, allow(x))] pub fn f(a: i64) -> i64 { a }"#,
+            r#"#[bridge(no_block(deny(x)))] pub fn f(a: i64) -> i64 { a }"#,
+            r#"#[bridge(no_block(allow(x), allow(y)))] pub fn f(a: i64) -> i64 { a }"#,
+            r#"#[bridge(no_block())] pub fn f(a: i64) -> i64 { a }"#,
+            r#"#[bridge(no_block(allow()))] pub fn f(a: i64) -> i64 { a }"#,
+            r#"#[bridge(no_block(allow(x = "why")))] pub fn f(a: i64) -> i64 { a }"#,
+            r#"#[bridge(no_block(allow(x, x)))] pub fn f(a: i64) -> i64 { a }"#,
+            r#"#[bridge(no_block(allow(x::<T>)))] pub fn f(a: i64) -> i64 { a }"#,
+            r#"#[bridge(confined, no_block(allow(x)))] pub struct S { a: i64 }"#,
+        ] {
+            assert!(parse_source(bad, "crate::api").is_err(), "{bad} must be refused");
         }
     }
 

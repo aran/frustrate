@@ -272,12 +272,8 @@ def _sink_args(ctx):
     return [a for p in ctx.attr.slow for a in ["--slow", p]] + \
            [a for c in ctx.attr.io for a in ["--io", c]]
 
-def _trust_args(ctx):
-    for symbol, why in ctx.attr.trusted.items():
-        if not why.strip():
-            fail("frustrate_no_block_check: `trusted` vouches for `%s` without saying why. " % symbol +
-                 "Give each entry the reason it cannot stall the caller.")
-    return [a for s in sorted(ctx.attr.trusted.keys()) for a in ["--trust", s]]
+def _allow_args(ctx):
+    return [a for s in ctx.attr.allow for a in ["--allow", s]]
 
 def _verdict_test(ctx, inputs, arguments, mnemonic, extra_outputs = {}):
     """Run the scanner as a build action and make its verdict a test.
@@ -379,7 +375,7 @@ def _native_test_impl(ctx):
     return _verdict_test(
         ctx,
         [ir, census],
-        ["--ir"] + _sink_args(ctx) + _trust_args(ctx) + ["--claims", census.path, ir.path],
+        ["--ir"] + _sink_args(ctx) + _allow_args(ctx) + ["--claims", census.path, ir.path],
         "FrustrateNativeBlockCheck",
     )
 
@@ -387,7 +383,7 @@ _native_test = rule(
     implementation = _native_test_impl,
     test = True,
     attrs = _SCANNER_ATTRS | _SINK_ATTRS | {
-        "trusted": attr.string_dict(),
+        "allow": attr.string_list(),
         "crate": attr.label(
             mandatory = True,
             cfg = _native_check_transition,
@@ -462,7 +458,7 @@ def frustrate_no_block_check(
         targets = None,
         slow = [],
         io = [],
-        trusted = {},
+        allow = [],
         **kwargs):
     """Settle every `#[bridge(no_block)]` claim in a bridge, for the targets it ships on.
 
@@ -484,7 +480,7 @@ def frustrate_no_block_check(
       and scans the whole-program LLVM IR for `slow`, `io`, and any call out
       of the Rust program that its C library (Apple's libSystem, Android's
       bionic, glibc) is not known to return from without waiting; a C
-      dependency's function is "cannot verify" until `trusted` names it.
+      dependency's function is "cannot verify" until a silence names it.
       The test and the scanner run on the host; only the crate is built for
       the platform, and rustc writes the IR without linking, so every
       analysis runs from any host with no SDK, NDK or C toolchain for the
@@ -571,19 +567,19 @@ def frustrate_no_block_check(
         Writes to an open descriptor are in no class, because stdout, stderr
         and the panic report are such writes. //bazel/wasm_block_check/io.rs
         has the maps and what each covers.
-      trusted: For the native analyses: external functions (C symbols, as
-        the linker names them) a claimed body may reach though the scanner
-        cannot see into them, each mapped to why it cannot stall the caller.
-        Anything reached outside the Rust program that is neither here nor
-        on its C library's list of functions known not to wait
-        (//bazel/wasm_block_check/libc.rs) is "cannot verify".
+      allow: For the native analyses: silences for every claim the target
+        checks. A name is what a "cannot verify" finding says to silence it
+        as. Silence one member's finding instead with
+        `no_block(allow(<name>))` in its `#[bridge(...)]`, its impl's, or its
+        file's `bridge_file!`. The check lists every silence it applied, and
+        fails on one that silences nothing.
       **kwargs: Common attributes (`tags`, `visibility`, `size`, ...) for
         every test and the suite.
     """
     if not crate:
-        if slow or io or trusted or targets != None:
+        if slow or io or allow or targets != None:
             fail("frustrate_no_block_check: %s has no `crate`, so it builds " % name +
-                 "nothing and `slow`, `io`, `trusted` and `targets` would check nothing. " +
+                 "nothing and `slow`, `io`, `allow` and `targets` would check nothing. " +
                  "Name the crate, or drop them.")
         _census_test(name = name, bridge = bridge, **kwargs)
         return
@@ -604,8 +600,8 @@ def frustrate_no_block_check(
     if io and not [t for t in analyses if t in _NATIVE or t == "wasi"]:
         fail("frustrate_no_block_check: %s names `io`, but only the native " % name +
              "targets and `wasi` check IO: a web build has none that blocks.")
-    if trusted and not [t for t in analyses if t in _NATIVE]:
-        fail("frustrate_no_block_check: %s names `trusted`, which only the " % name +
+    if allow and not [t for t in analyses if t in _NATIVE]:
+        fail("frustrate_no_block_check: %s names `allow`, which only the " % name +
              "native analyses read.")
 
     tags = kwargs.pop("tags", [])
@@ -624,7 +620,7 @@ def frustrate_no_block_check(
                 platform = Label("//bazel:%s_%s" % (os, cpu)),
                 slow = slow,
                 io = io,
-                trusted = trusted,
+                allow = allow,
                 tags = tags,
                 target_compatible_with = compatible,
                 **kwargs

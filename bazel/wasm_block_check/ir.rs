@@ -20,7 +20,7 @@
 //! **Externals are allowed by name, never denied by name.** An external a
 //! closure reaches is fine only if the target's C library ([`super::libc`],
 //! chosen by the module's `target triple`) lists it as known not to wait,
-//! each group with why, or the project lists it with `--trust`. Any other
+//! each group with why, or the project lists it with `--allow`. Any other
 //! external is "cannot verify", naming it: a C dependency, an OS call nobody
 //! has classified, a wait. A few std functions are vouched for by path
 //! ([`KNOWN_PATHS`]): the externals each lists are allowed where only it
@@ -47,7 +47,14 @@
 //! is what catches a build where the member was still not reached.
 //!
 //! Not followed: edges into the fatal entries ([`super::FATAL_ENTRIES`]),
-//! the panic handler and the allocation-error hook.
+//! the panic handler among them.
+//!
+//! **Silences.** A "cannot verify" finding is silenced by naming what it
+//! names: `--allow <name>` (the check target's `allow`)
+//! for every claim, or a census `allow` row (`no_block(allow(...))` in
+//! source) for one member. Each applied silence is listed in the verdict, and one that
+//! silences nothing is an error, so a silence cannot outlive what it was for.
+//! A wait is never silenced.
 //!
 //! # What green does not cover
 //!
@@ -301,7 +308,7 @@ fn sink_kinds(ir: &Ir, libc: &Libc, paths: &[Vec<String>], sinks: &Sinks) -> BTr
                     .filter(|c| c.native_call(libc.os, n))
                     .map(|c| format!("IO `{}`", c.name)),
             );
-            unknown = red.is_empty() && !libc.no_wait(n) && !sinks.trusted.iter().any(|t| t == n);
+            unknown = red.is_empty() && !libc.no_wait(n);
         } else {
             red.extend(
                 sinks
@@ -521,9 +528,45 @@ pub(crate) fn run_ir(
     }
     match_census(&root_names, claims, label)?;
 
+    let unresolved: BTreeMap<u32, String> = BTreeMap::new();
+    let site_of: BTreeMap<u32, String> = BTreeMap::new();
+
     let paths: Vec<Vec<String>> = ir.names.iter().map(|n| own_path(n)).collect();
-    let kinds = sink_kinds(&ir, libc, &paths, sinks);
+
+    let mut kinds = sink_kinds(&ir, libc, &paths, sinks);
     let known = known_paths(&ir, &paths);
+    for (s, why) in &unresolved {
+        kinds.insert(*s, (Verdict::CannotVerify, format!("its callee may be {why}")));
+    }
+    // What a silence names: an external function by its symbol, an indirect
+    // call by the path of the function that makes it.
+    let key_of: BTreeMap<u32, String> = kinds
+        .iter()
+        .filter(|(_, (v, _))| *v == Verdict::CannotVerify)
+        .map(|(s, _)| {
+            let key = match site_of.get(s) {
+                Some(func) => own_path(func).join("::"),
+                None => ir.names[*s as usize].clone(),
+            };
+            (*s, key)
+        })
+        .collect();
+    for (s, key) in &key_of {
+        if let Some(k) = kinds.get_mut(s) {
+            k.1.push_str(&format!(" (silence it as `{key}`)"));
+        }
+    }
+    // The check target's silences apply everywhere, sections included.
+    let mut used_target: BTreeSet<String> = BTreeSet::new();
+    let target_silenced: BTreeSet<u32> = key_of
+        .iter()
+        .filter(|(_, k)| sinks.allowed.iter().any(|w| w == *k))
+        .map(|(s, _)| *s)
+        .collect();
+    let all_kinds = kinds.clone();
+    for s in &target_silenced {
+        kinds.remove(s);
+    }
 
     let fatal: BTreeSet<u32> = (0..ir.names.len() as u32)
         .filter(|f| FATAL_ENTRIES.iter().any(|e| e.matches(&ir.names[*f as usize])))
@@ -602,6 +645,29 @@ pub(crate) fn run_ir(
         Some(a) => prove_bounded(&ir, libc, a, &kinds, &fatal, &known),
         None => Vec::new(),
     };
+    // A target silence is used if any section of the bounded lock reaches
+    // what it names.
+    if let Some(a) = acquire {
+        let mut sect_cut = fatal.clone();
+        sect_cut.insert(a);
+        for f in 0..ir.names.len() as u32 {
+            if f != a && ir.refs[f as usize].contains(&a) {
+                for g in reach_vouched(&ir, f, &ir.refs, &sect_cut, &known) {
+                    if target_silenced.contains(&g) {
+                        used_target.insert(key_of[&g].clone());
+                    }
+                }
+            }
+        }
+    }
+    let empty: Vec<String> = Vec::new();
+    let member_allow = |sym: &str| -> &Vec<String> {
+        claims
+            .and_then(|c| c.ids.get(sym).and_then(|id| c.allow.get(id)))
+            .unwrap_or(&empty)
+    };
+    let mut stale: Vec<String> = Vec::new();
+    let mut silences: Vec<String> = Vec::new();
 
     struct Finding {
         who: String,
@@ -613,7 +679,37 @@ pub(crate) fn run_ir(
     let mut findings: Vec<Finding> = Vec::new();
     for (r, sym) in roots.iter().zip(&root_names) {
         let closure = reach_vouched(&ir, *r, &ir.refs, &cut, &known);
-        let reached: BTreeSet<u32> = closure.iter().copied().filter(|f| kinds.contains_key(f)).collect();
+        for g in closure.iter().filter(|g| target_silenced.contains(g)) {
+            used_target.insert(key_of[g].clone());
+        }
+        let mine = member_allow(sym);
+        let mut used_mine: BTreeSet<&str> = BTreeSet::new();
+        let reached: BTreeSet<u32> = closure
+            .iter()
+            .copied()
+            .filter(|f| kinds.contains_key(f))
+            .filter(|f| match key_of.get(f) {
+                Some(k) => match mine.iter().find(|w| *w == k) {
+                    Some(w) => {
+                        used_mine.insert(w);
+                        false
+                    }
+                    None => true,
+                },
+                None => true,
+            })
+            .collect();
+        for w in mine {
+            if used_mine.contains(w.as_str()) {
+                silences.push(format!("  `{w}` in {}", display(sym)));
+            } else {
+                stale.push(format!(
+                    "  `{w}` on {}: its closure reaches nothing by that name that \
+                     this check cannot verify",
+                    display(sym)
+                ));
+            }
+        }
         // Red ahead of unprovable: a wait is the finding when there is one.
         let worst = reached.iter().map(|f| kinds[f].0).min();
         if let Some(v) = worst {
@@ -668,21 +764,59 @@ pub(crate) fn run_ir(
         }
     }
 
+    // Silences on claims with no root silence nothing.
+    if let Some(c) = claims {
+        let rooted: BTreeSet<&String> = c.roots().filter_map(|(s, _)| c.ids.get(s)).collect();
+        for (id, entries) in &c.allow {
+            if rooted.contains(id) {
+                continue;
+            }
+            let who = c.ids.iter().find(|(_, i)| *i == id).map(|(k, _)| k.as_str()).unwrap_or(id);
+            for w in entries {
+                stale.push(format!(
+                    "  `{w}` on {who}: the claim is settled without a root, so nothing \
+                     it reaches is scanned"
+                ));
+            }
+        }
+    }
+    for w in &sinks.allowed {
+        if used_target.contains(w) {
+            silences.push(format!("  `{w}` in every claim (the check target's `allow`)"));
+        } else {
+            stale.push(format!(
+                "  `{w}` in the check target's `allow`: no claim or bounded-lock \
+                 section reaches anything by that name that this check cannot verify"
+            ));
+        }
+    }
+    if !stale.is_empty() {
+        return Err(format!(
+            "wasm_block_check: {label}: {} silence(s) silence nothing:\n\n{}\n\n\
+             A silence that matches nothing would hide whatever later comes to \
+             match it, so it is an error rather than a no-op. Remove it, or \
+             correct what it names to what the check reports.",
+            stale.len(),
+            stale.join("\n")
+        ));
+    }
+    let _ = &all_kinds;
+    let silence_note = if silences.is_empty() {
+        String::new()
+    } else {
+        format!("\nSilenced:\n{}", silences.join("\n"))
+    };
+
     let sink_note = if sinks.is_empty() {
         String::new()
     } else {
         format!(", and {}", sinks.text())
     };
-    let trust_note = if sinks.trusted.is_empty() {
-        String::new()
-    } else {
-        format!(", trusting {}", sinks.trusted.iter().map(|t| format!("`{t}`")).collect::<Vec<_>>().join(", "))
-    };
 
     if findings.is_empty() {
         return Ok(format!(
             "wasm_block_check: {label} is clean — {} `no_block` root(s) on `{}` reach \
-             only externals known not to wait{trust_note}{sink_note}; {}{}.",
+             only externals known not to wait{sink_note}; {}{}.{silence_note}",
             roots.len(),
             ir.triple,
             if acquire.is_some() {
@@ -752,9 +886,11 @@ pub(crate) fn run_ir(
          the UI for as\nlong as another thread holds what it waits for. Ways out: \
          take the lock or the slow\ncall out of the body, make the member `async` \
          so it is dispatched off the caller, or\ndrop the claim. \"Cannot verify\" \
-         names a function outside the Rust program that is\nnot known not to \
-         wait; if it cannot stall the caller, list it in the check target's\n\
-         `trusted` with why.\n\nNot followed, and not counted above:\n",
+         names what the check cannot see into: a function outside the\nRust \
+         program not known not to wait, or an indirect call whose target may \
+         come from outside it.\nIf it cannot stall the caller, silence it: `no_block(allow(<name>))` on the\nmember, its impl or its file \
+         (`bridge_file!`), or `allow` in the check target for every claim.\n\
+         \nNot followed, and not counted above:\n",
     );
     for f in FATAL_ENTRIES {
         msg.push_str(&format!("  {} — {}.\n", f.what, f.why));
@@ -817,12 +953,12 @@ mod tests {
         run_ir(p.to_str().unwrap(), "//pkg:target", claims, sinks)
     }
 
-    fn sinks(slow: &[&str], io: &[&str], trusted: &[&str]) -> Sinks {
+    fn sinks(slow: &[&str], io: &[&str], allowed: &[&str]) -> Sinks {
         Sinks {
             paths: slow.iter().map(|t| super::super::SlowPath::parse(t).unwrap()).collect(),
             io: io.iter().map(|t| super::super::io::parse(t).unwrap()).collect(),
             wasi: false,
-            trusted: trusted.iter().map(|t| t.to_string()).collect(),
+            allowed: allowed.iter().map(|t| t.to_string()).collect(),
         }
     }
 
@@ -860,7 +996,7 @@ mod tests {
         assert!(e.contains("cannot verify: reaches sqlite3_step"), "{e}");
         assert!(!e.contains("reaches malloc"), "malloc is known not to wait: {e}");
         let ok = run_text(&format!("{HEAD}{body}"), None, &sinks(&[], &[], &["sqlite3_step"])).unwrap();
-        assert!(ok.contains("trusting `sqlite3_step`"), "{ok}");
+        assert!(ok.contains("`sqlite3_step` in every claim (the check target's `allow`)"), "{ok}");
     }
 
     /// A spin loop's yield is a wait, and the target's `allow` cannot silence it.
@@ -1046,6 +1182,60 @@ mod tests {
         );
         let e = run_text(&text, Some(&claims), &Sinks::default()).unwrap_err();
         assert!(e.contains("Shape::area\n      reaches nanosleep — waits"), "{e}");
+    }
+
+
+    /// The check target's silence names what the finding names, and the
+    /// verdict lists it with its reason.
+    #[test]
+    fn a_target_silence_is_applied_and_listed() {
+        let text = format!(
+            "{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n  call i32 @sqlite3_step(ptr null)\n  ret void\n}}\n\
+             declare i32 @sqlite3_step(ptr)\n"
+        );
+        let e = run_text(&text, None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("silence it as `sqlite3_step`"), "{e}");
+        let ok = run_text(&text, None, &sinks_allowing(&["sqlite3_step"])).unwrap();
+        assert!(ok.contains("`sqlite3_step` in every claim (the check target's `allow`)"), "{ok}");
+    }
+
+    fn sinks_allowing(t: &[&str]) -> Sinks {
+        Sinks {
+            allowed: t.iter().map(|a| a.to_string()).collect(),
+            ..Sinks::default()
+        }
+    }
+
+    #[test]
+    fn a_silence_that_silences_nothing_is_an_error() {
+        let text = format!("{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n  ret void\n}}\n");
+        let e = run_text(&text, None, &sinks_allowing(&["sqlite3_step"])).unwrap_err();
+        assert!(e.contains("silence nothing"), "{e}");
+        assert!(e.contains("`sqlite3_step` in the check target's `allow`"), "{e}");
+    }
+
+    /// A member's own silence covers that member and no other.
+    #[test]
+    fn a_member_silence_covers_its_member_only() {
+        let claims = Claims::parse(
+            &format!(
+                "{}\ncrate example\nartifact 1 a crate::a\nallow 1 sqlite3_step\nartifact 2 b crate::b\n",
+                super::super::CENSUS_HEADER
+            ),
+            "c",
+        )
+        .unwrap();
+        let root = |id: u32, name: &str| {
+            format!(
+                "define void @frustrate_check_block_{id}_{name}(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated8call_{id}_{name}()\n  ret void\n}}\n\
+                 define internal void @_RNvNtCs1_7example19frustrate_generated8call_{id}_{name}() {{\n  call void @_RNvCs1_7example1{name}()\n  ret void\n}}\n\
+                 define internal void @_RNvCs1_7example1{name}() {{\n  call i32 @sqlite3_step(ptr null)\n  ret void\n}}\n"
+            )
+        };
+        let text = format!("{HEAD}{}{}declare i32 @sqlite3_step(ptr)\n", root(1, "a"), root(2, "b"));
+        let e = run_text(&text, Some(&claims), &Sinks::default()).unwrap_err();
+        assert!(e.contains("0 `#[bridge(no_block)]` member(s) reach a wait and 1 cannot be verified"), "{e}");
+        assert!(e.contains("  b\n      cannot verify: reaches sqlite3_step"), "{e}");
     }
 
     /// A Linux module whose member makes `syscall`s: what each is read as.

@@ -763,6 +763,11 @@ pub struct Function {
     /// fingerprint — two halves that disagree about a claim still interoperate.
     #[serde(skip, default)]
     pub no_block: bool,
+    /// `no_block(allow(name, ...))`: names the check does not hold against
+    /// this claim. Like [`Function::no_block`] it stays out of the schema
+    /// fingerprint.
+    #[serde(skip, default)]
+    pub no_block_allow: Vec<String>,
     /// True when the bridged item (or the `impl`/`trait` block it came from)
     /// carries a `#[cfg(...)]`/`#[cfg_attr(...)]` attribute. Codegen cannot
     /// evaluate cfg predicates, so it always emits the member into both

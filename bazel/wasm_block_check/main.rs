@@ -335,9 +335,10 @@ struct Sinks {
     /// The module targets wasip1, whose waits are imports
     /// ([`io::WASI_WAITS`]) rather than instructions.
     wasi: bool,
-    /// External functions (natively) the project vouches for: reaching one is
-    /// not "cannot verify". The project states why where it lists them.
-    trusted: Vec<String>,
+    /// The check target's silences (`allow`): what each names — an external
+    /// function, or the function holding an indirect call — and why. Each
+    /// applies to every claim, and one that silences nothing is an error.
+    allowed: Vec<String>,
 }
 
 impl Sinks {
@@ -1205,7 +1206,7 @@ struct Finding {
 /// reading a newer census would have to guess at a token it does not know — and
 /// the one guess that is cheap to make ("treat it as needing no artifact") is
 /// the one that turns a misconfigured build into a silent pass.
-const CENSUS_HEADER: &str = "frustrate-claim-census 3";
+const CENSUS_HEADER: &str = "frustrate-claim-census 6";
 
 /// The `#[bridge(no_block)]` claims of one bridge crate, and how each is
 /// settled — written by codegen (`emit_rust::claim_census`), read here.
@@ -1240,6 +1241,12 @@ struct Claims {
     /// The path of each full root's member function, by root symbol, split
     /// into segments: the root must reach a function with that path.
     member_paths: BTreeMap<String, Vec<String>>,
+    /// The silences each claim carries in source (`no_block(allow(...))` on the member,
+    /// its impl block or its file), by fn id: what each names, and why.
+    allow: BTreeMap<String, Vec<String>>,
+    /// Each claim's fn id, by root symbol, and by display name for the
+    /// claims with no root.
+    ids: BTreeMap<String, String>,
     /// Wants a root reaching only the member's caller-side **residue** — the
     /// `BytesCodec::from_bytes` of its bridge-external parameters and the drop
     /// glue of the handles it hands out. Same shape as [`Claims::artifact`] and
@@ -1290,6 +1297,17 @@ impl Claims {
                 c.crate_name = name.to_string();
                 continue;
             }
+            if let Some(rest) = line.strip_prefix("allow ") {
+                let mut f = rest.split(' ');
+                let (Some(id), Some(what), None) = (f.next(), f.next(), f.next()) else {
+                    return Err(format!(
+                        "wasm_block_check: {path}: cannot read `{line}`.\n\
+                         An allow row is `allow <fn_id> <name>`."
+                    ));
+                };
+                c.allow.entry(id.to_string()).or_default().push(what.to_string());
+                continue;
+            }
             let mut f = line.split(' ');
             let (Some(kind), Some(id), Some(name), member, None) =
                 (f.next(), f.next(), f.next(), f.next(), f.next())
@@ -1314,6 +1332,12 @@ impl Claims {
             // The check root's symbol embeds the *bare* member name; the census
             // carries the qualified one so a message can name `Node::send`.
             let bare = name.rsplit("::").next().unwrap_or(name);
+            let key = if kind == "artifact" || kind == "artifact-residue" {
+                format!("{ROOT_PREFIX}{id}_{bare}")
+            } else {
+                name.to_string()
+            };
+            c.ids.insert(key, id.to_string());
             match kind {
                 "placement" => c.placement.push(name.to_string()),
                 "placement-dispatch" => c.placement_dispatch.push(name.to_string()),
@@ -2509,7 +2533,7 @@ fn main() -> ExitCode {
             slow.wasi = true;
             continue;
         }
-        if a != "--slow" && a != "--io" && a != "--trust" {
+        if a != "--slow" && a != "--io" && a != "--allow" {
             args.push(a);
             continue;
         }
@@ -2519,7 +2543,7 @@ fn main() -> ExitCode {
             .and_then(|v| {
                 match a.as_str() {
                     "--slow" => slow.paths.push(SlowPath::parse(&v)?),
-                    "--trust" => slow.trusted.push(v),
+                    "--allow" => slow.allowed.push(v),
                     _ => slow.io.push(io::parse(&v)?),
                 }
                 Ok(())
@@ -2559,7 +2583,7 @@ fn main() -> ExitCode {
     let usage = "usage: wasm_block_check [--wasi] [--slow <path> | --io <category>]... \
          <module.wasm> <label> [marker-out]\n\
          \x20      wasm_block_check [--wasi] [--slow ... | --io ...] --claims <census> <module.wasm> <label> [marker-out]\n\
-         \x20      wasm_block_check --ir [--slow <path> | --io <category> | --trust <symbol>]... \
+         \x20      wasm_block_check --ir [--slow <path> | --io <category> | --allow <name>]... \
          [--claims <census>] <module.ll> <label> [marker-out]\n\
          \x20      wasm_block_check --claims-only <census> <label> [marker-out]\n\
          \x20      wasm_block_check --report <module.wasm> [label]";
@@ -2881,7 +2905,7 @@ mod tests {
                     .collect(),
                 io: slow.iter().filter_map(|t| io::parse(t).ok()).collect(),
                 wasi: slow.contains(&"wasi"),
-                trusted: Vec::new(),
+                allowed: Vec::new(),
             };
             let c = rows.map(census).transpose()?;
             run_with(p.to_str().unwrap(), "//pkg:target.wasm", c.as_ref(), &sinks)
@@ -3630,9 +3654,9 @@ mod tests {
     fn a_census_that_cannot_be_read_is_never_read_as_no_claims() {
         let bad = Claims::parse("artifact 0 tag_join m::tag_join", "x.claims").unwrap_err();
         assert!(bad.contains("is not a claim census"), "{bad}");
-        let older = Claims::parse("frustrate-claim-census 2", "x.claims").unwrap_err();
+        let older = Claims::parse("frustrate-claim-census 5", "x.claims").unwrap_err();
         assert!(older.contains("older than this scanner"), "{older}");
-        let newer = Claims::parse("frustrate-claim-census 4", "x.claims").unwrap_err();
+        let newer = Claims::parse("frustrate-claim-census 7", "x.claims").unwrap_err();
         assert!(newer.contains("older than this scanner"), "{newer}");
         let torn = census("artifact tag_join").unwrap_err();
         assert!(torn.contains("<settlement> <fn_id> <name>"), "{torn}");

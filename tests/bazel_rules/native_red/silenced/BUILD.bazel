@@ -1,0 +1,42 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs")
+load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
+
+# Two claimed members calling the same C function, one of them silenced in
+# source. See ../BUILD.bazel.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "native_red_silenced",
+    package_name = "native_red_silenced",
+    module_paths = ["crate::api"],
+)
+
+cc_library(
+    name = "step",
+    srcs = ["src/step.c"],
+)
+
+rust_shared_library(
+    name = "silenced_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "native_red_silenced",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    link_deps = [":step"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+no_block_check_artifacts(
+    name = "artifacts",
+    bridge = ":bridge",
+    crate = ":silenced_shared",
+    platforms = ["//bazel:macos_aarch64"],
+    visibility = ["//tests/bazel_rules/native_red:__pkg__"],
+)

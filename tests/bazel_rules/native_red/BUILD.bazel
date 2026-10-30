@@ -10,6 +10,8 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 # - optimized: the member locks a Mutex at opt-level 2   -> red, named by
 #              each C library's wait
 # - dirty:     another section of the bounded lock sleeps -> cannot verify
+# - silenced:  two members call a C function, one silenced -> the other only
+# - stale:     a member's silence silences nothing         -> an error
 # - hashmap:   the member builds a `HashMap`, whose keys std draws through
 #              a fallback the check vouches for                -> passes
 #
@@ -17,7 +19,8 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 # C library's lists and the bounded lock's acquire are proven red on real IR;
 # external for the platforms with a C toolchain registered here (it compiles
 # C); hashmap, which is about Linux's std, for the Linux and Android
-# platforms. macOS hosts only: external's macOS build compiles its C with Xcode.
+# platforms; the rest, whose findings do not depend on the C library, for
+# macOS. macOS hosts only: external's macOS build compiles its C with Xcode.
 dart_test(
     name = "native_red_test",
     data = [
@@ -26,6 +29,8 @@ dart_test(
         "//tests/bazel_rules/native_red/external:artifacts",
         "//tests/bazel_rules/native_red/hashmap:artifacts",
         "//tests/bazel_rules/native_red/optimized:artifacts",
+        "//tests/bazel_rules/native_red/silenced:artifacts",
+        "//tests/bazel_rules/native_red/stale:artifacts",
     ],
     main = "native_red_test.dart",
     target_compatible_with = select({

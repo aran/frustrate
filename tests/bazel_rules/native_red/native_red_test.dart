@@ -100,4 +100,23 @@ void main() {
       }
     });
   }
+
+  const mac = 'macos_aarch64';
+
+  test('a silence covers only the member it is written on', () {
+    final (code, err) = red('silenced', mac);
+    expect(code, isNot(0), reason: err);
+    expect(
+      err,
+      contains('plain\n      cannot verify: reaches native_red_silenced_step'),
+    );
+    expect(err, isNot(contains('silenced\n      cannot verify')));
+  });
+
+  test('a silence that silences nothing fails the check', () {
+    final (code, err) = red('stale', mac);
+    expect(code, isNot(0), reason: err);
+    expect(err, contains('silence(s) silence nothing'));
+    expect(err, contains('`sqlite3_step` on plain'));
+  });
 }

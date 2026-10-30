@@ -111,12 +111,16 @@
 //!                                   already see are FR0048 and FR0049. Not valid on a data type,
 //!                                   which has no body. For a whole file, see
 //!                                   `bridge_file!` below.
+//!   #[bridge(no_block(allow(name, other::path, ...)))]
+//!                                   silences the no_block check's findings
+//!                                   for the named paths;
+//!                                   a form of `no_block`, inherited like it.
 //!
 //! File-level form:
 //!   frustrate::bridge_file!(no_block);
 //!                                   one line at the top of a bridge file,
 //!                                   claiming every bridged item in it. Only
-//!                                   `no_block` is accepted today.
+//!                                   `no_block`, with or without `allow(...)`, is accepted.
 //!
 //! A use site — a parameter, a return, a struct field, a `Vec`/`Option`/
 //! `HashMap` element, or an `impl` block's self type — may name a

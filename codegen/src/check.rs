@@ -2847,6 +2847,7 @@ fn finalize(mut iface: Interface) -> Result<Interface, Vec<Diagnostic>> {
                 // there is no claim to inherit — and inventing one would be a
                 // proof about code nobody asserted anything about.
                 no_block: false,
+                no_block_allow: Vec::new(),
                 cfg_gated: false,
                 web_runtime_fail: false,
                 rust_async: false,

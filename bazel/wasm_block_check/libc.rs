@@ -17,9 +17,9 @@
 //! `syscall(2)`: futexes for its locks, `getrandom`, `statx` and others. A
 //! direct call to `syscall` whose number is a constant in the IR is read as
 //! a call to an external named after the kernel call, as a path so that
-//! `trusted` can name it: `syscall::SYS_futex::FUTEX_WAKE`,
-//! `syscall::SYS_gettid` ([`syscall_name`]). The lists, the IO classes and
-//! `trusted` use that name. A number the table does not know is
+//! `no_block(allow(...))` can name it: `syscall::SYS_futex::FUTEX_WAKE`,
+//! `syscall::SYS_gettid` ([`syscall_name`]). The lists, the IO classes and a
+//! silence use that name. A number the table does not know is
 //! `syscall::nr_<n>`; a number or a futex operation that is not a constant
 //! there is `unknown`; no list knows either, so the call is "cannot verify".
 //! Any other reference to `syscall` stays the external `syscall`, which no
@@ -100,6 +100,12 @@ const UNWIND_FRAME: (&[&str], &str) = (
     "read or write the frame the unwinder hands a personality routine",
 );
 
+const UNWIND_START: (&[&str], &str) = (
+    &["_Unwind_RaiseException", "_Unwind_Resume"],
+    "start or resume unwinding a panic; only a panic's path reaches them, and \
+     the check is about a member's normal path, not its failure",
+);
+
 const SIGNALS: (&[&str], &str) = (
     &["sigaction", "sigaltstack", "sigemptyset", "sigaddset", "signal", "pthread_sigmask"],
     "set signal disposition or masks, and return",
@@ -173,6 +179,7 @@ pub(crate) const APPLE: Libc = Libc {
              has booted",
         ),
         UNWIND_FRAME,
+        UNWIND_START,
         SIGNALS,
         EXIT,
     ],
@@ -281,6 +288,7 @@ pub(crate) const BIONIC: Libc = Libc {
         ),
         LINUX_ENTROPY,
         UNWIND_FRAME,
+        UNWIND_START,
         SIGNALS,
         EXIT,
     ],
@@ -369,6 +377,7 @@ pub(crate) const GLIBC: Libc = Libc {
         ),
         LINUX_ENTROPY,
         UNWIND_FRAME,
+        UNWIND_START,
         SIGNALS,
         EXIT,
     ],

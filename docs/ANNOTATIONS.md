@@ -49,14 +49,23 @@ IO in a class in its `io` (`files`, `network`, `process`, which frustrate maps
 to each target's calls). For each native platform (Android, iOS, Linux with
 glibc, macOS) it reads that platform's build's whole-program LLVM IR, built
 from any host, and fails a member that reaches any C or OS function its C
-library is not known to return from without waiting, unless the target's
-`trusted` names it; on threaded web it scans the wasm module for
-`memory.atomic.wait`; on wasip1, for `poll_oneoff`. Red can be a false alarm.
+library is not known to return from without waiting as "cannot verify". On
+threaded web it scans the wasm module for `memory.atomic.wait`; on wasip1, for
+`poll_oneoff`. Red can be a false alarm.
 Green does not cover a call through a function pointer installed outside the
 member's reach (a logger, a hook), nor the panic path. To hold every sync member of a bridge to
 this, put `bridge_file!(no_block)` in each of its files. Each analysis sees
 only its own target's `#[cfg]` arm. [design/blocking.md](design/blocking.md)
 has the full argument.
+
+**Silencing "cannot verify":** `no_block(allow(name, ...))` is part of the
+claim — on the member, its impl block, or `bridge_file!(no_block(allow(...)))`
+— and silences a finding that names `name` for the claims in that scope; the
+check target's `allow` does the same for every claim it checks, for what a
+dependency or the build decides. `name` is
+what the finding says to silence it as. A wait is never silenced, the check
+lists every silence it applied, and a silence that matches nothing is an
+error.
 
 ## `native_only`
 
