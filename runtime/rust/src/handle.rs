@@ -74,8 +74,9 @@ pub use crate::rwlock::{RwLockReadGuard, RwLockWriteGuard, TryLockError};
 ///     the browser main thread. That is legal because [`LockedCell`] is
 ///     frustrate's own: `try_read`/`try_write` are one compare-exchange, and
 ///     the release is one more unless a waiter is queued on the object, in
-///     which case it takes a waiter list that is a `SpinLock` on threaded
-///     wasm. No path reaches a wait instruction, so `on_contention = "error"`
+///     which case it takes a waiter list under the bounded lock, a spin lock
+///     on threaded wasm. No path reaches a wait instruction, so
+///     `on_contention = "error"`
 ///     is on every surface. `on_contention = "block"` is the exception and
 ///     stays native-only: it waits to *acquire*, by declaration (FR0008), and
 ///     `blocking_read`/`blocking_write` are compiled off wasm.

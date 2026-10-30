@@ -509,11 +509,11 @@ pub fn install_dart_timer(requests: crate::DartCallback<(i64, i64)>) {
     install_timer(move |d| {
         let millis = i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
         let id = NEXT_TIMER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let slot = std::sync::Arc::new(crate::spin::SpinLock::new(TimerSlot {
+        let slot = std::sync::Arc::new(crate::bounded::Lock::new(TimerSlot {
             fired: false,
             waker: None,
         }));
-        PENDING.with(|p| p.insert(id, std::sync::Arc::clone(&slot)));
+        PENDING.insert(id, std::sync::Arc::clone(&slot));
         requests.call((id, millis));
         Box::pin(TimerFuture { id, slot })
     });
@@ -523,7 +523,7 @@ pub fn install_dart_timer(requests: crate::DartCallback<(i64, i64)>) {
 /// ignored: the host fires every id it was handed, and a task that ended (or
 /// was dropped) took its registration with it.
 pub fn fire_timer(id: i64) {
-    let Some(slot) = PENDING.with(|p| p.remove(&id)) else {
+    let Some(slot) = PENDING.remove(id) else {
         return;
     };
     // Bound out: waking runs the executor's schedule callback, which takes the
@@ -545,33 +545,33 @@ struct TimerSlot {
 
 /// Timers issued and not yet fired.
 ///
-/// A [`crate::spin::SpinLock`], for the reason `callback::INVOCATIONS` is one:
+/// A [`crate::bounded::Lock`], for the reason `callback::INVOCATIONS` is one:
 /// the browser main thread takes it — a `#[bridge(sync)]` `fire_timer` runs
 /// there — and a futex-parking lock traps on that thread. Critical sections
 /// here are a map insert or remove.
-static PENDING: TimerRegistry = TimerRegistry(crate::spin::SpinLock::new(None));
+static PENDING: TimerRegistry = TimerRegistry(crate::bounded::Lock::new(std::collections::BTreeMap::new()));
 static NEXT_TIMER: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1);
 
-/// The map, built lazily inside the lock so the whole thing stays `const`.
-struct TimerRegistry(
-    crate::spin::SpinLock<Option<std::collections::HashMap<i64, std::sync::Arc<crate::spin::SpinLock<TimerSlot>>>>>,
-);
+/// The pending timers. An entry is [`crate::bounded::Outside`]: the last
+/// `Arc` to a slot drops its waker, which must not happen under the lock.
+struct TimerRegistry(crate::bounded::Lock<std::collections::BTreeMap<i64, Pending>>);
+
+type Pending = crate::bounded::Outside<std::sync::Arc<crate::bounded::Lock<TimerSlot>>>;
 
 impl TimerRegistry {
-    fn with<R>(
-        &self,
-        f: impl FnOnce(&mut std::collections::HashMap<i64, std::sync::Arc<crate::spin::SpinLock<TimerSlot>>>) -> R,
-    ) -> R {
-        self.0.with(|slot| f(slot.get_or_insert_with(Default::default)))
+    fn insert(&self, id: i64, slot: std::sync::Arc<crate::bounded::Lock<TimerSlot>>) {
+        let entry = crate::bounded::Outside::new(slot);
+        let displaced = self.0.with(|m| m.insert(id, entry));
+        drop(displaced.map(crate::bounded::Outside::into_inner));
     }
 
-    fn remove(&self, id: i64) -> Option<std::sync::Arc<crate::spin::SpinLock<TimerSlot>>> {
-        self.with(|m| m.remove(&id))
+    fn remove(&self, id: i64) -> Option<std::sync::Arc<crate::bounded::Lock<TimerSlot>>> {
+        self.0.with(|m| m.remove(&id)).map(crate::bounded::Outside::into_inner)
     }
 }
 
-// Safety: the inner `SpinLock` is `Sync` for a `Send` payload, and the payload
-// here is a map of `Arc<SpinLock<TimerSlot>>`, whose own `Waker` is `Send`.
+// Safety: the inner `Lock` is `Sync` for a `Send` payload, and the payload
+// here is a map of `Arc<Lock<TimerSlot>>`, whose own `Waker` is `Send`.
 unsafe impl Sync for TimerRegistry {}
 
 /// The future [`install_dart_timer`] hands back: pending until the host fires.
@@ -581,7 +581,7 @@ unsafe impl Sync for TimerRegistry {}
 /// waits for is the documented no-op rather than a leak.
 struct TimerFuture {
     id: i64,
-    slot: std::sync::Arc<crate::spin::SpinLock<TimerSlot>>,
+    slot: std::sync::Arc<crate::bounded::Lock<TimerSlot>>,
 }
 
 impl std::future::Future for TimerFuture {
@@ -590,14 +590,18 @@ impl std::future::Future for TimerFuture {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<()> {
-        self.slot.with(|s| {
+        // The waker is cloned before the section and the one it replaces is
+        // dropped after it: either can run executor code.
+        let waker = cx.waker().clone();
+        let (poll, displaced) = self.slot.with(|s| {
             if s.fired {
-                std::task::Poll::Ready(())
+                (std::task::Poll::Ready(()), Some(waker))
             } else {
-                s.waker = Some(cx.waker().clone());
-                std::task::Poll::Pending
+                (std::task::Poll::Pending, s.waker.replace(waker))
             }
-        })
+        });
+        drop(displaced);
+        poll
     }
 }
 

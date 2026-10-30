@@ -97,9 +97,10 @@
 //! registers the handle's finalizer.
 
 use std::cell::Cell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{OnceLock, PoisonError, RwLock};
+
+use crate::bounded::Lock;
 
 /// A stable identifier for the current OS thread, allocated on first sight.
 ///
@@ -137,35 +138,23 @@ struct Entry {
     isolate: Option<u32>,
 }
 
-fn live() -> &'static RwLock<HashMap<u64, Entry>> {
-    static LIVE: OnceLock<RwLock<HashMap<u64, Entry>>> = OnceLock::new();
-    LIVE.get_or_init(|| RwLock::new(HashMap::new()))
-}
+static LIVE: Lock<BTreeMap<u64, Entry>> = Lock::new(BTreeMap::new());
 
 /// What has already been lost, by type name. Bounded by the number of resident
 /// types in the program rather than by the number of objects, so it can
 /// accumulate for the life of the process without growing without bound.
-fn lost() -> &'static RwLock<BTreeMap<&'static str, usize>> {
-    static LOST: OnceLock<RwLock<BTreeMap<&'static str, usize>>> = OnceLock::new();
-    LOST.get_or_init(|| RwLock::new(BTreeMap::new()))
-}
+static LOST: Lock<BTreeMap<&'static str, usize>> = Lock::new(BTreeMap::new());
 
 /// Record a freshly minted resident. Called by [`crate::handle::resident_new`].
 pub(crate) fn record(handle: u64, name: &'static str) {
-    live()
-        .write()
-        .unwrap_or_else(PoisonError::into_inner)
-        .insert(handle, Entry { name, born: thread_tag(), isolate: None });
+    let born = thread_tag();
+    LIVE.with(|live| live.insert(handle, Entry { name, born, isolate: None }));
 }
 
 /// Retire a resident that is being freed, answering its type name. `None` if
 /// there was no entry — a handle nothing minted here.
 pub(crate) fn retire(handle: u64) -> Option<&'static str> {
-    live()
-        .write()
-        .unwrap_or_else(PoisonError::into_inner)
-        .remove(&handle)
-        .map(|e| e.name)
+    LIVE.with(|live| live.remove(&handle)).map(|e| e.name)
 }
 
 /// Why an acquisition cannot be served.
@@ -188,12 +177,12 @@ pub(crate) enum Refused {
 /// See the module doc on why a handle with no entry is refused rather than
 /// waved through.
 pub(crate) fn on_owning_thread(handle: u64) -> Result<(), Refused> {
-    let map = live().read().unwrap_or_else(PoisonError::into_inner);
-    match map.get(&handle) {
-        Some(e) if e.born == thread_tag() => Ok(()),
+    let me = thread_tag();
+    LIVE.with(|live| match live.get(&handle) {
+        Some(e) if e.born == me => Ok(()),
         Some(e) => Err(Refused::OtherThread(e.name)),
         None => Err(Refused::Gone),
-    }
+    })
 }
 
 /// The message a refusal carries. One text per reason, because the panic a
@@ -233,7 +222,7 @@ pub(crate) fn wrong_thread(name: &str, what: &str) -> String {
 /// Number of live residents. The counterpart of `actor::host_count`, and used
 /// the same way: a leak pin measures it across a construct/reclaim cycle.
 pub fn live_count() -> usize {
-    live().read().unwrap_or_else(PoisonError::into_inner).len()
+    LIVE.with(|live| live.len())
 }
 
 /// Everything lost so far, by type name, with a count. Two things reach here:
@@ -244,20 +233,18 @@ pub fn live_count() -> usize {
 /// report is usually the one that died, so the reader is somebody else — the
 /// isolate a hot restart brought up, or a test.
 pub fn leak_report() -> Vec<(String, usize)> {
-    lost()
-        .read()
-        .unwrap_or_else(PoisonError::into_inner)
-        .iter()
-        .map(|(name, n)| ((*name).to_string(), *n))
-        .collect()
+    let tally: Vec<(&'static str, usize)> =
+        LOST.with(|lost| lost.iter().map(|(name, n)| (*name, *n)).collect());
+    tally.into_iter().map(|(name, n)| (name.to_string(), n)).collect()
 }
 
 /// Add to the tally. Takes `&'static str`s so the map's keys cost nothing.
 fn tally(by_type: &BTreeMap<&'static str, usize>) {
-    let mut lost = lost().write().unwrap_or_else(PoisonError::into_inner);
-    for (name, n) in by_type {
-        *lost.entry(name).or_default() += n;
-    }
+    LOST.with(|lost| {
+        for (name, n) in by_type {
+            *lost.entry(name).or_default() += n;
+        }
+    });
 }
 
 /// Say something, without letting the saying break the caller.
@@ -293,15 +280,14 @@ pub(crate) fn strand(name: &'static str) {
 /// ever free, so keeping them would make [`live_count`] permanently wrong
 /// about what is *reclaimable*, which is the only question it is asked.
 pub(crate) fn reap_isolate(isolate: u32) {
-    let doomed: Vec<&'static str> = {
-        let mut map = live().write().unwrap_or_else(PoisonError::into_inner);
+    let doomed: Vec<&'static str> = LIVE.with(|map| {
         let ids: Vec<u64> = map
             .iter()
             .filter(|(_, e)| e.isolate == Some(isolate))
             .map(|(h, _)| *h)
             .collect();
         ids.iter().filter_map(|h| map.remove(h)).map(|e| e.name).collect()
-    };
+    });
     if doomed.is_empty() {
         return;
     }
@@ -331,11 +317,7 @@ pub(crate) fn reap_isolate(isolate: u32) {
 /// visible to an app that has installed no `log` sink.
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_resident_leaked() -> u64 {
-    lost()
-        .read()
-        .unwrap_or_else(PoisonError::into_inner)
-        .values()
-        .sum::<usize>() as u64
+    LOST.with(|lost| lost.values().sum::<usize>()) as u64
 }
 
 /// Whether the calling thread may reclaim `handle`: 1 yes, 0 no.
@@ -361,13 +343,11 @@ pub extern "C" fn frustrate_resident_reclaimable(handle: u64) -> u8 {
 /// unattributed and is never reported as anyone's leak.
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_resident_attach(handle: u64, isolate: u32) {
-    if let Some(e) = live()
-        .write()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get_mut(&handle)
-    {
-        e.isolate = Some(isolate);
-    }
+    LIVE.with(|live| {
+        if let Some(e) = live.get_mut(&handle) {
+            e.isolate = Some(isolate);
+        }
+    });
 }
 
 #[cfg(test)]

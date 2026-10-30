@@ -481,7 +481,7 @@ mod threaded {
     /// The only lock kind the main thread may take: a spin lock. Any
     /// futex-parking lock (std Mutex, std mpsc's internal waker lock) traps
     /// on the browser main thread when contended.
-    use crate::spin::SpinLock;
+    use crate::bounded::Lock;
 
     /// Job queue whose push side never waits, so the main thread may push:
     /// a spin-locked deque plus a sequence counter workers futex-wait on.
@@ -490,7 +490,7 @@ mod threaded {
     /// usable here: its send path locks the receiver-waker Mutex, which
     /// parks with memory.atomic.wait32 under contention — a trap on main.)
     struct Queue {
-        jobs: SpinLock<VecDeque<Job>>,
+        jobs: Lock<VecDeque<Job>>,
         /// Bumped on every push; workers wait for it to move.
         seq: AtomicU32,
     }
@@ -500,7 +500,7 @@ mod threaded {
         /// settles a dispatched `#[bridge(no_block)]` claim: the main thread
         /// reaches this function on every such call, so "the body runs on a
         /// worker" is only useful if getting it there cannot itself wait.
-        /// `SpinLock` never executes the wait instruction and
+        /// `Lock` never executes the wait instruction and
         /// `memory_atomic_notify` is legal on any thread. A parking lock here —
         /// or any wait added on this path — would stall the page on a claim that
         /// says it cannot, and no check artifact would see it: a dispatched
@@ -543,7 +543,7 @@ mod threaded {
     /// `pool()` would futex-wait on it from the browser main thread. A const
     /// static has no initializer to get stuck in.
     static QUEUE: Queue = Queue {
-        jobs: SpinLock::new(VecDeque::new()),
+        jobs: Lock::new(VecDeque::new()),
         seq: AtomicU32::new(0),
     };
 
@@ -605,7 +605,7 @@ mod threaded {
     /// those members are native-only, so on web the suspension is the whole of
     /// the report.
     ///
-    /// It is *not* loud for the runtime's own [`crate::spin::SpinLock`]s, which
+    /// It is *not* loud for the runtime's own [`crate::bounded::Lock`]s, which
     /// have no try-lock path to report through: one held at trap time spins
     /// every later acquisition, including from the browser main thread. The
     /// only window is an allocation inside a critical section, and it is

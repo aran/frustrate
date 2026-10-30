@@ -31,7 +31,7 @@ use std::any::Any;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 
-use crate::spin::SpinLock;
+use crate::bounded::Lock;
 use crate::stream::{Inner, StreamSink};
 
 /// One non-terminal event a producer emitted.
@@ -69,7 +69,7 @@ pub enum Terminal {
 /// the erased box is load-bearing: `Inner` is `Arc`-shared across threads, and
 /// `dyn Any + Send` alone would cost it `Sync`.
 ///
-/// # Why these are [`SpinLock`]s and not `Mutex`es
+/// # Why these are [`Lock`]s and not `Mutex`es
 ///
 /// Not for contention — a captured end has one producer and one probe. It is
 /// that these locks are *linked into every build*, including the throwaway
@@ -89,17 +89,17 @@ pub enum Terminal {
 ///
 /// Both sections obey spin.rs's three rules: one container op, nothing dropped
 /// inside (see [`set_terminal`](Self::set_terminal)), release by guard. The
-/// same reasoning that already makes `Inner::wakers` a `SpinLock`.
+/// same reasoning that already makes `Inner::wakers` a `Lock`.
 pub(crate) struct CaptureState {
     events: Box<dyn Any + Send + Sync>,
-    terminal: SpinLock<Option<Terminal>>,
+    terminal: Lock<Option<Terminal>>,
 }
 
 impl CaptureState {
-    fn new<T: Send + 'static>(events: Arc<SpinLock<Vec<StreamEvent<T>>>>) -> Self {
+    fn new<T: Send + 'static>(events: Arc<Lock<Vec<StreamEvent<T>>>>) -> Self {
         CaptureState {
             events: Box::new(events),
-            terminal: SpinLock::new(None),
+            terminal: Lock::new(None),
         }
     }
 
@@ -109,7 +109,7 @@ impl CaptureState {
         self.log::<T>().with(|v| v.push(e));
     }
 
-    fn log<T: Send + 'static>(&self) -> &Arc<SpinLock<Vec<StreamEvent<T>>>> {
+    fn log<T: Send + 'static>(&self) -> &Arc<Lock<Vec<StreamEvent<T>>>> {
         self.events
             .downcast_ref()
             .expect("frustrate::testing: capture built for a different item type")
@@ -145,7 +145,7 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 /// dropping the last sink still runs drop-retire — which is what lets a test
 /// assert that its own teardown closes the channel.
 pub fn stream<T: Send + 'static>() -> (StreamSink<T>, StreamProbe<T>) {
-    let events: Arc<SpinLock<Vec<StreamEvent<T>>>> = Arc::new(SpinLock::new(Vec::new()));
+    let events: Arc<Lock<Vec<StreamEvent<T>>>> = Arc::new(Lock::new(Vec::new()));
     let capture = Arc::new(CaptureState::new(events.clone()));
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let inner = crate::stream::captured_end(id, capture.clone());
@@ -161,7 +161,7 @@ pub fn stream<T: Send + 'static>() -> (StreamSink<T>, StreamProbe<T>) {
 pub struct StreamProbe<T> {
     inner: Weak<Inner>,
     capture: Arc<CaptureState>,
-    events: Arc<SpinLock<Vec<StreamEvent<T>>>>,
+    events: Arc<Lock<Vec<StreamEvent<T>>>>,
 }
 
 impl<T: Send + 'static> StreamProbe<T> {

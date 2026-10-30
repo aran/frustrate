@@ -13,7 +13,7 @@
 //! further posts (including the end event) are suppressed — the Dart side
 //! already tore its end down.
 //!
-//! Locking: the cancel registry uses [`crate::spin::SpinLock`], not
+//! Locking: the cancel registry uses [`crate::bounded::Lock`], not
 //! `std::sync::Mutex` — on threaded wasm the browser main thread may call the
 //! cancel export while a worker holds the lock, and a parking lock would trap
 //! there ("Atomics.wait cannot be called in this context"). Critical sections
@@ -24,20 +24,20 @@ use crate::codec::{ByteWriter, FramedWriter};
 use crate::envelope::{
     string_envelope, STATUS_ERROR, STATUS_LEAKED, STATUS_STREAM_END, STATUS_STREAM_ITEM,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
-use crate::spin::SpinLock;
+use crate::bounded::Lock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use std::task::{Context, Poll, Waker};
 
 /// Live sinks by stream id, for the cancel export. Weak: the sink's own
 /// clones keep it alive; a cancel for an already-ended stream is a no-op.
-static REGISTRY: SpinLock<Option<HashMap<u64, Weak<Inner>>>> = SpinLock::new(None);
+static REGISTRY: Lock<BTreeMap<u64, Weak<Inner>>> = Lock::new(BTreeMap::new());
 
-fn with_registry<R>(f: impl FnOnce(&mut HashMap<u64, Weak<Inner>>) -> R) -> R {
-    REGISTRY.with(|m| f(m.get_or_insert_with(HashMap::new)))
+fn with_registry<R>(f: impl FnOnce(&mut BTreeMap<u64, Weak<Inner>>) -> R) -> R {
+    REGISTRY.with(f)
 }
 
 std::thread_local! {
@@ -102,7 +102,7 @@ pub(crate) struct Inner {
     /// op (push/take/retain, plus a
     /// waker clone in `register`), bounded by the fan-in count; the actual
     /// wakes run *outside* the lock.
-    wakers: SpinLock<Vec<Waker>>,
+    wakers: Lock<Vec<Waker>>,
     /// Set only by [`crate::testing::stream`]. `None` in every stream a
     /// generated binding ever builds, so production reads one already-hot
     /// pointer beside the atomics `live()` just loaded, and takes a branch
@@ -268,7 +268,7 @@ pub(crate) fn end(id: u64) -> Arc<Inner> {
         cancelled: AtomicBool::new(false),
         closed: AtomicBool::new(false),
         paused: AtomicBool::new(false),
-        wakers: SpinLock::new(Vec::new()),
+        wakers: Lock::new(Vec::new()),
         capture: None,
     });
     with_registry(|m| m.insert(id, Arc::downgrade(&inner)));
@@ -287,7 +287,7 @@ pub(crate) fn captured_end(id: u64, capture: Arc<crate::testing::CaptureState>) 
         cancelled: AtomicBool::new(false),
         closed: AtomicBool::new(false),
         paused: AtomicBool::new(false),
-        wakers: SpinLock::new(Vec::new()),
+        wakers: Lock::new(Vec::new()),
         capture: Some(capture),
     })
 }
@@ -642,7 +642,7 @@ fn lookup(id: u64) -> Option<Arc<Inner>> {
 /// already-ended streams are a no-op (the cancel/end race is legal).
 // `frustrate_block_check` gating, here and on the two signal exports below:
 // see the "block-check export gating" note in lib.rs.
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_stream_cancel(id: u64) {
     if let Some(inner) = lookup(id) {
@@ -656,7 +656,7 @@ pub extern "C" fn frustrate_stream_cancel(id: u64) {
 /// (`StreamController.onPause`). A producer awaiting [`StreamSink::send`] parks
 /// until resume. `add` is unaffected — it never blocks. Store only; nothing to
 /// wake on a pause. Safe for any id.
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_stream_pause(id: u64) {
     if let Some(inner) = lookup(id) {
@@ -668,7 +668,7 @@ pub extern "C" fn frustrate_stream_pause(id: u64) {
 /// wake every producer parked in `send()`. The store precedes the wake so a
 /// re-polling parked task observes `paused == false` (see `Ready::poll`). Safe
 /// for any id.
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_stream_resume(id: u64) {
     if let Some(inner) = lookup(id) {
@@ -707,7 +707,7 @@ mod tests {
     /// The registry lock must survive an unwinding critical section
     /// (regression guard; the defect landed fixed 2026-07-23).
     ///
-    /// Before the fix, `SpinLock::with` released with a plain `store(false)`
+    /// Before the fix, `Lock::with` released with a plain `store(false)`
     /// *after* `f`, so a panic inside the critical section skipped the release
     /// and left the lock held forever. That was not merely a leak:
     /// `frustrate_stream_cancel` may be entered from the browser main thread,
@@ -731,11 +731,8 @@ mod tests {
         std::panic::set_hook(prev);
         assert!(unwound, "the fixture must actually unwind");
 
-        // Read-and-clear rather than a plain read: if the lock IS wedged,
-        // clearing it here is what keeps the very next registry access — in
-        // this test binary or the sibling test below — from spinning forever
-        // instead of reporting this failure.
-        let wedged = REGISTRY.take_held();
+        // A read, not an acquisition, which would hang on the bug under test.
+        let wedged = REGISTRY.is_held();
         assert!(
             !wedged,
             "the registry lock was still held after its critical section \

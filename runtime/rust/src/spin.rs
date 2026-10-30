@@ -92,7 +92,12 @@ use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
-/// A spin lock over `T`.
+/// A spin lock over `T`: the bounded lock's (bounded.rs) arm on wasm with
+/// `+atomics`. Compiled on every target so its tests and Miri reach it.
+#[cfg_attr(
+    not(all(target_family = "wasm", target_feature = "atomics")),
+    allow(dead_code)
+)]
 pub(crate) struct SpinLock<T> {
     locked: AtomicBool,
     value: UnsafeCell<T>,
@@ -101,6 +106,10 @@ pub(crate) struct SpinLock<T> {
 // Safety: every access to `value` happens under `locked`.
 unsafe impl<T: Send> Sync for SpinLock<T> {}
 
+#[cfg_attr(
+    not(all(target_family = "wasm", target_feature = "atomics")),
+    allow(dead_code)
+)]
 impl<T> SpinLock<T> {
     /// Build one, in a `const` context if you like.
     ///
@@ -124,6 +133,16 @@ impl<T> SpinLock<T> {
     /// poll, no user code and no destructor-bearing drop inside it — see the
     /// module docs on why that bound is what makes spinning legal.
     pub(crate) fn with<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        let _held = self.acquire();
+        f(unsafe { &mut *self.value.get() })
+    }
+
+    /// Take the lock, released when the answer drops.
+    ///
+    /// Released through a guard rather than a trailing store, so an unwinding
+    /// section still frees the lock. See the module docs: the trailing-store
+    /// version shipped, and wedged the lock forever.
+    pub(crate) fn acquire(&self) -> Held<'_, T> {
         while self
             .locked
             .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -131,11 +150,13 @@ impl<T> SpinLock<T> {
         {
             std::hint::spin_loop();
         }
-        // Release through a guard rather than a trailing store, so an
-        // unwinding `f` still frees the lock. See the module docs: the
-        // trailing-store version shipped, and wedged the lock forever.
-        let _guard = Release(&self.locked);
-        f(unsafe { &mut *self.value.get() })
+        Held(&self.locked, PhantomData)
+    }
+
+    /// Whether the lock is held right now.
+    #[cfg(test)]
+    pub(crate) fn is_held(&self) -> bool {
+        self.locked.load(Ordering::Acquire)
     }
 
     /// Whether the lock is held right now — **and** release it if it is.
@@ -152,80 +173,12 @@ impl<T> SpinLock<T> {
     }
 }
 
-struct Release<'a>(&'a AtomicBool);
+/// A held [`SpinLock`]; dropping it releases the lock.
+pub(crate) struct Held<'a, T>(&'a AtomicBool, PhantomData<&'a T>);
 
-impl Drop for Release<'_> {
+impl<T> Drop for Held<'_, T> {
     fn drop(&mut self) {
         self.0.store(false, Ordering::Release);
-    }
-}
-
-// ------------------------------------------------- the per-target choice --
-
-/// A lock the browser main thread may take: a plain `std::sync::Mutex`
-/// wherever the target has no wait instruction, [`SpinLock`] on wasm with
-/// `+atomics`, where a futex-parking lock would trap there under contention.
-///
-/// Its critical sections are bound by the three rules above, because on one
-/// configuration they really are a spin lock's.
-///
-/// # Why `target_feature = "atomics"` and not `feature = "wasm-threads"`
-///
-/// The hazard is "does a wait instruction exist on this target", which is a
-/// property of **atomics**: `+atomics` is what makes std select its futex
-/// backends and what makes `memory.atomic.wait32` exist at all. Whether
-/// frustrate runs a worker pool is a different question, and the cargo feature
-/// is the right key for *that* (`executor::arrange_drain`, and all of pool.rs).
-///
-/// The two spellings agree on every configuration that ships — threaded web
-/// sets both, single-threaded web and native set neither — but they disagree
-/// on a fourth that is built: `+atomics` with the feature **off** is the
-/// `--cfg frustrate_block_check` artifact (lib.rs, "block-check export
-/// gating"). Keyed on the feature, that artifact took the `Mutex` arm while
-/// std's futex backends were live, so every [`crate::executor::Executor::spawn`]
-/// reached `memory.atomic.wait32` and a `#[bridge(no_block)]` claim on an
-/// **async** member was unsatisfiable — on a path present in neither
-/// production build. Keyed on atomics, the check artifact and threaded web
-/// make the same choice, which is what makes the artifact speak for production
-/// at all.
-///
-/// Both arms are a thin wrapper over a primitive that is tested on its own:
-/// the `Mutex` by std, the spin lock by this module's unit tests, which run on
-/// every host build rather than only where this `cfg` selects them. So the
-/// host tests exercise the `Mutex` arm; what carries the spin arm is that the
-/// critical sections are the same source.
-///
-/// One type rather than one per call site, for the reason the module docs give
-/// for `SpinLock`: the `cfg`-key argument is subtle enough that a second copy
-/// would drift.
-#[cfg(not(all(target_family = "wasm", target_feature = "atomics")))]
-pub(crate) struct Lock<T>(std::sync::Mutex<T>);
-
-#[cfg(not(all(target_family = "wasm", target_feature = "atomics")))]
-impl<T> Lock<T> {
-    pub(crate) fn new(value: T) -> Self {
-        Lock(std::sync::Mutex::new(value))
-    }
-    pub(crate) fn with<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
-        // Poisoning is recovered rather than propagated. Every holder either
-        // catches the panic before the guarded state can go logically wrong
-        // (the executor's `drain_one`) or is a `Drop` that must not panic
-        // itself (a lock guard's release).
-        let mut guard = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        f(&mut guard)
-    }
-}
-
-#[cfg(all(target_family = "wasm", target_feature = "atomics"))]
-pub(crate) struct Lock<T>(SpinLock<T>);
-
-#[cfg(all(target_family = "wasm", target_feature = "atomics"))]
-impl<T> Lock<T> {
-    pub(crate) fn new(value: T) -> Self {
-        Lock(SpinLock::new(value))
-    }
-    pub(crate) fn with<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
-        self.0.with(f)
     }
 }
 

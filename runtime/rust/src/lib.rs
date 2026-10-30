@@ -97,13 +97,15 @@ pub mod resident;
 /// The async-runtime hook: lend the cooperative executor a tokio/async-std
 /// context so a bridged `async fn` can `.await` that runtime's leaves.
 pub mod runtime;
-/// The non-parking lock every main-thread-reachable registry uses. Private:
-/// it is an implementation detail of this runtime's platform constraints, not
-/// something a bridge should build on.
+/// The bounded lock every registry of this runtime takes. Private: its
+/// sections are held to rules (bounded.rs) a bridge's own code does not keep.
+mod bounded;
+/// The non-parking primitives the bounded lock and the executor cell use on
+/// wasm with `+atomics`.
 mod spin;
-/// The `locked` model's read/write lock. Private for the same reason as
-/// `spin`: what a bridge names is [`handle::LockedCell`] and its guards, which
-/// are re-exported there so generated glue reaches one module.
+/// The `locked` model's read/write lock. Private: what a bridge names is
+/// [`handle::LockedCell`] and its guards, which are re-exported there so
+/// generated glue reaches one module.
 mod rwlock;
 pub mod testing;
 pub mod stream;
@@ -153,12 +155,15 @@ pub fn actor_host_count() -> usize {
 // --- block-check export gating ---------------------------------------------
 //
 // Every `#[unsafe(no_mangle)]` in this crate that a wasm build would emit carries
-// `#[cfg(not(frustrate_block_check))]` — the same gate codegen puts on the
-// exports it emits. Under `--cfg frustrate_block_check` the only surviving
-// exports are the generated `frustrate_check_block_*` roots, so lld's
-// dead-code elimination, rather than a hand-written call graph, decides what
-// a `#[bridge(no_block)]` body can reach. Nothing that ships sets the cfg, so
-// with it off this crate is unchanged. The full rationale — in particular why
+// `#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]` — the same
+// gate codegen puts on the exports it emits. Under `--cfg frustrate_block_check`
+// a wasm module's only surviving exports are the generated
+// `frustrate_check_block_*` roots, so lld's dead-code elimination, rather than a
+// hand-written call graph, decides what a `#[bridge(no_block)]` body can reach.
+// The native check keeps every export: its scanner walks the graph from the
+// roots itself, and it needs the whole program present to check every
+// bounded-lock section (bounded.rs). Nothing that ships sets the cfg, so with
+// it off this crate is unchanged. The full rationale — in particular why
 // restricting a module's exports from the link line does *not* work — lives on
 // `BLOCK_CHECK_SUPPRESS` in codegen/src/emit_rust.rs, and is not repeated at
 // the individual gates.
@@ -192,7 +197,7 @@ pub fn actor_host_count() -> usize {
 /// `unsafe` states a contract the host has always had to honour; it changes
 /// neither the exported symbol nor the calling convention, so the JS and Dart
 /// callers are unaffected.
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn frustrate_buffer_free(ptr: *mut u8, len: u64, cap: u64) {
     if ptr.is_null() {
@@ -253,7 +258,7 @@ pub const RUNTIME_ABI: u64 = 6;
 /// response capacity now goes and writing the response over the request. That
 /// is precisely the silent corruption this constant exists to turn into a
 /// named error.
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_runtime_abi() -> u64 {
     RUNTIME_ABI
@@ -325,7 +330,7 @@ pub extern "C" fn frustrate_exit_port() -> *mut std::ffi::c_void {
 /// request here, so there is no caller in a position to do anything else. The
 /// change is that the failure says what it was.
 #[cfg(target_family = "wasm")]
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_alloc(len: u64) -> *mut u8 {
     let len = len as usize;
@@ -374,7 +379,7 @@ pub extern "C" fn frustrate_alloc(len: u64) -> *mut u8 {
 /// export becomes an inert no-op there. The host may keep calling it
 /// unconditionally.
 #[cfg(target_family = "wasm")]
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_web_init() {
     // Settle the cooperative executor here — on the main thread, before any

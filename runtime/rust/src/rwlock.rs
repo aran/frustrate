@@ -15,9 +15,9 @@
 //! does not fix a shape they share.
 //!
 //! So the waiter list is guarded by the primitive frustrate already uses
-//! wherever the main thread may take a lock: [`crate::spin::SpinLock`] on
+//! wherever the main thread may take a lock: [`crate::bounded::Lock`] on
 //! `+atomics` wasm, `std::sync::Mutex` everywhere else — the choice
-//! [`crate::spin::Lock`] makes, with the reasoning for the `cfg` key there.
+//! [`crate::bounded::Lock`] makes, with the reasoning for the `cfg` key there.
 //! Owning the lock is what makes that choice reachable at all, and it turns
 //! three prose arguments about a third party's internals into tests over this
 //! file.
@@ -122,7 +122,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll, Waker};
 
-use crate::spin::Lock;
+use crate::bounded::Lock;
 
 /// A writer holds the lock.
 const WRITER: usize = 0b01;
@@ -1040,7 +1040,7 @@ mod tests {
     /// list** — a `write()` polled while a reader holds, so it queues — rather
     /// than one the lock-free fast path answers, or the test would pass
     /// against an implementation that wakes with the section still held. On
-    /// the `SpinLock` arm that would spin forever; on the host `Mutex` arm it
+    /// the `Lock` arm that would spin forever; on the host `Mutex` arm it
     /// deadlocks or panics ("cannot recursively acquire"). Either way the
     /// failure is this test hanging, not a page freezing later.
     #[test]

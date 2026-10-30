@@ -84,12 +84,13 @@ mod returning {
     use crate::envelope::{STATUS_CALLBACK_CALL, STATUS_ERROR, STATUS_OK, STATUS_TYPED_ERROR};
     use crate::stream::Inner;
     use std::cell::Cell;
-    use std::collections::HashMap;
+    use crate::bounded::Outside;
+    use std::collections::BTreeMap;
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::mpsc::{channel, Sender};
-    use crate::spin::SpinLock;
+    use crate::bounded::Lock;
     use std::sync::Arc;
     use std::task::{Context, Poll, Waker};
 
@@ -124,7 +125,7 @@ mod returning {
     /// executor task's waker. `respond` routes by the shape it finds.
     enum Waiter {
         Blocking(Sender<Vec<u8>>),
-        Async(Arc<SpinLock<Slot>>),
+        Async(Arc<Lock<Slot>>),
     }
 
     /// One registered invocation: the waiter, plus the isolate that owes it a
@@ -184,19 +185,17 @@ mod returning {
         // `frustrate_callback_respond` already established. It is also what
         // keeps the exit-notice handler non-blocking — no lock is held across
         // a wake.
-        let orphans: Vec<Waiter> = {
+        let orphans: Vec<Outside<Registered>> = {
             with_invocations(|map| {
                 let ids: Vec<u64> = map
                     .iter()
                     .filter(|(_, r)| r.isolate == isolate)
                     .map(|(id, _)| *id)
                     .collect();
-                ids.into_iter()
-                    .filter_map(|id| map.remove(&id))
-                    .map(|r| r.waiter)
-                    .collect()
+                ids.into_iter().filter_map(|id| map.remove(&id)).collect()
             })
         };
+        let orphans: Vec<Waiter> = orphans.into_iter().map(|r| r.into_inner().waiter).collect();
         for waiter in orphans {
             match waiter {
                 // Dropping the sender makes the blocked `recv` fail, which
@@ -235,7 +234,7 @@ mod returning {
 
     /// In-flight invocations awaiting their Dart response.
     ///
-    /// A [`SpinLock`], not a `Mutex`, and const-built rather than behind a
+    /// A [`Lock`], not a `Mutex`, and const-built rather than behind a
     /// `OnceLock` — both for the same reason, and both load-bearing on
     /// threaded wasm:
     ///
@@ -253,10 +252,13 @@ mod returning {
     ///   two threads to reach an uninitialised registry could put the main
     ///   thread into `Once`'s futex — the exact failure `pool::QUEUE` shipped.
     ///   A const-built static has no initialiser to race.
-    static INVOCATIONS: SpinLock<Option<HashMap<u64, Registered>>> = SpinLock::new(None);
+    ///
+    /// Entries are [`Outside`]: a `Registered` drops a channel end or a slot
+    /// holding a waker, which must not happen under the lock.
+    static INVOCATIONS: Lock<BTreeMap<u64, Outside<Registered>>> = Lock::new(BTreeMap::new());
 
-    fn with_invocations<R>(f: impl FnOnce(&mut HashMap<u64, Registered>) -> R) -> R {
-        INVOCATIONS.with(|m| f(m.get_or_insert_with(HashMap::new)))
+    fn with_invocations<R>(f: impl FnOnce(&mut BTreeMap<u64, Outside<Registered>>) -> R) -> R {
+        INVOCATIONS.with(f)
     }
 
     static NEXT_INVOCATION: AtomicU64 = AtomicU64::new(1);
@@ -335,15 +337,12 @@ mod returning {
             w.write_handle(invocation);
             (self.encode)(arg, &mut w);
             let (tx, rx) = channel();
-            with_invocations(|m| {
-                m.insert(
-                    invocation,
-                    Registered {
-                        isolate: isolate_of(self.end.id),
-                        waiter: Waiter::Blocking(tx),
-                    },
-                )
+            let entry = Outside::new(Registered {
+                isolate: isolate_of(self.end.id),
+                waiter: Waiter::Blocking(tx),
             });
+            let displaced = with_invocations(|m| m.insert(invocation, entry));
+            drop(displaced.map(Outside::into_inner));
             if !crate::post::deliver(self.end.id, w) {
                 // `deliver` has already given back what the argument minted:
                 // it never reached Dart, so no wrapper will ever dispose it.
@@ -353,10 +352,10 @@ mod returning {
                 // worker thread forever.
                 // Bound out: dropping a `Registered` inside the critical
                 // section would run `Waiter`'s drop there — a `Sender` drop
-                // unparks a blocked receiver, an `Arc<SpinLock<Slot>>` drop can
+                // unparks a blocked receiver, an `Arc<Lock<Slot>>` drop can
                 // free a `Waker`. Neither belongs under a spin lock.
                 let orphan = with_invocations(|m| m.remove(&invocation));
-                drop(orphan);
+                drop(orphan.map(Outside::into_inner));
                 panic!("frustrate: {DEAD_CONSUMER}");
             }
             // A closed channel means the waiter was taken by
@@ -418,7 +417,7 @@ mod returning {
         /// a real id (`NEXT_INVOCATION` starts at 1), so drop/remove is a safe
         /// no-op before the entry exists.
         id: u64,
-        slot: Option<Arc<SpinLock<Slot>>>,
+        slot: Option<Arc<Lock<Slot>>>,
     }
 
     // No self-referential fields, so moving is sound: `CallFuture` is `Unpin`,
@@ -446,19 +445,16 @@ mod returning {
                 let mut w = invocation_writer();
                 w.write_handle(invocation);
                 (this.encode)(arg, &mut w);
-                let slot = Arc::new(SpinLock::new(Slot {
+                let slot = Arc::new(Lock::new(Slot {
                     response: None,
                     waker: Some(cx.waker().clone()),
                 }));
-                with_invocations(|m| {
-                    m.insert(
-                        invocation,
-                        Registered {
-                            isolate: isolate_of(this.end.id),
-                            waiter: Waiter::Async(Arc::clone(&slot)),
-                        },
-                    )
+                let entry = Outside::new(Registered {
+                    isolate: isolate_of(this.end.id),
+                    waiter: Waiter::Async(Arc::clone(&slot)),
                 });
+                let displaced = with_invocations(|m| m.insert(invocation, entry));
+                drop(displaced.map(Outside::into_inner));
                 this.id = invocation;
                 this.slot = Some(slot);
                 // Registration precedes the post, so no response can arrive
@@ -470,29 +466,34 @@ mod returning {
                     // way a thrown closure does — the enclosing call's panic
                     // envelope carries it.
                     let orphan = with_invocations(|m| m.remove(&invocation));
-                    drop(orphan);
+                    drop(orphan.map(Outside::into_inner));
                     this.id = 0;
                     panic!("frustrate: {DEAD_CONSUMER}");
                 }
                 return Poll::Pending;
             }
             let slot = this.slot.as_ref().expect("slot present once posted");
-            let taken = slot.with(|g| {
+            // Cloned before the section, and the waker it replaces dropped
+            // after it: either can run executor code.
+            let waker = cx.waker().clone();
+            let (taken, displaced) = slot.with(|g| {
                 let resp = g.response.take();
                 if resp.is_none() {
                     // Not answered yet: refresh the waker (the task may resume
                     // on a different executor thread) and keep parking.
-                    g.waker = Some(cx.waker().clone());
+                    (resp, g.waker.replace(waker))
+                } else {
+                    (resp, Some(waker))
                 }
-                resp
             });
+            drop(displaced);
             let Some(resp) = taken else {
                 return Poll::Pending;
             };
             // `respond` already removed the registry entry; this is the sole
             // remover on the never-answered cancel path, and idempotent here.
             let answered = with_invocations(|m| m.remove(&this.id));
-            drop(answered);
+            drop(answered.map(Outside::into_inner));
             Poll::Ready(decode_response(&resp, this.decode, this.decode_err))
         }
     }
@@ -562,7 +563,7 @@ mod returning {
         fn drop(&mut self) {
             if self.id != 0 {
                 let abandoned = with_invocations(|m| m.remove(&self.id));
-                drop(abandoned);
+                drop(abandoned.map(Outside::into_inner));
             }
         }
     }
@@ -615,7 +616,7 @@ mod returning {
     // `frustrate_block_check` gating: see the "block-check export gating" note
     // in lib.rs. `mod returning` is not cfg'd, so this export is present on
     // wasm even though the blocking `call` path beside it is not.
-    #[cfg(not(frustrate_block_check))]
+    #[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn frustrate_callback_respond(
         invocation: u64,
@@ -631,7 +632,7 @@ mod returning {
         // caller panicked out, or an async caller was cancelled/dropped);
         // dropping the response is the only option left, and any failure was
         // already reported. Route by the waiter's shape.
-        let waiter = with_invocations(|m| m.remove(&invocation)).map(|r| r.waiter);
+        let waiter = with_invocations(|m| m.remove(&invocation)).map(|r| r.into_inner().waiter);
         match waiter {
             Some(Waiter::Blocking(tx)) => {
                 let _ = tx.send(bytes);

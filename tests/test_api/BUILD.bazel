@@ -39,12 +39,10 @@ frustrate_no_block_check(
     name = "test_api_block_check",
     bridge = ":bridge",
     crate = ":test_api_shared",
-    # Not Android or Linux: there std draws a `HashMap`'s keys from
-    # `getrandom`, whose `/dev/urandom` fallback is a `OnceLock` that waits
-    # while another thread opens it, and the stream registry builds its map
-    # inside a member's call.
     targets = [
+        "android",
         "ios",
+        "linux",
         "macos",
         "web",
     ],

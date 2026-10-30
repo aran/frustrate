@@ -61,14 +61,10 @@ use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::sync::Arc;
 
-// The registry lock is `spin::Lock`, because the browser main thread may take
-// it (a bridge call spawns from the main thread) and a futex-parking lock
-// would trap there under contention — the same stance the pool takes
-// (pool.rs). Critical sections here are tiny (push/pop a queue entry), so
-// spinning is bounded by another holder's queue op, never by a poll. The
-// per-target choice, and the argument for keying it on `target_feature =
-// "atomics"` rather than the cargo feature, live at the type.
-use crate::spin::Lock;
+// The registry lock is the bounded lock (bounded.rs), because the browser main
+// thread may take it (a bridge call spawns from the main thread). Critical
+// sections here push or pop a queue entry, never a poll.
+use crate::bounded::Lock;
 
 /// The run-queue tag a [detached](Executor::spawn_detached) task rides under.
 ///
@@ -585,7 +581,7 @@ static ACTOR_INSTANCE: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 // `frustrate_block_check` gating, here and on the three exports below: see the
 // "block-check export gating" note in lib.rs.
 #[cfg(target_family = "wasm")]
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_mark_actor_instance() {
     ACTOR_INSTANCE.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -748,15 +744,14 @@ pub fn cancel(call_id: u64) -> bool {
 ///
 /// Nothing user-written runs on the caller's thread — the future is dropped on a
 /// later drain — which is what makes this callable from the browser main thread,
-/// where the registry lock is already the non-parking `spin::SpinLock` (see
-/// [`Lock`]) for exactly the reason `frustrate_stream_cancel` is (stream.rs).
+/// where the registry lock is already the bounded [`Lock`] for exactly the reason `frustrate_stream_cancel` is (stream.rs).
 ///
 /// Both claimable shapes reach it here: a Rust `async fn` body, which is a task,
 /// and a native actor call, which is [`Executor::reserve`]d from the moment it
 /// is enqueued (actor.rs). A plain `#[bridge]` fn dispatched async is neither —
 /// it runs to completion on a pool worker — so codegen emits no cancel surface
 /// for one and this export would simply answer `0`.
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_call_cancel(call_id: u64) -> u8 {
     cancel(call_id) as u8
@@ -770,7 +765,7 @@ pub extern "C" fn frustrate_call_cancel(call_id: u64) -> u8 {
 /// again once its waker has re-enqueued it. Present on every build so the
 /// export table is uniform; on native / threaded web the pool drives drains
 /// and nothing calls this.
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_drain() {
     global().drain_all();
@@ -819,7 +814,7 @@ thread_local! {
 /// pool's `frustrate_current_call` (pool.rs). Present on every build so the
 /// export table is uniform; native / threaded web unwind in-band and never call
 /// it.
-#[cfg(not(frustrate_block_check))]
+#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_current_drain_call() -> u64 {
     CURRENT_DRAIN_CALL.with(|c| c.get())

@@ -58,7 +58,7 @@
 //! `*slot = Some(value)` drops the displaced value where it must not be
 //! dropped, and the difference is one character to miss.
 //!
-//! # Why [`crate::spin::SpinLock`], unconditionally
+//! # Why [`crate::bounded::Lock`], unconditionally
 //!
 //! Same stance as `stream::REGISTRY` and `callback::INVOCATIONS`, and for the
 //! same reason: a hook is read wherever the thing it hooks happens, and on
@@ -69,7 +69,7 @@
 //! allocation, never user code, never a poll.
 //!
 //! `executor::Lock`'s per-target split — `std::sync::Mutex` off `+atomics`
-//! wasm, `SpinLock` on it — was considered and is wrong *here*, for a reason
+//! wasm, `Lock` on it — was considered and is wrong *here*, for a reason
 //! specific to this module rather than a preference. That split leaves the two
 //! arms exercised by disjoint configurations: the host suite and Miri only ever
 //! see the `Mutex` arm, and the spin arm is covered by nothing until a wasm
@@ -90,7 +90,7 @@
 //! with no `Arc` and no destructor to keep out of a critical section, and its
 //! `ROUTED` flag selects a routing *mode* rather than reporting presence.
 
-use crate::spin::SpinLock;
+use crate::bounded::Lock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -102,7 +102,7 @@ pub(crate) struct Hook<T: ?Sized> {
     /// Whether the slot holds something. See the module docs: this is the
     /// fast path, and it is redundant with `slot` on purpose.
     present: AtomicBool,
-    slot: SpinLock<Option<Arc<T>>>,
+    slot: Lock<Option<Arc<T>>>,
 }
 
 /// The module is compiled on every target rather than cfg'd out, because a
@@ -116,7 +116,7 @@ impl<T: ?Sized> Hook<T> {
     pub(crate) const fn new() -> Self {
         Hook {
             present: AtomicBool::new(false),
-            slot: SpinLock::new(None),
+            slot: Lock::new(None),
         }
     }
 

@@ -13,8 +13,8 @@
 /// specification bars `Atomics.wait` on the browser main thread: a contended
 /// acquisition there is
 /// `RuntimeError: Atomics.wait cannot be called in this context`. That is why
-/// the runtime's own registries use `spin::SpinLock` (runtime/rust/src/spin.rs)
-/// — see that module for the full argument.
+/// the runtime's own registries use the bounded lock (runtime/rust/src/bounded.rs),
+/// a spin lock on that build — see that module and spin.rs.
 ///
 /// The argument is source-level and therefore rots. This looks at the artifact.
 ///
@@ -194,13 +194,13 @@ Future<void> main(List<String> args) async {
     'The list does not separate the two — see\nthe note on `_nonBlocking`.\n\n'
     'NOT expected here: anything under `frustrate::rwlock`. The `Locked` '
     'model\'s lock is the\nruntime\'s own and its waiter list is a '
-    '`spin::SpinLock` on this build, which is what puts\na synchronous '
+    'spin lock on this build (`frustrate::bounded::Lock`), which is what puts\na synchronous '
     'locked member on the browser main thread at all — a hit there means '
     'that\nregressed. Expected: std internals reached from native-only '
     'paths. What to look for\ninstead: a hand-rolled `static '
     'Mutex`/`OnceLock` in bridge code, which is the one case\ncodegen '
     'cannot see. Shared mutable state wants an Actor, and the runtime\'s '
-    'own registries\nwant `spin::SpinLock`.',
+    'own registries\nwant `bounded::Lock`.',
   );
 }
 

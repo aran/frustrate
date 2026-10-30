@@ -50,6 +50,11 @@ use super::{match_census, own_path, readable, Claims, Sinks, FATAL_ENTRIES, ROOT
 /// why each section is bounded. A path is a module or a function.
 const BOUNDED: &[(&[&str], &str)] = &[
     (
+        &["frustrate", "bounded"],
+        "the lock every runtime registry takes, whose sections bounded.rs \
+         keeps to a container operation",
+    ),
+    (
         &["frustrate", "spin"],
         "the runtime's registry lock, whose sections spin.rs bounds to a \
          container operation",
@@ -65,6 +70,11 @@ const BOUNDED: &[(&[&str], &str)] = &[
          removal per isolate",
     ),
 ];
+
+/// The export name `runtime/rust/src/bounded.rs` gives the bounded lock's
+/// acquire in the check build: a `frustrate::bounded` function that no
+/// mangled path names.
+const BOUNDED_ACQUIRE: &str = "frustrate_bounded_lock_acquire";
 
 /// frustrate's runtime functions that are not followed at all, like the
 /// fatal entries: each runs only after something has already ended, and its
@@ -310,7 +320,7 @@ pub(crate) fn run_ir(
 
     // The bounded runtime locks' edges into std::sync.
     for f in 0..ir.names.len() {
-        if !BOUNDED.iter().any(|(p, _)| path_starts(&paths[f], p)) {
+        if !(BOUNDED.iter().any(|(p, _)| path_starts(&paths[f], p)) || ir.names[f] == BOUNDED_ACQUIRE) {
             continue;
         }
         let into_sync = |c: &u32| {

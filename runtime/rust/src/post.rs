@@ -123,13 +123,13 @@ pub(crate) fn test_lock() -> std::sync::MutexGuard<'static, ()> {
 /// Fast path: the overwhelmingly common case is exactly one isolate. While
 /// that holds, `deliver` is a single relaxed atomic load of `SOLE_PORT` — no
 /// lock, no map lookup. A second registration flips `ROUTED` (monotonically),
-/// after which `deliver` consults the `RwLock<HashMap>`; reads there are
-/// concurrent across the worker threads posting completions.
+/// after which `deliver` consults the registry under the bounded lock.
 #[cfg(not(target_family = "wasm"))]
 mod native {
-    use std::collections::HashMap;
+    use crate::bounded::Lock;
+    use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
-    use std::sync::{OnceLock, RwLock};
+    use std::sync::OnceLock;
 
     /// Bit position separating the isolate id (above) from the per-isolate
     /// call sequence (below) inside a `call_id`. Kept in sync with the Dart
@@ -171,10 +171,8 @@ mod native {
     /// never removed, so this never flips back.
     static ROUTED: AtomicBool = AtomicBool::new(false);
 
-    fn registry() -> &'static RwLock<HashMap<u32, Target>> {
-        static REGISTRY: OnceLock<RwLock<HashMap<u32, Target>>> = OnceLock::new();
-        REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
-    }
+    /// Every registered isolate's target, by isolate id.
+    static REGISTRY: Lock<BTreeMap<u32, Target>> = Lock::new(BTreeMap::new());
 
     /// Resolve the `dart_api_dl` entry point and register this isolate's port.
     /// Returns the isolate id, or a negative [`dl`] error code — the caller
@@ -257,7 +255,7 @@ mod native {
     /// right: nothing in the new isolate is waiting for them.
     fn register_port(port: i64) -> u64 {
         let id = NEXT_ISOLATE.fetch_add(1, Ordering::SeqCst);
-        registry().write().unwrap().insert(id as u32, Target::Port(port));
+        REGISTRY.with(|r| r.insert(id as u32, Target::Port(port)));
         if id == 1 {
             // First isolate: install the fast path.
             SOLE_PORT.store(port, Ordering::SeqCst);
@@ -278,7 +276,7 @@ mod native {
     /// [`init_dl`] / `frustrate_init_dl`.
     #[cfg(test)]
     pub fn init(cb: PostCallback) {
-        registry().write().unwrap().insert(0, Target::Callback(cb));
+        REGISTRY.with(|r| r.insert(0, Target::Callback(cb)));
         // Clear the port fast path so `target_for` reaches the map, and reset
         // routing so isolate 0 is what an un-stamped id resolves to.
         SOLE_PORT.store(0, Ordering::SeqCst);
@@ -302,10 +300,7 @@ mod native {
     #[cfg(test)]
     pub fn register_callback(cb: PostCallback) -> u64 {
         let id = NEXT_ISOLATE.fetch_add(1, Ordering::SeqCst);
-        registry()
-            .write()
-            .unwrap()
-            .insert(id as u32, Target::Callback(cb));
+        REGISTRY.with(|r| r.insert(id as u32, Target::Callback(cb)));
         ROUTED.store(true, Ordering::SeqCst);
         id
     }
@@ -318,7 +313,7 @@ mod native {
             }
         }
         let isolate = (call_id >> ISOLATE_SHIFT) as u32;
-        registry().read().unwrap().get(&isolate).copied()
+        REGISTRY.with(|r| r.get(&isolate).copied())
     }
 
     /// Whether `isolate` has been tombstoned by [`mark_gone`]. An id never
@@ -329,13 +324,7 @@ mod native {
     /// tombstone before it scans the hosts, so a host that enters the host
     /// registry after that scan reads the tombstone here.
     pub(crate) fn isolate_gone(isolate: u32) -> bool {
-        matches!(
-            registry()
-                .read()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .get(&isolate),
-            Some(Target::Gone)
-        )
+        REGISTRY.with(|r| matches!(r.get(&isolate), Some(Target::Gone)))
     }
 
     /// Tombstone `isolate`: it is gone.
@@ -351,15 +340,11 @@ mod native {
     /// suspended in `call_async`, waits forever for an isolate that will never
     /// answer.
     ///
-    /// Poison-tolerant on both locks, because [`handle_exit`] calls this from
-    /// an `extern "C"` frame where a panic would unwind across the FFI
-    /// boundary. Nothing holds either lock across user code, so a poisoned one
-    /// is not evidence the map is torn.
+    /// Panic-free on the lock, because [`handle_exit`] calls this from an
+    /// `extern "C"` frame where a panic would unwind across the FFI boundary:
+    /// the bounded lock recovers from poisoning.
     fn mark_gone(isolate: u32) {
-        registry()
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(isolate, Target::Gone);
+        REGISTRY.with(|r| r.insert(isolate, Target::Gone));
         // The fast path caches the sole isolate's port; clear it so `target_for`
         // consults the map and finds the tombstone. Harmless when `ROUTED` (the
         // cache is already ignored), and a hot restart's fresh registration
@@ -887,8 +872,8 @@ mod native {
             assert_eq!(*SEEN_B.lock().unwrap(), vec![call_b]);
 
             // Tidy up so a later fast-path test isn't confused by these entries.
-            registry().write().unwrap().remove(&(a as u32));
-            registry().write().unwrap().remove(&(b as u32));
+            REGISTRY.with(|r| r.remove(&(a as u32)));
+            REGISTRY.with(|r| r.remove(&(b as u32)));
         }
 
         /// A tombstoned isolate is refused without touching its port, and the
@@ -919,7 +904,7 @@ mod native {
                 "nothing is delivered to a gone isolate"
             );
 
-            registry().write().unwrap().remove(&(iso as u32));
+            REGISTRY.with(|r| r.remove(&(iso as u32)));
         }
 
         /// A reply refused by a gone isolate gives back the handles it minted.
@@ -969,7 +954,7 @@ mod native {
                 "each refused reply freed exactly the handle it had minted"
             );
 
-            registry().write().unwrap().remove(&(iso as u32));
+            REGISTRY.with(|r| r.remove(&(iso as u32)));
         }
 
         /// A destructor that panics while a refused reply is being reclaimed
@@ -1011,7 +996,7 @@ mod native {
             assert_eq!(reports.len(), 1, "the panic must not vanish: {reports:?}");
             assert!(reports[0].contains("a destructor said no"), "{reports:?}");
 
-            registry().write().unwrap().remove(&(iso as u32));
+            REGISTRY.with(|r| r.remove(&(iso as u32)));
         }
     }
 }
