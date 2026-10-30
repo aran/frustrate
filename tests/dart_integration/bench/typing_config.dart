@@ -12,10 +12,12 @@ class TypingLoadConfig {
     this.sliceUs = 4000,
     this.idleSeconds = 90,
     this.loadSeconds = 150,
+    this.selfPost = false,
   });
 
-  /// Reads `--typing-idle=S`, `--typing-load=S`, `--typing-slice-us=N` and
-  /// `--typing-chars=N`; everything else keeps its default.
+  /// Reads `--typing-idle=S`, `--typing-load=S`, `--typing-slice-us=N`,
+  /// `--typing-chars=N` and `--typing-self-post`; everything else keeps its
+  /// default.
   factory TypingLoadConfig.fromArgs(Iterable<String> args) {
     int? opt(String name) {
       for (final a in args) {
@@ -30,6 +32,7 @@ class TypingLoadConfig {
       sliceUs: opt('typing-slice-us') ?? d.sliceUs,
       idleSeconds: opt('typing-idle') ?? d.idleSeconds,
       loadSeconds: opt('typing-load') ?? d.loadSeconds,
+      selfPost: args.contains('--typing-self-post'),
     );
   }
 
@@ -41,6 +44,7 @@ class TypingLoadConfig {
     sliceUs: j['slice_us'] as int,
     idleSeconds: j['idle_s'] as int,
     loadSeconds: j['load_s'] as int,
+    selfPost: j['self_post'] as bool? ?? false,
   );
 
   final int noteChars;
@@ -51,6 +55,11 @@ class TypingLoadConfig {
   final int idleSeconds;
   final int loadSeconds;
 
+  /// Whether the background job slices itself with `Addr::post` (each slice
+  /// posts the next) rather than being driven by one call per slice from the
+  /// benchmarking isolate.
+  final bool selfPost;
+
   Map<String, Object?> toJson() => {
     'note_chars': noteChars,
     'key_hz': keyHz,
@@ -59,5 +68,6 @@ class TypingLoadConfig {
     'slice_us': sliceUs,
     'idle_s': idleSeconds,
     'load_s': loadSeconds,
+    'self_post': selfPost,
   };
 }

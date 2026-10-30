@@ -79,7 +79,8 @@ Future<void> main(List<String> args) async {
     stderr.writeln(
       'web_bench: unrecognized argument(s): ${unknown.join(' ')}\n'
       'Usage: web_bench [--threaded] [--typing [--typing-idle=S] '
-      '[--typing-load=S] [--typing-slice-us=N] [--typing-chars=N]]',
+      '[--typing-load=S] [--typing-slice-us=N] [--typing-chars=N] '
+      '[--typing-self-post]]',
     );
     exit(2);
   }

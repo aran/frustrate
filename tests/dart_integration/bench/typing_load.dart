@@ -19,12 +19,15 @@
 ///     a second, and a background job that wants `jobUs` of CPU, run back to
 ///     back so the core is never idle.
 ///
-/// The job yields by being driven from this isolate: each slice is one
-/// `backgroundSlice` call that runs at most `sliceUs`, and the next is sent
-/// when its reply arrives. A keystroke that arrives during a slice runs before
-/// the next slice, because the next slice has not been sent yet. That is what
-/// a self-message re-queued behind pending messages would give, plus one
-/// round trip of idle core between slices.
+/// The job yields in one of two ways. By default it is driven from this
+/// isolate: each slice is one `backgroundSlice` call that runs at most
+/// `sliceUs`, and the next is sent when its reply arrives, so a keystroke that
+/// arrives during a slice runs before the next slice, which has not been sent
+/// yet, and the core idles for one round trip between slices. With
+/// `--typing-self-post` the core slices itself: each slice posts the next with
+/// `Addr::post`, which queues it behind every message already waiting, so a
+/// keystroke that arrives during a slice still runs before the next one, and
+/// the core is never idle.
 ///
 /// Every edit is published to this isolate as a `NoteChange` (the edit, not
 /// the note); the run checks that each one arrived.
@@ -135,8 +138,10 @@ class TypingLoadResult {
         'back,',
       )
       ..writeln(
-        '            each slice one call sent by this isolate when the last '
-        'replied.',
+        c.selfPost
+            ? '            each slice posted by the last with Addr::post.'
+            : '            each slice one call sent by this isolate when the '
+                  'last replied.',
       )
       ..writeln(
         'clocks      round trips: Stopwatch on this isolate. handlers: the '
@@ -291,7 +296,8 @@ Future<TypingLoadResult> runTypingLoad(
     }
   }
 
-  final job = background();
+  if (c.selfPost) await core.startBackground(sliceUs: c.sliceUs);
+  final job = c.selfPost ? Future<void>.value() : background();
   await Future.wait([
     every(
       c.keyHz,
@@ -319,6 +325,15 @@ Future<TypingLoadResult> runTypingLoad(
   ]);
   loading = false;
   await job;
+  if (c.selfPost) {
+    final report = await core.stopBackground();
+    for (final ns in report.handlerNs) {
+      result.loadHandler.us.add(ns / 1000);
+      result.loadSliceHandler.us.add(ns / 1000);
+    }
+    result.slices = report.handlerNs.length;
+    result.jobsDone = report.jobsDone;
+  }
   await Future.wait(pending);
   log(
     'typing: load done, ${result.loadRoundTrip.n} keystrokes, '
