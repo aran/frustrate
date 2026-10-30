@@ -214,6 +214,9 @@ dart_test(
 # call between its slices can stop, how long a call waits behind such a job,
 # `Deferred` with `Addr::call`, the self-call panic, and dispose with slices
 # pending. Runs on web via web_test.
+#
+# `exclusive`: the wait it bounds is wall-clock time, which tests running
+# beside it in a parallel `bazel test //...` stretch past the bound.
 dart_test(
     name = "addr_test",
     main = "test/addr_test.dart",
@@ -221,6 +224,7 @@ dart_test(
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    tags = ["exclusive"],
     deps = [
         "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
@@ -872,6 +876,23 @@ dart_test(
 # `bazel run :web_test` — single-threaded web is where "a suspended task is heap
 # data, not a parked thread" stops being an optimisation and becomes the reason
 # it works at all.
+# A panic no call waits on (an actor's posted closure or detached task, or a
+# detached task on no actor) is an uncaught error in the zone the work belongs
+# to. Also rides the browser runner (`bazel run :web_test`).
+dart_test(
+    name = "uncaught_panic_test",
+    main = "test/uncaught_panic_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
 dart_test(
     name = "spawn_detached_test",
     main = "test/spawn_detached_test.dart",

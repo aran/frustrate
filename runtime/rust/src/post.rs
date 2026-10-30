@@ -50,12 +50,12 @@
 #[cfg(not(target_family = "wasm"))]
 pub use native::{deliver, exit_send_port, init_dl, respond, ISOLATE_SHIFT};
 #[cfg(not(target_family = "wasm"))]
-pub(crate) use native::isolate_gone;
+pub(crate) use native::{isolate_gone, report_uncaught};
 // `not(wasm)` as well as `test`, like the `init` seam below: `native` does not
 // exist on wasm, so the bare `cfg(test)` made `--target wasm32 --tests` fail to
 // resolve this import. Nothing in the shipped build changed.
 #[cfg(all(test, not(target_family = "wasm")))]
-pub use native::mark_gone_for_test;
+pub use native::{mark_gone_for_test, register_callback};
 
 /// The test-only capture seam: the crate's unit tests exercise every producer
 /// path without a Dart VM, so they register a raw C callback in place of a port
@@ -314,6 +314,17 @@ mod native {
         }
         let isolate = (call_id >> ISOLATE_SHIFT) as u32;
         REGISTRY.with(|r| r.get(&isolate).copied())
+    }
+
+    /// Post a panic envelope that answers no call to `owner`, an id the
+    /// owning isolate routes to a zone (`uncaught`). Dropped if no isolate is
+    /// registered under it (a unit test) or it is gone.
+    pub(crate) fn report_uncaught(owner: u64, reply: crate::codec::FramedWriter) {
+        if target_for(owner).is_some() {
+            respond(owner, reply);
+        } else {
+            reply.into_parts().1.delivered();
+        }
     }
 
     /// Whether `isolate` has been tombstoned by [`mark_gone`]. An id never

@@ -70,8 +70,8 @@ use crate::bounded::Lock;
 ///
 /// Zero is already "no call" everywhere this id is read: it is
 /// [`CURRENT_DRAIN_CALL`]'s idle value, and the host reads a zero back from
-/// `frustrate_current_drain_call` as "a trap in executor plumbing rather than a
-/// user poll" (`runtime_web.dart`, `_drainExecutor`). Nothing ever inserts it
+/// `frustrate_current_drain_call` as "a trap no call owns", an uncaught error
+/// (`runtime_web.dart`, `_drainExecutor`). Nothing ever inserts it
 /// into the registry, so the answer-once check-and-remove in `drain_one` finds
 /// nothing to claim and answers nobody — which is the whole contract of a task
 /// with no call behind it.
@@ -107,8 +107,10 @@ struct Inner {
     /// that check-and-remove IS the answer-once gate (see `spawn`).
     tasks: HashMap<u64, Entry>,
     /// Runnables waiting to be polled, each tagged with its call id so a
-    /// finished task can be reaped and a panicking poll attributed.
-    ready: VecDeque<(u64, Runnable)>,
+    /// finished task can be reaped and a panicking poll attributed, and with
+    /// its owner, which hears a detached task's panic and owns what the poll
+    /// spawns (uncaught.rs).
+    ready: VecDeque<(u64, u64, Runnable)>,
 }
 
 struct Shared {
@@ -267,10 +269,11 @@ impl Executor {
             }
         };
         let for_schedule = self.shared.clone();
+        let owner = crate::uncaught::of_call(call_id);
         let schedule = move |runnable: Runnable| {
             for_schedule
                 .inner
-                .with(|inner| inner.ready.push_back((call_id, runnable)));
+                .with(|inner| inner.ready.push_back((call_id, owner, runnable)));
             (for_schedule.schedule)();
         };
         let (runnable, task) = async_task::spawn(future, schedule);
@@ -335,11 +338,12 @@ impl Executor {
     /// single-threaded web on the microtask drain, so a detached task is
     /// multiplexed exactly like a call's and parks no thread while it waits.
     ///
-    /// **A panic is reported, not delivered.** `drain_one` finds no registry
-    /// entry for [`DETACHED`] and so posts nothing, but it still builds the
-    /// panic envelope, which is what tells the process panic listener
-    /// ([`crate::panic`]). There is no future to reject, so being told is the
-    /// only outcome available; silence is the one that would be wrong.
+    /// **A panic is an uncaught error, not an answer.** `drain_one` finds no
+    /// registry entry for [`DETACHED`], so no call is answered. The panic
+    /// envelope it builds tells the process panic listener ([`crate::panic`])
+    /// and goes to the task's owner, captured here: the Dart zone of the
+    /// actor or isolate that spawned it (uncaught.rs). On wasm the poll traps
+    /// instead, and the host reports the trap to the same zone.
     ///
     /// Callable from any thread that may run bridge code, including the
     /// browser main thread inside a `#[bridge(sync)]` body: it takes the
@@ -347,10 +351,11 @@ impl Executor {
     /// of which waits.
     pub fn spawn_detached(&self, body: impl Future<Output = ()> + Send + 'static) {
         let for_schedule = self.shared.clone();
+        let owner = crate::uncaught::current();
         let schedule = move |runnable: Runnable| {
             for_schedule
                 .inner
-                .with(|inner| inner.ready.push_back((DETACHED, runnable)));
+                .with(|inner| inner.ready.push_back((DETACHED, owner, runnable)));
             (for_schedule.schedule)();
         };
         let (runnable, task) = async_task::spawn(body, schedule);
@@ -377,7 +382,7 @@ impl Executor {
     /// [`drain_all`](Self::drain_all) knows when the queue is empty.
     pub fn drain_one(&self) -> bool {
         let popped = self.shared.inner.with(|inner| inner.ready.pop_front());
-        let Some((call_id, runnable)) = popped else {
+        let Some((call_id, owner, runnable)) = popped else {
             return false;
         };
         // Record the call being polled so a panic stays attributable even when
@@ -400,7 +405,7 @@ impl Executor {
         // the context too (`runtime::tests::
         // cancelling_a_suspended_leaf_drops_it_under_the_context`).
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            crate::runtime::enter(|| runnable.run())
+            crate::uncaught::with(owner, || crate::runtime::enter(|| runnable.run()))
         })) {
             // Nothing to reap on the ordinary path: a completing poll claimed
             // its own registry entry (the answer-once gate in `spawn`), and a
@@ -425,6 +430,9 @@ impl Executor {
                 let reply = envelope::panic_envelope(panic);
                 if claimed.is_some() {
                     (self.shared.complete)(call_id, reply);
+                } else if call_id == DETACHED {
+                    // No call to answer: the owner's Dart zone hears it.
+                    crate::uncaught::report(owner, reply);
                 }
             }
         }
@@ -1323,6 +1331,38 @@ mod tests {
             log.lock().unwrap().is_empty(),
             "a detached task answers no call, so it delivers no envelope"
         );
+    }
+
+    /// A detached task's panic answers no call, but reaches the owner it was
+    /// spawned under, and what the task spawns is owned the same way.
+    #[test]
+    fn a_detached_panic_reaches_the_owner_it_was_spawned_under() {
+        let _serial = crate::post::test_lock();
+        static SEEN: Mutex<Vec<(u64, Vec<u8>)>> = Mutex::new(Vec::new());
+        extern "C" fn record(id: u64, ptr: *mut u8, len: u64, cap: u64) {
+            let bytes = unsafe { Vec::from_raw_parts(ptr, len as usize, cap as usize) };
+            SEEN.lock().unwrap().push((id, bytes));
+        }
+        SEEN.lock().unwrap().clear();
+        let isolate = crate::post::register_callback(record);
+        let owner = (isolate << crate::post::ISOLATE_SHIFT) | 3;
+        let (exec, log) = recording();
+        let inside = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let i = inside.clone();
+        crate::uncaught::with(owner, || {
+            exec.spawn_detached(async move {
+                i.store(crate::uncaught::current(), Ordering::SeqCst);
+                panic!("a detached task exploded");
+            })
+        });
+        assert!(exec.drain_all());
+        assert_eq!(inside.load(Ordering::SeqCst), owner);
+        assert!(log.lock().unwrap().is_empty(), "no call is answered");
+        let seen = std::mem::take(&mut *SEEN.lock().unwrap());
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].0, owner);
+        assert_eq!(seen[0].1[0], envelope::STATUS_PANIC);
+        assert!(String::from_utf8_lossy(&seen[0].1).contains("a detached task exploded"));
     }
 
     /// The wiring test for `--cfg frustrate_manual_scheduler`: that the build

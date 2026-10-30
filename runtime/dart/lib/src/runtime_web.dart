@@ -994,10 +994,11 @@ final class _WebTransport {
               StackTrace.current,
             ) ??
             false;
+        // No call owns it: a detached task, or the pool's own plumbing.
         if (!failed) {
-          throw StateError(
-            'frustrate: a pool worker trapped outside any attributable '
-            'call (call id $callId): $message',
+          _zone.handleUncaughtError(
+            BridgePanicException(message),
+            StackTrace.empty,
           );
         }
       case 'initError':
@@ -1254,6 +1255,7 @@ final class _WebTransport {
   /// JS call under dart2wasm and this argument never changes, so converting it
   /// per call is pure tax.
   static final JSAny _slabCapBig = _jsBigInt(frustrateRespSlabBytes);
+  static final JSAny _noOwnerBig = _jsBigInt(0);
 
   /// Run a request encoder against an ordinary heap writer, and hand back the
   /// pieces it produced rather than one contiguous buffer.
@@ -1343,6 +1345,8 @@ final class _WebTransport {
         _jsBigInt(reqLen),
         base.toJS,
         _slabCapBig,
+        // No owner: each instance reports its own traps (uncaught.rs).
+        _noOwnerBig,
       );
       if (n >= 0) {
         // The common case: the envelope is sitting in our own block.
@@ -1465,11 +1469,12 @@ final class _WebTransport {
       // destructors ran), matching the trap stance elsewhere.
       final callId = _jsNumber(_call(_currentDrainCallFn)!);
       // No attributable pending call (id 0, or an already-settled id): a
-      // trap in executor plumbing rather than a user poll — surface it
-      // loudly instead of swallowing a real trap.
+      // detached task, or executor plumbing. An uncaught error in the zone
+      // frustrate was initialised in, not in whichever zone this microtask
+      // happened to be scheduled from.
       final failed =
           _pendingFor(callId)?.fail(callId, e, StackTrace.current) ?? false;
-      if (!failed) rethrow;
+      if (!failed) _zone.handleUncaughtError(e, StackTrace.empty);
     }
   }
 
@@ -2009,6 +2014,10 @@ final class _WebActorHost implements ActorHost {
   /// instance, and each is failed with the named disposed-deferred error.
   final Set<int> _deferredInFlight = {};
 
+  /// The zone the actor was built in. A trap in its work that no call waits
+  /// on (a posted closure, a detached task) is an uncaught error here.
+  final Zone _zone = Zone.current;
+
   @override
   Object get bridgeIdentity => _rt;
 
@@ -2108,12 +2117,19 @@ final class _WebActorHost implements ActorHost {
         final callId = m.getProperty<JSNumber>('callId'.toJS).toDartInt;
         final message = m.getProperty<JSString>('message'.toJS).toDart;
         // After a trap no destructors ran on the worker instance; the host
-        // is degraded but still attributable.
-        _pending.fail(
+        // is degraded but still attributable. A trap no call owns (id 0: a
+        // posted closure or a detached task) is the actor's zone's.
+        final failed = _pending.fail(
           callId,
           BridgePanicException(message),
           StackTrace.current,
         );
+        if (!failed) {
+          _zone.handleUncaughtError(
+            BridgePanicException(message),
+            StackTrace.empty,
+          );
+        }
     }
   }
 

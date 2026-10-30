@@ -366,11 +366,13 @@ pub(crate) fn enter<R>(poll: impl FnOnce() -> R) -> R {
 /// - **`Send`, always** — the task may be polled on any pool worker. On
 ///   single-threaded web, where there are no workers to be polled on, the
 ///   bound can be dropped: see [`spawn_local`].
-/// - **A panic is reported, not delivered.** No call is waiting, so there is no
-///   future to reject; the panic reaches the process panic listener
-///   ([`crate::panic`]) and nothing else. On wasm (`panic = "abort"`) it traps
-///   out of the drain, where the host has no call to attribute it to and
-///   rethrows it into the page.
+/// - **A panic is an uncaught error.** No call is waiting, so there is no
+///   future to reject. In Dart the panic is a `BridgePanicException` uncaught
+///   in the zone the task belongs to: the zone an actor was built in, for a
+///   task spawned on that actor, and otherwise the zone frustrate was
+///   initialised in. It also reaches the panic listener ([`crate::panic`]). A
+///   task spawned outside any bridge call, from a thread frustrate does not
+///   own, belongs to no zone, and only the listener hears it.
 ///
 /// # Awaiting anything
 ///

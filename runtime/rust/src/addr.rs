@@ -51,9 +51,12 @@
 //!
 //! # Panics
 //!
-//! A posted closure that panics is reported to the panic listener; natively
-//! the executor carries on with its next message. On web a panic aborts the
-//! actor's instance, as a panic in any of its calls does.
+//! A posted closure that panics answers no call, so in Dart it is an uncaught
+//! error, a `BridgePanicException` in the zone the actor was built in. It also
+//! reaches the panic listener. A [`call`](Addr::call) on that closure resolves
+//! to `Err(Gone)`. Then the actor carries on with its next message: natively
+//! the panic unwinds, and on web the trap leaves the instance running, as a
+//! trap in any of its calls does.
 //!
 //! Awaiting [`call`](Addr::call) on the executor's own thread, from anywhere
 //! but frustrate's cooperative executor (a `block_on` in a method body, say),
@@ -131,6 +134,12 @@ impl<A: 'static> Addr<A> {
     /// module docs' Ordering), or is dropped without running if the actor is
     /// gone by then. Fire-and-forget.
     pub fn post(&self, f: impl FnOnce(&mut A) + Send + 'static) {
+        self.post_waited(f, None);
+    }
+
+    /// [`post`](Self::post), naming the [`Call`] waiting on the closure, if
+    /// any, so a web trap in it can still answer that call.
+    fn post_waited(&self, f: impl FnOnce(&mut A) + Send + 'static, waiter: Option<Waiter>) {
         let job: Posted = Box::new(move || match crate::objects::root::<A>() {
             // Safety: this closure runs as its own message on the executor
             // that owns the root, so no other borrow of it is live (the
@@ -139,11 +148,13 @@ impl<A: 'static> Addr<A> {
             Some(root) => f(unsafe { &mut *root }),
             None => drop(f),
         });
-        self.send(job);
+        self.send(job, waiter);
     }
 
+    /// Natively a panic unwinds through the closure and drops its [`Answer`],
+    /// so the waiter needs no record.
     #[cfg(not(target_family = "wasm"))]
-    fn send(&self, job: Posted) {
+    fn send(&self, job: Posted, _waiter: Option<Waiter>) {
         // Refused by a stopped host: dropped here, on the posting thread,
         // which is why a posted closure must be `Send`.
         if let Err(job) = self.host.post_posted(job) {
@@ -152,8 +163,8 @@ impl<A: 'static> Addr<A> {
     }
 
     #[cfg(target_family = "wasm")]
-    fn send(&self, job: Posted) {
-        web::post(job);
+    fn send(&self, job: Posted, waiter: Option<Waiter>) {
+        web::post(job, waiter);
     }
 
     /// Run `f` on this actor as a message, and resolve to its result.
@@ -174,7 +185,11 @@ impl<A: 'static> Addr<A> {
         let answer = Answer {
             slot: Some(Arc::clone(&slot)),
         };
-        self.post(move |root| answer.send(f(root)));
+        #[cfg(target_family = "wasm")]
+        let waiter: Option<Waiter> = Some(Arc::clone(&slot) as Waiter);
+        #[cfg(not(target_family = "wasm"))]
+        let waiter: Option<Waiter> = None;
+        self.post_waited(move |root| answer.send(f(root)), waiter);
         Call {
             slot,
             #[cfg(not(target_family = "wasm"))]
@@ -185,10 +200,33 @@ impl<A: 'static> Addr<A> {
 
 struct Slot<R> {
     value: Option<R>,
-    /// The answer will never come: the closure was dropped unrun.
+    /// The answer will never come: the closure was dropped unrun, or trapped.
     gone: bool,
     waker: Option<Waker>,
 }
+
+/// A [`Call`]'s slot, without its answer type: what can tell the waiter the
+/// answer will never come.
+trait Abandon {
+    /// Resolve the call to `Err(Gone)` unless it has its answer, and wake it.
+    fn abandon(&self);
+}
+
+impl<R> Abandon for Lock<Slot<R>> {
+    fn abandon(&self) {
+        let waker = self.with(|s| {
+            s.gone = true;
+            s.waker.take().map(Outside::new)
+        });
+        if let Some(w) = waker {
+            w.into_inner().wake();
+        }
+    }
+}
+
+/// The waiter on a posted closure, kept beside it on web only.
+#[cfg_attr(not(target_family = "wasm"), allow(dead_code))]
+type Waiter = Arc<dyn Abandon>;
 
 /// The sending half of a [`Call`], moved into the posted closure. Dropping it
 /// unsent (the closure was dropped without running) resolves the call to
@@ -213,13 +251,8 @@ impl<R> Answer<R> {
 
 impl<R> Drop for Answer<R> {
     fn drop(&mut self) {
-        let Some(slot) = self.slot.take() else { return };
-        let waker = slot.with(|s| {
-            s.gone = true;
-            s.waker.take().map(Outside::new)
-        });
-        if let Some(w) = waker {
-            w.into_inner().wake();
+        if let Some(slot) = self.slot.take() {
+            slot.abandon();
         }
     }
 }
@@ -274,12 +307,13 @@ impl<R> Future for Call<R> {
     }
 }
 
-/// Run one posted message. Natively a panic is caught and reported, so the
-/// host goes on to its next message.
+/// Run one posted message. Natively a panic is caught, told to the panic
+/// listener and to `owner`'s Dart zone, and the host goes on to its next
+/// message.
 #[cfg(not(target_family = "wasm"))]
-pub(crate) fn run(job: Posted) {
+pub(crate) fn run(job: Posted, owner: u64) {
     if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)) {
-        crate::panic::observed(crate::panic::message(&*payload));
+        crate::uncaught::report(owner, crate::envelope::panic_envelope(payload));
     }
 }
 
@@ -296,14 +330,21 @@ pub(crate) fn discard(job: Posted) {
 /// asks the worker to run the oldest one as a task of its own.
 #[cfg(target_family = "wasm")]
 mod web {
-    use super::Posted;
-    use std::cell::RefCell;
+    use super::{Posted, Waiter};
+    use std::cell::{Cell, RefCell};
     use std::collections::VecDeque;
 
     thread_local! {
-        /// Closures waiting for their token, oldest first. One instance is
-        /// one executor, so this is that executor's queue.
-        static WAITING: RefCell<VecDeque<Posted>> = const { RefCell::new(VecDeque::new()) };
+        /// Closures waiting for their token, oldest first, each with the
+        /// [`Call`](super::Call) waiting on it if any. One instance is one
+        /// executor, so this is that executor's queue.
+        static WAITING: RefCell<VecDeque<(Posted, Option<Waiter>)>> =
+            const { RefCell::new(VecDeque::new()) };
+
+        /// The waiter on the closure running now. Set and cleared by
+        /// [`frustrate_run_posted`] around the closure, so after a trap in it
+        /// this still names that closure's waiter.
+        static RUNNING: Cell<Option<Waiter>> = const { Cell::new(None) };
     }
 
     #[link(wasm_import_module = "frustrate")]
@@ -314,8 +355,8 @@ mod web {
         fn self_post();
     }
 
-    pub(super) fn post(job: Posted) {
-        WAITING.with(|q| q.borrow_mut().push_back(job));
+    pub(super) fn post(job: Posted, waiter: Option<Waiter>) {
+        WAITING.with(|q| q.borrow_mut().push_back((job, waiter)));
         unsafe { self_post() };
     }
 
@@ -326,8 +367,30 @@ mod web {
     pub extern "C" fn frustrate_run_posted() {
         let job = WAITING.with(|q| q.borrow_mut().pop_front());
         match job {
-            Some(job) => job(),
+            Some((job, waiter)) => {
+                RUNNING.set(waiter);
+                job();
+                RUNNING.set(None);
+            }
             None => panic!("frustrate: a self token arrived with no closure waiting — bridge bug"),
+        }
+    }
+
+    /// The closure [`frustrate_run_posted`] was running trapped: resolve its
+    /// [`Call`](super::Call), if it has one, to `Err(Gone)`, as unwinding
+    /// would have natively. Called by the actor worker after it catches the
+    /// trap.
+    ///
+    /// It touches [`RUNNING`], which only `frustrate_run_posted` writes and
+    /// only outside the closure, and that call's slot, whose lock sections
+    /// run no user code and so cannot have trapped while held. It does not
+    /// touch the queue. Waking the waiter is ordinary executor work, the same
+    /// any later call on the instance does.
+    #[cfg(not(frustrate_block_check))]
+    #[unsafe(no_mangle)]
+    pub extern "C" fn frustrate_posted_trapped() {
+        if let Some(waiter) = RUNNING.take() {
+            waiter.abandon();
         }
     }
 }

@@ -4966,7 +4966,14 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     let call_sync = iface.export_symbol("call_sync");
     let (slot, route) = hot_route(
         &call_sync,
-        &[("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64"), ("out", "*mut u8"), ("out_cap", "u64")],
+        &[
+            ("fn_id", "u32"),
+            ("req", "*const u8"),
+            ("req_len", "u64"),
+            ("out", "*mut u8"),
+            ("out_cap", "u64"),
+            ("owner", "u64"),
+        ],
         " -> i32",
     );
     out.push_str(ALLOW);
@@ -4992,14 +4999,14 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     out.push_str(ALLOW);
     out.push_str(BLOCK_CHECK_SUPPRESS);
     out.push_str(
-        "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[unsafe(no_mangle)]\n",
+        "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// `owner` owns what the body queues (`frustrate::envelope::run_sync`).\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[unsafe(no_mangle)]\n",
     );
     let _ = write!(
         out,
-        "pub unsafe extern \"C\" fn {call_sync}(\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n    out: *mut u8,\n    out_cap: u64,\n) -> i32 {{\n",
+        "pub unsafe extern \"C\" fn {call_sync}(\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n    out: *mut u8,\n    out_cap: u64,\n    owner: u64,\n) -> i32 {{\n",
     );
     out.push_str(&route);
-    out.push_str("    let req = request_slice(req, req_len);\n    let resp = envelope::run(|| {\n        let mut r = ByteReader::new(req);\n        let Some(arm) = select_sync(fn_id) else {\n            panic!(\"frustrate: unknown sync fn_id {fn_id}\")\n        };\n        arm(&mut r)\n    });\n    unsafe { envelope::respond_out(resp, out, out_cap) }\n}\n\n");
+    out.push_str("    let req = request_slice(req, req_len);\n    let resp = envelope::run_sync(owner, || {\n        let mut r = ByteReader::new(req);\n        let Some(arm) = select_sync(fn_id) else {\n            panic!(\"frustrate: unknown sync fn_id {fn_id}\")\n        };\n        arm(&mut r)\n    });\n    unsafe { envelope::respond_out(resp, out, out_cap) }\n}\n\n");
     // async. Its selector's actor arms exist only on wasm (natively those
     // calls route through frustrate_actor_call), so an actor-only crate's
     // native selector is `_ => None` and every id is the unknown-id panic.

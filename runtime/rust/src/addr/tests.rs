@@ -54,7 +54,11 @@ fn root() -> &'static mut Log {
 
 /// Spawn a host and build its `Log` root there, as a constructor call would.
 fn spawn_log() -> (Arc<Host>, Arc<Mutex<Vec<String>>>) {
-    let host = spawn_host(0);
+    spawn_log_on(spawn_host(0))
+}
+
+/// [`spawn_log`] on a given host.
+fn spawn_log_on(host: Arc<Host>) -> (Arc<Host>, Arc<Mutex<Vec<String>>>) {
     let log = Arc::new(Mutex::new(Vec::new()));
     let theirs = Arc::clone(&log);
     on_host(&host, move || {
@@ -326,22 +330,49 @@ fn posts_after_dispose_and_behind_the_stop_drop_unrun() {
     assert_eq!(ran.load(Ordering::SeqCst), 1, "a post ran after dispose");
 }
 
-/// A posted closure that panics is reported, and the host serves the next
-/// message.
+/// A posted closure that panics is reported to its actor's owner as a panic
+/// with no call, a call on a closure that panics resolves to `Err(Gone)`, and
+/// the host serves the next message.
 #[test]
-fn a_panicking_post_leaves_the_host_serving() {
+fn a_panicking_post_reaches_its_owner_and_leaves_the_host_serving() {
     let _serial = crate::post::test_lock();
     drain_completions();
-    let (host, log) = spawn_log();
+    static SEEN: Mutex<Vec<(u64, Vec<u8>)>> = Mutex::new(Vec::new());
+    extern "C" fn record(id: u64, ptr: *mut u8, len: u64, cap: u64) {
+        let bytes = unsafe { Vec::from_raw_parts(ptr, len as usize, cap as usize) };
+        SEEN.lock().unwrap().push((id, bytes));
+    }
+    SEEN.lock().unwrap().clear();
+    let isolate = crate::post::register_callback(record);
+    let owner = (isolate << crate::post::ISOLATE_SHIFT) | 9;
+    let (host, log) = spawn_log_on(crate::actor::spawn_owned(isolate as u32, owner));
     let (tx, rx) = channel();
+    let (call_tx, call_rx) = channel();
     on_host(&host, move || {
         root().me.post(|_| panic!("a posted closure exploded"));
+        call_tx
+            .send(root().me.call(|_| -> i64 { panic!("a called closure exploded") }))
+            .unwrap();
         root().me.post(move |r| {
             r.note("after");
             tx.send(()).unwrap();
         });
     });
-    recv(&rx, "the post after the panic");
+    let call = recv(&call_rx, "the call");
+    assert_eq!(block_on(call), Err(Gone));
+    recv(&rx, "the post after the panics");
     assert_eq!(*log.lock().unwrap(), ["after"]);
+    let seen = std::mem::take(&mut *SEEN.lock().unwrap());
+    let panics: Vec<_> = seen
+        .iter()
+        .map(|(id, bytes)| {
+            assert_eq!(*id, owner, "reported under the actor's owner");
+            assert_eq!(bytes[0], crate::envelope::STATUS_PANIC);
+            String::from_utf8_lossy(bytes).into_owned()
+        })
+        .collect();
+    assert_eq!(panics.len(), 2, "one report per panic: {panics:?}");
+    assert!(panics[0].contains("a posted closure exploded"));
+    assert!(panics[1].contains("a called closure exploded"));
     host.request_stop();
 }

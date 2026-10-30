@@ -308,6 +308,10 @@ abstract interface class FrustrateRuntime implements FrustrateChannel {
   /// worker-hosted wasm instance on web. Generated actor constructors call
   /// this once per spawn — one instance, one executor.
   ///
+  /// The actor belongs to the zone this is called in: a panic in its work
+  /// that no call waits on (a posted closure, a detached task) is an uncaught
+  /// error there.
+  ///
   /// [debugName] is the actor's type name (generated constructors pass it),
   /// carried into host-attributed reports — most importantly the
   /// disposed-deferred `StateError` — so they name the actor rather than an

@@ -36,11 +36,14 @@ typedef _ExitPortDart = Object Function();
 // response length, or -1 if it did not fit and was leased instead (the
 // (ptr, len, cap) triple then sits at the front of the response buffer).
 // See frustrate::envelope::respond_out.
+// The last argument is the isolate's own owner id (its tag): what the body
+// spawns belongs to the zone frustrate was initialised in (uncaught.rs).
 typedef _CallSyncC = Int32 Function(
   Uint32,
   Pointer<Uint8>,
   Uint64,
   Pointer<Uint8>,
+  Uint64,
   Uint64,
 );
 typedef _CallSyncDart = int Function(
@@ -48,6 +51,7 @@ typedef _CallSyncDart = int Function(
   Pointer<Uint8>,
   int,
   Pointer<Uint8>,
+  int,
   int,
 );
 typedef _CallAsyncC = Void Function(Uint32, Pointer<Uint8>, Uint64, Uint64);
@@ -64,7 +68,7 @@ typedef _ResidentReclaimableC = Uint8 Function(Uint64);
 typedef _ResidentReclaimableDart = int Function(int);
 typedef _ResidentLeakedC = Uint64 Function();
 typedef _ResidentLeakedDart = int Function();
-typedef _ActorSpawnC = Pointer<Void> Function(Uint32);
+typedef _ActorSpawnC = Pointer<Void> Function(Uint64);
 typedef _ActorSpawnDart = Pointer<Void> Function(int);
 typedef _ActorCallC = Void Function(
   Pointer<Void>,
@@ -409,6 +413,14 @@ final class _NativeTransport {
   /// runtime_web.dart, for the same reason.
   final Zone _zone = Zone.current;
 
+  /// The zone each live actor was built in, by the id its Rust executor
+  /// reports a panic that answers no call under (`frustrate_actor_spawn`).
+  /// An entry goes when its host object is collected; a report that finds
+  /// none, or names the isolate itself (sequence zero), goes to [_zone].
+  final Map<int, Zone> _actorZones = {};
+
+  late final Finalizer<int> _actorZoneRelease = Finalizer(_actorZones.remove);
+
   /// Where every async completion lands: call responses, stream events, and
   /// callback invocations, on ONE port.
   ///
@@ -641,6 +653,20 @@ final class _NativeTransport {
         pending.complete(callId, bytes);
         return;
       }
+    }
+    // No call owns it: a panic in work no call waits on (an actor's posted
+    // closure, a detached task), reported under its owner's id. An uncaught
+    // error, in the zone the work belongs to.
+    if (bytes.isNotEmpty && bytes[0] == statusPanic) {
+      final error = envelopeException(
+        statusPanic,
+        BinaryReader(bytes)..readU8(),
+      );
+      (_actorZones[callId] ?? _zone).handleUncaughtError(
+        error,
+        StackTrace.empty,
+      );
+      return;
     }
     // A completion for a call we no longer know about would indicate a
     // bridge bug (call ids are never reused within an isolate).
@@ -895,6 +921,7 @@ final class NativeRuntime implements FrustrateRuntime {
         reqLen,
         block,
         frustrateRespSlabBytes,
+        _t._isolateTag,
       );
       if (n >= 0) {
         // The common case: the envelope is sitting in our own block. Copy it
@@ -1033,8 +1060,13 @@ final class NativeRuntime implements FrustrateRuntime {
       .asFunction<_ActorCallDart>();
 
   @override
-  Future<ActorHost> spawnActorHost({String? debugName}) async =>
-      _NativeActorHost(this, _t._actorSpawn(_t._isolateId), debugName);
+  Future<ActorHost> spawnActorHost({String? debugName}) async {
+    final owner = _t._allocId();
+    final host = _NativeActorHost(this, _t._actorSpawn(owner), debugName);
+    _t._actorZones[owner] = Zone.current;
+    _t._actorZoneRelease.attach(host, owner);
+    return host;
+  }
 
   /// The transport: it issues every raw this runtime hands out, and every
   /// bridge in the same library shares it.

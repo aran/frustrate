@@ -187,6 +187,9 @@ pub struct Host {
     /// The isolate that spawned this host. An actor belongs to the isolate
     /// that built it: a handle is not `SendPort`-able, so it cannot migrate.
     isolate: u32,
+    /// Who hears a panic on this executor that answers no call: the id Dart
+    /// filed this actor's zone under (uncaught.rs). Zero in unit tests.
+    owner: u64,
     inbox: Inbox,
     thread: Thread,
     /// Set once, by the first request to stop. Makes stopping idempotent and
@@ -378,6 +381,11 @@ fn refuse(host: u64, call_id: u64) {
 /// already died, which closes the window in which an isolate's exit notice
 /// could miss a host it had just spawned.
 pub fn spawn_host(isolate: u32) -> Arc<Host> {
+    spawn_owned(isolate, 0)
+}
+
+/// [`spawn_host`], with the owner a panic that answers no call is reported to.
+pub(crate) fn spawn_owned(isolate: u32, owner: u64) -> Arc<Host> {
     let id = NEXT_HOST.fetch_add(1, Ordering::Relaxed);
     // The thread needs its `Host`, and the `Host` needs the thread's handle
     // to wake it. So the thread starts first and waits for its `Host` here.
@@ -401,6 +409,7 @@ pub fn spawn_host(isolate: u32) -> Arc<Host> {
     let host = Arc::new(Host {
         id,
         isolate,
+        owner,
         inbox: Inbox::new(),
         thread,
         stopping: AtomicBool::new(false),
@@ -420,6 +429,9 @@ fn run(host: Arc<Host>) {
     CURRENT_HOST.with(|c| {
         let _ = c.set(Arc::clone(&host));
     });
+    // What this thread queues, and what panics here with no call, is the
+    // actor's.
+    crate::uncaught::enter(host.owner);
     let entry = Outside::new(Arc::clone(&host));
     let displaced = HOSTS.with(|map| map.insert(host.id, entry));
     drop(displaced.map(Outside::into_inner));
@@ -443,7 +455,7 @@ fn run(host: Arc<Host>) {
         while let Some(msg) = batch.next() {
             match msg {
                 Msg::Call { call_id, job, pending: _pending } => serve(call_id, job),
-                Msg::Posted { job, pending: _pending } => crate::addr::run(job),
+                Msg::Posted { job, pending: _pending } => crate::addr::run(job, host.owner),
                 Msg::Stop => {
                     stop(&host, batch);
                     return;
@@ -585,11 +597,16 @@ pub fn reap_isolate(isolate: u32) {
     }
 }
 
-/// Start an executor for `isolate` and return the Dart side's counted pointer
-/// to it. Release it with [`frustrate_actor_release`].
+/// Start an executor and return the Dart side's counted pointer to it.
+/// Release it with [`frustrate_actor_release`].
+///
+/// `owner` is the id Dart filed the actor's zone under, for a panic on this
+/// executor that answers no call (uncaught.rs). Like a call id it carries the
+/// owning isolate in its high bits.
 #[unsafe(no_mangle)]
-pub extern "C" fn frustrate_actor_spawn(isolate: u32) -> *const c_void {
-    Arc::into_raw(spawn_host(isolate)) as *const c_void
+pub extern "C" fn frustrate_actor_spawn(owner: u64) -> *const c_void {
+    let isolate = (owner >> crate::post::ISOLATE_SHIFT) as u32;
+    Arc::into_raw(spawn_owned(isolate, owner)) as *const c_void
 }
 
 /// Stop the host after currently queued calls drain (FIFO). Idempotent.

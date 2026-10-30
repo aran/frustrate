@@ -51,6 +51,7 @@ extern "C" {
         req_len: u64,
         out: *mut u8,
         out_cap: u64,
+        owner: u64,
     ) -> i32;
     fn frustrate_buffer_free(ptr: *mut u8, len: u64, cap: u64);
 }
@@ -94,7 +95,7 @@ fn a_bridge_call_round_trips_through_the_exported_c_abi() {
 fn a_response_too_large_for_the_buffer_is_leased_back() {
     let mut out = [0u8; 24];
     let n = unsafe {
-        frustrate_rule_test_fixture_call_sync(4242, std::ptr::null(), 0, out.as_mut_ptr(), out.len() as u64)
+        frustrate_rule_test_fixture_call_sync(4242, std::ptr::null(), 0, out.as_mut_ptr(), out.len() as u64, 0)
     };
     assert_eq!(n, -1, "the panic message must not have fitted 24 bytes");
 
@@ -127,6 +128,7 @@ unsafe fn call_add(a: i32, b: i32, out: *mut u8, out_cap: u64) -> i32 {
             req.len() as u64,
             out,
             out_cap,
+            0,
         )
     }
 }

@@ -31,7 +31,7 @@
 //!
 //! | where | what reaches it |
 //! |---|---|
-//! | [`crate::envelope::panic_envelope`] | every panic that becomes a `STATUS_PANIC` answer: a sync body, a pool job, a cooperative-executor poll, and the two prefix catches generated glue wraps its async and actor dispatch in |
+//! | [`crate::envelope::panic_envelope`] | every panic that becomes a `STATUS_PANIC` answer: a sync body, a pool job, a cooperative-executor poll, and the two prefix catches generated glue wraps its async and actor dispatch in; and every panic with no call to answer, an actor's posted closure or a detached task, which Dart hears as an uncaught error (`uncaught`) |
 //! | [`crate::actor`]'s `Reap` arm | a user `Drop` that panics during actor teardown, which answers no call and kills the host thread |
 //! | `frustrate_web_init`'s panic hook | **every** panic on web, where `panic=abort` means none of the above run |
 //!

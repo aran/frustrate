@@ -6283,4 +6283,33 @@ impl Slicer {
     pub fn call_self_and_wait(&mut self) -> i64 {
         pollster::block_on(self.me.call(|s| s.slices)).unwrap_or(-1)
     }
+
+    /// Post a closure that panics with `message`. No call waits on it
+    /// (tests/dart_integration/test/uncaught_panic_test.dart).
+    pub fn post_panic(&mut self, message: String) {
+        self.me.post(move |_| panic!("{message}"));
+    }
+
+    /// `Addr::call` on a closure that panics with `message`, answering with
+    /// what the call resolved to.
+    pub fn call_panic(&mut self, message: String) -> Deferred<Result<i64, String>> {
+        let me = self.me.clone();
+        Deferred::new(async move {
+            me.call(move |_| -> i64 { panic!("{message}") })
+                .await
+                .map_err(|gone| gone.to_string())
+        })
+    }
+
+    /// Spawn a detached task that panics with `message`.
+    pub fn spawn_panic(&mut self, message: String) {
+        frustrate::runtime::spawn(async move { panic!("{message}") });
+    }
+}
+
+/// Spawn a detached task that panics with `message`, from a sync call: work
+/// that belongs to no actor (tests/dart_integration/test/uncaught_panic_test.dart).
+#[bridge(sync)]
+pub fn spawn_detached_panic(message: String) {
+    frustrate::runtime::spawn(async move { panic!("{message}") });
 }

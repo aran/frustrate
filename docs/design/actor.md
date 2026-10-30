@@ -118,6 +118,10 @@ something to the actor. The mechanics are in `runtime/rust/src/addr.rs`.
   consumed is dropped without running; so is one queued behind the stop, and
   one posted to a stopped executor. `call` then resolves to `Err(Gone)`. On web
   the worker's termination takes its waiting closures with it.
+- **Panics.** A posted closure, or a task the actor spawns, answers no call.
+  If it panics, the panic is an uncaught error in the zone the actor was built
+  in, and a `call` waiting on the closure resolves to `Err(Gone)`. The actor
+  keeps serving.
 - **No waiting on yourself.** Awaiting `call` on the actor's own executor
   (a `block_on` in a method body) panics at once, because the executor that
   would run the closure is the one waiting.

@@ -506,8 +506,10 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
   // page's calls) between two slices of a job that keeps posting; a
   // MessageChannel rather than setTimeout(0), which browsers clamp to 4 ms
   // once timers nest, an idle gap after every slice. A trap here belongs to
-  // no call, so it is reported the way a trap in executor plumbing is, under
-  // call id 0. Pool workers host no actor and never post to it.
+  // no call, so it is reported under call id 0, which the page hands to the
+  // actor's zone. If an `Addr::call` waits on the closure,
+  // `frustrate_posted_trapped` resolves it to `Err(Gone)`; it touches only
+  // that call's state. Pool workers host no actor and never post to it.
   const posted = new MessageChannel();
   posted.port1.onmessage = () => {
     try {
@@ -515,6 +517,12 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
     } catch (err) {
       postMessage({ type: 'trap', callId: 0, message: lastPanic || String(err) });
       lastPanic = null;
+      try {
+        exports.frustrate_posted_trapped();
+      } catch (again) {
+        postMessage({ type: 'trap', callId: 0, message: lastPanic || String(again) });
+        lastPanic = null;
+      }
     }
   };
 

@@ -258,7 +258,9 @@ pub fn spawn_call(
     spawn(move || {
         #[cfg(all(target_family = "wasm", feature = "wasm-threads"))]
         threaded::set_current_call(call_id);
-        crate::post::respond(call_id, job());
+        // What the job spawns belongs to the isolate that made the call.
+        let reply = crate::uncaught::with(crate::uncaught::of_call(call_id), job);
+        crate::post::respond(call_id, reply);
         #[cfg(all(target_family = "wasm", feature = "wasm-threads"))]
         threaded::set_current_call(0);
     });

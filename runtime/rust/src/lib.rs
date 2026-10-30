@@ -123,6 +123,8 @@ mod spin;
 /// [`handle::LockedCell`] and its guards, which are re-exported there so
 /// generated glue reaches one module.
 mod rwlock;
+/// Which Dart zone hears a panic that answers no call.
+mod uncaught;
 pub mod testing;
 pub mod stream;
 
@@ -255,13 +257,18 @@ pub unsafe extern "C" fn frustrate_buffer_free(ptr: *mut u8, len: u64, cap: u64)
 ///     `frustrate_actor_retain`/`frustrate_actor_release`; removes
 ///     `frustrate_actor_cancel_deferred` (`frustrate_call_cancel` claims the
 ///     same call).
+/// 7 — `frustrate_actor_spawn(owner) -> host` takes the id a panic with no
+///     call is reported under, which carries the isolate in its high bits
+///     (uncaught.rs), and each bridge's `call_sync` takes the calling
+///     isolate's owner id as a last argument. Adds `frustrate_posted_trapped`
+///     on wasm.
 ///
 /// Bumped rather than renamed, unlike `frustrate_init_dl`: the export whose
 /// shape changed is `frustrate_call_sync`, which codegen emits per bridge
 /// crate, so a rename would have to be spelled by the generator and would say
 /// nothing about the runtime the bridge was built against. The version this
 /// constant carries does, on both transports, before any call is dispatched.
-pub const RUNTIME_ABI: u64 = 6;
+pub const RUNTIME_ABI: u64 = 7;
 
 /// Read [`RUNTIME_ABI`]. Checked by the Dart transport before it calls anything
 /// else, so a runtime/package skew is a named error rather than a mismatched

@@ -93,6 +93,14 @@ pub fn run(body: impl FnOnce() -> Outcome) -> FramedWriter {
     }
 }
 
+/// [`run`] for a sync call, with `owner` as the owner of what the body
+/// queues: a task it spawns belongs to the zone `owner` names (uncaught.rs).
+/// Dart passes its isolate's tag natively and zero on web. For generated glue.
+#[doc(hidden)]
+pub fn run_sync(owner: u64, body: impl FnOnce() -> Outcome) -> FramedWriter {
+    crate::uncaught::with(owner, || run(body))
+}
+
 /// Encode a completed [`Outcome`] into its wire envelope. This is the
 /// non-panic half of [`run`], split out for the cooperative executor: an
 /// `async fn` body cannot be wrapped in a single `catch_unwind` (the panic

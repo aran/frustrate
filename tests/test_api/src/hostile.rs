@@ -120,6 +120,7 @@ fn call_sync(fn_id: u32, req: &[u8]) -> Vec<u8> {
             req.len() as u64,
             out.as_mut_ptr(),
             out.len() as u64,
+            0,
         )
     };
     if n >= 0 {
