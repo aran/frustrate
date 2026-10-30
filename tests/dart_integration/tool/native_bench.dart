@@ -2,7 +2,11 @@
 /// with asserts off, run against a stock `cargo --release` bridge.
 ///
 ///     bazel run //tests/dart_integration:native_bench
+///     bazel run //tests/dart_integration:native_bench -- --typing
 ///     (cd tests/dart_integration && dart run tool/native_bench.dart)  # JIT
+///
+/// `--typing` runs the typing-load scenario (`bench/typing_load.dart`, whose
+/// header says what it measures) instead of the cells.
 ///
 /// **Config coverage: native only.** Nothing here says anything about the
 /// three web configs (single-threaded, threaded, web+SAB). The browser suite
@@ -37,6 +41,8 @@ import 'package:frustrate/frustrate.dart';
 import 'package:frustrate_integration/test_api.frustrate.dart';
 
 import 'package:bench_harness/bench_harness.dart';
+
+import '../bench/typing_load.dart';
 
 // ------------------------------------------------------------- artifacts --
 
@@ -169,7 +175,7 @@ const _sizes = <(String, int)>[
 
 // ------------------------------------------------------------------- main --
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   final ws = _workspace();
   final dylibPath = _buildRelease(ws.path);
   final dylib = DynamicLibrary.open(dylibPath);
@@ -185,6 +191,10 @@ Future<void> main() async {
     BridgeLibrary.dynamic(dylib, name: dylibPath, bridge: frustrateBridge),
   );
   checkFrustrateSchema();
+
+  if (args.contains('--typing')) {
+    await _typing(TypingLoadConfig.fromArgs(args), dylibPath, ws.how);
+  }
 
   final cells = <Cell>[];
 
@@ -640,6 +650,50 @@ Future<void> main() async {
   exit(0);
 }
 
+Future<Never> _typing(
+  TypingLoadConfig config,
+  String dylibPath,
+  String how,
+) async {
+  final loadBefore = _sysctl('vm.loadavg');
+  final result = await runTypingLoad(config, log: stderr.writeln);
+  final meta = {
+    ..._meta(dylibPath, how),
+    'load_before': loadBefore,
+    'load_after': _sysctl('vm.loadavg'),
+  };
+  stdout.write(
+    result.render(
+      title: 'frustrate native typing load',
+      banner: _banner(meta),
+      budgets: nativeBudgets,
+    ),
+  );
+  stdout.writeln('RESULTS ${jsonEncode({...meta, 'typing': result.toJson()})}');
+  await stdout.flush();
+  exit(0);
+}
+
+/// Provenance for the typing scenario's report.
+Map<String, Object?> _meta(String dylibPath, String how) => {
+  'bench': 'native_bench --typing',
+  'rust_profile': 'release (stock: no lto/codegen-units tuning)',
+  'bridge_path': dylibPath,
+  'bridge_bytes': File(dylibPath).lengthSync(),
+  'bridge_sha256': _sha256(dylibPath),
+  'workspace_resolved_via': how,
+  'dart_version': Platform.version,
+  'dart_product_mode': const bool.fromEnvironment(
+    'dart.vm.product',
+    defaultValue: false,
+  ),
+  'dart_asserts_enabled': _assertsEnabled(),
+  'os': Platform.operatingSystemVersion,
+  'cpu': _sysctl('machdep.cpu.brand_string'),
+  'cores': Platform.numberOfProcessors,
+  'timestamp': DateTime.now().toUtc().toIso8601String(),
+};
+
 // ----------------------------------------------------------------- prose --
 //
 // The native driver's own words. `renderReport` in package:bench_harness owns the
@@ -670,6 +724,8 @@ List<String> _banner(Map<String, Object?> meta) {
     ],
     'machine     ${meta['cpu'] ?? '?'} / ${meta['cores']} cores / '
         '${meta['os']}',
+    if (meta['load_before'] != null)
+      'load avg    before ${meta['load_before']}  after ${meta['load_after']}',
   ];
 }
 

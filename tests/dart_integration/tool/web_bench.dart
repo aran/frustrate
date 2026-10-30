@@ -3,7 +3,13 @@
 ///
 ///     bazel run //tests/dart_integration:web_bench                 # single-threaded
 ///     bazel run //tests/dart_integration:web_bench -- --threaded   # threaded wasm
+///     bazel run //tests/dart_integration:web_bench -- --typing     # typing load
 ///     (cd tests/dart_integration && dart run tool/web_bench.dart)
+///
+/// `--typing` runs the typing-load scenario (`bench/typing_load.dart`, whose
+/// header says what it measures) in the page instead of the cells. It takes
+/// the scenario's own `--typing-*` options, which reach the page through
+/// `provenance.json`.
 ///
 /// **Why this driver runs `dart compile wasm` itself**, rather than depending on
 /// a Bazel-built module: exactly the reason `native_bench.dart` runs `cargo
@@ -44,6 +50,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../bench/typing_config.dart';
+
 // -------------------------------------------------------------- constants --
 
 /// The dart2wasm optimization level. `dart compile wasm` defaults to `-O1`;
@@ -60,11 +68,18 @@ const Duration _browserTimeout = Duration(minutes: 20);
 
 Future<void> main(List<String> args) async {
   final threaded = args.contains('--threaded');
-  final unknown = args.where((a) => a != '--threaded').toList();
+  final typing = args.contains('--typing');
+  final unknown = args
+      .where(
+        (a) =>
+            a != '--threaded' && a != '--typing' && !a.startsWith('--typing-'),
+      )
+      .toList();
   if (unknown.isNotEmpty) {
     stderr.writeln(
       'web_bench: unrecognized argument(s): ${unknown.join(' ')}\n'
-      'Usage: web_bench [--threaded]   (one config per invocation)',
+      'Usage: web_bench [--threaded] [--typing [--typing-idle=S] '
+      '[--typing-load=S] [--typing-slice-us=N] [--typing-chars=N]]',
     );
     exit(2);
   }
@@ -158,6 +173,9 @@ Future<void> main(List<String> args) async {
   }
 
   final provenance = <String, Object?>{
+    'scenario': typing ? 'typing' : 'cells',
+    if (typing) 'typing_config': TypingLoadConfig.fromArgs(args).toJson(),
+    'load_before': _sysctl('vm.loadavg'),
     'fixture_flavour': flavour,
     'rust_profile': 'release (stock: no lto/codegen-units tuning)',
     'fixture_bytes': fixture.lengthSync(),
@@ -292,8 +310,16 @@ Future<void> main(List<String> args) async {
   }
 
   final meta = payload['meta'] as Map<String, Object?>;
+  final loadAfter = _sysctl('vm.loadavg');
   stdout.write(payload['table'] as String);
-  stdout.writeln('RESULTS ${jsonEncode({...meta, 'cells': payload['cells']})}');
+  if (typing) {
+    stdout.writeln(
+      'load avg    before ${provenance['load_before']}  after $loadAfter',
+    );
+  }
+  stdout.writeln(
+    'RESULTS ${jsonEncode({...meta, 'load_after': loadAfter, 'cells': payload['cells']})}',
+  );
   await stdout.flush();
   exit(0);
 }

@@ -30,6 +30,8 @@ import 'package:frustrate_integration/test_api.frustrate.dart';
 
 import 'package:bench_harness/bench_harness.dart';
 
+import 'typing_load.dart';
+
 // ------------------------------------------------------------- JS interop --
 
 @JS('fetch')
@@ -310,6 +312,44 @@ Future<void> _run() async {
     );
   }
   _log('bridge up; asyncIsParallel=${rt.asyncIsParallel}');
+
+  if (built['scenario'] == 'typing') {
+    final config = TypingLoadConfig.fromJson(
+      built['typing_config'] as Map<String, Object?>,
+    );
+    final result = await runTypingLoad(config, log: _log);
+    final meta = <String, Object?>{
+      'bench': 'web_bench --typing',
+      'config': declaredThreaded ? 'web-threaded' : 'web-single-threaded',
+      ...built,
+      'cross_origin_isolated': coi,
+      'hardware_concurrency': rt.hardwareParallelism,
+      'async_is_parallel': rt.asyncIsParallel,
+      'dart_asserts_enabled': asserts,
+      'performance_now_tick_us': roundSig(tickUs),
+      'user_agent': globalContext
+          .getProperty<JSObject>('navigator'.toJS)
+          .getProperty<JSString>('userAgent'.toJS)
+          .toDart,
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+    };
+    await _post(
+      '/results',
+      jsonEncode({
+        'meta': meta,
+        'cells': result.toJson(),
+        'table': result.render(
+          title:
+              'frustrate web typing load  (dart2wasm '
+              '${built['dart_optimization_level']}, asserts off)',
+          banner: _banner(meta),
+          budgets: webBudgets,
+        ),
+        'log': _logLines,
+      }),
+    );
+    return;
+  }
 
   final miner = await Miner.new_(label: 'bench');
 

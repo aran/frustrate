@@ -5917,3 +5917,208 @@ pub fn chit_gate_parked() -> i64 {
 pub fn open_chit_gate() {
     CHIT_GATE_OPEN.store(true, Ordering::SeqCst);
 }
+
+// ----------------------------------------------- Actor: NoteCore (bench) --
+
+/// Monotonic nanoseconds on whichever executor calls it: `Instant` natively,
+/// and on wasm32-unknown-unknown the glue's `frustrate.now_monotonic_ns`
+/// import, which frustrate.js offers every instance it creates (main, pool
+/// worker, actor worker). That import is `performance.now()`: 5 µs ticks in a
+/// cross-origin-isolated page, coarser otherwise.
+fn core_clock_ns() -> i64 {
+    #[cfg(any(not(target_family = "wasm"), target_os = "wasi"))]
+    {
+        static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        EPOCH.get_or_init(std::time::Instant::now).elapsed().as_nanos() as i64
+    }
+    #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
+    {
+        #[link(wasm_import_module = "frustrate")]
+        unsafe extern "C" {
+            fn now_monotonic_ns() -> u64;
+        }
+        // SAFETY: a host import that takes nothing and returns a number.
+        unsafe { now_monotonic_ns() as i64 }
+    }
+}
+
+/// What one edit changed, as [`NoteCore`] publishes it: the edit, never the
+/// note. Offsets are UTF-8 byte offsets into the note.
+#[bridge(data)]
+pub struct NoteChange {
+    pub seq: i64,
+    /// 0 a keystroke, 1 a remote change.
+    pub origin: i64,
+    pub offset: i64,
+    pub deleted: i64,
+    pub inserted: String,
+}
+
+/// An edit's confirmation: its sequence number, and how long its handler ran,
+/// timed inside the handler with the executor's own clock.
+#[bridge(data)]
+pub struct NoteAck {
+    pub seq: i64,
+    pub handler_ns: i64,
+}
+
+/// One background slice's report.
+#[bridge(data)]
+pub struct SliceAck {
+    pub handler_ns: i64,
+    /// Background jobs finished so far, this slice's included.
+    pub jobs_done: i64,
+}
+
+/// A notes app's document core, for the typing-load bench
+/// (`tests/dart_integration/bench/typing_load.dart`). Holds the note as one
+/// `String` and owns the caret, as an editor core owns the selection, so a
+/// keystroke is "insert at the caret": one memmove of the note's tail. Every
+/// edit is published to the sink [`NoteCore::publish`] kept, as a
+/// [`NoteChange`].
+#[bridge(actor)]
+pub struct NoteCore {
+    text: String,
+    caret: usize,
+    seq: i64,
+    sink: Option<StreamSink<NoteChange>>,
+    /// CPU the current background job still wants, in nanoseconds.
+    job_left_ns: i64,
+    job_ns: i64,
+    jobs_done: i64,
+    /// Where the job's scan is in the note, and what it has folded so far.
+    job_pos: usize,
+    job_acc: u64,
+}
+
+impl NoteCore {
+    fn floor_boundary(&self, mut at: usize) -> usize {
+        at = at.min(self.text.len());
+        while !self.text.is_char_boundary(at) {
+            at -= 1;
+        }
+        at
+    }
+
+    fn publish_change(&mut self, origin: i64, offset: usize, deleted: usize, inserted: &str) -> i64 {
+        self.seq += 1;
+        if let Some(sink) = &self.sink {
+            sink.add(NoteChange {
+                seq: self.seq,
+                origin,
+                offset: offset as i64,
+                deleted: deleted as i64,
+                inserted: inserted.to_owned(),
+            });
+        }
+        self.seq
+    }
+}
+
+#[bridge]
+impl NoteCore {
+    /// A note of `chars` characters of prose, mostly ASCII with some accented
+    /// and CJK text, with the caret in the middle, and a background job that
+    /// wants `job_us` microseconds of CPU.
+    pub fn new(chars: i64, job_us: i64) -> Self {
+        const PROSE: &str = "The quick brown fox jumps over the lazy dog; café, naïve, 日本語のメモ. ";
+        let text: String = PROSE.chars().cycle().take(chars.clamp(0, 1 << 24) as usize).collect();
+        let mut core = NoteCore {
+            caret: text.len() / 2,
+            text,
+            seq: 0,
+            sink: None,
+            job_left_ns: job_us.max(0) * 1000,
+            job_ns: job_us.max(0) * 1000,
+            jobs_done: 0,
+            job_pos: 0,
+            job_acc: 0,
+        };
+        core.caret = core.floor_boundary(core.caret);
+        core
+    }
+
+    /// Keep `sink` and publish every later edit to it.
+    pub fn publish(&mut self, sink: StreamSink<NoteChange>) {
+        self.sink = Some(sink);
+    }
+
+    /// One keystroke: insert `text` at the caret and move the caret past it,
+    /// or, when `text` is empty, a backspace deleting the character before it.
+    pub fn key(&mut self, text: String) -> NoteAck {
+        let start = core_clock_ns();
+        let seq = if text.is_empty() {
+            let end = self.caret;
+            let begin = self.text[..end].char_indices().next_back().map_or(end, |(i, _)| i);
+            self.text.replace_range(begin..end, "");
+            self.caret = begin;
+            self.publish_change(0, begin, end - begin, "")
+        } else {
+            let at = self.caret;
+            self.text.insert_str(at, &text);
+            self.caret = at + text.len();
+            self.publish_change(0, at, 0, &text)
+        };
+        NoteAck { seq, handler_ns: core_clock_ns() - start }
+    }
+
+    /// One change from a remote peer, as bytes: a little-endian `u32` byte
+    /// offset, a `u16` count of bytes to delete, then the UTF-8 text to insert.
+    /// Offsets snap down to character boundaries; a short or malformed change
+    /// applies as much as parses.
+    pub fn remote(&mut self, change: Vec<u8>) -> NoteAck {
+        let start = core_clock_ns();
+        let le = |i: usize, n: usize| -> usize {
+            change.get(i..i + n).map_or(0, |b| b.iter().rev().fold(0, |a, &x| (a << 8) | x as usize))
+        };
+        let at = self.floor_boundary(le(0, 4));
+        let end = self.floor_boundary(at + le(4, 2));
+        let inserted = std::str::from_utf8(change.get(6..).unwrap_or(&[])).unwrap_or("");
+        self.text.replace_range(at..end, inserted);
+        if self.caret >= end {
+            self.caret = self.caret - (end - at) + inserted.len();
+        } else if self.caret > at {
+            self.caret = at + inserted.len();
+        }
+        let inserted = inserted.to_owned();
+        let seq = self.publish_change(1, at, end - at, &inserted);
+        NoteAck { seq, handler_ns: core_clock_ns() - start }
+    }
+
+    /// Run the background job for at most `slice_us` microseconds, then return
+    /// so that queued messages run. The job folds an FNV-1a hash over the note
+    /// in 4 KiB chunks until its CPU budget is spent, and then the next job
+    /// starts with a fresh budget.
+    pub fn background_slice(&mut self, slice_us: i64) -> SliceAck {
+        let start = core_clock_ns();
+        let deadline = start + slice_us.max(0) * 1000;
+        let mut now = start;
+        loop {
+            let bytes = self.text.as_bytes();
+            let from = self.job_pos.min(bytes.len());
+            let to = (from + 4096).min(bytes.len());
+            for &b in &bytes[from..to] {
+                self.job_acc = (self.job_acc ^ b as u64).wrapping_mul(0x100_0000_01b3);
+            }
+            self.job_pos = if to >= bytes.len() { 0 } else { to };
+            let t = core_clock_ns();
+            self.job_left_ns -= t - now;
+            now = t;
+            if self.job_left_ns <= 0 {
+                self.jobs_done += 1;
+                self.job_left_ns = self.job_ns;
+                break;
+            }
+            if now >= deadline {
+                break;
+            }
+        }
+        std::hint::black_box(self.job_acc);
+        SliceAck { handler_ns: core_clock_ns() - start, jobs_done: self.jobs_done }
+    }
+
+    /// The note's length in UTF-8 bytes.
+    pub fn len_bytes(&self) -> i64 {
+        self.text.len() as i64
+    }
+}

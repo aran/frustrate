@@ -48,6 +48,11 @@ dart_binary(
 dart_binary(
     name = "native_bench",
     main = "tool/native_bench.dart",
+    # `--typing`: the typing-load scenario, shared with the web page.
+    srcs = [
+        "bench/typing_config.dart",
+        "bench/typing_load.dart",
+    ],
     # The harness (Cell, the calibrate/warmup/measure loop, the table renderer)
     # is //tools/bench_harness, shared verbatim with the in-page web bench.
     # It used to be `tool/bench_core.dart` listed in `srcs` here — which said
@@ -84,11 +89,12 @@ dart_binary(
 #
 # `dart_binary` is `rule(..., executable = True)` with no `test = True`, so it
 # is not collected by `bazel test //...` and nothing new enters the default
-# suite by adding it. No deps: the driver is dart:io only, and the code it
-# measures is compiled from the source tree by the compilers it invokes.
+# suite by adding it. No deps: the driver is dart:io only (its one src is the
+# typing scenario's settings, which import nothing), and the code it measures is compiled from the source tree by the compilers it invokes.
 dart_binary(
     name = "web_bench",
     main = "tool/web_bench.dart",
+    srcs = ["bench/typing_config.dart"],
 )
 
 dart_test(
