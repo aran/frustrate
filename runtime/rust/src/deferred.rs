@@ -92,7 +92,7 @@ impl<T> Future for Deferred<T> {
 /// glue, from the deferred method's prefix — i.e. **on the actor's executor**.
 ///
 /// Native: records the call in the owning host's deferred registry
-/// ([`crate::actor`]) so `dispose()` can cancel it, and unregisters when the
+/// ([`crate::actor`]) so a stopping host can cancel it, and unregisters when the
 /// future is dropped — completion, cancellation, and a panicking poll all end
 /// with the future dropped, so a drop guard covers every exit.
 ///

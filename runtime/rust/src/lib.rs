@@ -227,12 +227,19 @@ pub unsafe extern "C" fn frustrate_buffer_free(ptr: *mut u8, len: u64, cap: u64)
 ///     lazily and fail at the first `cancel()` — an `ArgumentError` from
 ///     `lookupFunction` on native, a missing-export throw on web, both far from
 ///     the skew that caused them.
+/// 6 — the actor exports name a host by a counted pointer, not an id:
+///     `frustrate_actor_spawn(isolate) -> host`, and `frustrate_actor_shutdown`,
+///     `frustrate_actor_reap` and each bridge's `actor_call` take one. Adds
+///     `frustrate_actor_retain`/`frustrate_actor_release`; removes
+///     `frustrate_actor_cancel_deferred` (`frustrate_call_cancel` claims the
+///     same call).
+///
 /// Bumped rather than renamed, unlike `frustrate_init_dl`: the export whose
 /// shape changed is `frustrate_call_sync`, which codegen emits per bridge
 /// crate, so a rename would have to be spelled by the generator and would say
 /// nothing about the runtime the bridge was built against. The version this
 /// constant carries does, on both transports, before any call is dispatched.
-pub const RUNTIME_ABI: u64 = 5;
+pub const RUNTIME_ABI: u64 = 6;
 
 /// Read [`RUNTIME_ABI`]. Checked by the Dart transport before it calls anything
 /// else, so a runtime/package skew is a named error rather than a mismatched

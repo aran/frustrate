@@ -1,19 +1,56 @@
 //! Native actor hosts: one dedicated thread per actor instance.
 //!
-//! An actor host is a FIFO of jobs drained by its own OS thread — the
+//! An actor host is a FIFO of messages drained by its own OS thread, the
 //! native analog of the web's worker-hosted wasm instance. The objects the
-//! actor hosts live in this thread's object table (objects.rs) and are
-//! created, used, and dropped exclusively on it, so actor types need no
+//! actor hosts live in that thread's object table (objects.rs) and are
+//! created, used and dropped exclusively on it, so actor types need no
 //! `Send`/`Sync` and no locks: serialization is the executor itself.
 //!
+//! # Routing takes no lock on the caller's thread
+//!
+//! Every actor call is issued from a Dart isolate's thread, and for most apps
+//! that is the main isolate. So the path from a call to its executor is built
+//! to take no lock at all:
+//!
+//! - **The Dart side holds the executor.** `frustrate_actor_spawn` returns a
+//!   counted pointer to the [`Host`], and the Dart host object passes it on
+//!   every call. There is no registry lookup between a call and its queue.
+//!   The pointer stays valid for as long as the Dart object that holds it:
+//!   that object owns one strong count and releases it from a
+//!   `NativeFinalizer` (`frustrate_actor_release`). The GC backstop owns a
+//!   count of its own (`frustrate_actor_retain`/`frustrate_actor_reap`), so
+//!   the two finalizers may run in either order.
+//! - **The queue is lock-free.** [`Inbox`] is a Treiber stack that producers
+//!   push with one compare-and-swap and the host thread takes whole. A failed
+//!   CAS means another producer succeeded, so no producer ever waits on
+//!   another. The wake-up is `Thread::unpark`. (`std::sync::mpsc` is not used
+//!   because a send to a receiver that is parked takes the channel's waker
+//!   mutex, which the receiver also takes.)
+//! - **Stopping is a flag and a message.** `dispose()` and the GC backstop set
+//!   [`Host::stopping`] and push [`Msg::Stop`]. Everything else stopping a host
+//!   does (answering what was queued behind the stop, sweeping deferred
+//!   completions, leaving the registry, draining the object table) runs on the
+//!   host thread.
+//!
+//! The one registry here, [`hosts`], exists for the hot-restart path, which
+//! must find every host a dead isolate owned. The host thread enters itself
+//! there and leaves on exit, and [`reap_isolate`] reads it from the VM's
+//! exit-notice thread. No caller thread touches it.
+//!
+//! What a call still does on the caller's thread is reserve its id with the
+//! cooperative executor (`executor::reserve`), the answer-once gate shared by
+//! every async call; that registry's lock is executor.rs's.
+//!
 //! Not compiled for wasm: there the host is a Worker driving its own
-//! instance through the ordinary exports.
+//! instance through the ordinary exports, and the Dart side posts to it.
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{channel, Sender};
-use std::sync::{Mutex, OnceLock};
+use std::ffi::c_void;
+use std::ptr::{null_mut, NonNull};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::thread::Thread;
 
 /// One dispatched call body. `Some(reply)` is the response envelope the loop
 /// posts — the framed writer, so the ledger of what the reply minted travels
@@ -31,13 +68,167 @@ enum Msg {
         pending: crate::idle::Pending,
     },
     /// The executor's last message. Everything queued before it runs first;
-    /// then the host drops every object still in its table and exits.
+    /// then the host drops every object still in its table and exits. What
+    /// arrives after it is refused.
     ///
     /// One message for the orderly `dispose()` and for the reap of a handle
     /// nobody disposed: after an orderly dispose the table is already empty
     /// (the dispatched drop emptied it), so draining it is the reap's work and
     /// a no-op for the dispose.
     Stop,
+}
+
+/// A multi-producer, single-consumer queue whose push takes no lock.
+///
+/// A Treiber stack: [`push`](Inbox::push) links a node in front with one
+/// compare-and-swap, and the host thread takes the whole stack with one swap
+/// and reverses it, which restores arrival order. Taking the whole stack is
+/// what makes this sound without hazard pointers: the consumer never pops a
+/// node another thread can still be looking at, because producers never read
+/// a node after publishing it.
+///
+/// [`close`](Inbox::close) swaps in a sentinel that refuses every later push,
+/// handing the message back to its producer.
+pub struct Inbox {
+    head: AtomicPtr<Node>,
+}
+
+struct Node {
+    msg: Msg,
+    next: *mut Node,
+}
+
+impl Inbox {
+    fn new() -> Self {
+        Inbox { head: AtomicPtr::new(null_mut()) }
+    }
+
+    /// The closed sentinel: well aligned, never an allocation, never
+    /// dereferenced.
+    fn closed() -> *mut Node {
+        NonNull::dangling().as_ptr()
+    }
+
+    /// Queue `msg`, or hand it back if the inbox is closed.
+    fn push(&self, msg: Msg) -> Result<(), Msg> {
+        let node = Box::into_raw(Box::new(Node { msg, next: null_mut() }));
+        let mut head = self.head.load(Ordering::Relaxed);
+        loop {
+            if head == Self::closed() {
+                return Err(unsafe { Box::from_raw(node) }.msg);
+            }
+            // The node is still private to this thread.
+            unsafe { (*node).next = head };
+            match self
+                .head
+                .compare_exchange_weak(head, node, Ordering::Release, Ordering::Relaxed)
+            {
+                Ok(_) => return Ok(()),
+                Err(now) => head = now,
+            }
+        }
+    }
+
+    /// Everything queued so far, oldest first. Consumer only.
+    fn take(&self) -> Vec<Msg> {
+        let head = self.head.swap(null_mut(), Ordering::Acquire);
+        debug_assert!(head != Self::closed(), "take after close");
+        Self::collect(head)
+    }
+
+    /// Refuse every later push, and return what was queued, oldest first.
+    /// Consumer only.
+    fn close(&self) -> Vec<Msg> {
+        let head = self.head.swap(Self::closed(), Ordering::Acquire);
+        if head == Self::closed() {
+            return Vec::new();
+        }
+        Self::collect(head)
+    }
+
+    /// Unlink a taken stack and put it in arrival order.
+    fn collect(mut p: *mut Node) -> Vec<Msg> {
+        let mut out = Vec::new();
+        while !p.is_null() {
+            // Taken by the swap: no producer reads a node after publishing it,
+            // so this thread owns every node on the list.
+            let node = unsafe { Box::from_raw(p) };
+            p = node.next;
+            out.push(node.msg);
+        }
+        out.reverse();
+        out
+    }
+}
+
+impl Drop for Inbox {
+    fn drop(&mut self) {
+        let head = *self.head.get_mut();
+        if head != Self::closed() {
+            drop(Self::collect(head));
+        }
+    }
+}
+
+/// A live executor: its queue, its thread, and the isolate that owns it.
+///
+/// Shared by the host thread, the Dart host object (one strong count, through
+/// the pointer `frustrate_actor_spawn` returns), the GC backstop (another), and
+/// the [`hosts`] registry while the thread runs.
+pub struct Host {
+    id: u64,
+    /// The isolate that spawned this host. An actor belongs to the isolate
+    /// that built it: a handle is not `SendPort`-able, so it cannot migrate.
+    isolate: u32,
+    inbox: Inbox,
+    thread: Thread,
+    /// Set once, by the first request to stop. Makes stopping idempotent and
+    /// [`host_count`] exact at the moment of the request.
+    stopping: AtomicBool,
+}
+
+impl Host {
+    /// Queue `msg` and wake the host thread, or hand `msg` back if the host
+    /// has stopped.
+    fn post(&self, msg: Msg) -> Result<(), Msg> {
+        self.inbox.push(msg)?;
+        self.thread.unpark();
+        Ok(())
+    }
+
+    /// Ask the host to stop after what is already queued. Idempotent.
+    fn request_stop(&self) {
+        if !self.stopping.swap(true, Ordering::AcqRel) {
+            LIVE.fetch_sub(1, Ordering::Relaxed);
+            // Only the host thread closes the inbox, and only after this Stop,
+            // so this push cannot be refused.
+            let _ = self.post(Msg::Stop);
+        }
+    }
+
+    /// Enqueue one call. See [`submit`].
+    pub fn submit(
+        &self,
+        call_id: u64,
+        job: impl FnOnce() -> Option<crate::codec::FramedWriter> + Send + 'static,
+    ) {
+        // Before the push, not after: the host thread may dequeue the moment
+        // it arrives, and a job that reaches `executor::holds` before the
+        // reservation exists would be dropped as if it had been cancelled.
+        crate::executor::reserve(call_id);
+        // This frame may answer the call itself (a stopped host, below), after
+        // the message holding the call's own share has been dropped.
+        let _answering = crate::idle::Pending::begin();
+        let msg = Msg::Call {
+            call_id,
+            job: Box::new(job),
+            pending: crate::idle::Pending::begin(),
+        };
+        if let Err(msg) = self.post(msg) {
+            drop(msg);
+            refuse(self.id, call_id);
+        }
+    }
 }
 
 thread_local! {
@@ -60,60 +251,38 @@ pub(crate) fn current_host() -> u64 {
     id
 }
 
-/// A live executor, and the isolate that owns it.
-///
-/// `isolate` is learned rather than declared: `frustrate_actor_spawn` takes no
-/// arguments, and giving it one would be an ABI change for a fact the very next
-/// call carries anyway. Every call id is stamped with its isolate
-/// ([`crate::post::ISOLATE_SHIFT`]), and an actor's *constructor* is dispatched
-/// on its own host, so a host is attributed by the time it owns anything worth
-/// reaping. `None` means "spawned, never used" — a window in which there is
-/// also nothing to leak.
-struct Host {
-    tx: Sender<Msg>,
-    isolate: Option<u32>,
-}
+/// Hosts not yet asked to stop. Test support behind [`host_count`].
+static LIVE: AtomicUsize = AtomicUsize::new(0);
 
-/// Both registries in this file are a plain `std::sync::Mutex`, which is the
-/// odd one out and is deliberate. The sibling registries switch to a spin lock
-/// under threaded wasm — `stream.rs` (`SpinLock`), `executor.rs` (`Lock<T>`),
-/// `pool.rs` (`SpinMutex`) — because the browser main thread can take those,
-/// and a *contended* futex park traps there ("Atomics.wait cannot be called in
-/// this context"). These two never face that, for reasons that are enforced
-/// rather than incidental:
+static NEXT_HOST: AtomicU64 = AtomicU64::new(1);
+
+/// Every host whose thread is running, by id: what [`reap_isolate`] searches.
 ///
-/// * **Native** wants a real parking lock: these guard OS threads, and a spin
-///   here would spin for the length of whatever holds it.
-/// * **Web** never contends them. An actor host is a Worker running its *own*
-///   wasm instance (`runtime_web.dart`, `_WebActorHost`), so these statics are
-///   per-instance rather than shared, and that instance is single-threaded —
-///   an actor instance has no pool, which the glue enforces with a throwing
-///   `spawn_worker` import (`executor::ACTOR_INSTANCE`). `spawn_host`'s
-///   `thread::spawn` is not merely unsupported on wasm but unreachable:
-///   `frustrate_actor_spawn` is looked up only by the native runtime
-///   (`runtime_native.dart`).
-/// * `deferred()` is narrower still — `Deferred<T>` is rejected anywhere but an
-///   actor method (FR0038, `codegen/src/check.rs`), so nothing running on the
-///   main threaded-wasm instance registers here at all.
+/// Entered and left by the host thread itself ([`run`]), and read by
+/// `reap_isolate` on the VM thread that delivers isolate-exit notices. No
+/// caller thread takes this lock: a call reaches its host through the pointer
+/// the Dart side holds.
 ///
-/// So: do not "fix" these into spin locks, and do not add a caller that reaches
-/// them from the main instance without revisiting all three points.
-fn hosts() -> &'static Mutex<HashMap<u64, Host>> {
-    static HOSTS: OnceLock<Mutex<HashMap<u64, Host>>> = OnceLock::new();
+/// A plain `std::sync::Mutex`: on wasm this file does not exist, and on native
+/// every thread that takes it may park.
+fn hosts() -> &'static Mutex<HashMap<u64, Arc<Host>>> {
+    static HOSTS: OnceLock<Mutex<HashMap<u64, Arc<Host>>>> = OnceLock::new();
     HOSTS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Outstanding deferred completions by owning host. What `dispose()` and the
-/// reap paths cancel: the calls whose futures are live on the cooperative
-/// executor after their prefixes ran here.
+/// Outstanding deferred completions by owning host: what a stopping host
+/// cancels, the calls whose futures are live on the cooperative executor
+/// after their prefixes ran on it.
 ///
 /// Registered by `deferred::spawn_deferred` (on the host thread, during the
 /// prefix's job) and unregistered by its drop guard when the future is
 /// dropped — completion, cancellation, and a panicking poll all end there.
-/// The unregister is asynchronous to the cancel (the future drops on a later
-/// drain), so a sweep may see ids whose tasks are already claimed;
-/// `executor::cancel` refuses those, which is what makes the sweep idempotent
-/// with the per-call cancels `dispose()` already did.
+/// Swept by the host thread when it stops ([`cancel_deferred_for`]).
+///
+/// A `std::sync::Mutex` for the reason [`hosts`] is one: `Deferred<T>` exists
+/// only on actor members (FR0038), so nothing on a web main instance reaches
+/// it, and natively its takers are the host thread and whichever thread drops
+/// a deferred future.
 fn deferred() -> &'static Mutex<HashMap<u64, HashSet<u64>>> {
     static DEFERRED: OnceLock<Mutex<HashMap<u64, HashSet<u64>>>> = OnceLock::new();
     DEFERRED.get_or_init(|| Mutex::new(HashMap::new()))
@@ -122,16 +291,14 @@ fn deferred() -> &'static Mutex<HashMap<u64, HashSet<u64>>> {
 pub(crate) fn register_deferred(host: u64, call_id: u64) {
     deferred()
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .unwrap_or_else(PoisonError::into_inner)
         .entry(host)
         .or_default()
         .insert(call_id);
 }
 
 pub(crate) fn unregister_deferred(host: u64, call_id: u64) {
-    let mut map = deferred()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut map = deferred().lock().unwrap_or_else(PoisonError::into_inner);
     if let Some(set) = map.get_mut(&host) {
         set.remove(&call_id);
         if set.is_empty() {
@@ -140,35 +307,20 @@ pub(crate) fn unregister_deferred(host: u64, call_id: u64) {
     }
 }
 
-/// Cancel one deferred completion, for the Dart-side `dispose()`.
+/// Cancel every outstanding deferred completion of `host`, when it stops.
 ///
-/// Returns whether the cancel **claimed** the call (`executor::cancel`'s
-/// contract): `true` means its completion will never be delivered and the
-/// caller now owns failing the Dart future; `false` means the call already
-/// answered — or is answering right now, race-free under the executor's
-/// registry lock — and must be left alone. This claim protocol is what makes
-/// the disposed-deferred error exactly-once on native: a cancelled id never
-/// responds, an unclaimed id's response delivers normally.
-pub fn cancel_deferred(host: u64, call_id: u64) -> bool {
-    unregister_deferred(host, call_id);
-    crate::executor::cancel(call_id)
-}
-
-/// Cancel every outstanding deferred completion of `host` — the backstop
-/// sweep for the paths where no Dart-side `dispose()` enumerates them: a
-/// reaped handle, a dead isolate, and (as an idempotent belt) an orderly
-/// shutdown. Nobody is waiting on these calls, so no answer is owed; the
-/// point is dropping the futures and what they captured.
+/// The backstop for the paths where no Dart-side `dispose()` enumerates them:
+/// a reaped handle and a dead isolate. After an orderly `dispose()`, which has
+/// already cancelled each one through `frustrate_call_cancel`, this finds
+/// claimed ids and `executor::cancel` refuses them. Nobody is waiting on these
+/// calls, so no answer is owed; the point is dropping the futures and what
+/// they captured.
 ///
-/// **Runs no user code on this thread**: `executor::cancel` only claims the
-/// registry entry — the future's drop lands on a later drain, inside
-/// `drain_one`'s catch_unwind — so this is safe from `mark_gone`'s
-/// `extern "C"` frame (must not panic, must not block).
+/// Runs on the host thread after its last call, so it also catches a deferred
+/// prefix that was still queued when the stop was requested.
 fn cancel_deferred_for(host: u64) {
     let ids: Vec<u64> = {
-        let mut map = deferred()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut map = deferred().lock().unwrap_or_else(PoisonError::into_inner);
         map.remove(&host)
             .map(|set| set.into_iter().collect())
             .unwrap_or_default()
@@ -178,208 +330,195 @@ fn cancel_deferred_for(host: u64) {
     }
 }
 
-static NEXT_HOST: AtomicU64 = AtomicU64::new(1);
-
-pub fn spawn_host() -> u64 {
-    let id = NEXT_HOST.fetch_add(1, Ordering::Relaxed);
-    let (tx, rx) = channel::<Msg>();
-    hosts().lock().unwrap().insert(
-        id,
-        Host {
-            tx,
-            isolate: None,
-        },
-    );
-    std::thread::Builder::new()
-        .name(format!("frustrate-actor-{id}"))
-        .spawn(move || {
-            // Actor host threads may block on Dart (DartFunction::call).
-            crate::callback::enter_worker_context();
-            // So a deferred prefix dispatched here can name its own host
-            // (`current_host`) without the job carrying the id.
-            CURRENT_HOST.with(|c| c.set(id));
-            while let Ok(msg) = rx.recv() {
-                match msg {
-                    // The job is the generated envelope::run body: panics are
-                    // already converted to envelopes inside. Answering the call
-                    // can still run user code — freeing a reply nobody took
-                    // runs its handles' `Drop` — so both answer paths below
-                    // catch, and this loop never unwinds out of an answer.
-                    // `None` means the job detached its completion (a deferred
-                    // method) — the executor task it spawned owns the answer
-                    // now.
-                    Msg::Call {
-                        call_id,
-                        job,
-                        pending: _pending,
-                    } => {
-                        // A cancel that reached this call while it was queued
-                        // claimed the reservation `submit` made, and owns the
-                        // answer (`executor::holds` — a peek, sound because an
-                        // id never comes back). The job must not run at all:
-                        // its prefix is work the caller cancelled. Dropping it
-                        // here releases the request bytes and everything the
-                        // closure captured.
-                        if !crate::executor::holds(call_id) {
-                            continue;
-                        }
-                        if let Some(reply) = job() {
-                            // The job answered inline — a plain method, or a
-                            // deferred prefix that panicked before it could
-                            // spawn. Post only if the entry is still ours: the
-                            // same check-and-remove every other answer path
-                            // makes (executor.rs, the answer-once gate), which
-                            // is what keeps a cancel landing *during* the job
-                            // from producing a second answer.
-                            if crate::executor::cancel(call_id) {
-                                crate::post::respond(call_id, reply);
-                            } else {
-                                // A cancel owns the answer, so this reply goes
-                                // nowhere. Its encode has already registered
-                                // any handle it returns, and the Dart wrapper
-                                // that would dispose one is never built.
-                                //
-                                // Caught for `post::respond`'s reason, which
-                                // applies verbatim: freeing runs a user `Drop`,
-                                // and a panic escaping here kills this host
-                                // thread and wedges every call still to come.
-                                if let Err(payload) = std::panic::catch_unwind(
-                                    std::panic::AssertUnwindSafe(|| {
-                                        reply.into_parts().1.reclaim();
-                                    }),
-                                ) {
-                                    crate::panic::observed(crate::panic::message(&*payload));
-                                }
-                            }
-                        }
-                    }
-                    Msg::Stop => {
-                        // After an orderly dispose the table is empty; otherwise
-                        // each object drops as a leak, naming its type, and a
-                        // panicking `Drop` is reported without stranding the
-                        // rest (objects.rs).
-                        crate::objects::drain();
-                        break;
-                    }
-                }
-            }
-        })
-        .expect("frustrate: failed to spawn actor host thread");
-    id
+/// Answer `call_id` as refused by a stopped host, unless a cancel owns it.
+///
+/// Takes the call back through the executor's answer-once gate before
+/// posting, so a cancel that got there first still wins.
+fn refuse(host: u64, call_id: u64) {
+    if crate::executor::cancel(call_id) {
+        crate::post::respond(
+            call_id,
+            crate::envelope::run(|| panic!("frustrate: actor host {host} is stopped")),
+        );
+    }
 }
 
-/// Enqueue one call on `host`. A bad host id is a bridge bug (the Dart
-/// handle wrapper prevents use-after-dispose), reported loudly through the
-/// normal completion path rather than UB or silence.
+/// Start an executor owned by `isolate`.
+///
+/// Takes no lock on the calling thread. The host enters the [`hosts`]
+/// registry from its own thread, and then checks whether its isolate has
+/// already died, which closes the window in which an isolate's exit notice
+/// could miss a host it had just spawned.
+pub fn spawn_host(isolate: u32) -> Arc<Host> {
+    let id = NEXT_HOST.fetch_add(1, Ordering::Relaxed);
+    // The thread needs its `Host`, and the `Host` needs the thread's handle
+    // to wake it. So the thread starts first and waits for its `Host` here.
+    let handoff = Arc::new(AtomicPtr::<Host>::new(null_mut()));
+    let theirs = Arc::clone(&handoff);
+    let thread = std::thread::Builder::new()
+        .name(format!("frustrate-actor-{id}"))
+        .spawn(move || {
+            let host = loop {
+                let p = theirs.swap(null_mut(), Ordering::Acquire);
+                if !p.is_null() {
+                    break unsafe { Arc::from_raw(p) };
+                }
+                std::thread::park();
+            };
+            run(host);
+        })
+        .expect("frustrate: failed to spawn actor host thread")
+        .thread()
+        .clone();
+    let host = Arc::new(Host {
+        id,
+        isolate,
+        inbox: Inbox::new(),
+        thread,
+        stopping: AtomicBool::new(false),
+    });
+    LIVE.fetch_add(1, Ordering::Relaxed);
+    handoff.store(Arc::into_raw(Arc::clone(&host)) as *mut Host, Ordering::Release);
+    host.thread.unpark();
+    host
+}
+
+/// The host thread's loop.
+fn run(host: Arc<Host>) {
+    // Actor host threads may block on Dart (DartFunction::call).
+    crate::callback::enter_worker_context();
+    // So a deferred prefix dispatched here can name its own host
+    // (`current_host`) without the job carrying the id.
+    CURRENT_HOST.with(|c| c.set(host.id));
+    hosts()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(host.id, Arc::clone(&host));
+    // After entering the registry, not before: an exit notice either finds
+    // this host there, or was delivered before it entered, and then the
+    // isolate is already marked gone here. Both orders hold because the
+    // registry lock orders this insert against `reap_isolate`'s scan, and
+    // `mark_gone` marks the isolate before it scans.
+    if crate::post::isolate_gone(host.isolate) {
+        host.request_stop();
+    }
+    loop {
+        let batch = host.inbox.take();
+        if batch.is_empty() {
+            // A wake-up that raced this check is not lost: `unpark` before
+            // `park` makes the park return at once.
+            std::thread::park();
+            continue;
+        }
+        let mut batch = batch.into_iter();
+        while let Some(msg) = batch.next() {
+            match msg {
+                Msg::Call { call_id, job, pending: _pending } => serve(call_id, job),
+                Msg::Stop => {
+                    stop(&host, batch);
+                    return;
+                }
+            }
+        }
+    }
+}
+
+/// Run one call and answer it.
+fn serve(call_id: u64, job: Job) {
+    // A cancel that reached this call while it was queued claimed the
+    // reservation `submit` made, and owns the answer (`executor::holds` — a
+    // peek, sound because an id never comes back). The job must not run at
+    // all: its prefix is work the caller cancelled. Dropping it here releases
+    // the request bytes and everything the closure captured.
+    if !crate::executor::holds(call_id) {
+        return;
+    }
+    // The job is the generated envelope::run body: panics are already
+    // converted to envelopes inside. Answering the call can still run user
+    // code — freeing a reply nobody took runs its handles' `Drop` — so the
+    // reclaim below is caught, and this loop never unwinds out of an answer.
+    // `None` means the job detached its completion (a deferred method) — the
+    // executor task it spawned owns the answer now.
+    let Some(reply) = job() else { return };
+    // The job answered inline — a plain method, or a deferred prefix that
+    // panicked before it could spawn. Post only if the entry is still ours:
+    // the same check-and-remove every other answer path makes (executor.rs,
+    // the answer-once gate), which is what keeps a cancel landing *during* the
+    // job from producing a second answer.
+    if crate::executor::cancel(call_id) {
+        crate::post::respond(call_id, reply);
+    } else {
+        // A cancel owns the answer, so this reply goes nowhere. Its encode has
+        // already registered any handle it returns, and the Dart wrapper that
+        // would dispose one is never built.
+        //
+        // Caught for `post::respond`'s reason, which applies verbatim: freeing
+        // runs a user `Drop`, and a panic escaping here kills this host thread
+        // and wedges every call still to come.
+        if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            reply.into_parts().1.reclaim();
+        })) {
+            crate::panic::observed(crate::panic::message(&*payload));
+        }
+    }
+}
+
+/// The host's last act: refuse what came after the stop, release its deferred
+/// completions, leave the registry, and drop every object still in its table.
+fn stop(host: &Host, behind: impl Iterator<Item = Msg>) {
+    // Closing first means nothing posted from here on, by anyone, can land
+    // in a queue nobody will drain: it is handed back to its sender instead.
+    for msg in behind.chain(host.inbox.close()) {
+        if let Msg::Call { call_id, .. } = msg {
+            refuse(host.id, call_id);
+        }
+    }
+    // Claim-only on this thread: the futures drop on later executor drains.
+    cancel_deferred_for(host.id);
+    hosts()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove(&host.id);
+    // Last, because it runs user `Drop`s. After an orderly dispose the table
+    // is empty; otherwise each object drops as a leak, naming its type, and a
+    // panicking `Drop` is reported without stranding the rest.
+    crate::objects::drain();
+}
+
+/// Enqueue one call on the host behind `host`.
+///
+/// Takes no lock: the host is the pointer the Dart side holds, and the queue
+/// is lock-free. A stopped host answers the call with a loud panic envelope
+/// rather than dropping it.
 ///
 /// **Reserves the call on the cooperative executor first**, which is what
 /// makes a queued call cancellable at all: a `Deferred` method's completion
 /// only becomes a task when its prefix runs, so between here and there the
 /// answer-once gate would otherwise hold nothing and a `FrustrateCancelToken`
-/// would claim nothing. The reservation is resolved by whoever answers — the host
-/// loop above, the prefix's hand-off (`executor::spawn_reserved`), or a
-/// cancel. The one path that resolves none of those is a host thread that dies
-/// with messages still behind it, which the `Stop` that ends every host rides
-/// behind, so every ordinary teardown still dequeues them.
-pub fn submit(
-    host: u64,
+/// would claim nothing. The reservation is resolved by whoever answers — the
+/// host loop, the prefix's hand-off (`executor::spawn_reserved`), a refusal by
+/// a stopped host, or a cancel. The one path that resolves none of those is a
+/// host thread that dies with messages still behind it, and the host loop
+/// unwinds out of nothing but a job, which catches its own panics.
+///
+/// # Safety
+/// `host` must be a pointer `frustrate_actor_spawn` returned whose count the
+/// caller still holds.
+pub unsafe fn submit(
+    host: *const c_void,
     call_id: u64,
     job: impl FnOnce() -> Option<crate::codec::FramedWriter> + Send + 'static,
 ) {
-    // Before the send, not after: the host thread may dequeue the moment it
-    // arrives, and a job that reaches `executor::holds` before the reservation
-    // exists would be dropped as if it had been cancelled.
-    crate::executor::reserve(call_id);
-    // This frame may answer the call itself (a stopped host, below), after the
-    // message holding the call's own share has been dropped.
-    let _answering = crate::idle::Pending::begin();
-    let tx = {
-        let mut map = hosts().lock().unwrap();
-        match map.get_mut(&host) {
-            Some(h) => {
-                // First call attributes the host. Later calls cannot change it:
-                // one actor belongs to the isolate that built it, and a handle
-                // does not migrate between isolates (it is not `SendPort`-able).
-                h.isolate
-                    .get_or_insert((call_id >> crate::post::ISOLATE_SHIFT) as u32);
-                Some(h.tx.clone())
-            }
-            None => None,
-        }
-    };
-    let dead = match tx {
-        Some(tx) => tx
-            .send(Msg::Call {
-                call_id,
-                job: Box::new(job),
-                pending: crate::idle::Pending::begin(),
-            })
-            .is_err(),
-        None => true,
-    };
-    if dead {
-        // Nothing will ever dequeue this call, so this frame owes the answer —
-        // and takes the reservation back through the same gate before posting
-        // one, so a cancel that beat it here still wins.
-        if crate::executor::cancel(call_id) {
-            crate::post::respond(
-                call_id,
-                crate::envelope::run(|| panic!("frustrate: actor host {host} is stopped")),
-            );
-        }
-    }
+    unsafe { &*(host as *const Host) }.submit(call_id, job)
 }
 
-/// Number of live hosts. Test support: executor-leak pins measure this
-/// around spawn/dispose (a failed spawn must strand nothing).
+/// Number of hosts not yet asked to stop. Test support: executor-leak pins
+/// measure this around spawn/dispose (a failed spawn must strand nothing).
 pub fn host_count() -> usize {
-    hosts().lock().unwrap().len()
+    LIVE.load(Ordering::Relaxed)
 }
 
-/// Stop the host after currently queued calls drain (FIFO), dropping
-/// whatever is still in its object table. Idempotent.
-///
-/// Also sweeps the host's deferred registry — a belt: an orderly `dispose()`
-/// has already cancelled each outstanding deferred through
-/// [`cancel_deferred`] (and failed those futures on the Dart side), so the
-/// sweep finds already-claimed ids and `executor::cancel` refuses them. It
-/// exists for a `shutdown` that is not dispose-shaped.
-pub fn shutdown(host: u64) {
-    if let Some(Host { tx, .. }) = hosts().lock().unwrap().remove(&host) {
-        // The host thread exits at the Stop marker; if it already died the
-        // send error is irrelevant.
-        let _ = tx.send(Msg::Stop);
-    }
-    cancel_deferred_for(host);
-}
-
-/// Drop the objects and release the executor, for a handle nobody disposed.
-/// Idempotent, and a no-op for an id that was already reaped or shut down.
-///
-/// **Called from a `NativeFinalizer` callback**, which runs on an arbitrary
-/// thread with no current isolate and may not re-enter the VM: a map lock and
-/// an mpsc send, and the drop itself happens later on the host thread.
-///
-/// **A stale id cannot reap a live host.** `NEXT_HOST` only ever increments, so
-/// ids are never reused and a token held by a handle from before a hot restart
-/// can only miss. That is what makes it safe for a finalizer to fire long after
-/// the id it captured stopped meaning anything.
-///
-/// Removing the entry is not bookkeeping — it is the linearization point this
-/// shares with [`shutdown`], and it is also what makes [`host_count`] fall, so
-/// a leak pin can see the difference.
-pub fn reap(host: u64) {
-    if let Some(Host { tx, .. }) = hosts().lock().unwrap().remove(&host) {
-        let _ = tx.send(Msg::Stop);
-    }
-    // Nobody disposed this handle, so nothing enumerated its deferred
-    // completions either — drop their futures (and everything they captured).
-    // Claim-only on this thread; see `cancel_deferred_for` for why that makes
-    // it legal from a finalizer.
-    cancel_deferred_for(host);
-}
-
-/// Reap every executor owned by a dead isolate.
+/// Stop every executor owned by a dead isolate.
 ///
 /// **This is the hot-restart path.** Flutter's hot restart tears down
 /// the isolate without running `State.dispose` or `AppLifecycleState.detached`,
@@ -392,78 +531,92 @@ pub fn reap(host: u64) {
 /// just died, so it will never run. What does survive is the exit-port notice
 /// ([`crate::post::handle_exit`]), which is where this is called from.
 ///
-/// Each host is sent `Stop`, exactly as a finalizer would — the object drops on
-/// its own executor, running the user's `Drop`, and the thread exits. Hosts of
-/// *other* isolates are untouched, which is why the attribution in [`Host`]
-/// has to exist at all rather than this reaping everything.
+/// Each host is stopped exactly as a finalizer would stop it: its objects drop
+/// on its own executor, running the user's `Drop`, and the thread exits. Hosts
+/// of *other* isolates are untouched, which is why a host records its isolate.
+/// The two strong counts the dead isolate's Dart objects held are never
+/// released, so each such host leaks its small `Host` struct; its thread,
+/// queue contents and objects are all released.
 ///
 /// **Must not block and must not panic**: it runs from `mark_gone`, on a VM
-/// thread inside an `extern "C"` frame. One short lock, then sends; the drops
-/// happen later, on the host threads.
+/// thread inside an `extern "C"` frame. One short lock, poison-tolerant, then
+/// lock-free posts.
 pub fn reap_isolate(isolate: u32) {
-    let (ids, doomed): (Vec<u64>, Vec<Sender<Msg>>) = {
-        let mut map = hosts()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let ids: Vec<u64> = map
-            .iter()
-            .filter(|(_, h)| h.isolate == Some(isolate))
-            .map(|(id, _)| *id)
-            .collect();
-        let doomed = ids.iter().filter_map(|id| map.remove(id)).map(|h| h.tx).collect();
-        (ids, doomed)
-    };
-    for id in &ids {
-        // Same reasoning as `reap`: the isolate's finalizers died with it, so
-        // this is the only path left that can release its outstanding
-        // deferred futures. Claim-only on this thread (no user code, no
-        // blocking — the drops land on pool drains), which is what keeps
-        // `mark_gone`'s must-not-panic contract.
-        cancel_deferred_for(*id);
-    }
-    for tx in doomed {
-        let _ = tx.send(Msg::Stop);
+    let doomed: Vec<Arc<Host>> = hosts()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .values()
+        .filter(|h| h.isolate == isolate)
+        .cloned()
+        .collect();
+    for host in doomed {
+        host.request_stop();
     }
 }
 
+/// Start an executor for `isolate` and return the Dart side's counted pointer
+/// to it. Release it with [`frustrate_actor_release`].
 #[unsafe(no_mangle)]
-pub extern "C" fn frustrate_actor_spawn() -> u64 {
-    spawn_host()
+pub extern "C" fn frustrate_actor_spawn(isolate: u32) -> *const c_void {
+    Arc::into_raw(spawn_host(isolate)) as *const c_void
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn frustrate_actor_shutdown(host: u64) {
-    shutdown(host);
-}
-
-/// Cancel one deferred completion. Called by the Dart host's `dispose()`,
-/// once per outstanding deferred call.
+/// Stop the host after currently queued calls drain (FIFO). Idempotent.
 ///
-/// Returns 1 if the cancel claimed the call (Dart now owns failing that
-/// future with the disposed-deferred `StateError`), 0 if the call already
-/// answered (its response is delivered or in flight — Dart must leave it to
-/// complete normally).
-#[unsafe(no_mangle)]
-pub extern "C" fn frustrate_actor_cancel_deferred(host: u64, call_id: u64) -> u8 {
-    cancel_deferred(host, call_id) as u8
-}
-
 /// # Safety
-/// Always safe to call: `token` is an opaque host id, never dereferenced.
-///
-/// Takes a pointer rather than a `u64` so the symbol is directly usable as a
-/// Dart `NativeFinalizer` callback, exactly as the `frustrate_finalize_*`
-/// exports are. Host ids start at 1, so a real token is never null.
+/// `host` must be a counted pointer from [`frustrate_actor_spawn`] or
+/// [`frustrate_actor_retain`] that the caller has not released.
 #[unsafe(no_mangle)]
-pub extern "C" fn frustrate_actor_reap(token: *mut core::ffi::c_void) {
-    reap(token as u64);
+pub unsafe extern "C" fn frustrate_actor_shutdown(host: *const c_void) {
+    unsafe { &*(host as *const Host) }.request_stop();
+}
+
+/// Add a strong count to `host` and return it, as a token for the GC
+/// backstop ([`frustrate_actor_reap`]), which releases it.
+///
+/// # Safety
+/// As [`frustrate_actor_shutdown`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn frustrate_actor_retain(host: *const c_void) -> *const c_void {
+    unsafe { Arc::increment_strong_count(host as *const Host) };
+    host
+}
+
+/// Release one strong count on a host.
+///
+/// Takes a pointer so the symbol is directly usable as a Dart
+/// `NativeFinalizer` callback: it is the finalizer of the Dart host object,
+/// and the release of the backstop's token when `dispose()` detaches it. Only
+/// frees memory; it neither stops the host nor runs user code.
+///
+/// # Safety
+/// `token` must be a counted pointer from [`frustrate_actor_spawn`] or
+/// [`frustrate_actor_retain`], released exactly once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn frustrate_actor_release(token: *mut c_void) {
+    drop(unsafe { Arc::from_raw(token as *const Host) });
+}
+
+/// Stop the host and release the backstop's count, for an actor handle
+/// collected without `dispose()`.
+///
+/// **Called from a `NativeFinalizer` callback**, which runs on an arbitrary
+/// thread with no current isolate and may not re-enter the VM: a flag, a
+/// lock-free push and an unpark. The objects drop later, on the host thread.
+///
+/// # Safety
+/// As [`frustrate_actor_release`], for a token from [`frustrate_actor_retain`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn frustrate_actor_reap(token: *mut c_void) {
+    let host = unsafe { Arc::from_raw(token as *const Host) };
+    host.request_stop();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::codec::FramedWriter;
-    use std::sync::atomic::AtomicUsize;
+    use std::sync::mpsc::channel;
 
     // One test fn, serialized with other post-using tests via
     // post::test_lock (the post callback is process-global).
@@ -479,15 +632,15 @@ mod tests {
         crate::post::init(record);
 
         static ORDER: AtomicUsize = AtomicUsize::new(0);
-        let host = spawn_host();
+        let host = spawn_host(0);
         for i in 0..10u64 {
-            submit(host, i, move || {
+            host.submit(i, move || {
                 let seq = ORDER.fetch_add(1, Ordering::SeqCst) as u64;
                 assert_eq!(seq, i, "actor host must be FIFO");
                 Some(FramedWriter::from_bytes(vec![0, i as u8]))
             });
         }
-        shutdown(host);
+        host.request_stop();
         while SEEN.lock().unwrap().len() < 10 {
             std::thread::yield_now();
         }
@@ -495,7 +648,7 @@ mod tests {
 
         // A call to a stopped/unknown host responds with a loud panic
         // envelope, never silence.
-        submit(host, 11, || Some(FramedWriter::from_bytes(vec![])));
+        host.submit(11, || Some(FramedWriter::from_bytes(vec![])));
         while SEEN.lock().unwrap().len() < 11 {
             std::thread::yield_now();
         }
@@ -559,6 +712,35 @@ mod tests {
         );
     }
 
+    /// Wait until `host`'s thread has entered the registry, which it does
+    /// from its own thread after spawn returns.
+    fn await_registered(host: &Arc<Host>) {
+        await_true(
+            || hosts().lock().unwrap().contains_key(&host.id),
+            "the host thread never entered the registry",
+        );
+    }
+
+    /// Spin until `cond` holds, or fail with `what`. Deadline-bounded for
+    /// [`await_count`]'s reason.
+    fn await_true(cond: impl Fn() -> bool, what: &str) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            if cond() {
+                return;
+            }
+            std::thread::yield_now();
+        }
+        panic!("{what}");
+    }
+
+    /// Stop `host` the way the GC backstop does: through a token of its own,
+    /// released by the reap.
+    fn reap_via_backstop(host: &Arc<Host>) {
+        let token = unsafe { frustrate_actor_retain(Arc::as_ptr(host) as *const c_void) };
+        unsafe { frustrate_actor_reap(token as *mut c_void) };
+    }
+
     /// Increments a counter when dropped, as an actor object would be.
     struct Counted(&'static AtomicUsize);
     impl Drop for Counted {
@@ -586,14 +768,14 @@ mod tests {
                 panic!("a user Drop exploded during teardown");
             }
         }
-        let host = spawn_host();
+        let host = spawn_host(0);
         let before = host_count();
 
         // Minted on the host thread, like a generated constructor body. The
         // grenade is newer, so it drops first: the panic must not strand what
         // drains after it.
         let (tx, rx) = channel::<()>();
-        submit(host, 0, move || {
+        host.submit(0, move || {
             crate::handle::actor_new(Counted(&DROPS), "Counted");
             crate::handle::actor_new(Grenade, "Grenade");
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
@@ -602,11 +784,11 @@ mod tests {
         });
         rx.recv().unwrap();
 
-        reap(host);
+        reap_via_backstop(&host);
+        assert_eq!(host_count(), before - 1, "a reap must count at once");
         await_count(&EXITS, 1, "the host thread never exited");
         crate::panic::unregister();
 
-        assert_eq!(host_count(), before - 1, "reap must free the map entry");
         assert_eq!(DROPS.load(Ordering::SeqCst), 1, "the drain stopped at the panic");
         assert_eq!(
             reports.lock().unwrap().as_slice(),
@@ -623,11 +805,11 @@ mod tests {
         drain_completions();
         static DROPS: AtomicUsize = AtomicUsize::new(0);
         static EXITS: AtomicUsize = AtomicUsize::new(0);
-        let host = spawn_host();
+        let host = spawn_host(0);
         let before = host_count();
 
         let (tx, rx) = channel::<()>();
-        submit(host, 0, move || {
+        host.submit(0, move || {
             crate::handle::actor_new(Counted(&DROPS), "Counted");
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
             tx.send(()).unwrap();
@@ -636,16 +818,17 @@ mod tests {
         rx.recv().unwrap();
         assert_eq!(DROPS.load(Ordering::SeqCst), 0, "minting must not drop");
 
-        reap(host);
+        reap_via_backstop(&host);
         await_count(&DROPS, 1, "the reap never dropped the object");
         await_count(&EXITS, 1, "the host thread never exited");
-        assert_eq!(host_count(), before - 1, "reap must free the map entry");
+        assert_eq!(host_count(), before - 1);
 
         // Idempotent from both directions: a second reap and a shutdown of an
         // already-reaped host must find nothing and drop nothing.
-        reap(host);
-        shutdown(host);
+        reap_via_backstop(&host);
+        unsafe { frustrate_actor_shutdown(Arc::as_ptr(&host) as *const c_void) };
         assert_eq!(DROPS.load(Ordering::SeqCst), 1, "teardown must not repeat");
+        assert_eq!(host_count(), before - 1, "a host is uncounted once");
     }
 
     /// A dead isolate's executors are released; another isolate's are not.
@@ -656,27 +839,12 @@ mod tests {
     #[test]
     fn a_dead_isolate_takes_its_own_executors_and_only_its_own() {
         let _serial = crate::post::test_lock();
-        let mine = spawn_host();
-        let theirs = spawn_host();
+        let mine = spawn_host(11);
+        let theirs = spawn_host(22);
         let before = host_count();
-
-        // Attribution comes from the first call's id, so submit one to each.
-        // `submit` responds through `post`, which is what `test_lock` serializes.
-        let call = |iso: u64, host: u64| {
-            submit(host, iso << crate::post::ISOLATE_SHIFT | 7, || {
-                Some(crate::envelope::run(|| crate::envelope::Outcome::Error("x".into())))
-            });
-        };
-        call(11, mine);
-        call(22, theirs);
-        // Let each host's thread pick its message up, so the attribution has
-        // certainly been recorded before the reap reads it.
-        for _ in 0..200 {
-            if hosts().lock().unwrap().values().all(|h| h.isolate.is_some()) {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
+        // Each host enters the registry from its own thread.
+        await_registered(&mine);
+        await_registered(&theirs);
 
         reap_isolate(11);
         assert_eq!(
@@ -685,7 +853,7 @@ mod tests {
             "isolate 11's executor was not released"
         );
         assert!(
-            hosts().lock().unwrap().contains_key(&theirs),
+            !theirs.stopping.load(Ordering::SeqCst),
             "isolate 22's executor must survive — reaping every host on any \
              isolate death would break a multi-isolate app"
         );
@@ -693,7 +861,7 @@ mod tests {
         // Idempotent: a second notice for the same isolate finds nothing.
         reap_isolate(11);
         assert_eq!(host_count(), before - 1);
-        reap(theirs);
+        theirs.request_stop();
     }
 
     /// The wire, not just the mechanism: an isolate-death notice must reach
@@ -702,22 +870,9 @@ mod tests {
     #[test]
     fn an_isolate_death_notice_releases_that_isolate_s_executors() {
         let _serial = crate::post::test_lock();
-        let host = spawn_host();
+        let host = spawn_host(31);
         let before = host_count();
-        submit(host, 31u64 << crate::post::ISOLATE_SHIFT | 1, || {
-            Some(crate::envelope::run(|| crate::envelope::Outcome::Error("x".into())))
-        });
-        for _ in 0..200 {
-            if hosts()
-                .lock()
-                .unwrap()
-                .get(&host)
-                .is_none_or(|h| h.isolate.is_some())
-            {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
+        await_registered(&host);
 
         crate::post::mark_gone_for_test(31);
         assert_eq!(
@@ -727,51 +882,50 @@ mod tests {
         );
     }
 
-    /// A host that was spawned and never called has no isolate, so no isolate
-    /// death claims it. That window is real but empty: nothing has been
-    /// constructed on it yet, so there is nothing to leak.
-    // Not under `--cfg frustrate_manual_scheduler`. This asserts *when* a
-    // future is dropped, and that timing belongs to a self-draining Scheduler:
-    // the drop lands on the next executor drain, which under manual scheduling
-    // is whenever the host next asks and never on its own. The guarantee is
-    // unchanged there, only its schedule is, and the assertions here are
-    // written against the pool's.
-    #[cfg(not(frustrate_manual_scheduler))]
+    /// A host spawned for an isolate that has already died stops itself, so
+    /// an exit notice that raced the spawn cannot strand it.
     #[test]
-    fn an_unattributed_host_is_not_reaped_by_anyone() {
+    fn a_host_spawned_for_a_dead_isolate_stops_itself() {
         let _serial = crate::post::test_lock();
-        let host = spawn_host();
+        crate::post::mark_gone_for_test(41);
         let before = host_count();
-        reap_isolate(0);
-        reap_isolate(1);
-        assert_eq!(host_count(), before, "an unused host was claimed");
-        reap(host);
+        let host = spawn_host(41);
+        await_true(
+            || host.stopping.load(Ordering::SeqCst),
+            "a host of a dead isolate kept running",
+        );
+        assert_eq!(host_count(), before, "it counted itself out");
+        await_true(
+            || !hosts().lock().unwrap().contains_key(&host.id),
+            "the stopped host never left the registry",
+        );
     }
 
     /// An orderly dispose drops the object through the dispatched drop, and
-    /// the stop behind it finds an empty table: one drop, not two.
+    /// the stop behind it finds an empty table: one drop, not two. The thread
+    /// exits even though the test still holds the host.
     #[test]
     fn a_disposed_object_is_not_dropped_again_by_the_stop() {
         let _serial = crate::post::test_lock();
         drain_completions();
         static DROPS: AtomicUsize = AtomicUsize::new(0);
         static EXITS: AtomicUsize = AtomicUsize::new(0);
-        let host = spawn_host();
+        let host = spawn_host(0);
         let before = host_count();
 
         let (tx, rx) = channel::<u64>();
-        submit(host, 0, move || {
+        host.submit(0, move || {
             tx.send(crate::handle::actor_new(Counted(&DROPS), "Counted")).unwrap();
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
             Some(FramedWriter::from_bytes(vec![]))
         });
         let slot = rx.recv().unwrap();
         // What the generated dispatched drop does.
-        submit(host, 1, move || {
+        host.submit(1, move || {
             crate::handle::actor_drop::<Counted>(slot);
             Some(FramedWriter::from_bytes(vec![]))
         });
-        shutdown(host);
+        host.request_stop();
         await_count(&EXITS, 1, "a stop must end the thread");
         assert_eq!(DROPS.load(Ordering::SeqCst), 1, "dropped twice, or never");
         assert_eq!(host_count(), before - 1);
@@ -827,7 +981,8 @@ mod tests {
         let _serial = crate::post::test_lock();
         let seen = recording_posts();
         static PARKED_DROPS: AtomicUsize = AtomicUsize::new(0);
-        let host = spawn_host();
+        PARKED_DROPS.store(0, Ordering::SeqCst);
+        let host = spawn_host(0);
 
         // Two deferred calls dispatched on the host thread, exactly as the
         // generated prefix glue does: job spawns the body and returns None.
@@ -836,12 +991,12 @@ mod tests {
         // one `submit` made — a second body spawned under a *borrowed* id
         // would be refused (and would be a bridge bug in real glue: one call,
         // one completion).
-        submit(host, 101, move || {
+        host.submit(101, move || {
             crate::deferred::spawn_deferred(101, ParkedBody(Sentinel(&PARKED_DROPS)));
             None
         });
         let (tx, rx) = channel::<()>();
-        submit(host, 102, move || {
+        host.submit(102, move || {
             crate::deferred::spawn_deferred(102, async {
                 crate::envelope::Outcome::Error("done".into())
             });
@@ -861,22 +1016,22 @@ mod tests {
         }
         assert!(seen.lock().unwrap().contains(&102), "the ready body answers");
         assert!(
-            !cancel_deferred(host, 102),
+            !crate::executor::cancel(102),
             "an answered call must refuse the claim — dispose() would \
              otherwise fail a future whose real completion is delivered"
         );
 
         // 101 is parked; the cancel claims it, the future is dropped on a
         // drain, and no completion for it ever arrives.
-        assert!(cancel_deferred(host, 101), "a live deferred is claimable");
+        assert!(crate::executor::cancel(101), "a live deferred is claimable");
         await_count(&PARKED_DROPS, 1, "the cancelled future was never dropped");
         assert!(
             !seen.lock().unwrap().contains(&101),
             "a claimed cancel owns the answer: the executor must not respond \
              for call 101"
         );
-        assert!(!cancel_deferred(host, 101), "a claim is single-shot");
-        shutdown(host);
+        assert!(!crate::executor::cancel(101), "a claim is single-shot");
+        host.request_stop();
     }
 
     /// A reaped host takes its outstanding deferred futures with it — the
@@ -891,17 +1046,17 @@ mod tests {
         let _serial = crate::post::test_lock();
         let seen = recording_posts();
         static REAPED_DROPS: AtomicUsize = AtomicUsize::new(0);
-        let host = spawn_host();
+        let host = spawn_host(0);
 
         let (tx, rx) = channel::<()>();
-        submit(host, 201, move || {
+        host.submit(201, move || {
             crate::deferred::spawn_deferred(201, ParkedBody(Sentinel(&REAPED_DROPS)));
             tx.send(()).unwrap();
             None
         });
         rx.recv().unwrap();
 
-        reap(host);
+        reap_via_backstop(&host);
         await_count(
             &REAPED_DROPS,
             1,
@@ -911,9 +1066,9 @@ mod tests {
             !seen.lock().unwrap().contains(&201),
             "no answer is owed to a reaped handle's call"
         );
-        assert!(
-            deferred().lock().unwrap().get(&host).is_none(),
-            "the host's registry entry must not outlive the reap"
+        await_true(
+            || deferred().lock().unwrap().get(&host.id).is_none(),
+            "the host's registry entry must not outlive the reap",
         );
     }
 
@@ -943,21 +1098,21 @@ mod tests {
         static RAN: std::sync::atomic::AtomicBool =
             std::sync::atomic::AtomicBool::new(false);
         RAN.store(false, Ordering::SeqCst);
-        let host = spawn_host();
+        let host = spawn_host(0);
 
         // The fence is the FIFO, not a clock: 601 holds the host thread until
         // this test lets go, so 602 and 603 are certainly still queued below.
         let (go_tx, go_rx) = channel::<()>();
-        submit(host, 601, move || {
+        host.submit(601, move || {
             go_rx.recv().unwrap();
             Some(FramedWriter::from_bytes(vec![0]))
         });
-        submit(host, 602, move || {
+        host.submit(602, move || {
             RAN.store(true, Ordering::SeqCst);
             Some(FramedWriter::from_bytes(vec![0]))
         });
         let fence = Sentinel(&QUEUED_DROPS);
-        submit(host, 603, move || {
+        host.submit(603, move || {
             // Captured only to be dropped with this job; the sentinel proves
             // the *claimed* job's captures are released, and this one keeps
             // the control's shape identical to it.
@@ -1000,7 +1155,7 @@ mod tests {
              call 602"
         );
         drop(seen);
-        shutdown(host);
+        host.request_stop();
     }
 
     /// A reply the host loop cannot post gives back the handles it minted.
@@ -1020,10 +1175,10 @@ mod tests {
         }
         RECLAIMED.lock().unwrap().clear();
 
-        let host = spawn_host();
+        let host = spawn_host(0);
         let (started_tx, started_rx) = channel::<()>();
         let (go_tx, go_rx) = channel::<()>();
-        submit(host, 701, move || {
+        host.submit(701, move || {
             started_tx.send(()).unwrap();
             go_rx.recv().unwrap();
             let mut w = FramedWriter::status(crate::envelope::STATUS_OK);
@@ -1039,7 +1194,7 @@ mod tests {
 
         // FIFO-after 701, so its answer proves the loop has already passed the
         // claimed one. Same fence the queued-cancel test uses.
-        submit(host, 702, || Some(FramedWriter::from_bytes(vec![0])));
+        host.submit(702, || Some(FramedWriter::from_bytes(vec![0])));
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while std::time::Instant::now() < deadline {
             if seen.lock().unwrap().contains(&702) {
@@ -1056,7 +1211,7 @@ mod tests {
             "and the reply the loop could not post freed what it had minted"
         );
         drop(posted);
-        shutdown(host);
+        host.request_stop();
     }
 
     /// The hand-off from host to executor is atomic: a cancel that lands after
@@ -1075,7 +1230,7 @@ mod tests {
         let seen = recording_posts();
         static REFUSED_DROPS: AtomicUsize = AtomicUsize::new(0);
         static POLLS: AtomicUsize = AtomicUsize::new(0);
-        let host = spawn_host();
+        let host = spawn_host(0);
 
         /// Records its polls, and its drop. `ParkedBody` cannot say the first
         /// thing, and a refused hand-off has to be told from a body that
@@ -1094,7 +1249,7 @@ mod tests {
 
         let (started_tx, started_rx) = channel::<()>();
         let (go_tx, go_rx) = channel::<()>();
-        submit(host, 701, move || {
+        host.submit(701, move || {
             // The prefix is running now — and waits here, so the cancel below
             // lands strictly between dequeue and hand-off.
             started_tx.send(()).unwrap();
@@ -1120,10 +1275,126 @@ mod tests {
             !seen.lock().unwrap().contains(&701),
             "the canceller owns the answer, so nothing may respond for 701"
         );
-        assert!(
-            deferred().lock().unwrap().get(&host).is_none(),
-            "the deferred registration must be released with the refused body"
+        await_true(
+            || deferred().lock().unwrap().get(&host.id).is_none(),
+            "the deferred registration must be released with the refused body",
         );
-        shutdown(host);
+        host.request_stop();
+    }
+
+    // ------------------------------------------------------------- routing --
+
+    /// A call reaches its host without taking either registry lock: with both
+    /// held by this thread, a call still runs and answers. A `submit` that
+    /// took one would deadlock here, and the deadline turns that into a
+    /// failure.
+    #[test]
+    fn a_call_takes_no_registry_lock() {
+        let _serial = crate::post::test_lock();
+        let seen = recording_posts();
+        let host = spawn_host(0);
+        await_registered(&host);
+        {
+            let _hosts = hosts().lock().unwrap();
+            let _deferred = deferred().lock().unwrap();
+            unsafe {
+                submit(Arc::as_ptr(&host) as *const c_void, 801, || {
+                    Some(FramedWriter::from_bytes(vec![0]))
+                })
+            };
+            await_true(|| seen.lock().unwrap().contains(&801), "the call never answered");
+        }
+        host.request_stop();
+    }
+
+    /// The inbox keeps each producer's order, loses nothing under concurrent
+    /// producers, and refuses every push after close, handing it back.
+    ///
+    /// Run it under Miri too (`cargo miri test -p frustrate --lib inbox`): the
+    /// stack is raw pointers moved between threads.
+    #[test]
+    fn inbox_is_fifo_per_producer_and_refuses_after_close() {
+        const PRODUCERS: u64 = 4;
+        const EACH: u64 = if cfg!(miri) { 20 } else { 2000 };
+        fn call(id: u64) -> Msg {
+            Msg::Call {
+                call_id: id,
+                job: Box::new(|| None),
+                pending: crate::idle::Pending::begin(),
+            }
+        }
+        let inbox = Arc::new(Inbox::new());
+        let producers: Vec<_> = (0..PRODUCERS)
+            .map(|p| {
+                let inbox = Arc::clone(&inbox);
+                std::thread::spawn(move || {
+                    for i in 0..EACH {
+                        assert!(inbox.push(call(p << 32 | i)).is_ok());
+                    }
+                })
+            })
+            .collect();
+        let mut got: Vec<u64> = Vec::new();
+        while got.len() < (PRODUCERS * EACH) as usize {
+            for m in inbox.take() {
+                match m {
+                    Msg::Call { call_id, .. } => got.push(call_id),
+                    Msg::Stop => unreachable!(),
+                }
+            }
+            std::thread::yield_now();
+        }
+        for p in producers {
+            p.join().unwrap();
+        }
+        for p in 0..PRODUCERS {
+            let mine: Vec<u64> = got.iter().copied().filter(|id| id >> 32 == p).collect();
+            assert_eq!(mine, (0..EACH).map(|i| p << 32 | i).collect::<Vec<_>>());
+        }
+
+        assert!(inbox.push(call(7)).is_ok());
+        let closed = inbox.close();
+        assert_eq!(closed.len(), 1, "close returns what was still queued");
+        match inbox.push(call(8)) {
+            Err(Msg::Call { call_id: 8, .. }) => {}
+            _ => panic!("a push after close must be handed back"),
+        }
+        assert!(inbox.close().is_empty(), "a second close finds nothing");
+        // An open inbox frees what it still holds when dropped.
+        let open = Inbox::new();
+        assert!(open.push(call(9)).is_ok());
+        drop(open);
+    }
+
+    /// A call queued behind the stop is answered as refused, never dropped
+    /// silently, and so is a call submitted after the thread has gone.
+    #[test]
+    fn calls_behind_the_stop_are_refused_loudly() {
+        let _serial = crate::post::test_lock();
+        let seen = recording_posts();
+        let host = spawn_host(0);
+        let (go_tx, go_rx) = channel::<()>();
+        host.submit(901, move || {
+            go_rx.recv().unwrap();
+            Some(FramedWriter::from_bytes(vec![0]))
+        });
+        host.request_stop();
+        // Pushed after the Stop, so it is behind it in the queue.
+        host.submit(902, || Some(FramedWriter::from_bytes(vec![0])));
+        go_tx.send(()).unwrap();
+        await_true(
+            || {
+                let s = seen.lock().unwrap();
+                s.contains(&901) && s.contains(&902)
+            },
+            "a call behind the stop was never answered",
+        );
+        await_true(
+            || !hosts().lock().unwrap().contains_key(&host.id),
+            "the stopped host never left the registry",
+        );
+        // The inbox is closed now, so this one is refused on this thread.
+        host.submit(903, || Some(FramedWriter::from_bytes(vec![0])));
+        assert!(seen.lock().unwrap().contains(&903));
     }
 }

@@ -64,20 +64,26 @@ typedef _ResidentReclaimableC = Uint8 Function(Uint64);
 typedef _ResidentReclaimableDart = int Function(int);
 typedef _ResidentLeakedC = Uint64 Function();
 typedef _ResidentLeakedDart = int Function();
-typedef _ActorSpawnC = Uint64 Function();
-typedef _ActorSpawnDart = int Function();
+typedef _ActorSpawnC = Pointer<Void> Function(Uint32);
+typedef _ActorSpawnDart = Pointer<Void> Function(int);
 typedef _ActorCallC = Void Function(
-  Uint64,
+  Pointer<Void>,
   Uint64,
   Uint32,
   Pointer<Uint8>,
   Uint64,
 );
-typedef _ActorCallDart = void Function(int, int, int, Pointer<Uint8>, int);
-typedef _ActorShutdownC = Void Function(Uint64);
-typedef _ActorShutdownDart = void Function(int);
-typedef _ActorCancelDeferredC = Uint8 Function(Uint64, Uint64);
-typedef _ActorCancelDeferredDart = int Function(int, int);
+typedef _ActorCallDart = void Function(
+  Pointer<Void>,
+  int,
+  int,
+  Pointer<Uint8>,
+  int,
+);
+typedef _ActorShutdownC = Void Function(Pointer<Void>);
+typedef _ActorShutdownDart = void Function(Pointer<Void>);
+typedef _ActorRetainC = Pointer<Void> Function(Pointer<Void>);
+typedef _ActorRetainDart = Pointer<Void> Function(Pointer<Void>);
 typedef _StreamCancelC = Void Function(Uint64);
 typedef _StreamCancelDart = void Function(int);
 typedef _CallbackRespondC = Void Function(Uint64, Pointer<Uint8>, Uint64);
@@ -700,20 +706,31 @@ final class _NativeTransport {
       .lookup('frustrate_actor_shutdown')
       .cast<NativeFunction<_ActorShutdownC>>()
       .asFunction<_ActorShutdownDart>();
-  late final _ActorCancelDeferredDart _actorCancelDeferred = _primary
-      .lookup('frustrate_actor_cancel_deferred')
-      .cast<NativeFunction<_ActorCancelDeferredC>>()
-      .asFunction<_ActorCancelDeferredDart>();
+  late final _ActorRetainDart _actorRetain = _primary
+      .lookup('frustrate_actor_retain')
+      .cast<NativeFunction<_ActorRetainC>>()
+      .asFunction<_ActorRetainDart>();
+  late final Pointer<NativeFunction<_DropC>> _actorReleaseFn = _primary
+      .lookup('frustrate_actor_release')
+      .cast<NativeFunction<_DropC>>();
+  late final _DropDart _actorRelease = _actorReleaseFn.asFunction<_DropDart>();
 
   /// The GC backstop shared by every actor on this runtime.
   ///
   /// One finalizer, not one per host: `frustrate_actor_reap` is a single
-  /// runtime export taking the host id as its token, so unlike
+  /// runtime export taking a counted host pointer as its token, so unlike
   /// [handleDrop]'s per-type `frustrate_finalize_<Type>` there is nothing to
   /// vary. A field so it stays reachable for the life of the runtime — a
   /// `NativeFinalizer` that is itself collected finalizes nothing.
   late final NativeFinalizer _actorReaper = NativeFinalizer(
     _primary.lookup('frustrate_actor_reap').cast<NativeFunction<_DropC>>(),
+  );
+
+  /// Releases the count a `_NativeActorHost` holds on its Rust host when the
+  /// Dart object is collected. What keeps the pointer it passes on every call
+  /// valid for exactly as long as the object that passes it.
+  late final NativeFinalizer _actorHostRelease = NativeFinalizer(
+    _actorReleaseFn,
   );
 
   bool get asyncIsParallel => true;
@@ -1017,7 +1034,7 @@ final class NativeRuntime implements FrustrateRuntime {
 
   @override
   Future<ActorHost> spawnActorHost({String? debugName}) async =>
-      _NativeActorHost(this, _t._actorSpawn(), debugName);
+      _NativeActorHost(this, _t._actorSpawn(_t._isolateId), debugName);
 
   /// The transport: it issues every raw this runtime hands out, and every
   /// bridge in the same library shares it.
@@ -1203,9 +1220,15 @@ final class NativeRuntime implements FrustrateRuntime {
 /// A dedicated Rust thread (see runtime/rust/src/actor.rs). Completions
 /// arrive through the runtime's single post listener; only the issue path
 /// differs from a pool call.
-final class _NativeActorHost implements ActorHost {
+///
+/// Holds a counted pointer to the Rust host and passes it on every call, so a
+/// call reaches its executor's queue with no lookup and no lock. The count is
+/// released by a finalizer when this object is collected, which is what keeps
+/// the pointer valid for as long as anything can pass it: hence
+/// [Finalizable].
+final class _NativeActorHost implements ActorHost, Finalizable {
   final NativeRuntime _rt;
-  final int _hostId;
+  final Pointer<Void> _host;
 
   /// The actor's type name (generated constructors pass it), so
   /// host-attributed errors — the disposed-deferred StateError above all —
@@ -1218,7 +1241,12 @@ final class _NativeActorHost implements ActorHost {
   /// [shutdown] is exactly the set the dispose contract cancels.
   final Set<int> _deferredInFlight = {};
 
-  _NativeActorHost(this._rt, this._hostId, this._debugName);
+  /// Whether the GC backstop holds a count of its own ([attachReaper]).
+  bool _reaperAttached = false;
+
+  _NativeActorHost(this._rt, this._host, this._debugName) {
+    _rt._t._actorHostRelease.attach(this, _host.cast());
+  }
 
   @override
   Object get bridgeIdentity => _rt.bridgeIdentity;
@@ -1228,7 +1256,7 @@ final class _NativeActorHost implements ActorHost {
   /// has to answer locally, and Rust's own dead-host reply is a panic envelope
   /// (actor.rs) — a different exception for the same caller mistake. Both
   /// platforms now reject with the same StateError, and Rust's envelope stays
-  /// as the backstop for a host id that was never ours.
+  /// as the backstop.
   @override
   Future<BinaryReader> call(
     int fnId,
@@ -1245,10 +1273,8 @@ final class _NativeActorHost implements ActorHost {
     // `spawn_deferred` → `executor::spawn`), the same registry a plain
     // `async fn` lands in — so the runtime's own `frustrate_call_cancel` is
     // already the right claim, under the same answer-once gate.
-    // `frustrate_actor_cancel_deferred` adds only the host-registry
-    // bookkeeping `shutdown()` needs to enumerate what is left, and that entry
-    // is retired by the future's own drop guard a drain later; the sweep is
-    // documented as idempotent against exactly this (actor.rs).
+    // The host's own registry of deferred calls is retired by each future's
+    // drop guard, and swept by the host thread when it stops (actor.rs).
     final future = _rt._issueAsync(
       sizeHint,
       encode,
@@ -1261,7 +1287,7 @@ final class _NativeActorHost implements ActorHost {
       },
       (callId, reqPtr, len) {
         issued = callId;
-        _rt._actorCall(_hostId, callId, fnId, reqPtr, len);
+        _rt._actorCall(_host, callId, fnId, reqPtr, len);
       },
     );
     // The send closure ran synchronously inside issue, so `issued` is set
@@ -1341,7 +1367,7 @@ final class _NativeActorHost implements ActorHost {
     // already answered (its response is delivered or in the port queue) and
     // must be left to complete normally.
     for (final id in _deferredInFlight.toList()) {
-      if (_rt._t._actorCancelDeferred(_hostId, id) != 0) {
+      if (_rt._t._callCancel(id) != 0) {
         _rt._pending.fail(
           id,
           disposedDeferredError(_debugName),
@@ -1349,21 +1375,34 @@ final class _NativeActorHost implements ActorHost {
         );
       }
     }
-    _rt._t._actorShutdown(_hostId);
+    _rt._t._actorShutdown(_host);
   }
 
-  /// The token is the host id, which is all the reap path needs — the object
-  /// pointer is already held by the executor's own teardown slot
-  /// (`handle::actor_new`). Host ids start at 1, so the token is never null.
+  /// The token is a counted pointer to the host of its own
+  /// (`frustrate_actor_retain`), which the reap releases: the host object and
+  /// the actor handle may be collected in either order. The actor's objects
+  /// are already held by the executor's own table (`handle::actor_new`), so
+  /// the host is all the reap path needs.
   @override
-  void attachReaper(covariant Finalizable owner) => _rt._t._actorReaper.attach(
-    owner,
-    Pointer<Void>.fromAddress(_hostId),
-    detach: owner,
-  );
+  void attachReaper(covariant Finalizable owner) {
+    _rt._t._actorReaper.attach(
+      owner,
+      _rt._t._actorRetain(_host).cast(),
+      detach: owner,
+    );
+    _reaperAttached = true;
+  }
 
+  /// Detaching does not run the finalizer, so the backstop's count is
+  /// released here instead.
   @override
-  void detachReaper(Object owner) => _rt._t._actorReaper.detach(owner);
+  void detachReaper(Object owner) {
+    _rt._t._actorReaper.detach(owner);
+    if (_reaperAttached) {
+      _reaperAttached = false;
+      _rt._t._actorRelease(_host);
+    }
+  }
 }
 
 /// The GC path for a `#[bridge(resident)]` handle: a `dart:core` [Finalizer],

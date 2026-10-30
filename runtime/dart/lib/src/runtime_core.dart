@@ -448,15 +448,15 @@ abstract interface class ActorHost implements FrustrateChannel {
   ///
   /// The actor counterpart of [HandleDrop.attach], and it has to be here
   /// rather than on a per-type hook because an actor's identity on this side
-  /// is the *host*, not the object: the object's pointer reaches Rust only
-  /// inside a call, and a handle nobody disposed makes no more calls. So the
-  /// executor was told how to free its object at construction
-  /// (`handle::actor_new`), and all this has to carry is which executor.
+  /// is the *host*, not the object: the object lives in its executor's object
+  /// table (`handle::actor_new`), which drops whatever is still in it when the
+  /// executor stops. So all this has to carry is which executor.
   ///
   /// Best-effort by nature — Dart promises a finalizer *may* run, and on web
   /// only that. What it is not is best-effort about *safety*: a reap that
-  /// arrives late finds the host already gone, and one that arrives for a
-  /// stale id cannot hit a live host, because host ids are never reused.
+  /// arrives after the host stopped finds nothing to do, because stopping is
+  /// idempotent, and the token it carries keeps the host it names alive until
+  /// the reap has run.
   void attachReaper(Object owner);
 
   /// Unregister [owner]. Called by the generated `dispose()` before it can

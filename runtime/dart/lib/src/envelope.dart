@@ -16,7 +16,7 @@ import 'exceptions.dart';
 /// guards is a *stale* half, and a version number stored twice can go stale
 /// against itself — a bump applied to one transport would leave the other
 /// silently accepting the module it was supposed to reject.
-const int frustrateRuntimeAbi = 5;
+const int frustrateRuntimeAbi = 6;
 
 /// Bytes of the response buffer the transports hand `frustrate_call_sync`,
 /// which answers into it rather than leasing a `Vec` whenever the envelope

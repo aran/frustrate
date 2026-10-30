@@ -5054,7 +5054,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
         let actor_call = iface.export_symbol("actor_call");
         let (slot, route) = hot_route(
             &actor_call,
-            &[("host_id", "u64"), ("call_id", "u64"), ("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64")],
+            &[("host", "*const core::ffi::c_void"), ("call_id", "u64"), ("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64")],
             "",
         );
         out.push_str(&slot);
@@ -5065,15 +5065,15 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
         // A deferred prefix that panics never reached its spawn, so the call
         // still gets its envelope — the panic one.
         out.push_str(
-            "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[cfg(not(target_family = \"wasm\"))]\n#[unsafe(no_mangle)]\n",
+            "/// # Safety\n/// Called from generated Dart with a valid request buffer, and with the\n/// host pointer `frustrate_actor_spawn` returned, whose count it holds.\n#[cfg(not(target_family = \"wasm\"))]\n#[unsafe(no_mangle)]\n",
         );
         let _ = write!(
             out,
-            "pub unsafe extern \"C\" fn {actor_call}(\n    host_id: u64,\n    call_id: u64,\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n) {{\n",
+            "pub unsafe extern \"C\" fn {actor_call}(\n    host: *const core::ffi::c_void,\n    call_id: u64,\n    fn_id: u32,\n    req: *const u8,\n    req_len: u64,\n) {{\n",
         );
         out.push_str(&route);
         out.push_str(
-            "    let req = request_slice(req, req_len).to_vec();\n    frustrate::actor::submit(host_id, call_id, move || {\n        let mut r = ByteReader::new(&req);\n        match fn_id {\n",
+            "    let req = request_slice(req, req_len).to_vec();\n    unsafe { frustrate::actor::submit(host, call_id, move || {\n        let mut r = ByteReader::new(&req);\n        match fn_id {\n",
         );
         for f in &actor_fns {
             if f.deferred {
@@ -5091,7 +5091,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
             }
         }
         out.push_str(
-            "            other => Some(envelope::run(|| panic!(\"frustrate: unknown actor fn_id {other}\"))),\n        }\n    });\n}\n\n",
+            "            other => Some(envelope::run(|| panic!(\"frustrate: unknown actor fn_id {other}\"))),\n        }\n    }) };\n}\n\n",
         );
     }
 }

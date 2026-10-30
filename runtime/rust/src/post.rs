@@ -49,6 +49,8 @@
 
 #[cfg(not(target_family = "wasm"))]
 pub use native::{deliver, exit_send_port, init_dl, respond, ISOLATE_SHIFT};
+#[cfg(not(target_family = "wasm"))]
+pub(crate) use native::isolate_gone;
 // `not(wasm)` as well as `test`, like the `init` seam below: `native` does not
 // exist on wasm, so the bare `cfg(test)` made `--target wasm32 --tests` fail to
 // resolve this import. Nothing in the shipped build changed.
@@ -317,6 +319,23 @@ mod native {
         }
         let isolate = (call_id >> ISOLATE_SHIFT) as u32;
         registry().read().unwrap().get(&isolate).copied()
+    }
+
+    /// Whether `isolate` has been tombstoned by [`mark_gone`]. An id never
+    /// registered is not gone.
+    ///
+    /// For an actor host that starts after its isolate's exit notice may
+    /// already have been handled (`actor::run`). `mark_gone` writes the
+    /// tombstone before it scans the hosts, so a host that enters the host
+    /// registry after that scan reads the tombstone here.
+    pub(crate) fn isolate_gone(isolate: u32) -> bool {
+        matches!(
+            registry()
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get(&isolate),
+            Some(Target::Gone)
+        )
     }
 
     /// Tombstone `isolate`: it is gone.
