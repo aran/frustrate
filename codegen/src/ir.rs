@@ -684,6 +684,12 @@ pub struct Function {
     #[serde(skip, default)]
     pub generics: Vec<String>,
     pub params: Vec<Param>,
+    /// Where `Addr<..>` context parameters sit among the declared parameters
+    /// (receiver excluded), ascending. They are not in [`Function::params`]:
+    /// the executor supplies them, so they are on neither the Dart surface
+    /// nor the wire, and `#[serde(skip)]` keeps them out of the fingerprint.
+    #[serde(skip, default)]
+    pub addr_params: Vec<usize>,
     /// None for `()`.
     pub ret: Option<Type>,
     /// True when the declared return type is `Result<T, _>` — of either kind.

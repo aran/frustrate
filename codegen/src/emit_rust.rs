@@ -4634,6 +4634,17 @@ fn invocation(iface: &Interface, f: &Function, args: &[String]) -> String {
         (Some(parent), None) => format!("{}::{}", rust_value_path(iface, parent), f.name),
         (None, _) => format!("{}::{}", f.module_path, f.name),
     };
+    // `Addr` context parameters, at their declared positions among the
+    // parameters (after the receiver, which `args` leads with). Built for the
+    // parent's own type, so an `Addr<Other>` parameter is a type error.
+    let mut args = args.to_vec();
+    if let (false, Some(parent)) = (f.addr_params.is_empty(), &f.parent) {
+        let first_param = args.len() - f.params.len();
+        let addr = format!("frustrate::Addr::<{}>::__here()", rust_path(iface, parent));
+        for &at in &f.addr_params {
+            args.insert(first_param + at, addr.clone());
+        }
+    }
     format!("{callee}({})", args.join(", "))
 }
 
@@ -8286,6 +8297,34 @@ mod tests {
     /// non-responding form — the native FIFO arm answers `None` (the executor
     /// owns the answer) with prefix panics still saying something, and the
     /// wasm arm passes `call_id` through instead of responding inline.
+    /// An `Addr` context parameter is supplied by the glue at its declared
+    /// position, built for the actor's own type, on a constructor and on a
+    /// method alike; the wire parameters around it decode as before.
+    #[test]
+    fn addr_context_parameters_are_supplied_at_their_positions() {
+        let code = emit_src(
+            r#"
+            #[bridge(actor)] pub struct Job { n: i64 }
+            #[bridge] impl Job {
+                pub fn new(me: Addr<Job>) -> Self { Job { n: 0 } }
+                pub fn start(&mut self, a: i64, me: Addr<Self>, b: String) -> i64 { 0 }
+            }
+            "#,
+        );
+        let here = "frustrate::Addr::<crate::api::Job>::__here()";
+        assert!(code.contains(&format!("crate::api::Job::new({here})")), "{code}");
+        let start = code
+            .split("crate::api::Job::start(")
+            .nth(1)
+            .expect("the method is invoked")
+            .split(");")
+            .next()
+            .unwrap();
+        let args: Vec<&str> = start.split(", ").collect();
+        assert_eq!(args.len(), 4, "{start}");
+        assert_eq!(args[2], here, "{start}");
+    }
+
     #[test]
     fn deferred_member_hands_its_completion_to_the_executor() {
         let code = emit_src(

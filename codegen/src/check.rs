@@ -2823,6 +2823,7 @@ fn finalize(mut iface: Interface) -> Result<Interface, Vec<Diagnostic>> {
                 receiver: None,
                 generics: vec![],
                 params: vec![],
+                addr_params: vec![],
                 ret: None,
                 // A synthetic drop returns nothing and cannot fail.
                 err: None,
@@ -4900,6 +4901,27 @@ fn check_function(
                 message: format!("{ctx}: {why}"),
             });
         }
+    }
+
+    // `Addr<A>` is supplied by an actor's executor, so only a member that
+    // runs there can take one: the actor's constructor (the address is its
+    // new executor's) or one of its methods. Anywhere else there is no
+    // executor whose address it could be.
+    if !f.addr_params.is_empty()
+        && !(parent_model == Some(Model::Actor)
+            && !f.is_actor_drop
+            && (f.is_constructor || f.receiver.is_some()))
+    {
+        diags.push(Diagnostic {
+            code: "FR0084",
+            message: format!(
+                "{ctx}: a parameter of a type named `Addr` is taken for frustrate's \
+                 `Addr`, which an actor's executor supplies, so only an actor's \
+                 constructor or method can declare one. Declare the type \
+                 `#[bridge(actor)]`, or remove the parameter. If it is a type of your \
+                 own, import it under another name (`use ... as ...`)"
+            ),
+        });
     }
 
     // `Deferred<T>` is the actor opt-out of serialized completion: the body
@@ -9548,6 +9570,38 @@ mod tests {
         // a member is (`hash::member_ids`) — so the claim is about the list.
         assert!(iface.functions.last().unwrap().is_actor_drop);
         assert_eq!(iface.functions.len(), 3);
+    }
+
+    /// FR0084: an `Addr` is supplied by an actor's executor, so only an
+    /// actor's constructor or method may declare one; it never reaches the
+    /// Dart surface or the wire.
+    #[test]
+    fn addr_parameters_are_actor_members_only() {
+        assert_eq!(
+            codes(check_src("#[bridge] pub fn f(me: Addr<X>) -> i64 { 0 }")),
+            vec!["FR0084"]
+        );
+        assert_eq!(
+            codes(check_src(
+                "#[bridge(frozen)] pub struct F { x: i64 }\n\
+                 #[bridge] impl F { pub fn g(&self, me: Addr<F>) -> i64 { 0 } }"
+            )),
+            vec!["FR0084"]
+        );
+        let iface = check_src(
+            "#[bridge(actor)] pub struct A { x: i64 }\n\
+             #[bridge] impl A {\n\
+                 pub fn new(me: Addr<A>) -> Self { unimplemented!() }\n\
+                 pub fn go(&mut self, n: i64, me: Addr<Self>) -> i64 { 0 }\n\
+             }",
+        )
+        .unwrap();
+        let go = iface.functions.iter().find(|f| f.name == "go").unwrap();
+        assert_eq!(go.params.len(), 1);
+        assert_eq!(go.addr_params, [1]);
+        let new = iface.functions.iter().find(|f| f.name == "new").unwrap();
+        assert!(new.params.is_empty() && new.is_constructor);
+        assert_eq!(new.addr_params, [0]);
     }
 
     /// FR0038/FR0039: `Deferred` is the actor opt-out of serialized

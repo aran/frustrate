@@ -2683,6 +2683,28 @@ fn ty_mentions_self_type(ty: &syn::Type) -> bool {
     ty_mentions(ty)
 }
 
+/// Whether a parameter is written `Addr<A>`, under any path: an actor's
+/// address, which the executor supplies. Syntactic, as [`is_box_self`] is: the
+/// last segment `Addr` with one type argument, by value, so a type of the
+/// user's own named `Addr` is taken for it too (FR0084 says so).
+fn is_addr(ty: &syn::Type) -> bool {
+    let syn::Type::Path(p) = ty else { return false };
+    if p.qself.is_some() {
+        return false;
+    }
+    let Some(seg) = p.path.segments.last() else { return false };
+    if seg.ident != "Addr" {
+        return false;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &seg.arguments else {
+        return false;
+    };
+    matches!(
+        args.args.iter().collect::<Vec<_>>().as_slice(),
+        [syn::GenericArgument::Type(_)]
+    )
+}
+
 /// Whether an explicitly typed receiver is written `self: Box<Self>`.
 ///
 /// Syntactic, and deliberately so: this is asking what the author wrote, not
@@ -2736,6 +2758,7 @@ fn parse_fn(
     let generics = generic_params(&sig.generics);
     let mut receiver = None;
     let mut params = vec![];
+    let mut addr_params = vec![];
     for input in &sig.inputs {
         match input {
             syn::FnArg::Receiver(r) => {
@@ -2761,6 +2784,15 @@ fn parse_fn(
                 });
             }
             syn::FnArg::Typed(pt) => {
+                // `Addr<A>` is a context parameter: the executor supplies it,
+                // so it is recorded by position and never becomes a `Param`.
+                // Whether this member may have one is the checker's question
+                // (FR0084); that `A` is this actor is rustc's, because the
+                // glue builds it as `Addr::<Self's path>`.
+                if is_addr(&pt.ty) {
+                    addr_params.push(params.len() + addr_params.len());
+                    continue;
+                }
                 let syn::Pat::Ident(pi) = pt.pat.as_ref() else {
                     bail!("fn `{}`: unsupported parameter pattern", sig.ident);
                 };
@@ -2837,6 +2869,7 @@ fn parse_fn(
         receiver,
         generics,
         params,
+        addr_params,
         ret,
         err,
         fallible,
