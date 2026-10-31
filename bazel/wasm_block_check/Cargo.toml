@@ -20,4 +20,5 @@ path = "link_filter.rs"
 [dependencies]
 # Without default features it depends only on `bitflags`; `simd` decodes 0xFD
 # instructions, and with `features` off every proposal is read.
+rustc-demangle = "0.1"
 wasmparser = { version = "0.244", default-features = false, features = ["std", "simd"] }

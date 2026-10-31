@@ -1,5 +1,5 @@
 {
-  "checksum": "d32518739f2ae570a250634080dbeec2c4c5d20e75b6a1b69d5a51b6debbcf99",
+  "checksum": "54c708ee785febe87e2c72166288afae061882fc585ee0eeef3b192a9969a438",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -1512,6 +1512,10 @@
     "wasm-block-check 0.1.0": {
       "common_attrs": {
         "deps": [
+          {
+            "id": "rustc-demangle 0.1.28",
+            "target": "rustc_demangle"
+          },
           {
             "id": "wasmparser 0.244.0",
             "target": "wasmparser"

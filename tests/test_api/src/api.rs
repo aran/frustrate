@@ -1663,26 +1663,9 @@ pub fn snapshot_total_len(snap: &Snapshot) -> usize {
 /// `Snapshot` has **no** `Drop` impl, deliberately: what stays covered here is
 /// the linkage — `frozen_drop::<Snapshot>` → `Arc::drop_slow` →
 /// `drop_in_place::<Snapshot>` — which is what carries a user's `Drop` into the
-/// scan when there is one. Adding one that takes a `static Mutex` produces
-///
-/// ```text
-/// frustrate_check_block_103_find_snapshot
-///   test_api::frustrate_generated::drop_inner_Snapshot
-///     frustrate::handle::frozen_drop::test_api::api::Snapshot
-///       core::mem::drop::alloc::sync::Arc::test_api::api::Snapshot
-///         core::ptr::drop_in_place::alloc::sync::Arc::..::Snapshot
-///           alloc::sync::Arc::..::Snapshot::core::ops::drop::Drop::drop
-///             alloc::sync::Arc::test_api::api::Snapshot::drop_slow
-///               core::ptr::drop_in_place::test_api::api::Snapshot
-///                 test_api::api::Snapshot::core::ops::drop::Drop::drop
-///                   std::sync::poison::mutex::Mutex::lock
-///                     std::sys::sync::mutex::futex::Mutex::lock_contended
-///                       std::sys::pal::wasm::futex::futex_wait
-/// ```
-///
-/// ...against `memory_atomic_wait32` — the refcount branch is a direct call
-/// like any other, so an `Arc` model hides nothing. Measured, then reverted:
-/// the red direction is demonstrated by hand, as
+/// scan when there is one. A `Drop` that takes a `static Mutex` is red through
+/// that chain: the refcount branch is a direct call like any other, so an
+/// `Arc` model hides nothing. The red direction is demonstrated by hand, as
 /// `//tests/bazel_rules/async_fixture` explains.
 #[bridge(no_block)]
 pub fn find_snapshot(make: bool) -> Option<Snapshot> {
@@ -3998,25 +3981,11 @@ impl LiveProbe {
     /// pinned because its `Drop` is the one the Dart suite already drives
     /// through both routes.
     ///
-    /// Sabotaging the `Drop` below with a `static Mutex` take produces
-    ///
-    /// ```text
-    /// frustrate_check_block_203_new
-    ///   test_api::frustrate_generated::drop_inner_LiveProbe
-    ///     frustrate::handle::confined_drop::test_api::api::LiveProbe
-    ///       core::mem::drop::alloc::boxed::Box::test_api::api::LiveProbe
-    ///         core::ptr::drop_in_place::alloc::boxed::Box::..::LiveProbe
-    ///           core::ptr::drop_in_place::test_api::api::LiveProbe
-    ///             test_api::api::LiveProbe::core::ops::drop::Drop::drop
-    ///               std::sync::poison::mutex::Mutex::lock
-    ///                 std::sys::sync::mutex::futex::Mutex::lock_contended
-    ///                   std::sys::pal::wasm::futex::futex_wait
-    /// ```
-    ///
-    /// ...against `memory_atomic_wait32`. Measured, then reverted: the red
-    /// direction has no home in a build system that can only assert success,
-    /// so it is demonstrated by hand — the same convention, and the same
-    /// reasoning, as `//tests/bazel_rules/async_fixture`.
+    /// A `Drop` below that took a `static Mutex` would be red through the
+    /// root's edge to `drop_inner_LiveProbe`. The red direction has no home in
+    /// a build system that can only assert success, so it is demonstrated by
+    /// hand — the same convention, and the same reasoning, as
+    /// `//tests/bazel_rules/async_fixture`.
     #[bridge(sync, no_block)]
     pub fn new() -> Self {
         LIVE_PROBES.fetch_add(1, Ordering::SeqCst);

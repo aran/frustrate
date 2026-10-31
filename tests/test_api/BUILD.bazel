@@ -41,8 +41,8 @@ frustrate_no_block_check(
     # registry: both callbacks installed elsewhere, and this fixture's to
     # accept.
     allow = [
-        "core::task::wake::Waker::ops::drop::Drop::drop::frustrate",
-        "log::__private_api::GlobalLogger::Log::log",
+        "core::task::wake::Waker::drop",
+        "log::__private_api::GlobalLogger::log",
     ],
     targets = [
         "android",

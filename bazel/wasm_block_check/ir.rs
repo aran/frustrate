@@ -96,6 +96,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::libc::{self, Libc};
 use super::silences::{Applied, Silence};
+use super::symbol::trait_path;
 use super::{match_census, own_path, readable, Claims, Green, Sinks, FATAL_ENTRIES, ROOT_PREFIX};
 
 /// The export name `runtime/rust/src/bounded.rs` gives the bounded lock's
@@ -523,47 +524,25 @@ fn reach(start: u32, edges: &[BTreeSet<u32>], cut: &BTreeSet<u32>) -> BTreeSet<u
 /// Whether `path` is a member's own function. `want` is the census's path
 /// from the crate root (`crate::api::Doc::render`) and `display` the member's
 /// name (`Doc::render`), whose segments end `want`; `krate` is the name rustc
-/// compiled the bridge crate under. The function is in `krate`, under the
-/// module, and ends with the name, with the parent type among the segments
-/// between: a generic parent's arguments, or the implementing type of a `dyn`
-/// parent's trait method, may stand around it.
+/// compiled the bridge crate under. A free function's path is `krate`, the
+/// module, then the name. A method's is its type's, which may be defined
+/// outside the module holding the bridged impl, so it is `krate`, any
+/// module, then the type and name. A `dyn` parent's trait method matches by
+/// its [`trait_path`].
 fn is_member(path: &[String], krate: &str, want: &[String], display: &[&str]) -> bool {
-    let Some((name, parent)) = display.split_last() else {
-        return false;
-    };
     let module = &want[1..want.len().saturating_sub(display.len())];
     let Some((first, rest)) = path.split_first() else {
         return false;
     };
-    if first != krate || !rest.starts_with(module) || rest.last().map(String::as_str) != Some(*name) {
-        return false;
-    }
-    let between = &rest[module.len()..rest.len() - 1];
-    parent.iter().all(|p| between.iter().any(|s| s == p))
+    let ends = rest.len() >= display.len() && rest[rest.len() - display.len()..].iter().zip(display).all(|(a, b)| a == b);
+    first == krate && ends && (display.len() > 1 || rest.starts_with(module) && rest.len() == module.len() + 1)
 }
 
-/// A marked function's path, one for all its instances. `own_path` puts a v0
-/// generic instance's type arguments after the function's path; the function's
-/// own path is the crate and one name per `N<ns>` before it, which is read off
-/// a free function's mangling (`_RI`, then `N<ns>`s, then `C`). A symbol of
-/// another shape (an instance of a generic method, say) keeps all its
-/// segments, so each of its instances stands alone.
-pub(crate) fn marked_key(sym: &str) -> (String, bool) {
-    let mut path = own_path(sym);
-    let mut grouped = true;
-    if let Some(rest) = sym.strip_prefix("_RI") {
-        let b = rest.as_bytes();
-        let mut n = 0;
-        while b.get(2 * n) == Some(&b'N') && b.get(2 * n + 1).is_some_and(|c| c.is_ascii_lowercase()) {
-            n += 1;
-        }
-        if b.get(2 * n) == Some(&b'C') {
-            path.truncate(n + 1);
-        } else {
-            grouped = false;
-        }
-    }
-    (path.join("::"), grouped)
+/// A marked function's path, one for all its instances: [`own_path`] leaves
+/// out generic arguments, so every instance of a generic function or method
+/// has the same one.
+pub(crate) fn marked_key(sym: &str) -> String {
+    own_path(sym).join("::")
 }
 
 /// One bounded-lock section that fails its proof, with the path to why.
@@ -683,6 +662,7 @@ pub(crate) fn run_ir(
     match_census(&root_names, claims, label)?;
 
     let paths: Vec<Vec<String>> = ir.names.iter().map(|n| own_path(n)).collect();
+    let trait_paths: Vec<Option<Vec<String>>> = ir.names.iter().map(|n| trait_path(n)).collect();
 
     // Control: every `--slow` path names a function in the program. This
     // build keeps every production export, so a path that matches nothing
@@ -736,11 +716,8 @@ pub(crate) fn run_ir(
     // A member of a `dyn` parent is called through the vtable of whatever
     // object the handle holds, built wherever that object was made, so its
     // own function is never in the root's closure. Its possible callees are
-    // every function in a vtable that implements that trait method, which v0
-    // mangling names `<Impl as Trait>::method`: the root gets an edge to each.
-    // Legacy mangling drops the trait from an impl's path, so a module with
-    // legacy symbols gets no such edges, and the member stays unverified.
-    let v0_only = !(0..ir.names.len()).any(|f| ir.defined[f] && ir.names[f].starts_with("_ZN"));
+    // every function in a vtable that implements that trait method, named
+    // `<Impl as Trait>::method` ([`trait_path`]): the root gets an edge to each.
     let address_taken: BTreeSet<u32> = (0..ir.names.len())
         .flat_map(|g| ir.refs[g].difference(&ir.calls[g]).copied().collect::<Vec<_>>())
         .collect();
@@ -761,17 +738,25 @@ pub(crate) fn run_ir(
             });
             let reached = krate.is_some_and(|k| {
                 reach(r, &ir.refs, &cut).iter().any(|f| {
-                    ir.defined[*f as usize] && is_member(&paths[*f as usize], &k, want, &segs)
+                    let f = *f as usize;
+                    ir.defined[f]
+                        && (is_member(&paths[f], &k, want, &segs)
+                            || trait_paths[f].as_ref().is_some_and(|t| is_member(t, &k, want, &segs)))
                 })
             });
             if reached {
                 continue;
             }
-            let implementers: Vec<u32> = if v0_only && segs.len() == 2 {
+            let implementers: Vec<u32> = if segs.len() == 2 {
                 address_taken
                     .iter()
                     .copied()
-                    .filter(|f| ir.defined[*f as usize] && paths[*f as usize].ends_with(&[segs[0].to_string(), segs[1].to_string()]))
+                    .filter(|f| {
+                        ir.defined[*f as usize]
+                            && trait_paths[*f as usize]
+                                .as_ref()
+                                .is_some_and(|t| t.ends_with(&[segs[0].to_string(), segs[1].to_string()]))
+                    })
                     .collect()
             } else {
                 Vec::new()
@@ -916,10 +901,8 @@ pub(crate) fn run_ir(
     for (r, sym) in roots.iter().zip(&root_names) {
         let closure = reach_vouched(&ir, *r, &ir.refs, &stops, &known);
         for m in marked.iter().filter(|m| closure.iter().any(|f| ir.refs[*f as usize].contains(m))) {
-            let (key, grouped) = marked_key(&ir.names[*m as usize]);
-            // An instance of a generic method is not grouped with its siblings,
-            // so it is never called stale: a sibling may hold the finding.
-            let live = !grouped || reach(*m, &ir.refs, &stops).iter().any(|f| kinds.contains_key(f));
+            let key = marked_key(&ir.names[*m as usize]);
+            let live = reach(*m, &ir.refs, &stops).iter().any(|f| kinds.contains_key(f));
             let held = marks.entry(key).or_default();
             *held |= live;
         }
@@ -1507,6 +1490,20 @@ mod tests {
         );
         let ok = run_text(&kept, Some(&claims), &Sinks::default());
         assert!(ok.is_ok(), "{ok:?}");
+    }
+
+    #[test]
+    fn a_member_is_matched_by_its_path() {
+        let v = |s: &str| s.split("::").map(str::to_string).collect::<Vec<_>>();
+        let want = v("crate::api::render");
+        assert!(is_member(&v("example::api::render"), "example", &want, &["render"]));
+        assert!(!is_member(&v("example::other::render"), "example", &want, &["render"]));
+        assert!(!is_member(&v("example::api::render::{closure#0}"), "example", &want, &["render"]));
+        // A method of a type defined outside the module holding its impl.
+        let want = v("crate::api::Doc::render");
+        assert!(is_member(&v("example::model::Doc::render"), "example", &want, &["Doc", "render"]));
+        assert!(!is_member(&v("other::api::Doc::render"), "example", &want, &["Doc", "render"]));
+        assert!(!is_member(&v("example::api::Page::render"), "example", &want, &["Doc", "render"]));
     }
 
     /// A `dyn` member's own function is wherever the handle's vtable points:

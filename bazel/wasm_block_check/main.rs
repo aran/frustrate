@@ -106,6 +106,12 @@
 //! wait instructions — the match is inside a data-section string — and a raw
 //! `0xFE 0x01` byte scan fires on `i32.const 254`. Nothing short of decoding the
 //! code section is honest here, which is what [`parse`] does, with `wasmparser`.
+//!
+//! # Dependencies
+//!
+//! `wasmparser` and `rustc-demangle`, from the `@frustrate_crates` hub every
+//! consumer already resolves for the runtime's own crates. The scanner is built
+//! once, in the exec configuration.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
@@ -121,6 +127,9 @@ mod provenance;
 mod ir;
 mod libc;
 mod silences;
+mod symbol;
+
+use symbol::{own_path, readable};
 
 #[global_allocator]
 static ALLOC: budget::Budgeted = budget::Budgeted;
@@ -216,9 +225,8 @@ struct FatalEntry {
     /// Unmangled spellings, matched by equality. `#[panic_handler]` produced a
     /// bare `rust_begin_unwind` symbol on older toolchains.
     exact: &'static [&'static str],
-    /// A path that is an entry, with all its items ([`own_path`]): for an
-    /// impl whose methods a mangled symbol spells around back-references, or
-    /// a generic function.
+    /// A path whose items ([`own_path`]) are all entries: every method of a
+    /// type, its trait impls' included.
     path: &'static [&'static str],
 }
 
@@ -320,9 +328,9 @@ struct Green {
 /// leading segments of each function's demangled path ([`own_path`]). So
 /// `std::fs` matches `std::fs::read` and `std::fs::File::open` but not
 /// `std::fsx`, and `app::main_thread::slow` matches that function and its
-/// closures. The leading segments are where the item is *written*: a method in
-/// `impl Read for File` inside `std::fs` matches `std::fs`; a function generic
-/// over `std::fs::File` written elsewhere does not.
+/// closures. A method's path is its type's, trait impls included: a method of
+/// `impl Read for File` is `std::fs::File::read` and matches `std::fs`; a
+/// function generic over `std::fs::File` written elsewhere does not.
 ///
 /// A marker function must survive as a function of its own, so
 /// `#[inline(never)]`: even `#[inline]` vanishes from an opt-level 0 artifact.
@@ -404,43 +412,6 @@ impl Sinks {
             .collect::<Vec<_>>()
             .join(", ")
     }
-}
-
-/// The path a symbol's item is written at, segment by segment: the leading
-/// identifiers of [`readable`], which v0 mangling emits outermost-first before
-/// any generic arguments or instantiating crate.
-///
-/// Legacy mangling packs a trait impl's `<Type as Trait>` into one escaped
-/// identifier and a generic type's arguments into its own segment
-/// (`Vec$LT$T$GT$`). Both are unpacked to the type's own path, so legacy
-/// attributes a trait method to the implementing type where v0 attributes it
-/// to the module holding the impl. Either way the item's own crate comes
-/// first.
-fn own_path(sym: &str) -> Vec<String> {
-    let text = raw_path(sym);
-    if !sym.starts_with("_ZN") {
-        return text.split("::").map(str::to_string).collect();
-    }
-    let unescape = |s: &str| {
-        s.trim_start_matches('_')
-            .replace("$LT$", "<")
-            .replace("$GT$", ">")
-            .replace("$u20$", " ")
-            .replace("$RF$", "&")
-            .replace("..", "::")
-    };
-    let mut out = Vec::new();
-    for (n, seg) in text.split("::").enumerate() {
-        let seg = unescape(seg);
-        if n == 0 && seg.starts_with('<') {
-            let inner = seg[1..].trim_start_matches('&').trim_start_matches("mut ");
-            let ty = inner.split([' ', '<', '>']).next().unwrap_or("");
-            out.extend(ty.split("::").filter(|s| !s.is_empty()).map(str::to_string));
-            continue;
-        }
-        out.push(seg.split('<').next().unwrap_or("").to_string());
-    }
-    out
 }
 
 // --------------------------------------------------------------- decoding --
@@ -642,107 +613,6 @@ fn target_features_atomics(c: &CustomSectionReader<'_>) -> wasmparser::Result<bo
     Ok(atomics)
 }
 
-// ------------------------------------------------------------- legibility --
-
-/// Render a mangled symbol as `a::b::c`.
-///
-/// Both schemes write identifiers as `<length><bytes>`, with v0 adding a `_`
-/// separator when the identifier itself starts with `_`. This walks that
-/// structure and drops the pieces that carry no meaning for a reader: legacy's
-/// `17h<16 hex>` monomorphisation hash (which `tools/check_no_park.dart` also
-/// strips) and v0's `Cs…_`, `s…_` and `B…_` disambiguator and back-reference
-/// tokens. Skipping those tokens explicitly is what keeps the walk from
-/// mistaking a digit inside a crate hash — `CsfBCJUfclz7H_` — for a length.
-///
-/// A name that is neither scheme (a `#[no_mangle]` export, say) is returned
-/// unchanged: `frustrate_check_block_0_tag_join` contains digits that are not
-/// lengths.
-fn readable(sym: &str) -> String {
-    let raw = raw_path(sym);
-    if !sym.starts_with("_ZN") {
-        return raw;
-    }
-    // Legacy escapes a trait impl's `<T as Trait>` and generic arguments
-    // inside one identifier.
-    raw.replace("$LT$", "<")
-        .replace("$GT$", ">")
-        .replace("$u20$", " ")
-        .replace("$RF$", "&")
-        .replace("$C$", ",")
-        .replace("..", "::")
-}
-
-/// [`readable`] before legacy's escapes are undone: the identifiers joined by
-/// `::`, which is what [`own_path`] splits.
-fn raw_path(sym: &str) -> String {
-    if !sym.starts_with("_ZN") && !sym.starts_with("_R") {
-        return sym.to_string();
-    }
-    let v0 = sym.starts_with("_R");
-    let b = sym.as_bytes();
-    let mut out: Vec<String> = Vec::new();
-    let mut i = 0;
-    while i < b.len() {
-        let c = b[i];
-        if c.is_ascii_digit() {
-            let mut j = i;
-            while j < b.len() && b[j].is_ascii_digit() {
-                j += 1;
-            }
-            let len: usize = match sym[i..j].parse() {
-                Ok(v) => v,
-                Err(_) => {
-                    i = j;
-                    continue;
-                }
-            };
-            let mut s = j;
-            if v0 && s < b.len() && b[s] == b'_' {
-                // v0's separator before an identifier starting with `_` or a
-                // digit. In legacy the `_` belongs to the identifier.
-                s += 1;
-            }
-            let e = s + len;
-            if e > b.len() {
-                i = j;
-                continue;
-            }
-            let ident = &sym[s..e];
-            let hash = ident.len() == 17
-                && ident.starts_with('h')
-                && ident[1..].bytes().all(|c| c.is_ascii_hexdigit());
-            if !hash {
-                out.push(ident.to_string());
-            }
-            i = e;
-            continue;
-        }
-        // v0 disambiguators and back-references: `Cs<base62>_`, `s<base62>_`,
-        // `B<base62>_`. Consumed whole so their base62 digits are never read as
-        // a length.
-        if c == b'C' || c == b'B' || c == b's' {
-            let mut j = i + 1;
-            if c == b'C' && j < b.len() && b[j] == b's' {
-                j += 1;
-            }
-            let start = j;
-            while j < b.len() && b[j].is_ascii_alphanumeric() {
-                j += 1;
-            }
-            if j < b.len() && b[j] == b'_' && j > start {
-                i = j + 1;
-                continue;
-            }
-        }
-        i += 1;
-    }
-    if out.is_empty() {
-        sym.to_string()
-    } else {
-        out.join("::")
-    }
-}
-
 // -------------------------------------------------------------- the graph --
 
 /// Function indices whose name matches any [`FatalEntry`].
@@ -857,11 +727,10 @@ const CENSUS_HEADER: &str = "frustrate-claim-census 6";
 /// The `#[bridge(no_block)]` claims of one bridge crate, and how each is
 /// settled — written by codegen (`emit_rust::claim_census`), read here.
 ///
-/// Line-oriented rather than JSON because this tool has no dependencies, and a
-/// **separate** file from `interface.frustrate.json` because that JSON is the
-/// wire-schema fingerprint: `no_block` is `#[serde(skip)]` there precisely so a
-/// claim never moves the hash, and two halves that disagree about a claim still
-/// interoperate.
+/// Line-oriented, and a **separate** file from `interface.frustrate.json`
+/// because that JSON is the wire-schema fingerprint: `no_block` is
+/// `#[serde(skip)]` there precisely so a claim never moves the hash, and two
+/// halves that disagree about a claim still interoperate.
 #[derive(Default, Debug)]
 struct Claims {
     crate_name: String,
@@ -1526,12 +1395,10 @@ fn run_with(
                 .iter()
                 .any(|f| m.scan_of(*f).is_some_and(|s| s.calls.contains(k)))
         }) {
-            let (key, grouped) = ir::marked_key(m.names.get(k).map(String::as_str).unwrap_or(""));
-            // An instance of a generic method is not grouped with its siblings,
-            // so it is never called idle: a sibling may hold the finding.
+            let key = ir::marked_key(m.names.get(k).map(String::as_str).unwrap_or(""));
             let mut inside = stops.clone();
             inside.remove(k);
-            let live = !grouped || reach(&m, &[*k], &inside).iter().any(|f| findable.contains(f));
+            let live = reach(&m, &[*k], &inside).iter().any(|f| findable.contains(f));
             *marks.entry(key).or_default() |= live;
         }
         used_target.extend(closure.iter().filter(|f| target_silenced.contains(f)).map(|f| key_of(*f)));
@@ -1929,8 +1796,8 @@ const GLUE_MODULE: &str = "frustrate_generated";
 /// one, carries `frustrate_generated` somewhere in its symbol too — measured,
 /// 35 such symbols in one ancestry against 1 real member entry. A member entry
 /// is exactly `<crate>::frustrate_generated::<name>` with nothing after it,
-/// which [`readable`] renders as three components (a closure renders a fourth,
-/// empty one, because the mangling nests).
+/// which [`readable`] renders as three components (a closure adds a fourth,
+/// `{closure#0}`).
 fn is_member_glue(label: &str) -> bool {
     let parts: Vec<&str> = label.split("::").collect();
     parts.len() == 3 && parts[1] == GLUE_MODULE
@@ -2833,7 +2700,7 @@ mod tests {
         let b = Build {
             funcs: vec![
                 fun(ROOT, call(1)),
-                fun("_ZN8test_api3api9lock_it17h0b1b2c3d4e5f6071E", call(2)),
+                fun("_ZN8test_api3api7lock_it17h0b1b2c3d4e5f6071E", call(2)),
                 fun(PANIC_FMT, vec![0x01]),
                 fun(FUTEX_WAIT, wait()),
             ],
@@ -2859,9 +2726,11 @@ mod tests {
             "std::thread::park"
         );
         assert_eq!(readable(FUTEX_WAIT), "std::sys::pal::wasm::futex::futex_wait");
+        // v0's trailing instantiating crate (`…CsbOwqmHKCkC2_3std`) is not
+        // part of the name.
         assert_eq!(
             readable("_RNvNtNtNtCsfBCJUfclz7H_4core9core_arch6wasm326atomic20memory_atomic_wait32CsbOwqmHKCkC2_3std"),
-            "core::core_arch::wasm32::atomic::memory_atomic_wait32::std"
+            "core::core_arch::wasm32::atomic::memory_atomic_wait32"
         );
         // v0's `_` separator, and a name that is neither scheme.
         assert_eq!(readable(BEGIN_UNWIND), "__rustc::rust_begin_unwind");
@@ -3695,15 +3564,15 @@ mod tests {
     fn own_path_is_the_items_path_in_both_manglings() {
         let p = |s: &str| own_path(s).join("::");
         assert_eq!(p(SLOW_MARK), "example::main_thread::slow");
-        // v0 inherent impl, instantiated in another crate: the impl's module
-        // and type first, the instantiating crate after.
-        assert!(
-            p("_RNvMs5_NtCs6jEIwG9Ob0J_5alloc7raw_vecNtB5_11RawVecInner14grow_amortizedCs6uIOFUfKMfT_9frustrate")
-                .starts_with("alloc::raw_vec::RawVecInner::grow_amortized"),
+        // v0 inherent impl, instantiated in another crate: the type's path,
+        // without the instantiating crate.
+        assert_eq!(
+            p("_RNvMs5_NtCs6jEIwG9Ob0J_5alloc7raw_vecNtB5_11RawVecInner14grow_amortizedCs6uIOFUfKMfT_9frustrate"),
+            "alloc::raw_vec::RawVecInner::grow_amortized"
         );
-        // v0 generic instance: the function first, its type arguments after.
-        assert!(p("_RINvNtCs1_4mine3api7processNtNtCs2_3std2fs4FileE").starts_with("mine::api::process"));
-        // Legacy trait impl and generic type, unpacked to the type's path.
+        // v0 generic instance: the function, without its type arguments.
+        assert_eq!(p("_RINvNtCs1_4mine3api7processNtNtCs2_3std2fs4FileE"), "mine::api::process");
+        // Legacy trait impl and generic type, by the type's path.
         assert_eq!(
             p("_ZN47_$LT$std..fs..File$u20$as$u20$std..io..Read$GT$4read17h0123456789abcdefE"),
             "std::fs::File::read"
