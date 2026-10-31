@@ -2499,14 +2499,12 @@ fn encode_stmts_opt(
 /// Register one Dart object on `port` and write its id where the value sits.
 ///
 /// Emitted inside a bare block so the locals cannot collide with a sibling
-/// handle encoded at the same depth — several handles per call is now an
-/// ordinary case, not an error.
+/// handle encoded at the same depth: several handles per call is an ordinary
+/// case, not an error.
 ///
-/// Delivery timing is **not** decided here, and used to be: closure mirrors
-/// once carried their own `scheduleMicrotask`, from before
-/// `StreamRouter._deferDelivery` kept every path off the Rust stack on web.
-/// Every mirror method is now emitted as a direct call and the router owns the
-/// one hop — which is also what puts a user's throw inside `_dispatch`'s
+/// Delivery timing is **not** decided here. Every mirror method is emitted as
+/// a direct call and `StreamRouter._deferDelivery` owns the one hop off the
+/// Rust stack — which is also what puts a user's throw inside `_dispatch`'s
 /// try/catch, where the channel-termination policy can see it. Deferring only
 /// items and not terminals would reorder a close ahead of its items, so
 /// whatever the router does, it does per-mirror and never per-method.
@@ -7517,11 +7515,9 @@ mod tests {
             // parameter, into one scope.
             "#[bridge(sync)] pub fn f(a: Vec<(&D, D)>) -> i64 { 0 }",
             "#[bridge(sync)] pub fn f(a: std::collections::HashMap<&D, D>) -> i64 { 0 }",
-            // A set and a map, which is where the counted form's wrapping block
-            // used to be the thing keeping two siblings apart. The spend walk
-            // has no counter and so no block, and these say the loop variable
-            // and the closure parameters are scoped by the loop and the closure
-            // rather than by that block.
+            // Two sets and two maps: the spend walk has no counter and so no
+            // wrapping block, and these say the loop variable and the closure
+            // parameters are scoped by the loop and the closure.
             "#[bridge(sync)] pub fn f(a: std::collections::HashSet<D>, b: std::collections::HashSet<D>) -> i64 { 0 }",
             "#[bridge(sync)] pub fn f(a: std::collections::BTreeMap<D, i64>, b: std::collections::BTreeMap<D, i64>) -> i64 { 0 }",
         ] {

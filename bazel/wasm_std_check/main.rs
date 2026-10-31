@@ -497,14 +497,10 @@ mod tests {
         .is_ok());
     }
 
-    /// The recipe has to be runnable, not illustrative.
-    ///
-    /// It used to be a fixed `--facilities=clock,stdio` whatever the module
-    /// needed, which is wrong twice over: it names facilities this build does
-    /// not want, and — because the list REPLACES a flavour's rather than adding
-    /// to it — following it on a threaded target silently drops `atomics` and
-    /// produces a std that target does not load. So the list is computed, and
-    /// the replacement trap is stated.
+    /// The recipe has to be runnable, not illustrative: it names only the
+    /// facilities this module needs, and says that the list replaces a
+    /// flavour's rather than adding to it (on a threaded target, a list
+    /// without `atomics` builds a std that target does not load).
     #[test]
     fn the_rebuild_recipe_names_this_modules_facilities_and_the_replace_trap() {
         let err = check(&[PANIC, PRINT], &[]).unwrap_err();

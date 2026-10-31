@@ -105,11 +105,13 @@
 //!   #[bridge(no_block)]             member, impl block, or trait: a claim that
 //!                                   main-thread Dart calling this cannot be
 //!                                   stalled — nothing the caller runs reaches
-//!                                   a wait instruction. Proven at link time by
-//!                                   bazel/wasm_block_check, or settled by
-//!                                   placement; contradictions that codegen can
-//!                                   already see are FR0048 and FR0049. Not valid on a data type,
-//!                                   which has no body. For a whole file, see
+//!                                   a wait, a function the check target names
+//!                                   as slow, or IO it names. Proven per
+//!                                   target by `frustrate_no_block_check`, or
+//!                                   settled by placement; contradictions that
+//!                                   codegen can already see are FR0048 and
+//!                                   FR0049. Not valid on a data type, which
+//!                                   has no body. For a whole file, see
 //!                                   `bridge_file!` below.
 //!   #[bridge(no_block(allow(name, other::path, ...)))]
 //!                                   silences the no_block check's findings

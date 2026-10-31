@@ -246,23 +246,19 @@ mod returning {
     /// In-flight invocations awaiting their Dart response.
     ///
     /// A [`Lock`], not a `Mutex`, and const-built rather than behind a
-    /// `OnceLock` — both for the same reason, and both load-bearing on
-    /// threaded wasm:
+    /// `OnceLock` — both load-bearing on threaded wasm:
     ///
     /// * **The lock.** `call_async` registers here from a bridged `async fn`
     ///   body, which the executor drains on a *pool worker*; the answer arrives
     ///   through `frustrate_callback_respond`, which the web transport calls on
     ///   the page instance — i.e. from the *browser main thread*
-    ///   (`runtime_web.dart`). Main thread and worker
-    ///   therefore contend one lock, and a futex-parking lock traps there
-    ///   ("Atomics.wait cannot be called in this context"). Critical sections
-    ///   are single map operations — never a message body, which is why spin is
-    ///   right here and a parking lock is right in `actor.rs` — so this is the
-    ///   same stance `stream.rs`'s cancel registry takes, for the same reason.
-    /// * **The `OnceLock`.** `get_or_init` parks on its cold path, so the first
-    ///   two threads to reach an uninitialised registry could put the main
-    ///   thread into `Once`'s futex — the exact failure `pool::QUEUE` shipped.
-    ///   A const-built static has no initialiser to race.
+    ///   (`runtime_web.dart`). Main thread and worker therefore contend one
+    ///   lock, and a futex-parking lock traps there ("Atomics.wait cannot be
+    ///   called in this context"). Critical sections are single map
+    ///   operations, never a message body.
+    /// * **The const-built static.** `OnceLock::get_or_init` parks on its cold
+    ///   path, which would put the main thread into `Once`'s futex. A
+    ///   const-built static has no initialiser to race.
     ///
     /// Entries are [`Outside`]: a `Registered` drops a channel end or a slot
     /// holding a waker, which must not happen under the lock.

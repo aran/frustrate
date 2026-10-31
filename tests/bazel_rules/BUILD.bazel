@@ -447,7 +447,7 @@ frustrate_wasm_module(
     std_check = "off",
 )
 
-# Runs the real scanner binary over the three real modules. The unit tests in
+# Runs the real scanner binary over the four real modules. The unit tests in
 # //bazel/wasm_std_check cover the decision logic against hand-built modules;
 # this covers the half they cannot — that a real rustc, at the optimization
 # level this repo builds at, still emits the symbols being looked for.

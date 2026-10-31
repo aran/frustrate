@@ -1,93 +1,62 @@
-//! The non-parking primitives: a lock and a one-time initialisation, used
-//! everywhere either must be legal on the browser main thread.
+//! The spin lock under [`crate::bounded::Lock`] on wasm with `+atomics`.
 //!
-//! # Why this exists at all
+//! On threaded wasm the browser main thread takes the runtime's registries,
+//! and a futex-parking lock (`std::sync::Mutex`, `RwLock`, `Once`, `OnceLock`)
+//! traps there under contention: `RuntimeError: Atomics.wait cannot be called
+//! in this context`. Spinning is legal on every thread.
 //!
-//! On threaded wasm the main thread takes the runtime's registries — the
-//! stream cancel map, the executor's task registry, the pool's job queue — and
-//! a futex-parking lock traps there under contention:
-//! `RuntimeError: Atomics.wait cannot be called in this context`. That is not
-//! hypothetical. `pool::QUEUE` records the case where a wedged `Once` on this
-//! exact path took down every async call on the page. `std::sync::Mutex`,
-//! `RwLock`, `Once` and `OnceLock` all park; spinning is legal on every thread.
-//!
-//! # The trade, stated plainly
+//! # The trade
 //!
 //! A spin lock cannot trap, but it also cannot yield. Where a parking lock
 //! fails loudly, this one hangs: a holder that never releases is an app freeze,
-//! not an error. Three rules follow, and each is load-bearing rather than
-//! stylistic — every one of them has a real bug behind it:
+//! not an error. So the sections under it keep these rules:
 //!
 //! * **Critical sections are bounded by a container, and nest only into a
 //!   leaf.** Never a poll, never user code, and never a wake — a `Waker`
-//!   reaches the executor's own registry, which is not a leaf. Usually one
-//!   container operation; the honest upper bound is "work proportional to a
-//!   container this runtime owns" — `rwlock`'s grant loop pops as many waiters
-//!   as the lock can satisfy, which is bounded by the calls in flight on one
-//!   object. What the bound must never depend on is anything outside the
-//!   runtime. Each such section may also nest into the allocator, because a
-//!   growing `HashMap`/`Vec`/`VecDeque` allocates and on threaded wasm the global
+//!   reaches the executor's own registry, which is not a leaf. What the bound
+//!   depends on is a container this runtime owns, never anything outside it.
+//!   A section may nest into the allocator, because a growing
+//!   `HashMap`/`Vec`/`VecDeque` allocates and on threaded wasm the global
 //!   allocator is itself a spin lock (std's, in
-//!   `library/std/src/sys/alloc/wasm.rs`, which spins for the same reason this
-//!   module does). That one nesting is sanctioned because the allocator is a
-//!   strict leaf — dlmalloc calls nothing back — so the order is always
-//!   {registry, wakers, executor, queue} -> allocator and never the reverse,
-//!   and no cycle exists. Nesting into anything that is *not* a leaf is a
-//!   deadlock, not a slow path.
+//!   `library/std/src/sys/alloc/wasm.rs`). The allocator is a strict leaf —
+//!   dlmalloc calls nothing back — so the order is always
+//!   {registry, wakers, executor, queue} -> allocator and no cycle exists.
+//!   Nesting into anything that is *not* a leaf is a deadlock.
 //! * **Nothing may drop inside the section.** Bind whatever a container hands
-//!   back and let it die outside. This is load-bearing, not tidiness:
-//!   `HashMap::insert` returns the entry it displaced, and in `executor::spawn`
-//!   that entry is an `async_task::Task` whose `Drop` synchronously calls the
-//!   schedule callback — which takes the very lock being held. A drop inside
-//!   the section would spin forever with no user code involved.
-//! * **The release is a `Drop` guard, never a trailing store.** An unwinding
-//!   critical section must still free the lock. This was a real bug
-//!   (`a_panicking_critical_section_releases_the_registry_lock` in stream.rs):
-//!   a panic left `locked` set, and the next `frustrate_stream_cancel` — from
-//!   the Dart main thread — spun on it forever.
+//!   back and let it die outside. `HashMap::insert` returns the entry it
+//!   displaced, and in `executor::spawn` that entry is an `async_task::Task`
+//!   whose `Drop` synchronously calls the schedule callback — which takes the
+//!   very lock being held.
+//! * **The release is a `Drop` guard, never a trailing store**, so an
+//!   unwinding critical section still frees the lock.
 //!
-//!   Note precisely what that guard does *not* cover. Under wasm's
-//!   `panic = "abort"` nothing unwinds, so on the configuration this module
-//!   exists for the guard is inert: a **trap** inside a critical section leaves
-//!   the lock held for the life of the page, and the next acquisition — from
-//!   the browser main thread, in `frustrate_stream_cancel` or a spawn — spins
-//!   forever. A worker's trap is caught at the JS boundary, outside every Rust
-//!   frame, so whatever it held stays held (`pool::frustrate_pool_replenish`).
+//!   That guard does *not* cover a trap. Under wasm's `panic = "abort"`
+//!   nothing unwinds, so a trap inside a critical section leaves the lock held
+//!   for the life of the page, and the next acquisition — from the browser
+//!   main thread, in `frustrate_stream_cancel` or a spawn — spins forever. A
+//!   worker's trap is caught at the JS boundary, outside every Rust frame, so
+//!   whatever it held stays held (`pool::frustrate_pool_replenish`).
 //!
-//!   The realistic trigger is the one thing these sections do that can fail:
-//!   allocation, since every *mutating* section grows a container. That is
-//!   survivable only because it is already page-fatal — a wasm module at its
-//!   declared maximum memory cannot continue either way
-//!   (`frustrate_alloc` says so in as many words). So this changes how the page
-//!   dies, from a loud attributable panic to a frozen tab, not whether. Worth
-//!   knowing before trusting a spin lock further than that.
+//!   The one thing these sections do that can fail is allocation, since every
+//!   *mutating* section grows a container. That is already page-fatal — a wasm
+//!   module at its declared maximum memory cannot continue either way
+//!   (`frustrate_alloc` says so in as many words) — so the spin lock changes
+//!   how the page dies, from a loud panic to a frozen tab, not whether.
 //!
-//! # What checks this, and what deliberately does not
+//! # Tests
 //!
-//! The unit tests below run on every host build, and `cargo miri test -p
-//! frustrate --lib spin` runs them under Miri with leak checking on — which is
-//! the point of this module being compiled on every target rather than only
-//! where a `cfg` selects it. `tools/analyze.dart` runs that pass.
+//! The unit tests run on every host build, and `cargo miri test -p frustrate
+//! --lib spin` runs them under Miri with leak checking on (`tools/analyze.dart`
+//! runs that pass). The module is compiled on every target, not only where a
+//! `cfg` selects it, so Miri and the host tests reach it.
 //!
 //! # Initialising once without a `Once`
 //!
-//! `OnceLock`/`Once` park for the same reason a `Mutex` does, so the same ban
-//! applies to them. Wherever the value can be `const`-built the answer is a
-//! plain `static` with no initialiser to get stuck in, which is what
-//! `pool::QUEUE`, `stream::REGISTRY` and `callback::INVOCATIONS` all are. The
-//! one value that cannot be, the global executor, lives in
-//! `once_cell::race::OnceBox` (executor.rs).
-//!
-//! # Why it is one type
-//!
-//! There were three copies of this algorithm, and they had already drifted:
-//! two released with a trailing store and one with a guard, so two of them were
-//! unsound under unwinding and only the third had the regression test. Sharing
-//! one implementation makes that divergence impossible, collapses three
-//! `unsafe impl Sync` to one, and — because this module is compiled on every
-//! target rather than behind `cfg(all(target_family = "wasm", ...))` — puts the
-//! algorithm where Miri and the host test suite can actually reach it. The
-//! per-target choice of *whether* to use it stays at each call site.
+//! `OnceLock`/`Once` park for the same reason a `Mutex` does. Wherever the
+//! value can be `const`-built the answer is a plain `static` with no
+//! initialiser to get stuck in, which is what `pool::QUEUE`, `stream::REGISTRY`
+//! and `callback::INVOCATIONS` are. The one value that cannot be, the global
+//! executor, lives in `once_cell::race::OnceBox` (executor.rs).
 
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
@@ -112,15 +81,8 @@ unsafe impl<T: Send> Sync for SpinLock<T> {}
     allow(dead_code)
 )]
 impl<T> SpinLock<T> {
-    /// Build one, in a `const` context if you like.
-    ///
-    /// The `const` is load-bearing, not a convenience. `pool::QUEUE` is a
-    /// `static` built by this function precisely so it has *no initializer to
-    /// get stuck in*: the page-killing bug it replaced was a `OnceLock` whose
-    /// fallible initializer unwound through wasm under `panic = "abort"`,
-    /// leaving the `Once` in RUNNING for the life of the page so that every
-    /// later caller futex-waited on it. Keep this `const` and that failure
-    /// mode cannot come back by someone reaching for `OnceLock`.
+    /// Build one, in a `const` context, so a `static` holding it has no
+    /// initialiser to get stuck in. Keep it `const`.
     pub(crate) const fn new(value: T) -> Self {
         SpinLock {
             locked: AtomicBool::new(false),
@@ -141,8 +103,7 @@ impl<T> SpinLock<T> {
     /// Take the lock, released when the answer drops.
     ///
     /// Released through a guard rather than a trailing store, so an unwinding
-    /// section still frees the lock. See the module docs: the trailing-store
-    /// version shipped, and wedged the lock forever.
+    /// section still frees the lock.
     pub(crate) fn acquire(&self) -> Held<'_, T> {
         while self
             .locked
@@ -204,8 +165,7 @@ mod tests {
         assert_eq!(lock.with(|v| v.clone()), vec![1, 2, 3]);
     }
 
-    /// The regression that motivates the `Drop` guard. A trailing-store
-    /// release leaves `locked` set when `f` unwinds, and the next acquisition
+    /// A trailing-store release leaves `locked` set when `f` unwinds, and the next acquisition
     /// spins forever — on the browser main thread, an app freeze.
     #[test]
     fn a_panicking_critical_section_releases_the_lock() {

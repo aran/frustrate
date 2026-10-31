@@ -60,10 +60,9 @@ def _hot_patch_transition_impl(settings, attr):
         # function of every archive member the link pulled in — which is what
         # lets a patch call something the launch build never called — and rustc
         # collects mono items eagerly for the crate carrying the flag. The
-        # second is why this is per-crate: measured on e2e/iroh_demo's bridge,
-        # eager collection for every dependency as well costs 37 MB of debug
-        # library (88.6 MB against 125.5 MB) and buys nothing, since what a
-        # patch needs from a dependency is code that dependency already
+        # second is why this is per-crate: eager collection for every
+        # dependency as well bloats the debug library and buys nothing, since
+        # what a patch needs from a dependency is code that dependency already
         # compiled.
         # `patched_crate` rather than `library`, so a rule that compiles an
         # edited copy of a crate can name the library being patched and land in

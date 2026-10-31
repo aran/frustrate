@@ -38,10 +38,8 @@
 //! The key is `target_feature = "atomics"`, not `feature = "wasm-threads"`:
 //! the hazard is whether a wait instruction exists, which `+atomics` decides.
 //! The two agree on every configuration that ships, and disagree on the
-//! threaded no_block check build (`+atomics` with the feature off). Keyed on
-//! the feature, that build took the `Mutex` arm while std's futex backends
-//! were live, and every `Executor::spawn` reached `memory.atomic.wait32` on a
-//! path neither production build has.
+//! threaded no_block check build (`+atomics` with the feature off), which
+//! must check the lock the threaded build runs.
 //!
 //! Poisoning is recovered rather than propagated: no section leaves its
 //! container torn when it unwinds (each is one container operation), and the
@@ -61,7 +59,7 @@ unsafe impl<T: Send> Sync for Lock<T> {}
 
 impl<T> Lock<T> {
     /// Build one, in a `const` context, so a `static` has no initialiser to
-    /// get stuck in (`spin.rs` has the page that died to one).
+    /// get stuck in (`spin.rs`, on initialising once).
     pub(crate) const fn new(value: T) -> Self {
         Lock {
             raw: Raw::new(),

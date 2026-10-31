@@ -123,7 +123,7 @@ prove something there:
   SDK or NDK only for a dependency that compiles C.
   frustrate's registries share one lock type, `bounded::Lock`, whose wait is
   exempt only because the scanner checks every critical section of it in the
-  program and finds none that waits or takes it again
+  program and finds none that waits or takes it again.
   A call through a value loaded from a static, or returned by a C function,
   is "cannot verify": someone else installed it (`bazel/wasm_block_check/ir.rs`
   and `provenance.rs` have the procedure). A static only the program can name,

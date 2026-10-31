@@ -204,8 +204,7 @@ config_setting(
 #
 # It has exactly two readers, :wasm_threads_feature_build below and
 # :block_check_build, which hands the custom-std toolchains the check's link
-# filter. It defaults False, so every production configuration is the
-# configuration it was before this flag existed. Nothing else should read it:
+# filter. It defaults False, so no production configuration sees it. Nothing else should read it:
 # it is not a "diagnostic build" knob in general.
 bool_flag(
     name = "block_check",

@@ -15,7 +15,7 @@
 //! can rewrite those into the one real namespace its generated JS supplies, and
 //! that pass runs only when `frustrate_wasm_module` is given the `bindgen`
 //! attribute. Omit it and the module builds, links and passes every other
-//! check: the 126 unsatisfiable imports are as legal a wasm module as any
+//! check: the unsatisfiable imports are as legal a wasm module as any
 //! other, and nothing about the build says otherwise. The same holds for a
 //! namespace of the app's own JS that the target forgot to declare.
 //!
@@ -84,9 +84,7 @@ const SELF_SUPPLIED: &[&str] = &["frustrate", "env", "wasi_snapshot_preview1"];
 /// rustc links an `--extern` crate only when something uses it, so a dependency
 /// edge alone can leave the definition out, and the caller's `extern` block
 /// becomes `env.<symbol>` — an import no runtime supplies, in a namespace the
-/// namespace check waves through. Measured on exactly that shape
-/// (`//tests/bazel_rules:getrandom_probe.wasm` without its `use`), which is why
-/// this exists.
+/// namespace check waves through.
 ///
 /// The other two namespaces cannot be checked this way and should not be: a
 /// module's `frustrate` imports are whichever subset of the ABI and the
@@ -409,10 +407,9 @@ const MEASURED_BINDGEN: &str = "0.2.126";
 ///
 /// # What it does not check
 ///
-/// Nothing about a single-threaded module, which imports no memory at all
-/// (measured: `e2e/iroh_demo`'s post-passed module exports `memory` and imports
-/// none). Import-keyed, like every other gate here, so a consumer's own
-/// `platform()` is covered without this rule knowing any platform label.
+/// Nothing about a single-threaded module, which imports no memory at all.
+/// Import-keyed, like every other gate here, so a consumer's own `platform()`
+/// is covered without this rule knowing any platform label.
 fn run_post_pass(path: &str, label: &str) -> Result<(), String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     let cannot_read = |what: &str, e: String| {

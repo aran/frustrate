@@ -45,8 +45,8 @@ builder), so running the builder is picked up by the next build with no
 `bazel fetch --force`.
 """
 
-# rules_rust deleted the public `rust/repositories.bzl`; this symbol now
-# lives under `rust/private/`, where its own `extensions.bzl` loads it from. The
+# This symbol lives under rules_rust's `rust/private/`, where its own
+# `extensions.bzl` loads it from. The
 # file carries no `visibility()` restriction, so the load is legal — but it is a
 # private API, so a rules_rust bump can move it again without a deprecation
 # cycle. If it disappears, the replacement is to build the toolchain repo the
@@ -137,12 +137,12 @@ def _flavour_key(facilities):
 
 _BUILDER = "bazel run //toolchain/custom_std:build --"
 
-# Canonicalized in this file's (frustrate's) repo mapping, so the strings
-# embedded in generated BUILD files resolve correctly both when frustrate
-# is the root module and when a dependent workspace (e2e/flutter_demo)
-# reaches it through local_path_override.
 _LIB_DIR = "lib/rustlib/" + _WASM_TRIPLE + "/lib"
 
+# Canonicalized in this file's (frustrate's) repo mapping, so the strings
+# embedded in generated BUILD files resolve correctly both when frustrate
+# is the root module and when a dependent workspace reaches it through
+# local_path_override.
 def _label(s):
     return str(Label(s))
 

@@ -182,8 +182,7 @@ mod width {
         const UNFIXED: usize = 0;
 
         /// `const`-constructible, so the static holding it has no initialiser
-        /// to get stuck in — the property `spin.rs` explains and `pool::QUEUE`
-        /// paid for.
+        /// to get stuck in (`spin.rs`, on initialising once).
         pub(super) const fn new() -> Self {
             Width(AtomicUsize::new(Self::UNFIXED))
         }

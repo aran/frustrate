@@ -2862,19 +2862,11 @@ fn finalize(mut iface: Interface) -> Result<Interface, Vec<Diagnostic>> {
     // collision rule). Both emitters consume this same finalized IR, so the
     // table is consistent by construction.
     //
-    // This was ordinal until hot patching landed. The comment here used to
-    // decline hashing because "the only way the two halves can skew is a
-    // hand-edited generated file", and listed what would change that: "a
-    // reason to let a caller built against a *different* id table through".
-    // That is now an ordinary occurrence rather than a hypothetical. A patch
-    // replaces the running library's dispatch tables, and the Dart generated
-    // beside it arrives separately — later, or never, since a reload that
-    // fails to compile leaves the old Dart calling the patched image. With
-    // positional ids a member declared after an insertion inherits its
-    // neighbour's slot, so that stale caller decodes its arguments in a body
-    // expecting a different signature. Content-derived ids turn the same
-    // situation into an absent id and the `unknown fn_id` panic every entry
-    // point already has.
+    // Content-derived rather than positional because a patch replaces the
+    // running library's dispatch tables while the Dart generated beside it
+    // arrives separately, or never. A stale caller then meets an absent id and
+    // the `unknown fn_id` panic every entry point already has, instead of a
+    // neighbour's body decoding its arguments under another signature.
     let ids = crate::hash::member_ids(&iface.functions);
     for (f, id) in iface.functions.iter_mut().zip(ids) {
         f.fn_id = id;

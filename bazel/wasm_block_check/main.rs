@@ -3,9 +3,9 @@
 //! that does IO in an `--io` category ([`io`]); on wasip1 (`--wasi`), also the
 //! import that waits there.
 //!
-//! `no_block` is the author's claim that a body never waits, transitively, on
-//! any thread. Codegen cannot see through a call
-//! into a dependency, so the claim is settled at *artifact* time: a throwaway
+//! `no_block` is the author's claim that main-thread Dart calling a member
+//! cannot be stalled (docs/design/blocking.md). Codegen cannot see through a
+//! call into a dependency, so the claim is settled at *artifact* time: a throwaway
 //! module is built with `--cfg frustrate_block_check`, where the **only**
 //! exports are one root per claimed member. lld's GC deletes everything those
 //! roots cannot reach, and this tool asks whether a wait instruction survived.
@@ -24,7 +24,7 @@
 //!    Needed only in the Bazel flow, where `--shared-memory` comes from the
 //!    atomics toolchain (`bazel/custom_std.bzl`) and cannot be subtracted
 //!    downstream. The cargo flow drops those link args, so it has no start
-//!    section at all — measured.
+//!    section at all.
 //! 2. **No direct-call path at all** to `W` — from a root, from the start
 //!    function, or from a fatal entry — an error, not a pass. It means the
 //!    direct-call graph cannot account for how `W` is alive (reached only
@@ -90,9 +90,9 @@
 //! direction: a wait kept alive by nothing goes red rather than quiet.
 //!
 //! It is not a whole-program proof for a downstream consumer's own build. A
-//! `--release` build with LTO can inline the wait intrinsic into its callers
-//! (measured: ~10 of them), which is why the check artifact is built **debug**,
-//! where the intrinsic stays one named function.
+//! `--release` build with LTO can inline the wait intrinsic into its callers,
+//! which is why the check artifact is built **debug**, where the intrinsic
+//! stays one named function.
 //!
 //! **A call into an import ends the walk.** Only defined functions have bodies,
 //! so an edge below `func_imports` has nothing for [`Module::scan_of`] to
@@ -101,11 +101,9 @@
 //! which here is a root already scanned — but it is the boundary past which
 //! "this body never waits" stops being what green means.
 //!
-//! Byte-pattern grepping was tried and rejected twice. `grep -c
-//! memory.atomic.wait` over printed WAT returns 1 on an artifact with **zero**
-//! wait instructions — the match is inside a data-section string — and a raw
-//! `0xFE 0x01` byte scan fires on `i32.const 254`. Nothing short of decoding the
-//! code section is honest here, which is what [`parse`] does, with `wasmparser`.
+//! The scan decodes the code section with `wasmparser` ([`parse`]) rather than
+//! matching bytes: a `memory.atomic.wait` string in a data section is not a
+//! wait instruction, and a raw `0xFE 0x01` byte scan fires on `i32.const 254`.
 //!
 //! # Dependencies
 //!
@@ -166,21 +164,21 @@ const LINKER_EXPORTS: &[&str] = &["__wasm_init_tls"];
 ///
 /// Present under both mangling schemes: legacy writes
 /// `_ZN4core9panicking9panic_fmt17h…E`, v0 writes
-/// `_RNvNtCs…_4core9panicking9panic_fmt`. Measured: a `-Zbuild-std` artifact
-/// carries v0 std symbols, so a control that only knew legacy would fire on
-/// every real check artifact.
+/// `_RNvNtCs…_4core9panicking9panic_fmt`. A `-Zbuild-std` artifact carries v0
+/// std symbols, so a control that only knew legacy would fire on every real
+/// check artifact.
 const SENTINEL: &str = "9panicking";
 
 /// An entry into machinery that only runs on a thread that is already dying.
 ///
 /// **Why the exemption is required, not a contingency.** Every Rust function can
 /// panic, and the panic path takes two locks before it can report anything: the
-/// panic hook's `RwLock<Hook>` and `std::sys::backtrace`'s `Mutex<()>`. Measured
-/// on a real check artifact — the backward direct-call region of the one wait
-/// site is 16 functions, and 15 of them are `panic_with_hook`, `default_hook`,
-/// `sys::backtrace::lock` and the std lock internals underneath them. Without
-/// this rule the gate is red on every artifact, including one whose claimed
-/// bodies do nothing but arithmetic, which is a gate that says nothing.
+/// panic hook's `RwLock<Hook>` and `std::sys::backtrace`'s `Mutex<()>`: the
+/// backward direct-call region of the wait site is mostly `panic_with_hook`,
+/// `default_hook`, `sys::backtrace::lock` and the std lock internals beneath
+/// them. Without this rule the gate is red on every artifact, including one
+/// whose claimed bodies do nothing but arithmetic, which is a gate that says
+/// nothing.
 ///
 /// **Why the rule is path-based rather than site-based.** `futex_wait` itself
 /// can never be exempted — real `Mutex`/`Once` uses share it, and exempting the
@@ -195,7 +193,7 @@ const SENTINEL: &str = "9panicking";
 /// failing loudly, where the worst case is a degraded report —
 /// `trap_explain.dart` still attributes the trap to the right bridged call.
 ///
-/// **Both entries were measured, not guessed.** `rust_begin_unwind` alone cuts
+/// `rust_begin_unwind` alone cuts
 /// every panic path — it is the single `#[panic_handler]`, and `panic!`,
 /// `assert!`, bounds checks, `unwrap` and `handle_alloc_error`'s panic variant
 /// all funnel through `core::panicking::panic_fmt` into it. The alloc-error hook
@@ -677,9 +675,9 @@ fn reverse_edges(m: &Module) -> BTreeMap<u32, Vec<u32>> {
 /// the direct call edges are *complete* for the region the cut isolates. They
 /// are not complete for a function something can reach indirectly: a
 /// `call_indirect` can enter it from anywhere, and this tool deliberately does
-/// not model indirect edges (typed closure over the table reaches 97.4% of
-/// functions here — measured — because Rust monomorphisation erases the type
-/// information wasm would need to discriminate).
+/// not model indirect edges (a typed closure over the table reaches nearly
+/// every function, because Rust monomorphisation erases the type information
+/// wasm would need to discriminate).
 ///
 /// So: a function absent from every element segment, every global initialiser
 /// and every `ref.func` cannot be reached indirectly, and for a region built
@@ -687,9 +685,8 @@ fn reverse_edges(m: &Module) -> BTreeMap<u32, Vec<u32>> {
 /// members of the backward region that break that, and the caller refuses to
 /// certify rather than assume.
 ///
-/// Measured on a real check artifact: the 16-function region is clean except
-/// for `default_alloc_error_hook`, which is why that is a [`FatalEntry`] in its
-/// own right rather than an interior node.
+/// `default_alloc_error_hook` is the region's one table-resident member, which
+/// is why it is a [`FatalEntry`] in its own right rather than an interior node.
 fn side_condition(
     m: &Module,
     rev: &BTreeMap<u32, Vec<u32>>,
@@ -1679,7 +1676,8 @@ fn witness(
 /// bindgen post-pass can read a type; it is never called at run time and
 /// nothing a user writes reaches it. A `__wbindgen_malloc` is called by the
 /// generated JS. Neither is a body anyone claimed, and lumping them in with
-/// `frustrate_call_sync` would hide the only distinction the report is for.
+/// `frustrate_<crate>_call_sync` would hide the only distinction the report is
+/// for.
 ///
 /// Ordering is significant: `__wbindgen_describe_intounderlyingsource_pull`
 /// matches three of these prefixes, and the describe shim is what it is.
@@ -1688,7 +1686,7 @@ enum ExportKind {
     /// `frustrate_check_block_*` — a claimed member's check root. Only a
     /// `--cfg frustrate_block_check` artifact has these.
     CheckRoot,
-    /// `frustrate_call_sync` / `frustrate_call_async` / `frustrate_schema_hash`
+    /// `frustrate_<crate>_call_sync` / `_call_async` / `_schema_hash`
     /// — the production module's dispatch entries. Every bridged member is
     /// behind one, so reaching a wait *from* one is necessary but not
     /// sufficient for "a claimed body reaches it": the witness path is what
@@ -1782,8 +1780,8 @@ fn histogram(kinds: &[ExportKind]) -> String {
 /// The module codegen writes its per-member glue into.
 ///
 /// A production module has one dispatch export for the whole bridge, so
-/// "reachable from `frustrate_call_sync`" says nothing about *which* member.
-/// The glue does: `iroh_rust::frustrate_generated::actor_2_connect` is one
+/// "reachable from `frustrate_<crate>_call_sync`" says nothing about *which*
+/// member. The glue does: `iroh_rust::frustrate_generated::actor_2_connect` is one
 /// member's entry and nothing else's. Listing the glue in a site's ancestry is
 /// therefore the closest thing a production module has to the per-member cone a
 /// check artifact would isolate by construction.
@@ -1793,8 +1791,7 @@ const GLUE_MODULE: &str = "frustrate_generated";
 ///
 /// Structural rather than a substring test, and that is the whole point: a
 /// closure inside the dispatcher, and every `catch_unwind` monomorphised over
-/// one, carries `frustrate_generated` somewhere in its symbol too — measured,
-/// 35 such symbols in one ancestry against 1 real member entry. A member entry
+/// one, carries `frustrate_generated` somewhere in its symbol too. A member entry
 /// is exactly `<crate>::frustrate_generated::<name>` with nothing after it,
 /// which [`readable`] renders as three components (a closure adds a fourth,
 /// `{closure#0}`).
@@ -2077,7 +2074,7 @@ fn report(path: &str, label: &str) -> Result<String, String> {
         "\nSummary: {} site(s) with no export in their ordinary ancestry, {} with one.\n\
          An ordinary export ancestry is not by itself a verdict — `{}` reaches every bridged \
          member, so the witness path above is what says whose body it is.\n",
-        ordinary_free, ordinary_reached, "frustrate_call_sync"
+        ordinary_free, ordinary_reached, "frustrate_<crate>_call_sync"
     ));
     Ok(out)
 }
@@ -2737,8 +2734,8 @@ mod tests {
         assert_eq!(readable(ROOT), ROOT);
     }
 
-    /// A `0xFE` byte in an immediate is not an opcode. This is the measured
-    /// false red that rules out byte-pattern grepping.
+    /// A `0xFE` byte in an immediate is not an opcode: the false red a
+    /// byte-pattern scan would give.
     #[test]
     fn an_fe_valued_immediate_does_not_fire() {
         let mut body = vec![0x41, 0xfe, 0x01]; // i32.const 254
@@ -2994,7 +2991,7 @@ mod tests {
     }
 
     /// The exports a check artifact really does have besides its roots, all of
-    /// them non-function: measured as `memory`, `__data_end`, `__heap_base`.
+    /// them non-function (`memory`, `__data_end`, `__heap_base`).
     #[test]
     fn non_function_exports_are_allowed() {
         let b = Build {

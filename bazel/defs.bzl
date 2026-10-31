@@ -243,23 +243,19 @@ def frustrate_bridge_library(name, crate_name = None, shared_library = True, vis
     Use this instead of a bare `rust_shared_library` for a bridge crate. It
     declares two targets over **the same sources and the same attributes**:
 
-    * `<name>` — `rust_shared_library` (crate-type `cdylib`). Byte-for-byte
-      what a bare `rust_shared_library(name = "<name>", …)` produced, and the
-      target every consumer already names: `frustrate_wasm_module(crate = ":<name>")`,
+    * `<name>` — `rust_shared_library` (crate-type `cdylib`), the target
+      consumers name: `frustrate_wasm_module(crate = ":<name>")`,
       `frustrate_code_asset(library = ":<name>")`, which binds the shared
       library to the bindings' code-asset id; the app bundler ships it in each
-      platform's form.
+      platform's form. Absent under `shared_library = False`.
     * `<name>_lib` — `rust_library` (crate-type `rlib`). Same crate, same
       crate *name*, in the one form another Rust crate can link.
 
-    **Why the second target exists.** rustc cannot `extern crate` a cdylib.
-    That single fact left a bridge crate with unit tests only: the only test
-    form available was `rust_test(crate = ":<name>")`, which recompiles the
-    crate's own sources under `--test` and *explicitly forbids* adding `srcs`
-    (rules_rust `rust_test.crate` and `rust_test.srcs` are mutually
-    exclusive), so a file under `tests/` had to be `#[path = "../tests/…"]`
-    smuggled into some module of the crate behind `#[cfg(test)]` to run at
-    all. With the rlib, both ordinary forms work:
+    **Why the second target exists.** rustc cannot `extern crate` a cdylib,
+    and `rust_test(crate = ":<name>")` recompiles the crate's own sources
+    under `--test` and forbids `srcs` (rules_rust `rust_test.crate` and
+    `rust_test.srcs` are mutually exclusive), so against the cdylib only unit
+    tests exist. With the rlib, both ordinary forms work:
 
         rust_test(name = "unit", crate = ":<name>_lib")             # unit
         rust_test(                                                  # integration
@@ -529,8 +525,7 @@ def _frustrate_wasm_module_impl(ctx):
         # The std-facility tripwire (//bazel/wasm_std_check). Run over rustc's
         # own output rather than the post-pass result below, because it reads
         # mangled Rust symbols out of the name section and wasm-bindgen
-        # rewrites them — measured on e2e/iroh_demo, whose processed module
-        # carries 47,212 names and not one mangled symbol among them.
+        # rewrites them: a processed module carries no mangled symbol.
         #
         # A *validation* action rather than an input to the module: it produces
         # nothing anyone consumes, and validations run for every target that
@@ -647,12 +642,12 @@ def _frustrate_wasm_module_impl(ctx):
     # the import object, one `host_imports` declares, or the one the post-pass
     # wrote, which its generated JS supplies. Without it, a graph that needed
     # `bindgen` and did not get it builds green and dies at
-    # `WebAssembly.instantiate`, in a browser, with 126 unsatisfiable imports.
+    # `WebAssembly.instantiate`, in a browser, with unsatisfiable imports.
     #
     # A post-passed module is also checked for the shape the CLI's thread
     # transform produced — it fires whenever the memory is shared and cannot be
-    # switched off, rewrites the memory import, deletes the bootstrap symbols
-    # the pool pump used to call, and hands per-thread setup to
+    # switched off, rewrites the memory import, deletes the thread bootstrap
+    # symbols, and hands per-thread setup to
     # `__wbindgen_start`. frustrate drives that shape, and the CLI version is
     # the *app's* pin rather than frustrate's, so those facts are checked here
     # rather than discovered in a browser. A no-op on a single-threaded module.

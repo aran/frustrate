@@ -1461,7 +1461,7 @@ final class _WebTransport {
     }
   }
 
-  /// `frustrate_call_cancel` (executor.rs) — a runtime export since ABI 4, so
+  /// `frustrate_call_cancel` (executor.rs) — a runtime export, so
   /// it is present on every module `_checkRuntimeAbi` accepted. Claims one
   /// in-flight `async fn` call out of this instance's executor registry so its
   /// future is dropped; `1` means the claim landed and the Dart future is ours
@@ -1634,11 +1634,10 @@ final class _WebTransport {
   /// A bridge's `schema_hash` export is not a substitute — it fingerprints the
   /// *interface* a bridge exposes, so a module whose `#[bridge]` items are
   /// unchanged matches it exactly no matter how old the runtime underneath is.
-  /// The export whose shape moved at ABI 3 (a bridge's `call_sync`) is on the
-  /// hot path of every sync call and takes raw pointers, so calling an old one
-  /// with the new argument list would put the response capacity where a
-  /// pointer used to be and write the answer over the request. Loud here, or
-  /// silent corruption there.
+  /// A bridge's `call_sync` is on the hot path of every sync call and takes
+  /// raw pointers, so calling a module with a different argument list would
+  /// put the response capacity where a pointer used to be and write the answer
+  /// over the request. Loud here, or silent corruption there.
   ///
   /// A module too old to have the export at all fails inside [_export] with
   /// its own named error, which is the same verdict by a different route.

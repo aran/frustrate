@@ -57,10 +57,10 @@ def _wasm_check_transition_impl(settings, attr):
         # and //bazel:wasm32_wasi for `wasi`.
         "//command_line_option:platforms": [str(attr.platform)],
         # Debug, and this is a correctness requirement rather than a build-speed
-        # preference. Measured on the threaded fixture: at release opt levels
-        # rustc inlines the wait intrinsic into ~10 callers, leaving no single
-        # named function for the scanner to name in its witness chain; at
-        # opt-level 0 it stays one function. Pinned rather than inherited so a
+        # preference. At release opt levels rustc inlines the wait intrinsic
+        # into its callers, leaving no single named function for the scanner to
+        # name in its witness chain; at opt-level 0 it stays one function.
+        # Pinned rather than inherited so a
         # `bazel build -c opt` of this target still answers the question.
         "//command_line_option:compilation_mode": "fastbuild",
         # The cfg that inverts the module's export surface: codegen emits one
@@ -554,8 +554,8 @@ def frustrate_no_block_check(
 
     Each root takes its member's request bytes as parameters, so no
     optimizer can delete a body behind a decode it proved fails, and a
-    native analysis refuses a root that does not reach its member's own
-    function. The analyses append `-Copt-level=0` to
+    native analysis reports a root that does not reach its member's own
+    function as "cannot verify". The analyses append `-Copt-level=0` to
     `--@rules_rust//rust/settings:extra_rustc_flag` for readable witness
     paths; a crate's own `rustc_flags` reach rustc after it. The
     configurations also replace `extra_rustc_flags` (a list, so a transition
