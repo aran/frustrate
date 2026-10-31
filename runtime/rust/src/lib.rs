@@ -127,6 +127,8 @@ mod rwlock;
 mod uncaught;
 pub mod testing;
 pub mod stream;
+#[cfg(test)]
+mod test_wait;
 
 /// One lock for the tests that touch a **process global**, so they cannot run
 /// beside each other.

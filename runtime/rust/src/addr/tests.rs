@@ -8,6 +8,7 @@
 use super::*;
 use crate::actor::{Host, spawn_host};
 use crate::codec::FramedWriter;
+use crate::test_wait::Count;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -215,23 +216,11 @@ fn awaiting_a_call_on_its_own_executor_panics_at_once() {
 
 /// Counts runs and drops of a posted closure's capture.
 struct Tracked {
-    drops: Arc<AtomicUsize>,
+    drops: Arc<Count>,
 }
 impl Drop for Tracked {
     fn drop(&mut self) {
-        self.drops.fetch_add(1, Ordering::SeqCst);
-    }
-}
-
-fn await_count(n: &AtomicUsize, want: usize, what: &str) {
-    let deadline = std::time::Instant::now() + Duration::from_secs(10);
-    while n.load(Ordering::SeqCst) < want {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "{what}: still {}",
-            n.load(Ordering::SeqCst)
-        );
-        std::thread::yield_now();
+        self.drops.add();
     }
 }
 
@@ -244,7 +233,7 @@ fn posts_after_dispose_and_behind_the_stop_drop_unrun() {
     drain_completions();
     let (host, log) = spawn_log();
     let ran = Arc::new(AtomicUsize::new(0));
-    let drops = Arc::new(AtomicUsize::new(0));
+    let drops = Arc::new(Count::new());
     let (addr_tx, addr_rx) = channel();
     let (gone_tx, gone_rx) = channel();
     let (first_tx, first_rx) = channel();
@@ -291,7 +280,7 @@ fn posts_after_dispose_and_behind_the_stop_drop_unrun() {
     // Dropped unrun: the posted closure ran once (the first), both captures
     // dropped, and the call made after the dispose is Gone.
     assert_eq!(block_on(gone), Err(Gone));
-    await_count(&drops, 2, "captures dropped");
+    drops.wait_for(2, "captures dropped");
     assert_eq!(ran.load(Ordering::SeqCst), 1);
     assert_eq!(*log.lock().unwrap(), ["before dispose"]);
 
@@ -313,7 +302,7 @@ fn posts_after_dispose_and_behind_the_stop_drop_unrun() {
     }
     let behind = recv(&stopped_rx, "the stop");
     assert_eq!(block_on(behind), Err(Gone));
-    await_count(&drops, 3, "the capture behind the stop dropped");
+    drops.wait_for(3, "the capture behind the stop dropped");
 
     // After the host has stopped, a post is refused and dropped by the
     // poster, and a call is Gone.
@@ -325,7 +314,7 @@ fn posts_after_dispose_and_behind_the_stop_drop_unrun() {
         let _held = held;
         ran3.fetch_add(1, Ordering::SeqCst);
     });
-    await_count(&drops, 4, "the capture of a refused post dropped");
+    drops.wait_for(4, "the capture of a refused post dropped");
     assert_eq!(block_on(addr.call(|_| ())), Err(Gone));
     assert_eq!(ran.load(Ordering::SeqCst), 1, "a post ran after dispose");
 }

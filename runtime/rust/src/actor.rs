@@ -664,6 +664,7 @@ pub unsafe extern "C" fn frustrate_actor_reap(token: *mut c_void) {
 mod tests {
     use super::*;
     use crate::codec::FramedWriter;
+    use crate::test_wait::{Count, wait_until};
     use std::cell::Cell;
     use std::sync::Mutex;
     use std::sync::mpsc::channel;
@@ -691,17 +692,13 @@ mod tests {
             });
         }
         host.request_stop();
-        while SEEN.lock().unwrap().len() < 10 {
-            std::thread::yield_now();
-        }
+        wait_until(|| SEEN.lock().unwrap().len() >= 10, "ten answers");
         assert_eq!(SEEN.lock().unwrap()[9], (9, vec![0, 9]));
 
         // A call to a stopped/unknown host responds with a loud panic
         // envelope, never silence.
         host.submit(11, || Some(FramedWriter::from_bytes(vec![])));
-        while SEEN.lock().unwrap().len() < 11 {
-            std::thread::yield_now();
-        }
+        wait_until(|| SEEN.lock().unwrap().len() >= 11, "the stopped host's answer");
         let seen = SEEN.lock().unwrap();
         let (id, bytes) = &seen[10];
         assert_eq!(*id, 11);
@@ -722,10 +719,10 @@ mod tests {
     }
 
     /// Increments a counter when dropped.
-    struct Sentinel(&'static AtomicUsize);
+    struct Sentinel(&'static Count);
     impl Drop for Sentinel {
         fn drop(&mut self) {
-            self.0.fetch_add(1, Ordering::SeqCst);
+            self.0.add();
         }
     }
 
@@ -738,50 +735,13 @@ mod tests {
         static EXIT_MARK: Cell<Option<Sentinel>> = const { Cell::new(None) };
     }
 
-    /// Spin until `counter` reaches `want`, or fail naming what never happened.
-    ///
-    /// Bounded by a **deadline, not an iteration count**. An iteration bound
-    /// bounds spins rather than elapsed time, and those diverge in exactly the
-    /// wrong direction: the busier the machine, the less wall-clock a fixed
-    /// number of `yield_now` calls buys, so load makes a false failure *more*
-    /// likely rather than less — a flake that only ever appears in a full
-    /// parallel run and never when the test is chased on its own. The deadline
-    /// is generous because its only job is to make a genuine hang report
-    /// instead of wedging the suite.
-    fn await_count(counter: &AtomicUsize, want: usize, what: &str) {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while std::time::Instant::now() < deadline {
-            if counter.load(Ordering::SeqCst) >= want {
-                return;
-            }
-            std::thread::yield_now();
-        }
-        panic!(
-            "{what}: expected {want}, still {}",
-            counter.load(Ordering::SeqCst)
-        );
-    }
-
     /// Wait until `host`'s thread has entered the registry, which it does
     /// from its own thread after spawn returns.
     fn await_registered(host: &Arc<Host>) {
-        await_true(
+        wait_until(
             || HOSTS.with(|m| m.contains_key(&host.id)),
             "the host thread never entered the registry",
         );
-    }
-
-    /// Spin until `cond` holds, or fail with `what`. Deadline-bounded for
-    /// [`await_count`]'s reason.
-    fn await_true(cond: impl Fn() -> bool, what: &str) {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while std::time::Instant::now() < deadline {
-            if cond() {
-                return;
-            }
-            std::thread::yield_now();
-        }
-        panic!("{what}");
     }
 
     /// Stop `host` the way the GC backstop does: through a token of its own,
@@ -792,10 +752,10 @@ mod tests {
     }
 
     /// Increments a counter when dropped, as an actor object would be.
-    struct Counted(&'static AtomicUsize);
+    struct Counted(&'static Count);
     impl Drop for Counted {
         fn drop(&mut self) {
-            self.0.fetch_add(1, Ordering::SeqCst);
+            self.0.add();
         }
     }
 
@@ -810,8 +770,8 @@ mod tests {
         let _serial = crate::post::test_lock();
         drain_completions();
         let reports = crate::panic::record_for_tests();
-        static EXITS: AtomicUsize = AtomicUsize::new(0);
-        static DROPS: AtomicUsize = AtomicUsize::new(0);
+        static EXITS: Count = Count::new();
+        static DROPS: Count = Count::new();
         struct Grenade;
         impl Drop for Grenade {
             fn drop(&mut self) {
@@ -836,10 +796,10 @@ mod tests {
 
         reap_via_backstop(&host);
         assert_eq!(host_count(), before - 1, "a reap must count at once");
-        await_count(&EXITS, 1, "the host thread never exited");
+        EXITS.wait_for(1, "the host thread never exited");
         crate::panic::unregister();
 
-        assert_eq!(DROPS.load(Ordering::SeqCst), 1, "the drain stopped at the panic");
+        assert_eq!(DROPS.get(), 1, "the drain stopped at the panic");
         assert_eq!(
             reports.lock().unwrap().as_slice(),
             ["a user Drop exploded during teardown"],
@@ -853,8 +813,8 @@ mod tests {
     fn reap_drops_once_and_is_idempotent() {
         let _serial = crate::post::test_lock();
         drain_completions();
-        static DROPS: AtomicUsize = AtomicUsize::new(0);
-        static EXITS: AtomicUsize = AtomicUsize::new(0);
+        static DROPS: Count = Count::new();
+        static EXITS: Count = Count::new();
         let host = spawn_host(0);
         let before = host_count();
 
@@ -866,18 +826,18 @@ mod tests {
             Some(FramedWriter::from_bytes(vec![]))
         });
         rx.recv().unwrap();
-        assert_eq!(DROPS.load(Ordering::SeqCst), 0, "minting must not drop");
+        assert_eq!(DROPS.get(), 0, "minting must not drop");
 
         reap_via_backstop(&host);
-        await_count(&DROPS, 1, "the reap never dropped the object");
-        await_count(&EXITS, 1, "the host thread never exited");
+        DROPS.wait_for(1, "the reap never dropped the object");
+        EXITS.wait_for(1, "the host thread never exited");
         assert_eq!(host_count(), before - 1);
 
         // Idempotent from both directions: a second reap and a shutdown of an
         // already-reaped host must find nothing and drop nothing.
         reap_via_backstop(&host);
         unsafe { frustrate_actor_shutdown(Arc::as_ptr(&host) as *const c_void) };
-        assert_eq!(DROPS.load(Ordering::SeqCst), 1, "teardown must not repeat");
+        assert_eq!(DROPS.get(), 1, "teardown must not repeat");
         assert_eq!(host_count(), before - 1, "a host is uncounted once");
     }
 
@@ -940,12 +900,12 @@ mod tests {
         crate::post::mark_gone_for_test(41);
         let before = host_count();
         let host = spawn_host(41);
-        await_true(
+        wait_until(
             || host.stopping.load(Ordering::SeqCst),
             "a host of a dead isolate kept running",
         );
         assert_eq!(host_count(), before, "it counted itself out");
-        await_true(
+        wait_until(
             || !HOSTS.with(|m| m.contains_key(&host.id)),
             "the stopped host never left the registry",
         );
@@ -958,8 +918,8 @@ mod tests {
     fn a_disposed_object_is_not_dropped_again_by_the_stop() {
         let _serial = crate::post::test_lock();
         drain_completions();
-        static DROPS: AtomicUsize = AtomicUsize::new(0);
-        static EXITS: AtomicUsize = AtomicUsize::new(0);
+        static DROPS: Count = Count::new();
+        static EXITS: Count = Count::new();
         let host = spawn_host(0);
         let before = host_count();
 
@@ -976,8 +936,8 @@ mod tests {
             Some(FramedWriter::from_bytes(vec![]))
         });
         host.request_stop();
-        await_count(&EXITS, 1, "a stop must end the thread");
-        assert_eq!(DROPS.load(Ordering::SeqCst), 1, "dropped twice, or never");
+        EXITS.wait_for(1, "a stop must end the thread");
+        assert_eq!(DROPS.get(), 1, "dropped twice, or never");
         assert_eq!(host_count(), before - 1);
     }
 
@@ -1030,8 +990,8 @@ mod tests {
     fn a_cancelled_deferred_never_answers_and_a_completed_one_refuses_the_claim() {
         let _serial = crate::post::test_lock();
         let seen = recording_posts();
-        static PARKED_DROPS: AtomicUsize = AtomicUsize::new(0);
-        PARKED_DROPS.store(0, Ordering::SeqCst);
+        static PARKED_DROPS: Count = Count::new();
+        PARKED_DROPS.reset();
         let host = spawn_host(0);
 
         // Two deferred calls dispatched on the host thread, exactly as the
@@ -1055,15 +1015,8 @@ mod tests {
         });
         rx.recv().unwrap();
 
-        // 102 completes naturally on the pool-driven executor. Deadline rather
-        // than an iteration count, for the reason `await_count` spells out.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while std::time::Instant::now() < deadline {
-            if seen.lock().unwrap().contains(&102) {
-                break;
-            }
-            std::thread::yield_now();
-        }
+        // 102 completes naturally on the pool-driven executor.
+        wait_until(|| seen.lock().unwrap().contains(&102), "the fence call never answered");
         assert!(seen.lock().unwrap().contains(&102), "the ready body answers");
         assert!(
             !crate::executor::cancel(102),
@@ -1074,7 +1027,7 @@ mod tests {
         // 101 is parked; the cancel claims it, the future is dropped on a
         // drain, and no completion for it ever arrives.
         assert!(crate::executor::cancel(101), "a live deferred is claimable");
-        await_count(&PARKED_DROPS, 1, "the cancelled future was never dropped");
+        PARKED_DROPS.wait_for(1, "the cancelled future was never dropped");
         assert!(
             !seen.lock().unwrap().contains(&101),
             "a claimed cancel owns the answer: the executor must not respond \
@@ -1095,7 +1048,7 @@ mod tests {
     fn reaping_a_host_drops_its_outstanding_deferred_futures() {
         let _serial = crate::post::test_lock();
         let seen = recording_posts();
-        static REAPED_DROPS: AtomicUsize = AtomicUsize::new(0);
+        static REAPED_DROPS: Count = Count::new();
         let host = spawn_host(0);
 
         let (tx, rx) = channel::<()>();
@@ -1107,16 +1060,12 @@ mod tests {
         rx.recv().unwrap();
 
         reap_via_backstop(&host);
-        await_count(
-            &REAPED_DROPS,
-            1,
-            "reap must release the deferred future (nothing else can)",
-        );
+        REAPED_DROPS.wait_for(1, "reap must release the deferred future (nothing else can)");
         assert!(
             !seen.lock().unwrap().contains(&201),
             "no answer is owed to a reaped handle's call"
         );
-        await_true(
+        wait_until(
             || DEFERRED.with(|m| m.get(&host.id).is_none()),
             "the host's registry entry must not outlive the reap",
         );
@@ -1144,7 +1093,7 @@ mod tests {
     fn a_cancel_claims_a_call_that_is_still_queued() {
         let _serial = crate::post::test_lock();
         let seen = recording_posts();
-        static QUEUED_DROPS: AtomicUsize = AtomicUsize::new(0);
+        static QUEUED_DROPS: Count = Count::new();
         static RAN: std::sync::atomic::AtomicBool =
             std::sync::atomic::AtomicBool::new(false);
         RAN.store(false, Ordering::SeqCst);
@@ -1180,13 +1129,7 @@ mod tests {
 
         // 603's answer is FIFO-after 602's slot, so it proves the loop has
         // already passed (and dropped) the claimed job.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while std::time::Instant::now() < deadline {
-            if seen.lock().unwrap().contains(&603) {
-                break;
-            }
-            std::thread::yield_now();
-        }
+        wait_until(|| seen.lock().unwrap().contains(&603), "the fence call never answered");
         let seen = seen.lock().unwrap();
         assert!(seen.contains(&603), "the uncancelled queued call must answer");
         assert!(
@@ -1195,7 +1138,7 @@ mod tests {
              deferred prefix is user code the caller cancelled"
         );
         assert_eq!(
-            QUEUED_DROPS.load(Ordering::SeqCst),
+            QUEUED_DROPS.get(),
             1,
             "the claimed job must be dropped, not stranded in the queue"
         );
@@ -1245,13 +1188,7 @@ mod tests {
         // FIFO-after 701, so its answer proves the loop has already passed the
         // claimed one. Same fence the queued-cancel test uses.
         host.submit(702, || Some(FramedWriter::from_bytes(vec![0])));
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while std::time::Instant::now() < deadline {
-            if seen.lock().unwrap().contains(&702) {
-                break;
-            }
-            std::thread::yield_now();
-        }
+        wait_until(|| seen.lock().unwrap().contains(&702), "the fence call never answered");
         let posted = seen.lock().unwrap();
         assert!(posted.contains(&702), "the uncancelled call must answer");
         assert!(!posted.contains(&701), "a claimed cancel owns the answer");
@@ -1278,7 +1215,7 @@ mod tests {
     fn a_cancel_during_the_prefix_beats_the_hand_off() {
         let _serial = crate::post::test_lock();
         let seen = recording_posts();
-        static REFUSED_DROPS: AtomicUsize = AtomicUsize::new(0);
+        static REFUSED_DROPS: Count = Count::new();
         static POLLS: AtomicUsize = AtomicUsize::new(0);
         let host = spawn_host(0);
 
@@ -1314,7 +1251,7 @@ mod tests {
             "a call whose prefix is running is still the canceller's to claim"
         );
         go_tx.send(()).unwrap();
-        await_count(&REFUSED_DROPS, 1, "the refused body was never dropped");
+        REFUSED_DROPS.wait_for(1, "the refused body was never dropped");
         assert_eq!(
             POLLS.load(Ordering::SeqCst),
             0,
@@ -1325,7 +1262,7 @@ mod tests {
             !seen.lock().unwrap().contains(&701),
             "the canceller owns the answer, so nothing may respond for 701"
         );
-        await_true(
+        wait_until(
             || DEFERRED.with(|m| m.get(&host.id).is_none()),
             "the deferred registration must be released with the refused body",
         );
@@ -1351,7 +1288,7 @@ mod tests {
                         Some(FramedWriter::from_bytes(vec![0]))
                     })
                 };
-                await_true(|| seen.lock().unwrap().contains(&801), "the call never answered");
+                wait_until(|| seen.lock().unwrap().contains(&801), "the call never answered");
             })
         });
         host.request_stop();
@@ -1432,14 +1369,14 @@ mod tests {
         // Pushed after the Stop, so it is behind it in the queue.
         host.submit(902, || Some(FramedWriter::from_bytes(vec![0])));
         go_tx.send(()).unwrap();
-        await_true(
+        wait_until(
             || {
                 let s = seen.lock().unwrap();
                 s.contains(&901) && s.contains(&902)
             },
             "a call behind the stop was never answered",
         );
-        await_true(
+        wait_until(
             || !HOSTS.with(|m| m.contains_key(&host.id)),
             "the stopped host never left the registry",
         );

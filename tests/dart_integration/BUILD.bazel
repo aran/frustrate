@@ -221,12 +221,9 @@ dart_test(
 )
 
 # `Addr`: an actor posting closures to itself. Ordering, a job that only a
-# call between its slices can stop, how long a call waits behind such a job,
+# call between its slices can stop, how many slices a call waits behind such a job,
 # `Deferred` with `Addr::call`, the self-call panic, and dispose with slices
 # pending. Runs on web via web_test.
-#
-# `exclusive`: the wait it bounds is wall-clock time, which tests running
-# beside it in a parallel `bazel test //...` stretch past the bound.
 dart_test(
     name = "addr_test",
     main = "test/addr_test.dart",
@@ -234,7 +231,6 @@ dart_test(
         "test/init_native.dart",
         "test/init_web.dart",
     ],
-    tags = ["exclusive"],
     deps = [
         "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
@@ -895,6 +891,7 @@ dart_test(
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
+        "test/zone_heard.dart",
     ],
     deps = [
         "//tests/test_api:bindings",

@@ -18,6 +18,12 @@ import 'init_native.dart' if (dart.library.js_interop) 'init_web.dart';
 
 const bool isWeb = bool.fromEnvironment('dart.library.js_interop');
 
+/// Slices that run between two calls, at the median. The design bounds a
+/// call's own wait: it arrives during one slice, runs after the one that
+/// slice has already queued, and not after the job. The third is the slice
+/// that can run while the previous answer is on its way back to Dart.
+const int _medianSlicesBetween = 3;
+
 void main() {
   setUpAll(initBridge);
 
@@ -85,35 +91,27 @@ void main() {
       final s = await Slicer.new_();
       final job = s.runUntilStopped(sliceUs: sliceUs);
       await s.slicesSince();
-      final sw = Stopwatch()..start();
-      final roundTripUs = <int>[];
       final between = <int>[];
       for (var i = 0; i < calls; i++) {
-        final t0 = sw.elapsedMicroseconds;
         between.add(await s.slicesSince());
-        roundTripUs.add(sw.elapsedMicroseconds - t0);
       }
       await s.stop();
       await job;
       await s.dispose();
-      roundTripUs.sort();
       between.sort();
-      final p50 = roundTripUs[calls ~/ 2];
-      final p99 = roundTripUs[calls * 99 ~/ 100];
-      final most = roundTripUs.last;
+      final total = between.fold<int>(0, (a, b) => a + b);
       // ignore: avoid_print
       print(
-        'Addr liveness, $sliceUs us slices: call round trip p50 $p50 us, '
-        'p99 $p99 us, max $most us; slices between calls '
-        'p50 ${between[calls ~/ 2]}, max ${between.last}, '
-        'total ${between.fold<int>(0, (a, b) => a + b)}',
+        'Addr liveness, $sliceUs us slices: slices between calls '
+        'p50 ${between[calls ~/ 2]}, max ${between.last}, total $total',
       );
-      // A call waits for the slice running when it arrives, not for the job,
-      // which runs until the last call stops it. The test prints the measured
-      // wait; the bound leaves room for a loaded machine.
-      expect(most, lessThan(25 * sliceUs));
+      // Counted in slices, not time, so a loaded machine does not move it.
+      // The median, not the largest: slices also run while Dart is not
+      // running, which the slicing design does not bound, so a stall of the
+      // test's own thread shows up as one large count.
+      expect(between[calls ~/ 2], lessThanOrEqualTo(_medianSlicesBetween));
       // And the job keeps going while calls run.
-      expect(between.fold<int>(0, (a, b) => a + b), greaterThan(calls ~/ 2));
+      expect(total, greaterThan(calls ~/ 2));
     },
   );
 
