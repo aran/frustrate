@@ -192,8 +192,8 @@ pub struct Host {
     owner: u64,
     inbox: Inbox,
     thread: Thread,
-    /// Set once, by the first request to stop. Makes stopping idempotent and
-    /// [`host_count`] exact at the moment of the request.
+    /// Set once, by the first request to stop. Makes stopping idempotent, and
+    /// uncounts the host in [`host_count`] at the moment of the request.
     stopping: AtomicBool,
 }
 
@@ -230,7 +230,6 @@ impl Host {
     /// Ask the host to stop after what is already queued. Idempotent.
     pub(crate) fn request_stop(&self) {
         if !self.stopping.swap(true, Ordering::AcqRel) {
-            LIVE.fetch_sub(1, Ordering::Relaxed);
             // Only the host thread closes the inbox, and only after this Stop,
             // so this push cannot be refused.
             let _ = self.post(Msg::Stop);
@@ -290,9 +289,6 @@ pub(crate) fn current() -> Arc<Host> {
         "frustrate: an Addr can only be made on its actor's executor — bridge bug",
     )
 }
-
-/// Hosts not yet asked to stop. Test support behind [`host_count`].
-static LIVE: AtomicUsize = AtomicUsize::new(0);
 
 static NEXT_HOST: AtomicU64 = AtomicU64::new(1);
 
@@ -414,7 +410,6 @@ pub(crate) fn spawn_owned(isolate: u32, owner: u64) -> Arc<Host> {
         thread,
         stopping: AtomicBool::new(false),
     });
-    LIVE.fetch_add(1, Ordering::Relaxed);
     handoff.store(Arc::into_raw(Arc::clone(&host)) as *mut Host, Ordering::Release);
     host.thread.unpark();
     host
@@ -556,10 +551,17 @@ pub unsafe fn submit(
     unsafe { &*(host as *const Host) }.submit(call_id, job)
 }
 
-/// Number of hosts not yet asked to stop. Test support: executor-leak pins
-/// measure this around spawn/dispose (a failed spawn must strand nothing).
+/// Number of hosts in the registry not yet asked to stop. A host counts once
+/// its thread has entered the registry, which it does before serving its
+/// first call. Test support: executor-leak pins measure this around
+/// spawn/dispose (a failed spawn must strand nothing). Derived from the
+/// registry on each call, so it costs nothing until asked.
 pub fn host_count() -> usize {
-    LIVE.load(Ordering::Relaxed)
+    HOSTS.with(|map| {
+        map.values()
+            .filter(|host| !host.stopping.load(Ordering::Acquire))
+            .count()
+    })
 }
 
 /// Stop every executor owned by a dead isolate.
@@ -779,7 +781,6 @@ mod tests {
             }
         }
         let host = spawn_host(0);
-        let before = host_count();
 
         // Minted on the host thread, like a generated constructor body. The
         // grenade is newer, so it drops first: the panic must not strand what
@@ -793,6 +794,8 @@ mod tests {
             Some(FramedWriter::from_bytes(vec![]))
         });
         rx.recv().unwrap();
+        // Registered: the host has served a job.
+        let before = host_count();
 
         reap_via_backstop(&host);
         assert_eq!(host_count(), before - 1, "a reap must count at once");
@@ -816,7 +819,6 @@ mod tests {
         static DROPS: Count = Count::new();
         static EXITS: Count = Count::new();
         let host = spawn_host(0);
-        let before = host_count();
 
         let (tx, rx) = channel::<()>();
         host.submit(0, move || {
@@ -826,6 +828,8 @@ mod tests {
             Some(FramedWriter::from_bytes(vec![]))
         });
         rx.recv().unwrap();
+        // Registered: the host has served a job.
+        let before = host_count();
         assert_eq!(DROPS.get(), 0, "minting must not drop");
 
         reap_via_backstop(&host);
@@ -851,10 +855,10 @@ mod tests {
         let _serial = crate::post::test_lock();
         let mine = spawn_host(11);
         let theirs = spawn_host(22);
-        let before = host_count();
-        // Each host enters the registry from its own thread.
+        // Each host enters the registry, and so the count, from its own thread.
         await_registered(&mine);
         await_registered(&theirs);
+        let before = host_count();
 
         reap_isolate(11);
         assert_eq!(
@@ -881,8 +885,8 @@ mod tests {
     fn an_isolate_death_notice_releases_that_isolate_s_executors() {
         let _serial = crate::post::test_lock();
         let host = spawn_host(31);
-        let before = host_count();
         await_registered(&host);
+        let before = host_count();
 
         crate::post::mark_gone_for_test(31);
         assert_eq!(
@@ -921,7 +925,6 @@ mod tests {
         static DROPS: Count = Count::new();
         static EXITS: Count = Count::new();
         let host = spawn_host(0);
-        let before = host_count();
 
         let (tx, rx) = channel::<u64>();
         host.submit(0, move || {
@@ -930,6 +933,8 @@ mod tests {
             Some(FramedWriter::from_bytes(vec![]))
         });
         let slot = rx.recv().unwrap();
+        // Registered: the host has served a job.
+        let before = host_count();
         // What the generated dispatched drop does.
         host.submit(1, move || {
             crate::handle::actor_drop::<Counted>(slot);
