@@ -556,14 +556,19 @@ def frustrate_no_block_check(
         third-party function. Each matches every function whose demangled
         path starts with it, whole segments only; start with the crate's
         name, never `crate::`. A marker must be `#[inline(never)]`: even
-        `#[inline]` vanishes at opt-level 0. A misspelt path matches nothing
-        and stays green, so try a new one once by calling it from a claimed
-        member.
+        `#[inline]` vanishes at opt-level 0. A native analysis refuses a
+        path that names no function in the program, since its build keeps
+        every production export. A wasm module keeps only what the claims
+        reach, so with no native target a misspelt path stays green: try a
+        new one once by calling it from a claimed member.
       io: IO classes a claimed body may not do: `files` (opening, naming,
         reading or syncing a file), `network` (sockets and name lookup),
         `process` (starting a program). frustrate maps each to the target's
         calls: C library functions natively, `wasi_snapshot_preview1`
-        imports on wasi. Sleeping needs no class: it is a wait everywhere.
+        imports on wasi. A native analysis already reports every such call
+        as "cannot verify", so there a class only makes the finding red and
+        names it; `wasi` finds the calls only through a class. Sleeping needs no class:
+        it is a wait everywhere.
         Writes to an open descriptor are in no class, because stdout, stderr
         and the panic report are such writes. //bazel/wasm_block_check/io.rs
         has the maps and what each covers.
@@ -573,7 +578,9 @@ def frustrate_no_block_check(
         function instead; for one member's finding, `no_block(allow(<name>))`
         in its `#[bridge(...)]`, its impl's, or its file's `bridge_file!`. The
         check lists every silence it applied, and fails on one that silences
-        nothing.
+        nothing. Only the native analyses read silences, these and the ones
+        in source: `web_threads` and `wasi` neither apply them nor fail on
+        them.
       **kwargs: Common attributes (`tags`, `visibility`, `size`, ...) for
         every test and the suite.
     """

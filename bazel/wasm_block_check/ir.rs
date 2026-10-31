@@ -587,8 +587,31 @@ pub(crate) fn run_ir(
     }
     match_census(&root_names, claims, label)?;
 
-
     let paths: Vec<Vec<String>> = ir.names.iter().map(|n| own_path(n)).collect();
+
+    // Control: every `--slow` path names a function in the program. This
+    // build keeps every production export, so a path that matches nothing
+    // here is misspelt, or names a function this target's build never calls;
+    // either way it checks nothing.
+    let unmatched: Vec<String> = sinks
+        .paths
+        .iter()
+        .filter(|p| !(0..ir.names.len()).any(|f| ir.defined[f] && p.matches(&paths[f])))
+        .map(|p| format!("  `{}`", p.text()))
+        .collect();
+    if !unmatched.is_empty() {
+        return Err(format!(
+            "wasm_block_check: {label}: {} `slow` path(s) name no function in \
+             this program:\n\n{}\n\n\
+             This build keeps every production export, so the path is misspelt \
+             (it starts with the crate's name as rustc sees it, hyphens as \
+             underscores, and matches whole segments), or nothing in this \
+             target's build calls the function. Either way it would check \
+             nothing. Correct it, or remove it.",
+            unmatched.len(),
+            unmatched.join("\n")
+        ));
+    }
 
     let fatal: BTreeSet<u32> = (0..ir.names.len() as u32)
         .filter(|f| FATAL_ENTRIES.iter().any(|e| e.matches(&ir.names[*f as usize])))
@@ -1257,6 +1280,20 @@ mod tests {
         assert!(e.contains("reaches open — IO `files`"), "{e}");
         let e = check(&body, &["example::render"], &[]).unwrap_err();
         assert!(e.contains("named slow by `example::render`"), "{e}");
+    }
+
+    #[test]
+    fn a_slow_path_that_names_no_function_is_refused() {
+        let body = format!(
+            "{ROOT}define void @_RNvCs1_7example6render() {{\n  ret void\n}}\n\
+             define void @_RNvCs1_7example4slow() {{\n  ret void\n}}\n"
+        );
+        let ok = check(&body, &["example::slow"], &[]).unwrap();
+        assert!(ok.contains("is clean"), "{ok}");
+        let e = check(&body, &["example::slow", "example::slwo"], &[]).unwrap_err();
+        assert!(e.contains("1 `slow` path(s) name no function"), "{e}");
+        assert!(e.contains("`example::slwo`"), "{e}");
+        assert!(!e.contains("`example::slow`"), "{e}");
     }
 
     #[test]

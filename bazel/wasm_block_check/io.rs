@@ -16,6 +16,12 @@
 //! is a call the optimizer cannot inline away, which is why IO is checked
 //! here and not through `--slow` paths: std's IO functions inline away.
 //!
+//! Natively a category changes how a finding is worded, not what is found:
+//! no call in one is known not to wait, so without the category the native
+//! check already reports each as "cannot verify". Naming it makes the
+//! finding red and names the category. On wasip1 a category is the only way
+//! its calls are found.
+//!
 //! What no category covers: writes to an already-open descriptor (`write`,
 //! `fd_write`). Standard output and error are such writes, and so is the panic
 //! hook's report, which the wasm scan cannot tell apart from a claimed body's
@@ -350,6 +356,29 @@ mod tests {
     fn an_unknown_category_is_refused_naming_the_known_ones() {
         let e = parse("disk").err().unwrap();
         assert!(e.contains("`files`, `network`, `process`"), "{e}");
+    }
+
+    /// What makes a category on a native target only wording: every call in
+    /// it is "cannot verify" without it, in every C library of its OS.
+    #[test]
+    fn no_native_call_in_a_category_is_known_not_to_wait() {
+        for libc in crate::libc::KNOWN {
+            for c in CATEGORIES {
+                let calls = match libc.os {
+                    Os::Apple => c.apple,
+                    Os::Linux => c.linux,
+                };
+                for p in calls {
+                    let stem = p.trim_end_matches('*');
+                    assert!(!libc.no_wait(stem), "{}: `{p}` in `{}`", libc.name, c.name);
+                }
+            }
+            for (names, _) in libc.no_wait {
+                for n in names.iter().map(|n| n.trim_end_matches('*')) {
+                    assert!(!CATEGORIES.iter().any(|c| c.native_call(libc.os, n)), "{}: `{n}`", libc.name);
+                }
+            }
+        }
     }
 
     #[test]

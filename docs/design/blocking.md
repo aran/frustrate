@@ -95,9 +95,11 @@ names classes of IO; a claimed body may reach neither. A class is one word
 frustrate maps per target, because IO is a different call on each: a C library
 function natively, a `wasi_snapshot_preview1` import on wasip1. Neither can be
 inlined away, which is why IO is checked there and not through std's own
-functions. Single-threaded web has no IO that blocks: std's is stubs, and
-JavaScript's is asynchronous. Sleeping is a wait on every target, so it needs
-no class.
+functions. Natively no IO call is known not to wait, so a native analysis
+reports each as "cannot verify" whatever `io` says; a class there makes the
+finding red and names it. Single-threaded web has no IO that blocks: std's
+is stubs, and JavaScript's is asynchronous. Sleeping is a wait on every
+target, so it needs no class.
 
 ## Which analysis proves what
 

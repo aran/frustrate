@@ -1,6 +1,6 @@
 //! Tiny self-contained bridge fixture for the Bazel rule tests.
 //!
-//! One `#[bridge(sync)]` function is enough to exercise the whole pipeline
+//! Two `#[bridge(sync)]` functions are enough to exercise the whole pipeline
 //! the rules wire up — codegen scans this file, emits the Rust glue and Dart
 //! bindings, and the generated glue compiles into the wasm module. Kept
 //! deliberately minimal (no async, no streams, no handles) so these tests
@@ -22,6 +22,20 @@ use frustrate::bridge;
 pub fn add(a: i32, b: i32) -> i32 {
     a.wrapping_add(b)
 }
+
+/// Not claimed, and the one caller of [`slow`], so that the marker
+/// `//tests/bazel_rules:fixture_block_check` names exists in the native
+/// program: the native check refuses a `slow` path that names no function.
+#[bridge(sync)]
+pub fn sub(a: i32, b: i32) -> i32 {
+    slow();
+    a.wrapping_sub(b)
+}
+
+/// `//tests/bazel_rules:fixture_block_check`'s `slow` marker.
+#[bridge(skip)]
+#[inline(never)]
+pub fn slow() {}
 
 /// The unit-test half of `frustrate_bridge_library`'s contract, and the
 /// contrast that makes the integration test in `tests/exported_abi.rs` mean

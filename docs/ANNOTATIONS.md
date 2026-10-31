@@ -47,9 +47,11 @@ on: no claimed member reaches a wait, a function under a path in its `slow`
 (your own `#[inline(never)]` slow-work marker, or a third-party function), or
 IO in a class in its `io` (`files`, `network`, `process`, which frustrate maps
 to each target's calls). For each native platform (Android, iOS, Linux with
-glibc, macOS) it reads that platform's build's whole-program LLVM IR, built
-from any host, and fails a member that reaches any C or OS function its C
-library is not known to return from without waiting as "cannot verify". On
+glibc, macOS) it reads that platform's build's whole-program LLVM IR and fails a
+member that reaches a C or OS function its C library is not known to return
+from without waiting as "cannot verify"; IO calls are among those already, so there an `io`
+class only makes the finding red and names the class. A `slow` path that names
+no function in the native program is refused as a likely misspelling. On
 threaded web it scans the wasm module for `memory.atomic.wait`; on wasip1, for
 `poll_oneoff`. Red can be a false alarm.
 A call through a value loaded from a static (a logger installed with
@@ -68,7 +70,9 @@ claim — on the member, its impl block, or `bridge_file!(no_block(allow(...)))`
 check target's `allow` does the same for every claim it checks, for what a
 dependency or the build decides. `name` is
 what the finding says to silence it as. The check lists every silence it
-applied, and a silence that matches nothing is an error.
+applied, and a silence that matches nothing is an error. Only the native check
+reads silences, these and the attribute below: on threaded web and wasip1 a
+silenced finding stays red, and a silence is neither applied nor checked.
 
 **Silencing a whole function:** `#[frustrate::no_block(allow)]` on a function
 of your own — free, a method or generic — means a claimed member that reaches
@@ -86,8 +90,7 @@ Use the check target's `allow` for code you cannot annotate, and the member's
 `allow` as a convenience when the name is enough. In an ordinary build the
 function is unchanged; the attribute costs nothing in release. The attribute
 fails the check when a claimed member reaches the function but nothing under it
-would be a finding; a marked function no claim reaches is ignored. The native
-check reads it; the wasm checks do not.
+would be a finding; a marked function no claim reaches is ignored.
 
 ## `native_only`
 

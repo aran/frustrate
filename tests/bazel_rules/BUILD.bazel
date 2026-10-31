@@ -344,9 +344,9 @@ build_test(
 # - `.wasi`: wasip1 with the stock std, where IO is `wasi_snapshot_preview1`
 #   imports.
 #
-# `slow` names a path nothing defines, so it proves only that paths reach every
-# analysis; `io` likewise reaches the native analyses and wasi. The red
-# direction cannot be
+# `slow` names a marker only the unclaimed `sub` calls: native proves the path
+# names a function, and every analysis that no claim reaches it. `io` reaches
+# native and wasi. The red direction cannot be
 # a target, because Bazel cannot assert that an action fails: put a
 # `Mutex::lock` in `add`'s body and every analysis that runs goes red, naming
 # `add` and its path. The scanner's unit tests in //bazel/wasm_block_check cover
@@ -360,7 +360,7 @@ frustrate_no_block_check(
         "network",
         "process",
     ],
-    slow = ["rule_test_fixture::slow"],
+    slow = ["rule_test_fixture::api::slow"],
     targets = [
         "android",
         "ios",

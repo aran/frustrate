@@ -307,9 +307,10 @@ const WAIT64: &str = "memory.atomic.wait64";
 /// For the same reason std's IO cannot be named on `wasm32-unknown-unknown`,
 /// where `std::fs` and `std::net` are stubs that inline away.
 ///
-/// A path that names nothing matches nothing. That is the one silence this
-/// cannot close: a clean artifact is one in which the named functions are
-/// absent, so absence cannot also be the evidence of a misspelling.
+/// A path that names nothing is refused by the native analysis
+/// ([`ir`]), whose build keeps the whole program. A wasm scan cannot
+/// refuse it: its module keeps only what the roots reach, so a clean one is
+/// one in which the named functions are absent.
 struct SlowPath(Vec<String>);
 
 impl SlowPath {
@@ -2574,6 +2575,13 @@ fn main() -> ExitCode {
             eprintln!("{e}");
             return ExitCode::FAILURE;
         }
+    }
+    if !ir_mode && !slow.allowed.is_empty() {
+        eprintln!(
+            "wasm_block_check: `--allow` is read only by the native analysis \
+             (`--ir`); a wasm scan would ignore it."
+        );
+        return ExitCode::FAILURE;
     }
     if let Err(e) = self_test() {
         eprintln!("wasm_block_check: {e}");
