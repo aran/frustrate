@@ -48,7 +48,7 @@ use crate::bounded::{Lock, Outside};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::c_void;
 use std::ptr::{null_mut, NonNull};
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::Thread;
 
@@ -669,6 +669,7 @@ mod tests {
     use crate::test_wait::{Count, wait_until};
     use std::cell::Cell;
     use std::sync::Mutex;
+    use std::sync::atomic::AtomicUsize;
     use std::sync::mpsc::channel;
 
     // One test fn, serialized with other post-using tests via
@@ -952,7 +953,9 @@ mod tests {
     /// an `Outcome` so it is spawnable as a deferred body.
     // The `Sentinel` is never read — it is held purely so that dropping this
     // future runs its `Drop`, which is the observation the test makes.
+    #[cfg(not(frustrate_manual_scheduler))]
     struct ParkedBody(#[allow(dead_code)] Sentinel);
+    #[cfg(not(frustrate_manual_scheduler))]
     impl std::future::Future for ParkedBody {
         type Output = crate::envelope::Outcome;
         fn poll(

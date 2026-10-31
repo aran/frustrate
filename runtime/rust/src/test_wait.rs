@@ -34,6 +34,7 @@ impl Count {
         *self.n.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    #[cfg_attr(frustrate_manual_scheduler, allow(dead_code))]
     pub(crate) fn reset(&self) {
         *self.n.lock().unwrap_or_else(PoisonError::into_inner) = 0;
     }
