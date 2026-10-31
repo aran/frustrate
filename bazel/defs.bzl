@@ -27,6 +27,7 @@ FrustrateBridgeInfo = provider(
         "crate_name": "str: the bridge crate's name.",
         "dart_import": "str: import URI of the generated Dart bindings entry.",
         "ir": "File: the interface JSON, which a bridge naming this one in `models` checks its shared types against.",
+        "models_import": "str: import URI of the library through which a bridge naming this one in `models` reaches its plain data classes and their codecs.",
         "package_name": "str: the Dart package the bindings compile into.",
     },
 )
@@ -43,12 +44,15 @@ def _frustrate_bridge_impl(ctx):
     # by lib_root (= this package) prefix, so the bindings dart_library must
     # live in this same package and the file must sit directly under lib/.
     # The entry is a conditional export of the per-platform surfaces under
-    # lib/src/ (web omits native-only members).
+    # lib/src/ (web omits native-only members). Beside it, the models library
+    # exports the plain data classes and their codecs to bridges that name
+    # this one in `models`.
     stem = ctx.attr.crate_name + ".frustrate"
     dart_out = ctx.actions.declare_file("lib/" + stem + ".dart")
+    dart_models_out = ctx.actions.declare_file("lib/" + stem + ".models.dart")
     dart_native_out = ctx.actions.declare_file("lib/src/" + stem + ".native.dart")
     dart_web_out = ctx.actions.declare_file("lib/src/" + stem + ".web.dart")
-    dart_outs = [dart_out, dart_native_out, dart_web_out]
+    dart_outs = [dart_out, dart_models_out, dart_native_out, dart_web_out]
     ir_out = ctx.actions.declare_file(ctx.label.name + "/interface.frustrate.json")
 
     # The `#[bridge(no_block)]` claim census: which claims want a check
@@ -65,7 +69,7 @@ def _frustrate_bridge_impl(ctx):
         args.add("--src", "{}:{}".format(src.path, module_path))
     models = [m[FrustrateBridgeInfo] for m in ctx.attr.models]
     for m in models:
-        args.add("--model", "{}={}".format(m.ir.path, m.dart_import))
+        args.add("--model", "{}={}".format(m.ir.path, m.models_import))
     args.add("--rust-out", rust_out)
     args.add("--dart-out", dart_out)
     args.add("--ir-out", ir_out)
@@ -85,6 +89,7 @@ def _frustrate_bridge_impl(ctx):
             crate_name = ctx.attr.crate_name,
             dart_import = "package:{}/{}.dart".format(ctx.attr.package_name, stem),
             ir = ir_out,
+            models_import = "package:{}/{}.models.dart".format(ctx.attr.package_name, stem),
             package_name = ctx.attr.package_name,
         ),
         DefaultInfo(files = depset([rust_out, ir_out, claims_out] + dart_outs)),

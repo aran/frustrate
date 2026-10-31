@@ -5,7 +5,7 @@
 //!     --crate-name my_bridge \
 //!     --dart-package my_app \
 //!     --src api.rs:crate::api [--src more.rs:crate::more ...] \
-//!     [--model core.json=package:core_app/core.frustrate.dart ...] \
+//!     [--model core.json=package:core_app/core.frustrate.models.dart ...] \
 //!     --rust-out frustrate_generated.rs \
 //!     --dart-out bridge.frustrate.dart \
 //!     [--ir-out interface.json] \
@@ -49,13 +49,13 @@ fn main() -> Result<()> {
             }
             "--model" => {
                 let v = value("--model")?;
-                let (ir, dart_import) = v.split_once('=').context(
-                    "--model expects <interface json>=<bindings import URI>, \
-                     e.g. core.json=package:core_app/core.frustrate.dart",
+                let (ir, import) = v.split_once('=').context(
+                    "--model expects <interface json>=<models library import URI>, \
+                     e.g. core.json=package:core_app/core.frustrate.models.dart",
                 )?;
                 models.push(ModelSpec {
                     ir: ir.into(),
-                    dart_import: dart_import.to_string(),
+                    import: import.to_string(),
                 });
             }
             "--rust-out" => rust_out = Some(value("--rust-out")?.into()),

@@ -14,7 +14,8 @@
 //! Rust item with one wire shape, or codegen refuses.
 //!
 //! What changes is the Dart surface only. The importer emits no class and no
-//! codec for a taken type: it imports the class from the model's surface,
+//! codec for a taken type: it imports the class from the model's models
+//! library (`<crate>.frustrate.models.dart`, beside the bindings entry),
 //! re-exports it, and forwards its private codec names to the model's
 //! [`MODELS_CLASS`]. The Rust glue and the schema fingerprint treat the type
 //! like any of the bridge's own, so a change to its shape moves the
@@ -25,17 +26,18 @@ use crate::emit_dart::{data_class, data_dart_type, decl_has_handle, decl_owns_ha
 use crate::ir::*;
 use std::fmt::Write;
 
-/// The class each surface declares its plain data codecs on, public so that
-/// another bridge's bindings can reach them and hidden by the entry so that no
-/// application does. `$` keeps it out of reach of any name derived from Rust.
+/// The class each surface declares its plain data codecs on. The models
+/// library exports it for other bridges' bindings; the entry hides it, so an
+/// application importing the bindings does not see it. `$` keeps it out of
+/// reach of any name derived from Rust.
 pub(crate) const MODELS_CLASS: &str = "$FrustrateModels";
 
 /// A model bridge as handed to codegen: its interface and the import URI of
-/// its public bindings entry (`package:<pkg>/<crate>.frustrate.dart`).
+/// its models library (`package:<pkg>/<crate>.frustrate.models.dart`).
 #[derive(Debug, Clone)]
 pub struct ModelInterface {
     pub iface: Interface,
-    pub dart_import: String,
+    pub import: String,
 }
 
 /// Why the data declaration `name` cannot be shared with another bridge, or
@@ -141,21 +143,6 @@ fn render(iface: &Interface, name: &str) -> String {
     name.to_string()
 }
 
-/// The URIs of the two surfaces behind a bindings entry: `src/<stem>.native.dart`
-/// and `src/<stem>.web.dart` beside `<stem>.dart`, as `generate` lays them out.
-fn surface_imports(entry: &str) -> (String, String) {
-    let (dir, file) = entry.rsplit_once('/').unwrap_or(("", entry));
-    let stem = file.strip_suffix(".dart").unwrap_or(file);
-    let at = |variant: &str| {
-        if dir.is_empty() {
-            format!("src/{stem}.{variant}.dart")
-        } else {
-            format!("{dir}/src/{stem}.{variant}.dart")
-        }
-    };
-    (at("native"), at("web"))
-}
-
 /// Take from `models` every data declaration of `iface` that one of them
 /// declares, or refuse.
 ///
@@ -167,14 +154,10 @@ pub fn apply(mut iface: Interface, models: &[ModelInterface]) -> Result<Interfac
     let mut diags = vec![];
     let mut bridges: Vec<ModelBridge> = models
         .iter()
-        .map(|m| {
-            let (native_import, web_import) = surface_imports(&m.dart_import);
-            ModelBridge {
-                crate_name: m.iface.crate_name.clone(),
-                native_import,
-                web_import,
-                types: vec![],
-            }
+        .map(|m| ModelBridge {
+            crate_name: m.iface.crate_name.clone(),
+            import: m.import.clone(),
+            types: vec![],
         })
         .collect();
     let names: Vec<String> = iface
@@ -313,18 +296,22 @@ fn import_prefix(model: &ModelBridge) -> String {
 }
 
 /// The directives that bring each model's classes and codecs into a surface,
-/// and re-export the classes so this bridge's API is usable on its own.
-pub(crate) fn emit_imports(out: &mut String, iface: &Interface, web: bool) {
+/// and re-export the classes so this bridge's API is usable on its own. The
+/// import shows only what the forwarded codecs name; a variant class is
+/// re-exported but never named here.
+pub(crate) fn emit_imports(out: &mut String, iface: &Interface) {
     for m in &iface.models {
-        let uri = if web { &m.web_import } else { &m.native_import };
-        let shown: Vec<String> = m.types.iter().flat_map(|t| dart_names(iface, t)).collect();
-        let shown = shown.join(", ");
+        let uri = &m.import;
+        let used: Vec<String> = m.types.iter().map(|t| data_class(iface, t)).collect();
+        let exported: Vec<String> = m.types.iter().flat_map(|t| dart_names(iface, t)).collect();
         let _ = write!(
             out,
-            "import '{uri}' show {shown};\n\
+            "import '{uri}' show {};\n\
              import '{uri}' as {} show {MODELS_CLASS};\n\
-             export '{uri}' show {shown};\n",
-            import_prefix(m)
+             export '{uri}' show {};\n",
+            used.join(", "),
+            import_prefix(m),
+            exported.join(", ")
         );
     }
 }
@@ -341,6 +328,34 @@ pub(crate) fn emit_forwarded_codecs(out: &mut String, iface: &Interface, name: &
         "void _enc{stem}(BinaryWriter w, {cls} v) => {prefix}.{MODELS_CLASS}.enc{stem}(w, v);\n\
          {cls} _dec{stem}(BinaryReader r) => {prefix}.{MODELS_CLASS}.dec{stem}(r);\n\n"
     );
+}
+
+/// The models library: the entry's surfaces narrowed to the plain data classes
+/// and [`MODELS_CLASS`], which is what a bridge naming this one in `models`
+/// imports. A bridge with no plain data exports nothing from it.
+pub(crate) fn emit_models_library(iface: &Interface, entry_stem: &str) -> String {
+    let mut out = format!(
+        "// @generated by frustrate-codegen for crate `{}`. Do not edit.\n\
+         //\n\
+         // The plain data classes and their codecs, for the bindings of a bridge\n\
+         // that names this one in `models`. Applications import\n\
+         // `{entry_stem}.dart`.\n",
+        iface.crate_name
+    );
+    let names = shareable(iface);
+    if names.is_empty() {
+        return out;
+    }
+    let mut shown: Vec<String> = names.iter().flat_map(|n| dart_names(iface, n)).collect();
+    shown.push(MODELS_CLASS.to_string());
+    let _ = write!(
+        out,
+        "export 'src/{entry_stem}.native.dart'\n\
+         \x20   if (dart.library.js_interop) 'src/{entry_stem}.web.dart'\n\
+         \x20   show {};\n",
+        shown.join(", ")
+    );
+    out
 }
 
 /// [`MODELS_CLASS`]: this surface's plain data codecs, for the bindings of a
@@ -395,7 +410,7 @@ mod tests {
                 "a",
                 &[(shared, "shared::model"), ("#[bridge(sync)] pub fn make() -> Block { todo!() }", "crate::api")],
             ),
-            dart_import: "package:a_app/a.frustrate.dart".into(),
+            import: "package:a_app/a.frustrate.models.dart".into(),
         }
     }
 
@@ -416,11 +431,11 @@ mod tests {
     fn taken_types_are_imported_and_not_declared() {
         let b = apply_b(SHARED, B_API, &[bridge_a(SHARED)]).unwrap();
         let out = crate::emit_dart::emit(&b, "b.frustrate", "b_app");
-        for (surface, variant) in [(&out.native, "native"), (&out.web, "web")] {
-            let uri = format!("package:a_app/src/a.frustrate.{variant}.dart");
-            let shown = "Block, Graph, Shape, ShapeCircle, ShapeSquare, ShapeEmpty, Mood";
-            assert!(surface.contains(&format!("import '{uri}' show {shown};")), "{surface}");
-            assert!(surface.contains(&format!("export '{uri}' show {shown};")), "{surface}");
+        for surface in [&out.native, &out.web] {
+            let uri = "package:a_app/a.frustrate.models.dart";
+            assert!(surface.contains(&format!("import '{uri}' show Block, Graph, Shape, Mood;")), "{surface}");
+            let exported = "Block, Graph, Shape, ShapeCircle, ShapeSquare, ShapeEmpty, Mood";
+            assert!(surface.contains(&format!("export '{uri}' show {exported};")), "{surface}");
             assert!(
                 surface.contains(&format!("import '{uri}' as frustrate_model_a show $FrustrateModels;")),
                 "{surface}"
@@ -451,6 +466,15 @@ mod tests {
         let a = bridge_a(SHARED).iface;
         let out = crate::emit_dart::emit(&a, "a.frustrate", "a_app");
         assert!(out.entry.contains("'src/a.frustrate.web.dart'\n    hide $FrustrateModels;"), "{}", out.entry);
+        assert!(
+            out.models.contains(
+                "export 'src/a.frustrate.native.dart'\n    \
+                 if (dart.library.js_interop) 'src/a.frustrate.web.dart'\n    \
+                 show Block, Graph, Shape, ShapeCircle, ShapeSquare, ShapeEmpty, Mood, $FrustrateModels;"
+            ),
+            "{}",
+            out.models
+        );
         for surface in [&out.native, &out.web] {
             assert!(surface.contains("abstract final class $FrustrateModels {"), "{surface}");
             assert!(
@@ -469,6 +493,7 @@ mod tests {
         let a = iface("a", &[("#[bridge(sync)] pub fn f() -> i64 { 0 }", "crate::api")]);
         let out = crate::emit_dart::emit(&a, "a.frustrate", "a_app");
         assert!(!out.entry.contains("hide"), "{}", out.entry);
+        assert!(!out.models.contains("export"), "{}", out.models);
         assert!(!out.native.contains("$FrustrateModels"), "{}", out.native);
     }
 
@@ -476,7 +501,7 @@ mod tests {
     fn a_crate_relative_path_names_the_same_item_from_the_other_crate() {
         let a = ModelInterface {
             iface: iface("a", &[(SHARED, "crate::model")]),
-            dart_import: "package:a_app/a.frustrate.dart".into(),
+            import: "package:a_app/a.frustrate.models.dart".into(),
         };
         let b = apply(iface("b", &[(SHARED, "a::model"), (B_API, "crate::api")]), &[a]).unwrap();
         assert_eq!(b.models[0].types, ["Block", "Graph", "Shape", "Mood"]);
@@ -523,7 +548,7 @@ mod tests {
         ";
         let a = ModelInterface {
             iface: iface("a", &[(shared, "shared::model")]),
-            dart_import: "package:a_app/a.frustrate.dart".into(),
+            import: "package:a_app/a.frustrate.models.dart".into(),
         };
         let r = apply(iface("b", &[(shared, "shared::model")]), &[a]);
         let diags = r.expect_err("refused");
@@ -556,7 +581,7 @@ mod tests {
     fn the_model_interface_round_trips_through_its_json() {
         let a = bridge_a(SHARED).iface;
         let read: Interface = serde_json::from_str(&serde_json::to_string(&a).unwrap()).unwrap();
-        let model = ModelInterface { iface: read, dart_import: "package:a_app/a.frustrate.dart".into() };
+        let model = ModelInterface { iface: read, import: "package:a_app/a.frustrate.models.dart".into() };
         assert!(apply_b(SHARED, B_API, &[model]).is_ok());
     }
 }

@@ -61,10 +61,9 @@ pub struct Interface {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ModelBridge {
     pub crate_name: String,
-    /// Import URIs of the model bridge's native and web Dart surfaces, which
-    /// declare the classes and the codecs.
-    pub native_import: String,
-    pub web_import: String,
+    /// Import URI of the model bridge's models library, which exports the
+    /// classes and the codecs.
+    pub import: String,
     /// The data declarations taken from it, in this interface's order.
     pub types: Vec<String>,
 }

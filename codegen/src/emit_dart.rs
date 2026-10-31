@@ -22,9 +22,11 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use std::fmt::Write;
 
 /// The generated Dart bindings. `entry` is the public conditional export;
-/// the variants live under `src/` next to it.
+/// the variants live under `src/` next to it. `models` is the library a
+/// bridge naming this one in `models` imports ([`crate::models`]).
 pub struct DartBindings {
     pub entry: String,
+    pub models: String,
     pub native: String,
     pub web: String,
 }
@@ -36,6 +38,7 @@ pub struct DartBindings {
 pub fn emit(iface: &Interface, entry_stem: &str, dart_package: &str) -> DartBindings {
     DartBindings {
         entry: emit_entry(iface, entry_stem),
+        models: crate::models::emit_models_library(iface, entry_stem),
         native: emit_surface(iface, false, dart_package),
         web: emit_surface(iface, true, dart_package),
     }
@@ -165,7 +168,7 @@ fn emit_surface(iface: &Interface, web: bool, dart_package: &str) -> String {
     for uri in extern_imports {
         let _ = write!(out, "import '{uri}';\n");
     }
-    crate::models::emit_imports(&mut out, iface, web);
+    crate::models::emit_imports(&mut out, iface);
     out.push('\n');
     // The wire-schema fingerprint (codegen/src/hash.rs): the same value the
     // generated Rust exports as `frustrate_<crate>_schema_hash`. `checkFrustrateSchema`

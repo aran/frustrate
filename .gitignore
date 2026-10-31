@@ -5,6 +5,7 @@ target/
 *.frustrate.dart
 *.frustrate.native.dart
 *.frustrate.web.dart
+*.frustrate.models.dart
 frustrate_generated.rs
 frustrate_claims.txt
 frustrate_ir.json

@@ -30,9 +30,9 @@ pub struct SourceSpec {
 pub struct ModelSpec {
     /// The model bridge's interface JSON (its `ir_out`).
     pub ir: PathBuf,
-    /// Import URI of the model bridge's Dart bindings entry, e.g.
-    /// `package:core_app/core.frustrate.dart`.
-    pub dart_import: String,
+    /// Import URI of the model bridge's models library, e.g.
+    /// `package:core_app/core.frustrate.models.dart`.
+    pub import: String,
 }
 
 #[derive(Debug, Clone)]
@@ -53,7 +53,8 @@ pub struct GenerateConfig {
     pub rust_out: PathBuf,
     /// Where to write the public Dart bindings entry (a conditional export).
     /// The per-platform variants land next to it under `src/`:
-    /// `src/<entry stem>.native.dart` and `src/<entry stem>.web.dart`.
+    /// `src/<entry stem>.native.dart` and `src/<entry stem>.web.dart`; the
+    /// models library beside it, as `<entry stem>.models.dart`.
     pub dart_out: PathBuf,
     /// Optional: where to write the finalized interface IR as JSON.
     pub ir_out: Option<PathBuf>,
@@ -96,7 +97,7 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
             .with_context(|| format!("reading {}", m.ir.display()))?;
         let iface: ir::Interface = serde_json::from_str(&text)
             .with_context(|| format!("reading the interface in {}", m.ir.display()))?;
-        model_inputs.push(models::ModelInterface { iface, dart_import: m.dart_import.clone() });
+        model_inputs.push(models::ModelInterface { iface, import: m.import.clone() });
     }
     let iface = check::check(iface)
         .and_then(|iface| models::apply(iface, &model_inputs))
@@ -121,6 +122,7 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
         None => PathBuf::from("src"),
     };
     write_atomic(&config.dart_out, &dart.entry)?;
+    write_atomic(&config.dart_out.with_file_name(format!("{entry_stem}.models.dart")), &dart.models)?;
     write_atomic(&src_dir.join(format!("{entry_stem}.native.dart")), &dart.native)?;
     write_atomic(&src_dir.join(format!("{entry_stem}.web.dart")), &dart.web)?;
 
