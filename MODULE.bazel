@@ -75,11 +75,10 @@ use_repo(
 #   browser                   wasm_threads_disabled + wasm_std_custom
 #
 # so //bazel:wasm32 (stable, stock std), :wasm32_threads and :wasm32_custom each
-# resolve exactly one. An earlier version of this comment claimed the order was
-# load-bearing; it is not, because every stock toolchain carries a stable
-# channel gate. Keeping it order-independent is worth the care: the three differ
-# in extra_rustc_flags, so a wrong pick is a link error far from its cause
-# rather than a resolution error.
+# resolve exactly one. Every stock toolchain carries a stable channel gate, so
+# the order is not load-bearing. Keep it that way: the three differ in
+# extra_rustc_flags, so a wrong pick is a link error far from its cause rather
+# than a resolution error.
 #
 # The host toolchain is gated on the channel flag (nightly only) and builds the
 # proc-macros and build scripts that a custom-std build's nightly rustc consumes
@@ -116,11 +115,11 @@ crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 crate.from_cargo(
     name = "frustrate_crates",
     cargo_lockfile = "//:Cargo.lock",
-    # Required since rules_rust 0.74.0 for any module that another module
-    # depends on: a transitive `crate_universe` call cannot repin across a
-    # module boundary, so the resolution has to be checked in. Without it the
-    # e2e demos — which `bazel_dep` on frustrate — fail during module
-    # resolution, before any target is analysed. Repin with
+    # Required for any module that another module depends on: a transitive
+    # `crate_universe` call cannot repin across a module boundary, so the
+    # resolution has to be checked in. Without it the e2e demos — which
+    # `bazel_dep` on frustrate — fail during module resolution, before any
+    # target is analysed. Repin with
     # `CARGO_BAZEL_REPIN=1 bazel build //...` after changing Cargo.lock.
     lockfile = "//:Cargo.Bazel.lock",
     # Only the workspace root manifest — its `members` list implies every crate,
@@ -128,8 +127,8 @@ crate.from_cargo(
     # shows up in the extension's recorded inputs, so edits re-splice). Do not
     # re-list members; rules_rust prints an INFO asking for their removal.
     manifests = ["//:Cargo.toml"],
-    # The runtime now has an unconditional external-crate dep (async-task, for
-    # the executor), so every target a downstream app cross-compiles to must be
+    # The runtime has an unconditional external-crate dep (async-task, for the
+    # executor), so every target a downstream app cross-compiles to must be
     # a supported triple here or the crate resolves to `//:incompatible` (the
     # iOS/Android/Linux demo builds fail otherwise). This replaces the
     # crate_universe default set, so the defaults are re-listed alongside the

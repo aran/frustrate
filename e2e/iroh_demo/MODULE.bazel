@@ -21,10 +21,10 @@ module(name = "frustrate_iroh_demo")
 bazel_dep(name = "frustrate", version = "0.1.0")
 bazel_dep(name = "rules_flutter", version = "0.0.6")
 bazel_dep(name = "rules_dart", version = "0.7.3")
-# 0.70.0 is a floor, not a current version: earlier releases auto-register a
-# fake wasm32 cc_toolchain that resolves ahead of the real one below, so a
-# downgrade breaks ring's build script far from the cause.
-# <https://github.com/bazelbuild/rules_rust/pull/3892> (checked 2026-09-02).
+# rules_rust releases before 0.70.0 auto-register a fake wasm32 cc_toolchain
+# that resolves ahead of the real one below, so an older rules_rust breaks
+# ring's build script far from the cause.
+# <https://github.com/bazelbuild/rules_rust/pull/3892>
 bazel_dep(name = "rules_rust", version = "0.75.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
@@ -32,7 +32,7 @@ bazel_dep(name = "apple_support", version = "2.9.1")
 bazel_dep(name = "rules_apple", version = "5.2.0")
 bazel_dep(name = "rules_cc", version = "0.2.26")
 bazel_dep(name = "rules_swift", version = "4.1.2")
-bazel_dep(name = "llvm", version = "0.8.23")
+bazel_dep(name = "llvm", version = "0.8.24")
 
 # Android bundling (rules_flutter's flutter_android_app + the NDK cc toolchain
 # that cross-compiles the Rust bridge to android_arm64).
@@ -288,27 +288,11 @@ use_repo(binaryen, "binaryen")
 #    Linux nor the target you asked for. //:app_linux and //relay both depend on
 #    this.
 #
-# `@llvm` (hermeticbuild/hermetic-llvm) rather than `@toolchains_llvm`
-# (bazel-contrib), which this module used until 2026-09-08. Neither is
-# deprecated; the swap bought two specific deletions, and nothing else:
-#
-#  1. //bazel:wasm.bzl, entirely. It held an empty-sysroot filegroup and a pin
-#     of `libclang_rt.builtins-wasm32.a` to wasi-sdk-24. That pin was the
-#     liability — wasi-sdk moved the flat archive into per-target directories
-#     with no `wasm32-unknown-unknown/` among them, so it could never be bumped
-#     in place, only replaced. `@llvm` ships wasm32 as a first-class target.
-#
-#  2. The 13,423-file Chromium bullseye sysroot, and with it the `-L` into that
-#     sysroot that `extra_link_flags` used to carry. `@llvm` is zero-sysroot: it
-#     cross-compiles glibc and libc++ from source, so the Flutter GTK runner
-#     link no longer puts a foreign sysroot's `libm.so` ld script on the command
-#     line and the workaround for it is gone with the cause. Every Linux compile
-#     action taking that whole sysroot as an input is gone too.
-#
-# Verified on Debian 12 (glibc 2.36), cross-compiled from macOS arm64: the
-# Flutter app starts under Xvfb and reaches its Dart VM service, `//relay`
-# binds and reports ready, and the app binary needs no symbol newer than
-# GLIBC_2.16. A green build is not evidence for any of that.
+# `@llvm` (hermeticbuild/hermetic-llvm) is zero-sysroot: it cross-compiles glibc
+# and libc++ from source, so no foreign sysroot is an input to Linux compile
+# actions and the Flutter GTK runner link needs no `-L` into one. It ships
+# wasm32 as a first-class target, so no separate wasm sysroot or compiler-rt
+# archive is needed.
 #
 # NO `toolchain.exec` tag: exec defaults to every supported host, so this stays
 # correct when the host is Linux rather than macOS. Pinning it would leave a
