@@ -355,9 +355,9 @@
     // wasm entries one `callSync` costs.
     //
     // Six parameters covers every export the runtime calls
-    // (`frustrate_call_sync`, at five, is the widest); a wasm export ignores
-    // arguments past its own arity, so the unused tail costs nothing and needs
-    // no per-arity variants.
+    // (a bridge's `call_sync`, at five, is the widest); a wasm export
+    // ignores arguments past its own arity, so the unused tail costs nothing
+    // and needs no per-arity variants.
     //
     // The marker prefix is load-bearing: the Dart side strips back to it, so
     // a trap nothing else attributed still reports exactly the engine's own

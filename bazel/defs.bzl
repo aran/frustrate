@@ -391,9 +391,10 @@ def frustrate_library(name, bridges, crate_name = None, visibility = None, **kwa
       `dart_test` or `dart_binary` that uses the bridges together: an explicit
       code asset replaces the one a bindings package declares under its id.
 
-    In Dart, `FrustrateNative.init` each bridge's generated library; every one
-    after the first attaches to the transport the first built. On web,
-    `FrustrateWeb.init` loads the module once and serves every bridge in it.
+    In Dart, `FrustrateNative.init` each bridge's generated library, and on
+    web `FrustrateWeb.init` each bridge's `frustrateBridge` with the one
+    module; every init after the first attaches to the transport the first
+    built.
 
     Args:
         name: the shared library target.

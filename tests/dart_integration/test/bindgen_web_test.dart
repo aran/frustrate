@@ -33,6 +33,7 @@ const _noSpawnLocalReason =
 void main() {
   setUpAll(() async {
     await FrustrateWeb.initFromUrl(
+      frustrateBridge,
       '../build/bindgen/bindgen_api.wasm',
       bindgenGlueUrl: '../build/bindgen/bindgen_api_bg.js',
     );

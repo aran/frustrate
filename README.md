@@ -187,7 +187,8 @@ dart_binary(
 `FrustrateNative.init` each bridge's library: the first builds the transport,
 the rest attach to it. A library built separately is refused. On web,
 `frustrate_wasm_module(crate = ":app_rust")` builds the one module, and
-`FrustrateWeb.init` serves every bridge in it. Generated code reaches its
+`FrustrateWeb.initFromUrl(main.frustrateBridge, 'app_rust.wasm')` serves a
+bridge from it, once per bridge, the same way. Generated code reaches its
 runtime with `Frustrate.of(frustrateBridge)`; `Frustrate.instance` answers
 only while one bridge is active, and `Frustrate.activate` replaces only the
 bridge its runtime serves, so a test can fake one bridge and keep another real.
@@ -467,7 +468,7 @@ export function read(ptr, cap) {
 ```
 
 ```dart
-await FrustrateWeb.initFromUrl('app.wasm',
+await FrustrateWeb.initFromUrl(frustrateBridge, 'app.wasm',
     hostImports: {'my_files': 'my_files.js'});
 ```
 

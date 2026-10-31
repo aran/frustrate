@@ -17,7 +17,7 @@
 ///
 ///     import 'package:frustrate/frustrate_web.dart';
 ///
-///     await FrustrateWeb.initFromUrl(moduleUrl);
+///     await FrustrateWeb.initFromUrl(frustrateBridge, moduleUrl);
 ///
 /// Import this only where the file cannot run natively. In portable code the
 /// conditional export is the point, and reaching past it re-introduces the

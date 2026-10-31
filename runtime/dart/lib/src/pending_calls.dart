@@ -301,8 +301,8 @@ final class PendingCalls {
       } else {
         // Our entry is already gone, so the completion landed *during* [send]
         // and this future is settled: single-threaded web runs the whole
-        // async body inline during `frustrate_call_async`, so `post` can fire
-        // before a later trap unwinds out of the same export. Completing
+        // async body inline during the bridge's `call_async`, so `post` can
+        // fire before a later trap unwinds out of the same export. Completing
         // twice would be a "Future already completed" state error, and
         // swallowing a trap is against the loud-contract stance — report it
         // out of band instead.

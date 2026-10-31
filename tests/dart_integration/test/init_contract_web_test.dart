@@ -21,6 +21,7 @@ import 'dart:typed_data';
 
 import 'package:frustrate/frustrate.dart';
 import 'package:frustrate/frustrate_web.dart';
+import 'package:frustrate_integration/test_api.frustrate.dart';
 import 'package:test/test.dart';
 
 import 'init_web.dart';
@@ -30,7 +31,7 @@ void main() {
 
   test('a second init naming the same module is a declared no-op', () async {
     final installed = Frustrate.instance;
-    await FrustrateWeb.initFromUrl(bridgeModuleUrl);
+    await FrustrateWeb.initFromUrl(frustrateBridge, bridgeModuleUrl);
     expect(identical(Frustrate.instance, installed), isTrue);
   });
 
@@ -41,7 +42,10 @@ void main() {
       // fetch that already happened; the contract's failure names the module
       // already installed and never reaches the network.
       await expectLater(
-        FrustrateWeb.initFromUrl('../build/not_the_bridge.wasm'),
+        FrustrateWeb.initFromUrl(
+          frustrateBridge,
+          '../build/not_the_bridge.wasm',
+        ),
         throwsA(
           isA<StateError>().having(
             (e) => e.message,
@@ -63,7 +67,7 @@ void main() {
     // disagreement — which is also what stops the empty buffer from reaching
     // `WebAssembly.compile`.
     await expectLater(
-      FrustrateWeb.init(Uint8List(0)),
+      FrustrateWeb.init(frustrateBridge, Uint8List(0)),
       throwsA(
         isA<StateError>().having(
           (e) => e.message,

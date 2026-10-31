@@ -86,6 +86,17 @@ const _sharedMemoryInitialPages = 256;
 /// footprint on exactly the builds that already pay the most for memory.
 const _poolWorkerStackBytes = 1 << 20;
 
+/// Whether [module] carries [bridge]: whether it exports the `call_sync`
+/// entry that bridge's glue defines under its crate name
+/// ([FrustrateBridge.symbol]).
+bool _carries(JSObject module, FrustrateBridge bridge) {
+  final entry = bridge.symbol('call_sync');
+  for (final export in _wasmModuleExports(module).toDart) {
+    if (export.getProperty<JSString>('name'.toJS).toDart == entry) return true;
+  }
+  return false;
+}
+
 /// Whether [module] was built for threaded wasm: such modules import their
 /// (shared) linear memory rather than declaring one of their own.
 ///
@@ -102,23 +113,6 @@ const _poolWorkerStackBytes = 1 << 20;
 /// because only `--shared-memory` makes rustc pass `--import-memory`. So an
 /// imported memory means a threaded module by construction, and
 /// //bazel/wasm_import_check gates the rest of that shape at build time.
-/// The bridges [module] contains, found by the `call_sync` entry every
-/// bridge's glue exports under its crate name (`FrustrateBridge.symbol`).
-List<FrustrateBridge> _bridgesIn(JSObject module) {
-  const prefix = 'frustrate_';
-  const suffix = '_call_sync';
-  return [
-    for (final entry in _wasmModuleExports(module).toDart)
-      if (entry.getProperty<JSString>('name'.toJS).toDart case final name
-          when name.startsWith(prefix) &&
-              name.endsWith(suffix) &&
-              name.length > prefix.length + suffix.length)
-        FrustrateBridge(
-          name.substring(prefix.length, name.length - suffix.length),
-        ),
-  ];
-}
-
 bool _importsMemory(JSObject module) {
   for (final entry in _wasmModuleImports(module).toDart) {
     if (entry.getProperty<JSString>('kind'.toJS).toDart == 'memory') {
@@ -208,10 +202,10 @@ external JSAny? _frustrateCall(
 /// The same frame, declared to return an `int`.
 ///
 /// Two declarations of one JS function, not two frames: the glue is untouched.
-/// It exists because `frustrate_call_sync` returns an i32 and the alternative
-/// ways to read it back are both worse than the entry it saves — `Number(v)`
-/// is a JS call, and going through `JSAny?` gives dart2wasm nothing to
-/// specialize. A statically typed `external` returning `int` is the cheapest
+/// It exists because a bridge's `call_sync` export returns an i32 and the
+/// alternative ways to read it back are both worse than the entry it saves —
+/// `Number(v)` is a JS call, and going through `JSAny?` gives dart2wasm nothing
+/// to specialize. A statically typed `external` returning `int` is the cheapest
 /// primitive available here, the same one `_jsNumber` above relies on.
 @JS(r'$frustrateCall')
 external int _frustrateCallInt(
@@ -424,26 +418,40 @@ void _checkNumberBackend() {
   }
 }
 
-/// Web entry point: instantiate the bridge wasm module once, then use the
-/// generated API.
+/// Web entry point: initialize each bridge once, then use the generated API.
+///
+/// Every init names the bridge it serves — the generated bindings'
+/// `frustrateBridge` — and the module that carries it. The first builds the
+/// transport; a later one naming another bridge in the same module attaches
+/// it, and one naming a different module throws. A bridge is served only once
+/// an init has named it, however many bridges the module links.
 class FrustrateWeb {
-  /// Instantiate the bridge module from its wasm bytes and install the
-  /// transport.
+  /// The transport this class built.
+  static _WebTransport? _transport;
+
+  /// A first init still running, which a concurrent init waits for so that
+  /// it attaches to the transport being built instead of building another.
+  static Future<void>? _building;
+
+  /// Serve [bridge] from the module whose wasm bytes these are, compiling and
+  /// instantiating it on the first call.
   ///
   /// Follows the repeated-init contract stated on [Frustrate], the same one
-  /// native follows: naming the same module again does nothing — it does not
-  /// reach `WebAssembly.compile`, does not create a second shared memory and
-  /// does not instantiate a second module — and naming a *different* one
-  /// throws, because the first module stays installed and would keep serving
-  /// every call.
+  /// native follows: naming the same module again does nothing for a bridge
+  /// already served — it does not reach `WebAssembly.compile`, does not create
+  /// a second shared memory and does not instantiate a second module — and
+  /// attaches a bridge that is not yet served to the module already running.
+  /// Naming a *different* module throws, because the first module stays
+  /// installed and would keep serving every call. So does a module that does
+  /// not carry [bridge]: link it in with `frustrate_library`.
   ///
   /// **How a module is identified**, since bytes are not cheap to compare: by
   /// what the caller named it — the URL for [initFromUrl], the module's size
   /// for this entry point — together with [bindgenGlueUrl] and [hostImports],
   /// which are part of what the module *is* (the same bytes with different JS
-  /// behind their imports are a different bridge). So two different modules of
-  /// byte-identical length, passed as bytes, are not told apart: the check is a
-  /// fence against the accident, not an identity comparison.
+  /// behind their imports are a different module). So two different modules
+  /// of byte-identical length, passed as bytes, are not told apart: the check
+  /// is a fence against the accident, not an identity comparison.
   ///
   /// The compiled `WebAssembly.Module` is kept: actor hosts post it to their
   /// workers (compiled code is shared; memory is per-instance).
@@ -468,32 +476,35 @@ class FrustrateWeb {
   ///    which supplies wasm-bindgen's namespace: the one its post-pass names
   ///    `./<stem>_bg.js`. [hostImports] may not name a namespace of that form.
   ///    The glue's attach step is wasm-bindgen's own start-up handshake.
-  ///    Required if and only if the bridge crate's dependency graph contains
+  ///    Required if and only if the module's dependency graph contains
   ///    `wasm-bindgen`.
   ///
+  /// Both describe the module, so every init naming it passes the same ones.
   /// A namespace with no module fails at instantiation, with a message naming
   /// it; so does a URL that fails to load. A module built for `wasm32-wasip1`
   /// that imports nothing else needs neither argument.
   static Future<void> init(
+    FrustrateBridge bridge,
     Uint8List wasmModuleBytes, {
     String? bindgenGlueUrl,
     Map<String, String> hostImports = const {},
-  }) async {
+  }) {
     // Before anything else, because a build that must not exist should not get
     // as far as compiling a module.
     _checkNumberBackend();
     final suppliers = _Suppliers(bindgenGlueUrl, hostImports);
     // Size stands in for the bytes; see the identity note above.
-    final source = ('bytes', wasmModuleBytes.length, suppliers);
-    final description = suppliers.describe(
-      'a ${wasmModuleBytes.length}-byte module',
+    return _serve(
+      bridge,
+      ('bytes', wasmModuleBytes.length, suppliers),
+      suppliers.describe('a ${wasmModuleBytes.length}-byte module'),
+      suppliers,
+      () async => wasmModuleBytes,
     );
-    if (Frustrate.initializedFrom(source, description)) return;
-    await _instantiate(wasmModuleBytes, suppliers, source, description);
   }
 
-  /// Fetch the bridge module from [url] (same COOP/COEP-isolated origin) and
-  /// [init] with its bytes.
+  /// Fetch the module from [url] (same COOP/COEP-isolated origin) and [init]
+  /// [bridge] with its bytes.
   ///
   /// A repeated call naming the same [url] costs nothing at all — the contract
   /// is settled before the fetch, so it is not even a re-download — and one
@@ -504,41 +515,83 @@ class FrustrateWeb {
   /// Note that this and [init] name a module in two different ways, so
   /// initializing through one and then the other is reported as a disagreement.
   static Future<void> initFromUrl(
+    FrustrateBridge bridge,
     String url, {
     String? bindgenGlueUrl,
     Map<String, String> hostImports = const {},
-  }) async {
+  }) {
     // Same reason as in [init]: a build that must not exist should not get as
     // far as fetching a module.
     _checkNumberBackend();
     final suppliers = _Suppliers(bindgenGlueUrl, hostImports);
     final resolved = _absolute(url);
-    final source = ('url', resolved, suppliers);
-    final description = suppliers.describe('the module at $resolved');
-    if (Frustrate.initializedFrom(source, description)) return;
-    final response = await _fetch(url.toJS).toDart;
-    if (!response.ok) {
-      throw StateError(
-        'frustrate: fetching bridge module $url failed (HTTP ${response.status})',
-      );
-    }
-    final buffer = await response.arrayBuffer().toDart;
-    await _instantiate(
-      buffer.toDart.asUint8List(),
+    return _serve(
+      bridge,
+      ('url', resolved, suppliers),
+      suppliers.describe('the module at $resolved'),
       suppliers,
-      source,
-      description,
+      () async {
+        final response = await _fetch(url.toJS).toDart;
+        if (!response.ok) {
+          throw StateError(
+            'frustrate: fetching bridge module $url failed '
+            '(HTTP ${response.status})',
+          );
+        }
+        final buffer = await response.arrayBuffer().toDart;
+        return buffer.toDart.asUint8List();
+      },
     );
   }
 
-  /// Compile, instantiate and install — everything both entry points share,
-  /// reached only once the repeated-init guard has let the call through.
-  static Future<void> _instantiate(
-    Uint8List wasmModuleBytes,
-    _Suppliers suppliers,
+  /// The repeated-init decision and what follows it, for both entry points.
+  /// [bytes] is reached only by a first init.
+  static Future<void> _serve(
+    FrustrateBridge bridge,
     Object source,
     String description,
+    _Suppliers suppliers,
+    Future<Uint8List> Function() bytes,
   ) async {
+    // Its own caller reports a failed first init; this one then tries afresh.
+    for (var building = _building; building != null; building = _building) {
+      await building.then((_) {}, onError: (Object _) {});
+    }
+    final transport = _transport;
+    if (transport == null) {
+      if (Frustrate.initializedFrom(source, description, bridge: bridge)) {
+        return;
+      }
+      final building = _build(bridge, source, description, suppliers, bytes);
+      _building = building;
+      try {
+        await building;
+      } finally {
+        _building = null;
+      }
+      return;
+    }
+    // True for the module this transport was built from; a StateError for
+    // any other.
+    Frustrate.initializedFrom(source, description);
+    transport.attach(bridge, description);
+    Frustrate.install(
+      transport.runtimeFor(bridge),
+      source: source,
+      description: description,
+    );
+  }
+
+  /// Compile, instantiate and install: a first init, once the repeated-init
+  /// guard has let it through.
+  static Future<void> _build(
+    FrustrateBridge bridge,
+    Object source,
+    String description,
+    _Suppliers suppliers,
+    Future<Uint8List> Function() bytes,
+  ) async {
+    final wasmModuleBytes = await bytes();
     // Workers registered while no transport is installed cannot belong to this
     // Dart heap — this is its first init — so they are what a previous one
     // left behind (see [_workerRegistryKey]). Reaped before anything else so a
@@ -548,12 +601,9 @@ class FrustrateWeb {
     final runtime = _WebTransport._(suppliers);
     final moduleBytes = wasmModuleBytes.toJS; // per-byte: Dart-heap init only
     final module = await _wasmCompile(moduleBytes).toDart;
-    final bridges = _bridgesIn(module);
-    // Every bridge the module carries is already served — by fakes a test
-    // activated — so init is an ensure that is already satisfied (see
-    // "Init while a fake is active" on [Frustrate]). A bridge that is not
-    // served still needs the module, and gets it.
-    if (bridges.isNotEmpty && bridges.every(Frustrate.isServed)) return;
+    // Before instantiating, so a module that cannot serve the bridge named
+    // starts no Rust runtime.
+    if (!_carries(module, bridge)) throw _notCarried(bridge, description);
     runtime._module = module;
     // Threaded wasm modules import a shared memory; create it before
     // instantiation.
@@ -591,15 +641,23 @@ class FrustrateWeb {
     if (_textEncoder != null) {
       BinaryWriter.stringEncodeHook = _encodeStringJs;
     }
-    for (final bridge in bridges) {
-      Frustrate.install(
-        WebRuntime._(runtime, bridge),
-        source: source,
-        description: description,
-      );
-    }
+    Frustrate.install(
+      runtime.runtimeFor(bridge),
+      source: source,
+      description: description,
+    );
+    _transport = runtime;
   }
 }
+
+/// The refusal of a module that does not carry [bridge].
+StateError _notCarried(FrustrateBridge bridge, String description) =>
+    StateError(
+      'frustrate: $description does not carry $bridge: it has no '
+      '`${bridge.symbol('call_sync')}` export. Link every bridge the page '
+      'uses into one module with frustrate_library, and build the module '
+      'from that.',
+    );
 
 /// `String` reaches JS in O(1) — on dart2wasm a Dart `String` *is* a JS string
 /// — and the result stays JS-backed, because `.toDart` on a `JSUint8Array` is
@@ -721,6 +779,26 @@ final class _WebTransport {
 
   /// Every bridge's runtime, for routing what this instance posts back.
   final List<WebRuntime> _views = [];
+
+  /// The runtime of each bridge an init has named.
+  final Map<FrustrateBridge, WebRuntime> _runtimes = {};
+
+  /// The runtime [bridge] is served by, for a bridge this module carries: the
+  /// first init checked its own before instantiating, and [attach] checks the
+  /// rest.
+  WebRuntime runtimeFor(FrustrateBridge bridge) =>
+      _runtimes[bridge] ??= WebRuntime._(this, bridge);
+
+  /// Accept [bridge] for this module, or throw a [StateError] when the module
+  /// does not carry it. [description] names the module in that error.
+  void attach(FrustrateBridge bridge, String description) {
+    if (_runtimes.containsKey(bridge)) return;
+    final entry = bridge.symbol('call_sync');
+    if (_exports.getProperty<JSAny?>(entry.toJS) == null) {
+      throw _notCarried(bridge, description);
+    }
+    runtimeFor(bridge);
+  }
 
   /// The router an event for [id] belongs to: the one that registered it, or,
   /// when none did, any one — a router drops a late stream event for an id it
@@ -1073,9 +1151,8 @@ final class _WebTransport {
     }
   }
 
-  /// [_call] for an export that returns an `int` — today only
-  /// `frustrate_call_sync`, whose i32 says whether the response fitted the
-  /// slab. Identical trap handling, deliberately through the same helper: this
+  /// [_call] for an export that returns an `int`: a bridge's `call_sync`,
+  /// whose i32 says whether the response fitted the slab. Identical trap handling, deliberately through the same helper: this
   /// is the frame `trap_attribution_test` pins, and a second copy of that
   /// `catch` is a second thing that can drift away from it.
   int _callInt(
@@ -1313,12 +1390,11 @@ final class _WebTransport {
     // the floor — this is three of them: alloc, the call, free.
     // `call_entry_count_test.dart` is what pins that count.
     //
-    // The third entry used to be a fourth: `frustrate_call_sync` leased a
-    // fresh Rust `Vec` for the response, which had to be handed back. It now
-    // answers into the first [frustrateRespSlabBytes] of this block whenever
-    // the envelope fits, and there is nothing to hand back. Only a response
-    // too large for the slab still leases, and only that call pays the fourth
-    // entry (pinned both ways by `call_entry_count_test.dart`).
+    // The bridge's `call_sync` answers into the first
+    // [frustrateRespSlabBytes] of this block whenever the envelope fits, so
+    // there is nothing to hand back. Only a response too large for the slab
+    // leases a Rust `Vec`, and only that call pays a fourth entry to free it
+    // (pinned both ways by `call_entry_count_test.dart`).
     //
     // **This is not a slab reused across calls**, which was rejected on
     // soundness, and the difference
@@ -1555,11 +1631,10 @@ final class _WebTransport {
   /// Refuse a module built against a different frustrate runtime, before
   /// anything calls into it.
   ///
-  /// The native transport has done this since ABI 2; web had nothing.
-  /// `frustrate_schema_hash` is not a substitute — it fingerprints the
+  /// A bridge's `schema_hash` export is not a substitute — it fingerprints the
   /// *interface* a bridge exposes, so a module whose `#[bridge]` items are
   /// unchanged matches it exactly no matter how old the runtime underneath is.
-  /// The export whose shape moved at ABI 3 (`frustrate_call_sync`) is on the
+  /// The export whose shape moved at ABI 3 (a bridge's `call_sync`) is on the
   /// hot path of every sync call and takes raw pointers, so calling an old one
   /// with the new argument list would put the response capacity where a
   /// pointer used to be and write the answer over the request. Loud here, or

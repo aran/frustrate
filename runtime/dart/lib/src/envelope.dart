@@ -18,7 +18,7 @@ import 'exceptions.dart';
 /// silently accepting the module it was supposed to reject.
 const int frustrateRuntimeAbi = 7;
 
-/// Bytes of the response buffer the transports hand `frustrate_call_sync`,
+/// Bytes of the response buffer the transports hand a bridge's `call_sync`,
 /// which answers into it rather than leasing a `Vec` whenever the envelope
 /// fits (`frustrate::envelope::respond_out`).
 ///

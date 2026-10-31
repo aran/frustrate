@@ -619,11 +619,10 @@ bool get _assertsEnabled {
 ///
 /// An isolate (a page, on web) loads one library and runs one Rust runtime:
 /// one std, one allocator, one worker pool, one memory. Every bridge linked
-/// into that library is served by it — natively each through its own
-/// `FrustrateNative.init`, on web all of them by the one module
-/// `FrustrateWeb.init` loads. A bridge built into a *different* library cannot
-/// join: its Rust runtime would be a second one, with its own pool and its own
-/// handle registry. The platform init refuses it, naming the fix (compose the
+/// into that library is served by it once its own platform init names it
+/// (`FrustrateNative.init`, `FrustrateWeb.init`). A bridge built into a
+/// *different* library cannot join: its Rust runtime would be a second one,
+/// with its own pool and its own handle registry. The platform init refuses it, naming the fix (compose the
 /// bridges into one library with `frustrate_library`).
 ///
 /// ## Installed versus active, per bridge
@@ -762,9 +761,10 @@ class Frustrate {
     return StateError(
       'frustrate: $bridge is not initialized. This isolate runs the library '
       'loaded from $source; on native, pass the generated bridge library of '
-      '${bridge.crate} to FrustrateNative.init, and on web, link the bridge '
-      'into the module FrustrateWeb.init loads. Bridges used together are '
-      'composed into one library with frustrate_library.',
+      '${bridge.crate} to FrustrateNative.init, and on web, pass its '
+      'frustrateBridge to FrustrateWeb.init with the module it is linked '
+      'into. Bridges used together are composed into one library with '
+      'frustrate_library.',
     );
   }
 

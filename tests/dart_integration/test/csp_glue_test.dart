@@ -54,7 +54,7 @@ void main() {
       r'$frustrateGlueUrl'.toJS,
       '../build/frustrate.js'.toJS,
     );
-    await FrustrateWeb.initFromUrl('../build/test_api.wasm');
+    await FrustrateWeb.initFromUrl(frustrateBridge, '../build/test_api.wasm');
   });
 
   group('served glue (strict-CSP delivery)', () {
