@@ -29,15 +29,29 @@
 /// more. Timings from this harness are not release numbers under any flag.
 library;
 
+import 'dart:convert';
 import 'dart:io';
+
+/// The package the Bazel-built fixture files are served from, at
+/// `packages/web_test_fixtures/<path>` (the `fixtures` paths of
+/// `:web_test_inputs`). Tests fetch them by URLs relative to their page.
+const _fixturePackage = 'web_test_fixtures';
 
 Future<void> main(List<String> args) async {
   final threaded = args.contains('--threaded');
   final facilities = args.contains('--facilities');
   final release = args.contains('--release');
+  final inputs = args
+      .where((a) => a.startsWith('--inputs='))
+      .map((a) => a.substring('--inputs='.length))
+      .firstOrNull;
   final passthrough = args
       .where(
-        (a) => a != '--threaded' && a != '--release' && a != '--facilities',
+        (a) =>
+            a != '--threaded' &&
+            a != '--release' &&
+            a != '--facilities' &&
+            !a.startsWith('--inputs='),
       )
       .toList();
 
@@ -50,23 +64,34 @@ Future<void> main(List<String> args) async {
       ? '$workspace/tests/dart_integration'
       : Directory.current.path;
 
-  // 0. Stage the composed fixture (two bridges, one module) that Bazel built
-  //    into this binary's runfiles: the module under build/, both bridges'
-  //    bindings under lib/. `dart run` has no runfiles and nothing builds the
-  //    fixture without Bazel, so that path leaves out the files that need it,
-  //    by their `bazel_fixture` tag, and says so.
-  final bazel = workspace != null;
-  if (workspace != null) {
-    _stageComposed(packageDir);
-    for (final fixture in _fixtures) {
-      if (!await fixture.stage(packageDir, workspace, threaded)) exit(1);
+  // 0. Resolve the Bazel-built fixtures (`:web_test_inputs`) in place: a
+  //    package config outside the source tree adds their bindings packages to
+  //    pub's, and a temporary directory of links serves their files. `dart
+  //    run` has no runfiles and nothing builds these fixtures without Bazel,
+  //    so that path leaves out the files that need them, by their
+  //    `bazel_fixture` tag, and says so.
+  Directory? scratch;
+  var tests = const <String>[];
+  if (workspace != null && inputs != null) {
+    scratch = Directory.systemTemp.createTempSync('frustrate_web_test.');
+    final declared = await _resolveInputs(
+      inputs,
+      scratch.path,
+      packageDir,
+      workspace,
+      threaded,
+    );
+    if (declared == null) {
+      scratch.deleteSync(recursive: true);
+      exit(1);
     }
+    tests = declared;
   } else {
     stdout.writeln(
       'not under `bazel run`: leaving out the bazel_fixture tests '
-      '(compose_web_test.dart, bindgen_web_test.dart, '
-      'host_imports_web_test.dart), whose fixtures only '
-      'Bazel builds',
+      '(compose_web_test.dart, compose_concurrent_init_web_test.dart, '
+      'bindgen_web_test.dart, host_imports_web_test.dart), whose fixtures '
+      'only Bazel builds',
     );
   }
 
@@ -79,19 +104,35 @@ Future<void> main(List<String> args) async {
     if (facilities) '--facilities',
     if (release) '--release',
   ], packageDir);
-  if (built != 0) exit(built);
+  if (built != 0) {
+    scratch?.deleteSync(recursive: true);
+    exit(built);
+  }
 
   // 2. Run the browser suite. Chrome flags (SharedArrayBuffer for the threaded
   //    fixture) live in dart_test.yaml, so this stays a plain invocation.
-  final tested = await _run('dart', [
-    'test',
-    '-p',
-    'chrome',
-    '-c',
-    'dart2wasm',
-    if (!bazel) ...['--exclude-tags', 'bazel_fixture'],
-    ...passthrough,
-  ], packageDir);
+  const testArgs = ['-p', 'chrome', '-c', 'dart2wasm'];
+  final int tested;
+  if (scratch != null) {
+    // The runner reads its isolate's package config, for the compiler and to
+    // serve `packages/`, so it runs from source under the merged config.
+    tested = await _run('dart', [
+      '--packages=${scratch.path}/package_config.json',
+      _testRunner('${scratch.path}/package_config.json'),
+      ...testArgs,
+      // The test files `:web_test_inputs` declares, unless the caller chose.
+      if (passthrough.isEmpty) ...tests else ...passthrough,
+    ], packageDir);
+    scratch.deleteSync(recursive: true);
+  } else {
+    tested = await _run('dart', [
+      'test',
+      ...testArgs,
+      '--exclude-tags',
+      'bazel_fixture',
+      ...passthrough,
+    ], packageDir);
+  }
   exit(tested);
 }
 
@@ -106,93 +147,129 @@ Future<int> _run(String exe, List<String> args, String cwd) async {
   return proc.exitCode;
 }
 
-/// Copy the composed fixture out of the runfiles `bazel run` starts in.
-void _stageComposed(String packageDir) {
-  const module = 'tests/compose/composed.wasm';
-  Directory('$packageDir/build').createSync(recursive: true);
-  File(module).copySync('$packageDir/build/composed.wasm');
-  for (final bridge in ['alpha', 'beta']) {
-    final lib = Directory('tests/compose/$bridge/lib');
-    for (final file in lib.listSync(recursive: true).whereType<File>()) {
-      final relative = file.path.substring(lib.path.length + 1);
-      final staged = File('$packageDir/lib/$relative')
-        ..parent.createSync(recursive: true);
-      file.copySync(staged.path);
-    }
-  }
-  stdout.writeln('staged the composed fixture from $module');
-}
-
-/// A Bazel-built fixture: its module and the JS beside it, staged under
-/// build/<package>/, and its bindings, staged under lib/.
+/// Write `<scratch>/package_config.json`, pub's packages plus those of
+/// [inputs], and link each fixture file under `<scratch>/fixtures/`. Returns
+/// the test files [inputs] declares, or null on failure.
 ///
-/// The single-threaded build is in this binary's runfiles. The threaded one
-/// needs the locally built +atomics std, and as a dependency of this binary it
-/// would make every run need that std, so under `--threaded` it is built here,
-/// from the fixture's `threaded` package, after `bazel run` has released the
-/// workspace.
-final class _Fixture {
-  const _Fixture(this.package, {required this.built, this.sources = const []});
+/// [inputs] is the runfiles path of the manifest `:web_test_inputs` writes;
+/// `bazel run` starts this binary in its runfiles. The single-threaded
+/// fixtures are runfiles. The threaded ones need the locally built +atomics
+/// std, and as dependencies of this binary they would make every run need
+/// that std, so under `--threaded` they are built here, after `bazel run` has
+/// released the workspace, and linked from where Bazel reports them.
+Future<List<String>?> _resolveInputs(
+  String inputs,
+  String scratch,
+  String packageDir,
+  String workspace,
+  bool threaded,
+) async {
+  final manifest =
+      jsonDecode(File(inputs).readAsStringSync()) as Map<String, Object?>;
+  final runfiles = Directory.current.absolute.path;
 
-  /// The fixture's package under tests/, and its directory under build/.
-  final String package;
-
-  /// Files a target of the package builds: (file name, target name).
-  final List<(String, String)> built;
-
-  /// Files in this binary's runfiles (its `data`), staged as they are under
-  /// their base names, whichever build is staged.
-  final List<String> sources;
-
-  Future<bool> stage(String packageDir, String workspace, bool threaded) async {
-    var from = 'tests/$package';
-    if (threaded) {
-      final target = '//tests/$package/threaded';
-      final ran = await _run('bazel', [
-        'build',
-        for (final (_, name) in built) '$target:$name',
-      ], workspace);
-      if (ran != 0) return false;
-      // Only the crate under the rule is transitioned, so the rule's own
-      // outputs are where `bazel-bin` points.
-      from = '$workspace/bazel-bin/tests/$package/threaded';
+  final files = {
+    for (final MapEntry(:key, :value)
+        in (manifest['fixtures'] as Map<String, Object?>).entries)
+      key: '$runfiles/$value',
+  };
+  if (threaded) {
+    final labels = (manifest['threaded'] as Map<String, Object?>)
+        .cast<String, String>();
+    if (await _run('bazel', ['build', ...labels.values], workspace) != 0) {
+      return null;
     }
-    final out = Directory('$packageDir/build/$package')
-      ..createSync(recursive: true);
-    for (final (file, _) in built) {
-      File('$from/$file').copySync('${out.path}/$file');
+    for (final MapEntry(key: path, value: label) in labels.entries) {
+      final built = await _outputOf(label, workspace);
+      if (built == null) return null;
+      files[path] = built;
     }
-    for (final file in sources) {
-      File(file).copySync('${out.path}/${file.split('/').last}');
-    }
-    final lib = Directory('tests/$package/lib');
-    for (final file in lib.listSync(recursive: true).whereType<File>()) {
-      final relative = file.path.substring(lib.path.length + 1);
-      final staged = File('$packageDir/lib/$relative')
-        ..parent.createSync(recursive: true);
-      file.copySync(staged.path);
-    }
-    stdout.writeln('staged the $package fixture from $from');
-    return true;
   }
+  for (final MapEntry(key: path, value: file) in files.entries) {
+    Link('$scratch/fixtures/$path')
+        .createSync(File(file).resolveSymbolicLinksSync(), recursive: true);
+  }
+
+  // Pub's own resolution of this package, as `dart test` would get it.
+  final got = await _run('dart', ['pub', 'get'], packageDir);
+  if (got != 0) return null;
+  final pubConfig = File('$packageDir/.dart_tool/package_config.json');
+  final config =
+      jsonDecode(pubConfig.readAsStringSync()) as Map<String, Object?>;
+  final packages = [
+    for (final package in (config['packages'] as List).cast<Map>())
+      {
+        ...package,
+        // Relative to pub's config, which this one does not sit beside.
+        'rootUri': pubConfig.uri
+            .resolve(package['rootUri'] as String)
+            .toString(),
+      },
+  ];
+  final pubNames = {for (final p in packages) p['name']};
+  for (final MapEntry(key: name, value: package)
+      in (manifest['packages'] as Map<String, Object?>).entries) {
+    if (pubNames.contains(name)) {
+      stderr.writeln('web_test: pub already resolves package $name');
+      return null;
+    }
+    final root = Directory('$runfiles/${(package as Map)['root']}')
+        .resolveSymbolicLinksSync();
+    packages.add({
+      'name': name,
+      'rootUri': Directory(root).uri.toString(),
+      'packageUri': 'lib/',
+      if ((package['languageVersion'] as String).isNotEmpty)
+        'languageVersion': package['languageVersion'],
+    });
+  }
+  packages.add({
+    'name': _fixturePackage,
+    'rootUri': Directory(scratch).uri.toString(),
+    'packageUri': 'fixtures/',
+  });
+  File('$scratch/package_config.json').writeAsStringSync(
+    const JsonEncoder.withIndent('  ')
+        .convert({...config, 'packages': packages}),
+  );
+  stdout.writeln(
+    'serving ${files.length} Bazel-built fixture files and '
+    '${(manifest['packages'] as Map).length} bindings packages'
+    '${threaded ? ', the threaded build where there is one' : ''}',
+  );
+  return (manifest['tests'] as List).cast<String>();
 }
 
-const _fixtures = [
-  // //tests/bindgen: an actor reaching browser APIs through wasm-bindgen.
-  _Fixture(
-    'bindgen',
-    built: [
-      ('bindgen_api.wasm', 'bindgen_api.wasm'),
-      ('bindgen_api_bg.js', 'bindgen_api_bg_js'),
-    ],
-  ),
-  // //tests/host_imports: Rust calling JS the app supplies.
-  _Fixture(
-    'host_imports',
-    built: [('host_imports_api.wasm', 'host_imports_api.wasm')],
-    sources: [
-      'tests/host_imports/test_host.js',
-      'tests/host_imports/self_supplied.json',
-    ],
-  ),
-];
+/// The one file Bazel builds for [label], or null if it is not one file.
+Future<String?> _outputOf(String label, String workspace) async {
+  final query = await Process.run('bazel', [
+    'cquery',
+    '--output=files',
+    label,
+  ], workingDirectory: workspace);
+  final outputs = (query.stdout as String)
+      .split('\n')
+      .where((l) => l.isNotEmpty)
+      .toList();
+  if (query.exitCode != 0 || outputs.length != 1) {
+    stderr
+      ..writeln('web_test: expected one output of $label, got $outputs')
+      ..write(query.stderr);
+    return null;
+  }
+  return '$workspace/${outputs.single}';
+}
+
+/// The pub `test` runner's entry point, from [packageConfig].
+String _testRunner(String packageConfig) {
+  final config = jsonDecode(
+    File(packageConfig).readAsStringSync(),
+  ) as Map<String, Object?>;
+  final test = (config['packages'] as List).cast<Map>().firstWhere(
+    (p) => p['name'] == 'test',
+  );
+  final root = test['rootUri'] as String;
+  return Uri.parse(root.endsWith('/') ? root : '$root/')
+      .resolve('bin/test.dart')
+      .toFilePath();
+}

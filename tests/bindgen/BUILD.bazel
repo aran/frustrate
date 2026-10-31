@@ -1,10 +1,11 @@
+load("@rules_dart//dart:defs.bzl", "dart_library")
 load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_wasm_module")
 
 # A bridge whose actor reaches browser APIs from Rust through wasm-bindgen,
 # web-sys and js-sys: the root test of frustrate's wasm-bindgen support.
-# `bazel run //tests/dart_integration:web_test` stages the module, its
+# `bazel run //tests/dart_integration:web_test` serves the module, its
 # wasm-bindgen JS and the bindings, and runs bindgen_web_test.dart on them;
-# `-- --threaded` stages the build in ./threaded instead.
+# `-- --threaded` serves the build in ./threaded instead.
 #
 # Its third-party crates come from `@bindgen_test_crates`, a dev-only hub of
 # its own (//:MODULE.bazel), and the CLI from `@wasm_bindgen_crates`.
@@ -22,6 +23,17 @@ frustrate_bridge_outputs(
     module_paths = ["crate::api"],
     package_name = "bindgen_api",
     visibility = ["//tests:__subpackages__"],
+)
+
+dart_library(
+    name = "bindings",
+    srcs = [":bridge.dart"],
+    package_name = "bindgen_api",
+    visibility = ["//tests:__subpackages__"],
+    deps = [
+        "//runtime/dart:frustrate",
+        "@pub_deps//:ffi",
+    ],
 )
 
 frustrate_bridge_library(

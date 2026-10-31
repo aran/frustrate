@@ -3,9 +3,9 @@
 /// bridge with its own exports, schema and handles. The VM half is
 /// //tests/compose:compose_test.
 ///
-/// The module and both bridges' bindings are built by Bazel and staged here
-/// by `bazel run //tests/dart_integration:web_test`; `dart run
-/// tool/web_test.dart` has no Bazel outputs to stage and leaves this file out
+/// The module and both bridges' bindings are built by Bazel and served by
+/// `bazel run //tests/dart_integration:web_test`; `dart run
+/// tool/web_test.dart` has no Bazel outputs to serve and leaves this file out
 /// by its tag.
 @TestOn('browser')
 @Tags(['bazel_fixture'])
@@ -15,8 +15,8 @@ import 'dart:async';
 
 import 'package:frustrate/frustrate.dart';
 import 'package:frustrate/frustrate_web.dart';
-import 'package:frustrate_integration/compose_alpha.frustrate.dart' as alpha;
-import 'package:frustrate_integration/compose_beta.frustrate.dart' as beta;
+import 'package:compose_alpha/compose_alpha.frustrate.dart' as alpha;
+import 'package:compose_beta/compose_beta.frustrate.dart' as beta;
 import 'package:frustrate/testing.dart';
 import 'package:test/test.dart';
 
@@ -37,7 +37,7 @@ final class _FakeBeta extends beta.FakeComposeBeta {
 
 FakeRuntime _fakeBeta() => FakeRuntime(beta.FakeComposeBetaBridge(_FakeBeta()));
 
-const _module = '../build/composed.wasm';
+const _module = '../packages/web_test_fixtures/composed.wasm';
 
 /// A bridge the module does not link.
 const _absent = FrustrateBridge('compose_gamma');

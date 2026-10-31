@@ -1,0 +1,88 @@
+"""The Bazel-built inputs of the browser suite, named for its driver."""
+
+load("@rules_dart//dart:providers.bzl", "DartInfo")
+load("@rules_dart//dart:utils.bzl", "dart_analyzable_info")
+
+def _web_test_inputs_impl(ctx):
+    packages = {}
+    files = []
+    for dep in ctx.attr.packages:
+        info = dep[DartInfo]
+        language_version = ""
+        for record in info.transitive_packages.to_list():
+            if record.package_name == info.package_name:
+                language_version = record.language_version
+        packages[info.package_name] = {
+            "root": info.lib_root,
+            "languageVersion": language_version,
+        }
+        files.extend(info.srcs)
+    fixtures = {}
+    for target, path in ctx.attr.fixtures.items():
+        outputs = target.files.to_list()
+        if len(outputs) != 1:
+            fail("%s: fixture %s is %d files, not one" % (ctx.label, target.label, len(outputs)))
+        fixtures[path] = outputs[0].short_path
+        files.append(outputs[0])
+    prefix = ctx.label.package + "/"
+    tests = []
+    for src in ctx.files.srcs:
+        if not src.short_path.startswith(prefix):
+            fail("%s: %s is not in this package" % (ctx.label, src.short_path))
+        if src.basename.endswith("_test.dart"):
+            tests.append(src.short_path[len(prefix):])
+    manifest = ctx.actions.declare_file(ctx.label.name + ".json")
+    ctx.actions.write(manifest, json.encode_indent({
+        "packages": packages,
+        "fixtures": fixtures,
+        "threaded": ctx.attr.threaded,
+        "tests": tests,
+    }))
+    return [
+        DefaultInfo(
+            files = depset([manifest]),
+            runfiles = ctx.runfiles(files = [manifest] + files + ctx.files.srcs),
+        ),
+        # The `dart_analyze` aspect checks `srcs` against `packages` and
+        # `deps`, the closure the browser run resolves them in.
+        dart_analyzable_info(
+            deps = ctx.attr.packages + ctx.attr.deps,
+            srcs = ctx.files.srcs,
+        ),
+    ]
+
+web_test_inputs = rule(
+    implementation = _web_test_inputs_impl,
+    doc = "The browser suite's sources, with a JSON manifest of the Dart " +
+          "packages and fixture files they need, all of them in its " +
+          "runfiles. Paths are runfiles-relative: `packages` maps a package " +
+          "name to its root (the parent of `lib/`), `fixtures` maps the path " +
+          "a test fetches a file by to the file. `tests` lists the test files " +
+          "of `srcs`, relative to this package.",
+    attrs = {
+        "srcs": attr.label_list(
+            allow_files = [".dart"],
+            doc = "The suite's sources, tests and helpers, in this package.",
+        ),
+        "packages": attr.label_list(
+            providers = [DartInfo],
+            doc = "Libraries the tests import by their own package names " +
+                  "that pub cannot resolve.",
+        ),
+        "deps": attr.label_list(
+            providers = [DartInfo],
+            doc = "The other libraries `srcs` import. Pub resolves these for " +
+                  "the browser run; here they resolve `srcs` for analysis.",
+        ),
+        "fixtures": attr.label_keyed_string_dict(
+            allow_files = True,
+            doc = "Each single-file target, keyed to the path it is served at.",
+        ),
+        "threaded": attr.string_dict(
+            doc = "Fixture paths whose file under the driver's `--threaded` " +
+                  "is the named target's output instead. Labels, not " +
+                  "dependencies: those targets need the locally built " +
+                  "+atomics std, so the driver builds them only when asked.",
+        ),
+    },
+)

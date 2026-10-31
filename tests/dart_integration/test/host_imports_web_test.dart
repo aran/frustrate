@@ -4,7 +4,7 @@
 /// every realm that instantiates the module imports its own copy and is handed
 /// its instance by `attach`.
 ///
-/// The module, test_host.js and the bindings are staged by
+/// The module, test_host.js and the bindings are built by Bazel and served by
 /// `bazel run //tests/dart_integration:web_test` (the threaded build under
 /// `-- --threaded`); `dart run tool/web_test.dart` leaves this file out by its
 /// tag.
@@ -17,16 +17,17 @@ import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:typed_data';
 
-import 'package:frustrate/frustrate.dart';
 import 'package:frustrate/frustrate_web.dart';
-import 'package:frustrate_integration/host_imports_api.frustrate.dart';
+import 'package:host_imports_api/host_imports_api.frustrate.dart';
 import 'package:test/test.dart';
 
-const _module = '../build/host_imports/host_imports_api.wasm';
-const _host = '../build/host_imports/test_host.js';
+const _module =
+    '../packages/web_test_fixtures/host_imports/host_imports_api.wasm';
+const _host = '../packages/web_test_fixtures/host_imports/test_host.js';
 
 /// The namespaces //bazel/wasm_import_check admits as the runtime's own.
-const _selfSupplied = '../build/host_imports/self_supplied.json';
+const _selfSupplied =
+    '../packages/web_test_fixtures/host_imports/self_supplied.json';
 
 @JS('fetch')
 external JSPromise<_Response> _fetch(JSString url);
@@ -69,7 +70,10 @@ void main() {
       FrustrateWeb.initFromUrl(
         frustrateBridge,
         _module,
-        hostImports: {'frustrate_test_host': '../build/host_imports/none.js'},
+        hostImports: {
+          'frustrate_test_host':
+              '../packages/web_test_fixtures/host_imports/none.js',
+        },
       ),
       throwsA(
         predicate(

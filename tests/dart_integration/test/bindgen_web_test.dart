@@ -4,7 +4,7 @@
 /// the zone the actor was built in.
 ///
 /// The module, its wasm-bindgen JS and the bindings are built by Bazel and
-/// staged by `bazel run //tests/dart_integration:web_test` (the threaded build
+/// served by `bazel run //tests/dart_integration:web_test` (the threaded build
 /// under `-- --threaded`); `dart run tool/web_test.dart` leaves this file out
 /// by its tag.
 @TestOn('browser')
@@ -16,7 +16,7 @@ import 'dart:async';
 
 import 'package:frustrate/frustrate.dart';
 import 'package:frustrate/frustrate_web.dart';
-import 'package:frustrate_integration/bindgen_api.frustrate.dart';
+import 'package:bindgen_api/bindgen_api.frustrate.dart';
 import 'package:test/test.dart';
 
 import 'zone_heard.dart';
@@ -34,8 +34,8 @@ void main() {
   setUpAll(() async {
     await FrustrateWeb.initFromUrl(
       frustrateBridge,
-      '../build/bindgen/bindgen_api.wasm',
-      bindgenGlueUrl: '../build/bindgen/bindgen_api_bg.js',
+      '../packages/web_test_fixtures/bindgen/bindgen_api.wasm',
+      bindgenGlueUrl: '../packages/web_test_fixtures/bindgen/bindgen_api_bg.js',
     );
     checkFrustrateSchema();
   });

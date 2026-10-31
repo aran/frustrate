@@ -235,10 +235,15 @@ List<_Step> _matrix(String pin) => [
   ),
   _Step(
     'dart analyze tests/dart_integration',
-    'The integration suite. Was excluded until its browser-only files '
-        'could name `FrustrateWeb` on any platform — see '
-        'package:frustrate/frustrate_web.dart.',
-    ['dart', 'analyze', 'tests/dart_integration'],
+    'The integration suite\'s library, tools and benchmarks. Its tests are '
+        'Bazel targets, which `bazel test` analyses.',
+    [
+      'dart',
+      'analyze',
+      'tests/dart_integration/lib',
+      'tests/dart_integration/tool',
+      'tests/dart_integration/bench',
+    ],
   ),
 ];
 

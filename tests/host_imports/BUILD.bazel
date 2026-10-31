@@ -1,11 +1,12 @@
 load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
+load("@rules_dart//dart:defs.bzl", "dart_library")
 load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_wasm_module")
 
 # A bridge whose Rust calls JavaScript the app supplies, through an import
 # namespace of its own (`host_imports`), with no wasm-bindgen.
-# `bazel run //tests/dart_integration:web_test` stages the module, test_host.js
+# `bazel run //tests/dart_integration:web_test` serves the module, test_host.js
 # and the bindings, and runs host_imports_web_test.dart on them; `-- --threaded`
-# stages the build in ./threaded instead.
+# serves the build in ./threaded instead.
 
 frustrate_bridge_outputs(
     name = "bridge",
@@ -14,6 +15,17 @@ frustrate_bridge_outputs(
     module_paths = ["crate::api"],
     package_name = "host_imports_api",
     visibility = ["//tests:__subpackages__"],
+)
+
+dart_library(
+    name = "bindings",
+    srcs = [":bridge.dart"],
+    package_name = "host_imports_api",
+    visibility = ["//tests:__subpackages__"],
+    deps = [
+        "//runtime/dart:frustrate",
+        "@pub_deps//:ffi",
+    ],
 )
 
 frustrate_bridge_library(
