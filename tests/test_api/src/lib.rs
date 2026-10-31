@@ -7,7 +7,7 @@ pub mod api;
 pub mod cancel_api;
 /// Generated shape coverage: one member per emitted code path that nothing
 /// else in this crate instantiates
-/// (`cargo run -p shape-coverage -- --write-fixture`). Regenerate, never edit.
+/// (`bazel run //tools/shape_coverage -- --write-fixture`). Regenerate, never edit.
 pub mod shapes;
 
 // Written by frustrate codegen: build.rs under cargo, a declared action under
