@@ -21,6 +21,8 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 #              a fallback the check vouches for                -> passes
 # - memchr:    the member calls memchr, which on x86_64 calls through a
 #              static holding the routine it chose             -> passes
+# - linked_fixture, a library linking two bridges: passes against both
+#              censuses, fails against one, and names a finding with its bridge
 #
 # optimized and dirty are built for every native analysis's platform, so each
 # C library's lists and the bounded lock's acquire are proven red on real IR;
@@ -42,6 +44,7 @@ dart_test(
         "//tests/bazel_rules/native_red/marked:artifacts",
         "//tests/bazel_rules/native_red/memchr:artifacts",
         "//tests/bazel_rules/native_red/optimized:artifacts",
+        "//tests/bazel_rules/linked_fixture:artifacts",
         "//tests/bazel_rules/native_red/silenced:artifacts",
         "//tests/bazel_rules/thread_local_fixture:artifacts",
     ],

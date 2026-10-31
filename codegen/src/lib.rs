@@ -227,7 +227,7 @@ pub(crate) fn mask_ids(code: &str) -> String {
         "call_",
         "spawn_",
         "actor_",
-        "frustrate_check_block_",
+        "frustrate_check_block_test_api_",
         "callSync(",
         "callAsync(",
         "actorCall(",

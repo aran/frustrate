@@ -591,6 +591,9 @@ frustrate_no_block_check(
 )
 ```
 
+When the target is a `frustrate_library` that links several bridges, `bridge` takes a
+list, one `frustrate_bridge` per linked bridge.
+
 `bazel test :block_check` runs one analysis per target and CPU, from any
 host: natively over the whole linked program, on the web over the wasm
 module. Members whose bodies

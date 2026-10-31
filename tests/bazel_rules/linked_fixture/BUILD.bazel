@@ -1,0 +1,72 @@
+load("//bazel:defs.bzl", "frustrate_library", "frustrate_no_block_check")
+load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
+
+# frustrate_no_block_check over a frustrate_library that links two bridges:
+# `example` (a clean member) and `app` (a member silenced per platform). One
+# check settles both bridges' claims over the one build, each root attributed to
+# its bridge by the crate name it carries.
+
+BRIDGES = [
+    "//tests/bazel_rules/linked_fixture/example:bridge",
+    "//tests/bazel_rules/linked_fixture/app:bridge",
+]
+
+frustrate_library(
+    name = "linked",
+    bridges = {
+        "//tests/bazel_rules/linked_fixture/example:example_lib": BRIDGES[0],
+        "//tests/bazel_rules/linked_fixture/app:app_lib": BRIDGES[1],
+    },
+    visibility = ["//tests/bazel_rules:__subpackages__"],
+)
+
+frustrate_no_block_check(
+    name = "linked_block_check",
+    bridge = BRIDGES,
+    crate = ":linked",
+    slow = [
+        "linked_app::api::slow",
+        "linked_example::api::slow",
+    ],
+    targets = [
+        "android",
+        "ios",
+        "linux",
+        "macos",
+        "web_threads",
+        "wasi",
+    ],
+)
+
+# The check's own inputs, for //tests/bazel_rules/native_red:native_red_test:
+# each bridge's census and the library's IR, with no verdict attached.
+no_block_check_artifacts(
+    name = "artifacts",
+    bridge = BRIDGES,
+    crate = ":linked",
+    platforms = ["//bazel:macos_aarch64"],
+    visibility = ["//tests/bazel_rules/native_red:__pkg__"],
+)
+
+# What `linked_block_check.silences` is handed, for
+# //tests/bazel_rules/silences:silences_test: that test's host may not run every
+# analysis (`web_threads` needs a staged std), so it runs the scanner's
+# `--silences` over these analyses' files itself.
+filegroup(
+    name = "applied",
+    testonly = True,
+    srcs = [
+        ":linked_block_check.linux_x86_64",
+        ":linked_block_check.macos_aarch64",
+        ":linked_block_check.wasi",
+    ],
+    output_group = "silences",
+    visibility = ["//tests/bazel_rules/silences:__pkg__"],
+)
+
+filegroup(
+    name = "census",
+    srcs = BRIDGES,
+    output_group = "claims",
+    visibility = ["//tests/bazel_rules/silences:__pkg__"],
+)

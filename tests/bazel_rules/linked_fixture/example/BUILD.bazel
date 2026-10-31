@@ -1,0 +1,26 @@
+load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "linked_example",
+    module_paths = ["crate::api"],
+    package_name = "linked_example",
+    visibility = ["//tests/bazel_rules:__subpackages__"],
+)
+
+# Only ever linked into //tests/bazel_rules/linked_fixture:linked.
+frustrate_bridge_library(
+    name = "example",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "linked_example",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    shared_library = False,
+    visibility = ["//tests/bazel_rules:__subpackages__"],
+    deps = ["//runtime/rust:frustrate"],
+)

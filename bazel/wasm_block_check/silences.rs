@@ -257,6 +257,50 @@ mod tests {
         assert!(e.contains("`getaddrinfo` in the check target's `allow`"), "{e}");
     }
 
+    /// Both of two linked bridges number a member 1 and silence it. Applied
+    /// for one bridge, the other's silence is still unused, and the message
+    /// says whose.
+    #[test]
+    fn linked_bridges_are_judged_each_on_its_own_silences() {
+        let bridge = |krate: &str| {
+            Claims::parse(
+                &format!(
+                    "{}\ncrate {krate}\nartifact 1 add crate::add\nallow 1 pthread_mutex_lock\n",
+                    super::super::CENSUS_HEADER
+                ),
+                krate,
+            )
+            .unwrap()
+        };
+        let c = Claims::merge(vec![("example".into(), bridge("example")), ("app".into(), bridge("app"))]).unwrap();
+        let e = judge(
+            "//p:c",
+            &c,
+            &[],
+            &[applied("//p:c.native", &[Silence::Member("example:1".into(), "pthread_mutex_lock".into())], &[])],
+        )
+        .unwrap_err();
+        assert!(e.contains("1 silence(s) silence nothing"), "{e}");
+        assert!(e.contains("`pthread_mutex_lock` on app: add: no analysis found"), "{e}");
+        assert!(!e.contains("on example: add"), "{e}");
+        let ok = judge(
+            "//p:c",
+            &c,
+            &[],
+            &[applied(
+                "//p:c.native",
+                &[
+                    Silence::Member("example:1".into(), "pthread_mutex_lock".into()),
+                    Silence::Member("app:1".into(), "pthread_mutex_lock".into()),
+                ],
+                &[],
+            )],
+        )
+        .unwrap();
+        assert!(ok.contains("on example: add, applied by //p:c.native"), "{ok}");
+        assert!(ok.contains("on app: add, applied by //p:c.native"), "{ok}");
+    }
+
     /// A marked function idle on one analysis and applied on another is used;
     /// idle on every one, it is an error.
     #[test]

@@ -172,4 +172,73 @@ void main() {
     expect(code, isNot(0), reason: err);
     expect(err, contains('jump\n      reaches nanosleep — waits'));
   });
+
+  group('a library linking two bridges', () {
+    const dir = 'tests/bazel_rules/linked_fixture';
+    final example = _rlocation('$dir/example/bridge/no_block.claims');
+    final app = _rlocation('$dir/app/bridge/no_block.claims');
+    final ir = _rlocation('$dir/artifacts/$mac.ll');
+
+    (int, String) linked(List<String> censuses) {
+      final r = Process.runSync(scanner, [
+        '--ir',
+        '--claims',
+        censuses.first,
+        for (final c in censuses.skip(1)) ...['--also-claims', c],
+        ir,
+        '//$dir:linked_block_check',
+      ]);
+      return (r.exitCode, '${r.stderr}${r.stdout}');
+    }
+
+    test('is checked against every linked bridge\'s census, in any order', () {
+      for (final order in [
+        [example, app],
+        [app, example],
+      ]) {
+        final (code, out) = linked(order);
+        expect(code, 0, reason: out);
+        expect(out, contains('3 `no_block` root(s)'));
+      }
+    });
+
+    test('is not passed over a census that names only one bridge', () {
+      for (final (census, other) in [
+        (example, 'linked_app'),
+        (app, 'linked_example'),
+      ]) {
+        final (code, err) = linked([census]);
+        expect(code, isNot(0), reason: err);
+        expect(err, contains("no linked bridge's census claims"));
+        expect(err, contains('frustrate_check_block_${other}_'));
+      }
+    });
+
+    test(
+      'names a finding with its own bridge, and silences stay per bridge',
+      () {
+        // The same census without its silences: the finding comes back, in
+        // the bridge that had them. `add` is in both bridges under one fn id,
+        // and neither is a finding.
+        final bare = Directory.systemTemp.createTempSync('linked_census');
+        final stripped = File('${bare.path}/app.claims')
+          ..writeAsStringSync(
+            File(app)
+                .readAsLinesSync()
+                .where((l) => !l.startsWith('allow '))
+                .join('\n'),
+          );
+        final (code, err) = linked([example, stripped.path]);
+        expect(code, isNot(0), reason: err);
+        expect(
+          err,
+          contains(
+            'linked_app: read\n      reaches pthread_mutex_lock — waits',
+          ),
+        );
+        expect(err, isNot(contains('linked_example')));
+        expect(err, isNot(contains('linked_app: add')));
+      },
+    );
+  });
 }

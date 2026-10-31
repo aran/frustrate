@@ -850,7 +850,7 @@ pub(crate) fn run_ir(
 
     let display = |sym: &str| -> String {
         claims
-            .and_then(|c| c.roots().find(|(s, _)| s == sym).map(|(_, d)| d.clone()))
+            .and_then(|c| c.shown(sym))
             .unwrap_or_else(|| sym.to_string())
     };
 
@@ -1167,7 +1167,7 @@ mod tests {
         run_text(&format!("{HEAD}{body}"), None, &sinks(slow, io, &[]))
     }
 
-    const ROOT: &str = "define void @frustrate_check_block_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n";
+    const ROOT: &str = "define void @frustrate_check_block_example_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n";
 
     #[test]
     fn a_member_that_locks_a_mutex_is_named_with_its_path() {
@@ -1247,7 +1247,7 @@ mod tests {
     /// The bounded lock: `with` calls the acquire, then the section.
     fn bounded(section_body: &str, elsewhere: &str) -> String {
         format!(
-            "{HEAD}define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_9frustrate4with()\n  ret void\n}}\n\
+            "{HEAD}define void @frustrate_check_block_example_1_render() {{\n  call void @_RNvCs1_9frustrate4with()\n  ret void\n}}\n\
              define void @frustrate_bounded_lock_acquire() {{\n  call i32 @pthread_mutex_lock(ptr %0)\n  ret void\n}}\n\
              define void @_RNvCs1_9frustrate4with() {{\n  call void @frustrate_bounded_lock_acquire()\n  call void @_RNvCs1_9frustrate7section()\n  call i32 @pthread_mutex_unlock(ptr %0)\n  ret void\n}}\n\
              define void @_RNvCs1_9frustrate7section() {{\n{section_body}  ret void\n}}\n\
@@ -1297,7 +1297,7 @@ mod tests {
     #[test]
     fn a_runtime_function_taking_a_std_lock_is_an_ordinary_wait() {
         let e = check(
-            "define void @frustrate_check_block_1_render() {\n  call void @_RNvNtCs1_9frustrate8resident4live()\n  ret void\n}\n\
+            "define void @frustrate_check_block_example_1_render() {\n  call void @_RNvNtCs1_9frustrate8resident4live()\n  ret void\n}\n\
              define void @_RNvNtCs1_9frustrate8resident4live() {\n  call void @_RNvNtNtCs2_3std4sync4once9call_once()\n  ret void\n}\n\
              define void @_RNvNtNtCs2_3std4sync4once9call_once() {\n  call i32 @dispatch_semaphore_wait(ptr %0)\n  ret void\n}\n\
              declare i32 @dispatch_semaphore_wait(ptr)\n",
@@ -1478,13 +1478,13 @@ mod tests {
         let claims = census("artifact 1 render crate::api::render");
         // What an optimizer that proved the decode fails leaves behind.
         let folded = format!(
-            "{HEAD}define void @frustrate_check_block_1_render(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated13call_1_render()\n  ret void\n}}\n\
+            "{HEAD}define void @frustrate_check_block_example_1_render(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated13call_1_render()\n  ret void\n}}\n\
              define void @_RNvNtCs1_7example19frustrate_generated13call_1_render() {{\n  ret void\n}}\n"
         );
         let e = run_text(&folded, Some(&claims), &Sinks::default()).unwrap_err();
         assert!(e.contains("cannot verify: does not reach its own function `crate::api::render`"), "{e}");
         let kept = format!(
-            "{HEAD}define void @frustrate_check_block_1_render(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated13call_1_render()\n  ret void\n}}\n\
+            "{HEAD}define void @frustrate_check_block_example_1_render(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated13call_1_render()\n  ret void\n}}\n\
              define void @_RNvNtCs1_7example19frustrate_generated13call_1_render() {{\n  call void @_RNvNtCs1_7example3api6render()\n  ret void\n}}\n\
              define void @_RNvNtCs1_7example3api6render() {{\n  ret void\n}}\n"
         );
@@ -1512,7 +1512,7 @@ mod tests {
     fn a_dyn_members_implementations_are_its_callees() {
         let claims = census("artifact 1 Shape::area crate::api::Shape::area");
         let text = format!(
-            "{HEAD}define void @frustrate_check_block_1_area(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated11call_1_area()\n  ret void\n}}\n\
+            "{HEAD}define void @frustrate_check_block_example_1_area(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated11call_1_area()\n  ret void\n}}\n\
              define void @_RNvNtCs1_7example19frustrate_generated11call_1_area() {{\n  %f = load ptr, ptr %v\n  call void %f()\n  ret void\n}}\n\
              @vtable.0 = private constant <{{ ptr }}> <{{ ptr @_RNvXs_NtCs1_7example3apiNtB4_6CircleNtB4_5Shape4area }}>\n\
              define void @_RNvXs_NtCs1_7example3apiNtB4_6CircleNtB4_5Shape4area() {{\n  call i32 @nanosleep(ptr %0)\n  ret void\n}}\n\
@@ -1574,7 +1574,7 @@ mod tests {
         .unwrap();
         let root = |id: u32, name: &str| {
             format!(
-                "define void @frustrate_check_block_{id}_{name}(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated8call_{id}_{name}()\n  ret void\n}}\n\
+                "define void @frustrate_check_block_example_{id}_{name}(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated8call_{id}_{name}()\n  ret void\n}}\n\
                  define internal void @_RNvNtCs1_7example19frustrate_generated8call_{id}_{name}() {{\n  call void @_RNvCs1_7example1{name}()\n  ret void\n}}\n\
                  define internal void @_RNvCs1_7example1{name}() {{\n  call i32 @sqlite3_step(ptr null)\n  ret void\n}}\n"
             )
@@ -1583,6 +1583,58 @@ mod tests {
         let e = run_text(&text, Some(&claims), &Sinks::default()).unwrap_err();
         assert!(e.contains("0 `#[bridge(no_block)]` member(s) reach a wait and 1 cannot be verified"), "{e}");
         assert!(e.contains("  b\n      cannot verify: reaches sqlite3_step"), "{e}");
+    }
+
+    /// Two bridges linked into one program, each with a member `a` numbered 1
+    /// that calls a C function. One bridge's silence on its member is not the
+    /// other's, and a finding names the bridge it is in.
+    #[test]
+    fn linked_bridges_keep_their_own_silences_and_roots() {
+        let bridge = |krate: &str, allow: &str| {
+            Claims::parse(
+                &format!(
+                    "{}\ncrate {krate}\nartifact 1 a crate::a\n{allow}",
+                    super::super::CENSUS_HEADER
+                ),
+                &format!("{krate}.claims"),
+            )
+            .unwrap()
+        };
+        let root = |krate: &str| {
+            let n = krate.len();
+            format!(
+                "define void @frustrate_check_block_{krate}_1_a(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_{n}{krate}19frustrate_generated8call_1_a()\n  ret void\n}}\n\
+                 define internal void @_RNvNtCs1_{n}{krate}19frustrate_generated8call_1_a() {{\n  call void @_RNvCs1_{n}{krate}1a()\n  ret void\n}}\n\
+                 define internal void @_RNvCs1_{n}{krate}1a() {{\n  call i32 @sqlite3_step(ptr null)\n  ret void\n}}\n"
+            )
+        };
+        let text = format!("{HEAD}{}{}declare i32 @sqlite3_step(ptr)\n", root("example"), root("app"));
+        let merge = |example: Claims, app: Claims| {
+            Claims::merge(vec![("example.claims".into(), example), ("app.claims".into(), app)]).unwrap()
+        };
+
+        // Only `example` silences it: `app`'s member, numbered the same, is
+        // still the one finding, and is named with its bridge.
+        let claims = merge(bridge("example", "allow 1 sqlite3_step\n"), bridge("app", ""));
+        let e = run_text(&text, Some(&claims), &Sinks::default()).unwrap_err();
+        assert!(e.contains("0 `#[bridge(no_block)]` member(s) reach a wait and 1 cannot be verified"), "{e}");
+        assert!(e.contains("  app: a\n      cannot verify: reaches sqlite3_step"), "{e}");
+        assert!(!e.contains("example: a"), "{e}");
+
+        // Both silence their own, and each silence is applied under its own
+        // bridge's id.
+        let claims = merge(
+            bridge("example", "allow 1 sqlite3_step\n"),
+            bridge("app", "allow 1 sqlite3_step\n"),
+        );
+        let g = run_green(&text, Some(&claims), &Sinks::default()).unwrap();
+        assert!(g.applied.silences.contains(&Silence::Member("example:1".into(), "sqlite3_step".into())));
+        assert!(g.applied.silences.contains(&Silence::Member("app:1".into(), "sqlite3_step".into())));
+
+        // A root of a linked bridge that no census names is not a pass.
+        let only = bridge("example", "allow 1 sqlite3_step\n");
+        let e = run_text(&text, Some(&only), &Sinks::default()).unwrap_err();
+        assert!(e.contains("frustrate_check_block_app_1_a — carries the crate of none of `example`"), "{e}");
     }
 
 
@@ -1666,7 +1718,7 @@ mod tests {
     fn a_call_through_a_value_loaded_from_a_static_cannot_be_verified() {
         let text = format!(
             "{HEAD}@SLOT = internal global ptr null\n\
-             define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_7example6render()\n  ret void\n}}\n\
+             define void @frustrate_check_block_example_1_render() {{\n  call void @_RNvCs1_7example6render()\n  ret void\n}}\n\
              define internal void @_RNvCs1_7example6render() {{\n  %f = load ptr, ptr @SLOT\n  call void %f()\n  ret void\n}}\n"
         );
         let e = run_text(&text, None, &Sinks::default()).unwrap_err();
@@ -1683,7 +1735,7 @@ mod tests {
     #[test]
     fn a_call_through_a_thread_local_kept_in_a_pthread_key_cannot_be_verified() {
         let text = "target triple = \"aarch64-unknown-linux-android\"\n\
-             define void @frustrate_check_block_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n\
+             define void @frustrate_check_block_example_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n\
              define internal void @_RNvCs1_7example6render() {\n  %b = call ptr @pthread_getspecific(i32 %k)\n  %f = load ptr, ptr %b\n  call void %f()\n  ret void\n}\n\
              declare ptr @pthread_getspecific(i32)\n";
         let e = run_text(text, None, &Sinks::default()).unwrap_err();
@@ -1701,7 +1753,7 @@ mod tests {
         let phi: Vec<String> = (0..n).map(|i| format!("[ %a{i}, %start ]")).collect();
         let text = format!(
             "{HEAD}@SLOT = internal global ptr null\n\
-             define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_7example6render()\n  ret void\n}}\n\
+             define void @frustrate_check_block_example_1_render() {{\n  call void @_RNvCs1_7example6render()\n  ret void\n}}\n\
              define internal void @_RNvCs1_7example6render() {{\nstart:\n{allocas}  br label %l\nl:\n  \
              %p = phi ptr {}\n  %v = load ptr, ptr @SLOT\n  store ptr %v, ptr %p, align 8\n  \
              %f = load ptr, ptr %a7, align 8\n  call void %f()\n  ret void\n}}\n",
@@ -1722,7 +1774,7 @@ mod tests {
         let vs: Vec<String> = (0..n).map(|i| format!("ptr %v{i}")).collect();
         let text = format!(
             "{HEAD}{statics}\
-             define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_7example6render()\n  ret void\n}}\n\
+             define void @frustrate_check_block_example_1_render() {{\n  call void @_RNvCs1_7example6render()\n  ret void\n}}\n\
              define internal void @_RNvCs1_7example6render() {{\n{loads}  %f = phi ptr {}\n  call void %f()\n  ret void\n}}\n",
             vs.iter().map(|v| format!("[ {}, %x ]", &v[4..])).collect::<Vec<_>>().join(", ")
         );
@@ -1736,7 +1788,7 @@ mod tests {
     #[test]
     fn a_call_through_a_pointer_the_member_stored_itself_is_followed() {
         let text = format!(
-            "{HEAD}define void @frustrate_check_block_1_render() {{\n  %slot = alloca [8 x i8], align 8\n  store ptr @_RNvCs1_7example4work, ptr %slot, align 8\n  %f = load ptr, ptr %slot, align 8\n  call void %f()\n  ret void\n}}\n\
+            "{HEAD}define void @frustrate_check_block_example_1_render() {{\n  %slot = alloca [8 x i8], align 8\n  store ptr @_RNvCs1_7example4work, ptr %slot, align 8\n  %f = load ptr, ptr %slot, align 8\n  call void %f()\n  ret void\n}}\n\
              define internal void @_RNvCs1_7example4work() {{\n  ret void\n}}\n"
         );
         let ok = run_text(&text, None, &Sinks::default()).unwrap();
@@ -1750,7 +1802,7 @@ mod tests {
         let text = format!(
             "{HEAD}@LOGGER = internal global ptr null\n\
              define internal ptr @_RNvCs1_3log6logger() {{\n  %l = load ptr, ptr @LOGGER\n  ret ptr %l\n}}\n\
-             define void @frustrate_check_block_1_render() {{\n  %l = call ptr @_RNvCs1_3log6logger()\n  %f = load ptr, ptr %l\n  call void %f()\n  ret void\n}}\n"
+             define void @frustrate_check_block_example_1_render() {{\n  %l = call ptr @_RNvCs1_3log6logger()\n  %f = load ptr, ptr %l\n  call void %f()\n  ret void\n}}\n"
         );
         let e = run_text(&text, None, &Sinks::default()).unwrap_err();
         assert!(e.contains("loaded from `LOGGER`"), "{e}");
@@ -1763,13 +1815,13 @@ mod tests {
     fn a_helper_is_reported_in_the_context_that_hands_it_a_slots_value() {
         let helper = "define internal void @_RNvCs1_7example6invoke(ptr %f) {\n  call void %f()\n  ret void\n}\n";
         let own = format!(
-            "{HEAD}{helper}define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_7example6invoke(ptr @_RNvCs1_7example4work)\n  ret void\n}}\n\
+            "{HEAD}{helper}define void @frustrate_check_block_example_1_render() {{\n  call void @_RNvCs1_7example6invoke(ptr @_RNvCs1_7example4work)\n  ret void\n}}\n\
              define internal void @_RNvCs1_7example4work() {{\n  ret void\n}}\n"
         );
         assert!(run_text(&own, None, &Sinks::default()).is_ok());
         let slot = format!(
             "{HEAD}@SLOT = internal global ptr null\n{helper}\
-             define void @frustrate_check_block_1_render() {{\n  %f = load ptr, ptr @SLOT\n  call void @_RNvCs1_7example6invoke(ptr %f)\n  ret void\n}}\n"
+             define void @frustrate_check_block_example_1_render() {{\n  %f = load ptr, ptr @SLOT\n  call void @_RNvCs1_7example6invoke(ptr %f)\n  ret void\n}}\n"
         );
         let e = run_text(&slot, None, &Sinks::default()).unwrap_err();
         assert!(e.contains("an indirect call in example::invoke"), "{e}");
@@ -1781,7 +1833,7 @@ mod tests {
     fn a_known_slot_is_not_a_finding() {
         let text = format!(
             "{HEAD}@_RNvNtNtNtCs1_4core2io5error12os_functions12OS_FUNCTIONS = internal global ptr null\n\
-             define void @frustrate_check_block_1_render() {{\n  %f = load ptr, ptr @_RNvNtNtNtCs1_4core2io5error12os_functions12OS_FUNCTIONS\n  call void %f()\n  ret void\n}}\n"
+             define void @frustrate_check_block_example_1_render() {{\n  %f = load ptr, ptr @_RNvNtNtNtCs1_4core2io5error12os_functions12OS_FUNCTIONS\n  call void %f()\n  ret void\n}}\n"
         );
         assert!(run_text(&text, None, &Sinks::default()).is_ok());
     }
@@ -1846,7 +1898,7 @@ mod tests {
     #[test]
     fn the_bounded_locks_futex_wait_is_exempt_on_linux() {
         let text = "target triple = \"x86_64-unknown-linux-gnu\"\n\
-             define void @frustrate_check_block_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n\
+             define void @frustrate_check_block_example_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n\
              define void @_RNvCs1_7example6render() {\n  call void @_RNvCs1_9frustrate4with()\n  ret void\n}\n\
              define void @frustrate_bounded_lock_acquire() {\n  %1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 137, i32 noundef 0, ptr null, ptr null, i32 noundef -1)\n  ret void\n}\n\
              define void @_RNvCs1_9frustrate4with() {\n  call void @frustrate_bounded_lock_acquire()\n  %1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 129, i32 noundef 1)\n  ret void\n}\n\

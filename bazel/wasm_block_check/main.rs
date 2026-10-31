@@ -74,6 +74,11 @@
 //! last mode is what makes a placement-settled claim set cost nothing at all:
 //! no module, no +atomics std, no build.
 //!
+//! A library that links several bridges has one census per bridge, and the
+//! driver hands over all of them (`--also-claims`): the roots are matched
+//! against their union, and each root is its bridge's by the crate name its
+//! symbol carries ([`Claims::merge`]).
+//!
 //! The cfg reaches frustrate's own `#[no_mangle]`s and no further, so a graph
 //! containing wasm-bindgen would arrive here with its dependency rlibs' exports
 //! still on. The check configuration links through `link_filter.rs`,
@@ -133,7 +138,7 @@ static ALLOC: budget::Budgeted = budget::Budgeted;
 /// Every function export of a check artifact must start with this.
 ///
 /// Codegen emits one `#[cfg(frustrate_block_check)] #[no_mangle] pub extern "C"
-/// fn frustrate_check_block_{fn_id}_{name}()` per claimed member, and gates
+/// fn frustrate_check_block_{crate}_{fn_id}_{name}()` per claimed member, and gates
 /// every other `#[no_mangle]` in the generated bindings and in the runtime on
 /// `#[cfg(not(frustrate_block_check))]`. So an artifact with any other function
 /// export is either the production module (scan the wrong file and everything
@@ -715,10 +720,12 @@ struct Finding {
 /// reading a newer census would have to guess at a token it does not know — and
 /// the one guess that is cheap to make ("treat it as needing no artifact") is
 /// the one that turns a misconfigured build into a silent pass.
-const CENSUS_HEADER: &str = "frustrate-claim-census 6";
+const CENSUS_HEADER: &str = "frustrate-claim-census 7";
 
 /// The `#[bridge(no_block)]` claims of one bridge crate, and how each is
-/// settled — written by codegen (`emit_rust::claim_census`), read here.
+/// settled — written by codegen (`emit_rust::claim_census`), read here. A
+/// library that links several bridges is the union of their censuses
+/// ([`Claims::merge`]); each root belongs to the bridge whose census lists it.
 ///
 /// Line-oriented, and a **separate** file from `interface.frustrate.json`
 /// because that JSON is the wire-schema fingerprint: `no_block` is
@@ -726,7 +733,12 @@ const CENSUS_HEADER: &str = "frustrate-claim-census 6";
 /// halves that disagree about a claim still interoperate.
 #[derive(Default, Debug)]
 struct Claims {
-    crate_name: String,
+    /// The bridge crates these claims are of: one, or every bridge a library
+    /// links. A root's symbol carries its crate's name, so this is what says
+    /// which bridge a root belongs to.
+    crates: Vec<String>,
+    /// The crate of each root, by root symbol.
+    crate_of: BTreeMap<String, String>,
     /// Settled by placement on an **actor**: the body runs on the actor's own
     /// executor on every platform, so no configuration exists in which the
     /// caller's thread runs it. No root.
@@ -800,9 +812,11 @@ impl Claims {
             ));
         }
         let mut c = Claims::default();
+        let mut crate_name = String::new();
         for line in lines {
             if let Some(name) = line.strip_prefix("crate ") {
-                c.crate_name = name.to_string();
+                crate_name = name.to_string();
+                c.crates = vec![crate_name.clone()];
                 continue;
             }
             if let Some(rest) = line.strip_prefix("allow ") {
@@ -837,11 +851,20 @@ impl Claims {
                      only an `artifact` row, carries the member's function path."
                 ));
             }
-            // The check root's symbol embeds the *bare* member name; the census
-            // carries the qualified one so a message can name `Node::send`.
+            // The check root's symbol embeds the crate and the *bare* member
+            // name; the census carries the qualified one so a message can name
+            // `Node::send`.
             let bare = name.rsplit("::").next().unwrap_or(name);
+            let root = format!("{ROOT_PREFIX}{crate_name}_{id}_{bare}");
+            if (kind == "artifact" || kind == "artifact-residue") && crate_name.is_empty() {
+                return Err(format!(
+                    "wasm_block_check: {path}: `{line}` comes before a `crate` row, \
+                     so its check root cannot be named."
+                ));
+            }
             let key = if kind == "artifact" || kind == "artifact-residue" {
-                format!("{ROOT_PREFIX}{id}_{bare}")
+                c.crate_of.insert(root.clone(), crate_name.clone());
+                root.clone()
             } else {
                 name.to_string()
             };
@@ -851,14 +874,12 @@ impl Claims {
                 "placement-dispatch" => c.placement_dispatch.push(name.to_string()),
                 "declared" => c.declared.push(name.to_string()),
                 "artifact" => {
-                    let sym = format!("{ROOT_PREFIX}{id}_{bare}");
+                    let sym = root;
                     let segs = member.unwrap_or_default().split("::").map(str::to_string).collect();
                     c.member_paths.insert(sym.clone(), segs);
                     c.artifact.push((sym, name.to_string()));
                 }
-                "artifact-residue" => c
-                    .residue
-                    .push((format!("{ROOT_PREFIX}{id}_{bare}"), name.to_string())),
+                "artifact-residue" => c.residue.push((root, name.to_string())),
                 _ => {
                     return Err(format!(
                         "wasm_block_check: {path}: `{kind}` is not a settlement this \
@@ -870,6 +891,102 @@ impl Claims {
             }
         }
         Ok(c)
+    }
+
+    /// The claims of every bridge a library links, as one set: the censuses
+    /// read from `paths`, in that order.
+    ///
+    /// A root is attributed to its bridge by the crate name its symbol
+    /// carries, and the census that lists that symbol is its bridge's. Two
+    /// bridges of one name would own the same symbols, and a census with no
+    /// crate cannot own any, so both are refused rather than guessed at.
+    ///
+    /// A fn id is a bridge's own numbering, so two bridges both have an id 0.
+    /// Everything keyed by one (`allow`, `ids`) is namespaced by crate here, so
+    /// a silence on one bridge's member can never be read as another's. A
+    /// claim with no root is likewise keyed by its crate and name.
+    fn merge(parts: Vec<(String, Claims)>) -> Result<Claims, String> {
+        if parts.len() == 1 {
+            return Ok(parts.into_iter().next().unwrap().1);
+        }
+        let mut seen: BTreeMap<String, String> = BTreeMap::new();
+        let mut all = Claims::default();
+        for (path, c) in parts {
+            let Some(krate) = c.crates.first().cloned() else {
+                return Err(format!(
+                    "wasm_block_check: {path} names no `crate`, so with more than one \
+                     census its roots cannot be attributed to a bridge."
+                ));
+            };
+            if let Some(other) = seen.insert(krate.clone(), path.clone()) {
+                return Err(format!(
+                    "wasm_block_check: {other} and {path} are both censuses of crate \
+                     `{krate}`. Each linked bridge is named once, and its crate's \
+                     name is what tells its roots from another bridge's."
+                ));
+            }
+            let qualified = |id: &String| format!("{krate}:{id}");
+            for (key, id) in c.ids {
+                let key = if c.crate_of.contains_key(&key) { key } else { format!("{krate}::{key}") };
+                all.ids.insert(key, qualified(&id));
+            }
+            for (id, names) in c.allow {
+                all.allow.insert(qualified(&id), names);
+            }
+            all.crates.push(krate);
+            all.crate_of.extend(c.crate_of);
+            all.placement.extend(c.placement);
+            all.placement_dispatch.extend(c.placement_dispatch);
+            all.artifact.extend(c.artifact);
+            all.member_paths.extend(c.member_paths);
+            all.residue.extend(c.residue);
+            all.declared.extend(c.declared);
+        }
+        Ok(all)
+    }
+
+    /// Read the censuses at these paths, as one set.
+    fn read(paths: &[String]) -> Result<Claims, String> {
+        let parts = paths
+            .iter()
+            .map(|p| {
+                std::fs::read_to_string(p)
+                    .map_err(|e| format!("wasm_block_check: {p}: {e}"))
+                    .and_then(|t| Claims::parse(&t, p))
+                    .map(|c| (p.clone(), c))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Claims::merge(parts)
+    }
+
+    /// The linked bridges whose crate name a root symbol carries: a root is
+    /// `<prefix><crate>_<fn id>_<member>`. For a message about a root no
+    /// census claims, which is the one place a root's bridge is not already
+    /// known from the census that lists it.
+    fn crates_named_by(&self, root: &str) -> Vec<&str> {
+        let Some(rest) = root.strip_prefix(ROOT_PREFIX) else {
+            return Vec::new();
+        };
+        self.crates
+            .iter()
+            .map(String::as_str)
+            .filter(|k| {
+                rest.strip_prefix(k)
+                    .and_then(|r| r.strip_prefix('_'))
+                    .is_some_and(|r| r.starts_with(|c: char| c.is_ascii_digit()))
+            })
+            .collect()
+    }
+
+    /// A claim's name for a message: its display, with its bridge's crate in
+    /// front where several bridges are linked, since two of them can each
+    /// have an `add`.
+    fn shown(&self, root: &str) -> Option<String> {
+        let (_, display) = self.roots().find(|(s, _)| s == root)?;
+        Some(match self.crate_of.get(root) {
+            Some(k) if self.crates.len() > 1 => format!("{k}: {display}"),
+            _ => display.clone(),
+        })
     }
 
     /// Every claim that wants a check root, whatever shape that root has. The
@@ -885,22 +1002,22 @@ impl Claims {
     }
 
     /// How a claim is named in a message, by its fn id.
-    fn display_of<'a>(&'a self, id: &'a str) -> &'a str {
+    fn display_of(&self, id: &str) -> String {
         let Some((key, _)) = self.ids.iter().find(|(_, i)| *i == id) else {
-            return id;
+            return id.to_string();
         };
-        self.roots()
-            .find(|(s, _)| s == key)
-            .map(|(_, d)| d.as_str())
-            .unwrap_or(key)
+        self.shown(key).unwrap_or_else(|| key.clone())
     }
 
     /// How the crate is named in a message.
     fn who(&self) -> String {
-        if self.crate_name.is_empty() {
-            "this bridge".into()
-        } else {
-            format!("`{}`", self.crate_name)
+        match self.crates.as_slice() {
+            [] => "this bridge".into(),
+            [one] => format!("`{one}`"),
+            many => format!(
+                "the bridges {}",
+                many.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ")
+            ),
         }
     }
 
@@ -1145,7 +1262,8 @@ fn run_with(
             .iter()
             .filter_map(|(sym, display)| {
                 let at = root_names.iter().position(|n| n == sym)?;
-                let glue = format!("call_{}", &sym[ROOT_PREFIX.len()..]);
+                let krate = c.crate_of.get(sym).map_or(0, String::len);
+                let glue = format!("call_{}", &sym[ROOT_PREFIX.len() + krate + 1..]);
                 let reaches = reach(&m, &[roots[at]], &BTreeSet::new()).iter().any(|f| {
                     m.names
                         .get(f)
@@ -1362,7 +1480,7 @@ fn run_with(
         .collect();
     let display = |sym: &str| -> String {
         claims
-            .and_then(|c| c.roots().find(|(s, _)| s == sym).map(|(_, d)| d.clone()))
+            .and_then(|c| c.shown(sym))
             .unwrap_or_else(|| sym.to_string())
     };
     let empty: Vec<String> = Vec::new();
@@ -1592,17 +1710,25 @@ fn match_census(root_names: &[String], claims: Option<&Claims>, label: &str) -> 
                 .filter(|n| !c.roots().any(|(sym, _)| sym == *n))
                 .collect();
             if !extra.is_empty() {
+                let attribute = |n: &String| match c.crates_named_by(n).as_slice() {
+                    [] => format!("  {n} — carries the crate of none of {}", c.who()),
+                    named => format!(
+                        "  {n} — of `{}`, which claims no such member",
+                        named.join("`, `")
+                    ),
+                };
                 return Err(format!(
-                    "wasm_block_check: {label} exports check root(s) the census \
-                     does not claim:\n\n{}\n\n\
-                     The module and the census disagree about what is claimed, so \
-                     a scan over these roots answers a question nobody asked. \
-                     Rebuild both from the same sources.",
-                    extra
-                        .iter()
-                        .map(|n| format!("  {n}"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
+                    "wasm_block_check: {label} exports check root(s) no linked \
+                     bridge's census claims:\n\n{}\n\n\
+                     The module and the censuses disagree about what is claimed, \
+                     so a scan over these roots answers a question nobody asked. \
+                     Either the module links a bridge this check does not name \
+                     (every linked bridge's `frustrate_bridge` goes in the check \
+                     target's `bridge`; it is checked against {}), or the module \
+                     and the censuses were generated from different sources — \
+                     rebuild both.",
+                    extra.iter().map(|n| attribute(n)).collect::<Vec<_>>().join("\n"),
+                    c.who()
                 ));
             }
         }
@@ -2162,6 +2288,9 @@ fn main() -> ExitCode {
     let mut ir_mode = false;
     // `--applied <file>`: where a green check writes the silences it applied.
     let mut applied_out: Option<String> = None;
+    // `--also-claims <census>`: another bridge linked into the same artifact,
+    // beside the census a mode takes positionally.
+    let mut also_claims: Vec<String> = Vec::new();
     let mut raw = std::env::args();
     while let Some(a) = raw.next() {
         if a == "--ir" {
@@ -2178,6 +2307,16 @@ fn main() -> ExitCode {
                 Some(v) => applied_out = Some(v),
                 None => {
                     eprintln!("wasm_block_check: `--applied` wants a value");
+                    return ExitCode::FAILURE;
+                }
+            }
+            continue;
+        }
+        if a == "--also-claims" {
+            match raw.next() {
+                Some(v) => also_claims.push(v),
+                None => {
+                    eprintln!("wasm_block_check: `--also-claims` wants a value");
                     return ExitCode::FAILURE;
                 }
             }
@@ -2232,6 +2371,7 @@ fn main() -> ExitCode {
     // and it is the only one whose verdict rests on the module alone.
     let usage = "usage: wasm_block_check [--wasi] [--slow <path> | --io <category> | --allow <name>]... \
          [--applied <file>] <module.wasm> <label> [marker-out]\n\
+         \x20      (every mode that takes a census takes more, one `--also-claims <census>` per further linked bridge)\n\
          \x20      wasm_block_check [--wasi] [--slow ... | --io ... | --allow ...] [--applied <file>] \
          --claims <census> <module.wasm> <label> [marker-out]\n\
          \x20      wasm_block_check --ir [--slow ... | --io ... | --allow ...] [--applied <file>] \
@@ -2239,12 +2379,12 @@ fn main() -> ExitCode {
          \x20      wasm_block_check --claims-only <census> <label> [marker-out]\n\
          \x20      wasm_block_check [--allow <name>]... --silences <census> <applied>... <label> <marker-out>\n\
          \x20      wasm_block_check --report <module.wasm> [label]";
+    let censuses = |first: &String| -> Vec<String> {
+        std::iter::once(first.clone()).chain(also_claims.iter().cloned()).collect()
+    };
     let (verdict, marker) = match args.get(1).map(String::as_str) {
         Some("--claims") if args.len() >= 5 => {
-            let claims = match std::fs::read_to_string(&args[2])
-                .map_err(|e| format!("wasm_block_check: {}: {e}", args[2]))
-                .and_then(|t| Claims::parse(&t, &args[2]))
-            {
+            let claims = match Claims::read(&censuses(&args[2])) {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("{e}");
@@ -2279,9 +2419,7 @@ fn main() -> ExitCode {
         // analyses wrote with `--applied` (silences.rs).
         Some("--silences") if args.len() >= 5 => {
             let n = args.len();
-            let v = std::fs::read_to_string(&args[2])
-                .map_err(|e| format!("wasm_block_check: {}: {e}", args[2]))
-                .and_then(|t| Claims::parse(&t, &args[2]))
+            let v = Claims::read(&censuses(&args[2]))
                 .and_then(|c| {
                     let checks = args[3..n - 2]
                         .iter()
@@ -2296,10 +2434,7 @@ fn main() -> ExitCode {
             (v.map(|text| Green { text, applied: silences::Applied::default() }), args.get(n - 1))
         }
         Some("--claims-only") if args.len() >= 4 => {
-            let v = std::fs::read_to_string(&args[2])
-                .map_err(|e| format!("wasm_block_check: {}: {e}", args[2]))
-                .and_then(|t| Claims::parse(&t, &args[2]))
-                .and_then(|c| claims_only(&args[3], &c));
+            let v = Claims::read(&censuses(&args[2])).and_then(|c| claims_only(&args[3], &c));
             (v.map(|text| Green { text, applied: silences::Applied::default() }), args.get(4))
         }
         Some(flag) if flag.starts_with("--") => {
@@ -2553,7 +2688,11 @@ mod tests {
             let base = b.imports.len() + b.funcs.len();
             let mut added = 0;
             for (name, kind, idx) in self.exports.iter() {
-                let Some(rest) = name.strip_prefix(ROOT_PREFIX) else { continue };
+                let Some(rest) = name.strip_prefix(ROOT_PREFIX).and_then(|r| {
+                    ["fixture_", "other_"].iter().find_map(|k| r.strip_prefix(k))
+                }) else {
+                    continue;
+                };
                 if *kind != 0 {
                     continue;
                 }
@@ -2629,6 +2768,39 @@ mod tests {
         }
     }
 
+    /// A census of one named crate from its rows.
+    fn census_of(krate: &str, rows: &str) -> Result<Claims, String> {
+        Claims::parse(
+            &format!("# generated\n{CENSUS_HEADER}\ncrate {krate}\n{rows}"),
+            &format!("{krate}.claims"),
+        )
+    }
+
+    /// The censuses of every bridge a library links, as the driver reads them.
+    fn linked(bridges: &[(&str, &str)]) -> Result<Claims, String> {
+        Claims::merge(
+            bridges
+                .iter()
+                .map(|(k, rows)| Ok((format!("{k}.claims"), census_of(k, rows)?)))
+                .collect::<Result<_, String>>()?,
+        )
+    }
+
+    impl Build {
+        /// The module against several bridges' censuses at once.
+        fn check_linked(&self, bridges: &[(&str, &str)]) -> Result<String, String> {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let dir = std::env::temp_dir().join(format!("wasm_block_linked_{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
+            std::fs::write(&p, self.with_glue().wasm()).unwrap();
+            let c = linked(bridges)?;
+            c.refuse_empty("//pkg:target.wasm")?;
+            run_with(p.to_str().unwrap(), "//pkg:target.wasm", Some(&c), &Sinks::default()).map(|g| g.text)
+        }
+    }
+
     /// A census from its rows, through the real parser — so a test that asserts
     /// on a verdict has also asserted the format it was written in.
     fn census(rows: &str) -> Result<Claims, String> {
@@ -2645,7 +2817,7 @@ mod tests {
         "_RNvMs9_NtNtNtCsbOwqmHKCkC2_3std4sync9nonpoison6rwlockINtB5_6RwLockNtNtBb_9panicking4HookE4readBb_";
     const FUTEX_WAIT: &str = "_RNvNtNtNtNtCsbOwqmHKCkC2_3std3sys3pal4wasm5futex10futex_wait";
     const ALLOC_HOOK: &str = "_RNvNtCsbOwqmHKCkC2_3std5alloc24default_alloc_error_hook";
-    const ROOT: &str = "frustrate_check_block_0_tag_join";
+    const ROOT: &str = "frustrate_check_block_fixture_0_tag_join";
 
     fn root_export(idx: u32) -> (String, u8, u32) {
         (ROOT.to_string(), 0, idx)
@@ -2786,7 +2958,7 @@ mod tests {
         assert!(e.contains("futex_wait"), "{e}");
         assert!(e.contains("not panic paths"), "{e}");
         assert!(
-            e.contains("        frustrate_check_block_0_tag_join\n"),
+            e.contains("        frustrate_check_block_fixture_0_tag_join\n"),
             "shows the witness from the root: {e}"
         );
     }
@@ -3361,14 +3533,17 @@ mod tests {
     fn a_census_that_cannot_be_read_is_never_read_as_no_claims() {
         let bad = Claims::parse("artifact 0 tag_join m::tag_join", "x.claims").unwrap_err();
         assert!(bad.contains("is not a claim census"), "{bad}");
-        let older = Claims::parse("frustrate-claim-census 5", "x.claims").unwrap_err();
+        let older = Claims::parse("frustrate-claim-census 6", "x.claims").unwrap_err();
         assert!(older.contains("older than this scanner"), "{older}");
-        let newer = Claims::parse("frustrate-claim-census 7", "x.claims").unwrap_err();
+        let newer = Claims::parse("frustrate-claim-census 8", "x.claims").unwrap_err();
         assert!(newer.contains("older than this scanner"), "{newer}");
         let torn = census("artifact tag_join").unwrap_err();
         assert!(torn.contains("<settlement> <fn_id> <name>"), "{torn}");
         let unnumbered = census("artifact x tag_join").unwrap_err();
         assert!(unnumbered.contains("no numeric fn id"), "{unnumbered}");
+        let crateless = Claims::parse(&format!("{CENSUS_HEADER}\nartifact 0 tag_join m::tag_join"), "x.claims")
+            .unwrap_err();
+        assert!(crateless.contains("before a `crate` row"), "{crateless}");
         let pathless = census("artifact 0 tag_join").unwrap_err();
         assert!(pathless.contains("carries the member's function path"), "{pathless}");
         let future = census("proven 0 tag_join").unwrap_err();
@@ -3379,7 +3554,7 @@ mod tests {
     #[test]
     fn a_census_carries_the_crate_name_and_ignores_comments() {
         let c = census("\n# a comment\nplacement 3 Node::send\n").unwrap();
-        assert_eq!(c.crate_name, "fixture");
+        assert_eq!(c.crates, vec!["fixture".to_string()]);
         assert_eq!(c.placement, vec!["Node::send".to_string()]);
         assert!(c.who().contains("fixture"), "{}", c.who());
     }
@@ -3391,7 +3566,7 @@ mod tests {
         let e = clean()
             .check_claims("artifact 0 tag_join m::tag_join\nartifact 7 withdraw m::withdraw")
             .unwrap_err();
-        assert!(e.contains("withdraw — expected `frustrate_check_block_7_withdraw`"), "{e}");
+        assert!(e.contains("withdraw — expected `frustrate_check_block_fixture_7_withdraw`"), "{e}");
         assert!(e.contains("never reached rustc"), "{e}");
         // The claim that IS rooted must not be reported as missing.
         assert!(!e.contains("tag_join —"), "{e}");
@@ -3405,13 +3580,139 @@ mod tests {
         let b = Build {
             exports: vec![
                 root_export(0),
-                ("frustrate_check_block_4_elsewhere".into(), 0, 0),
+                ("frustrate_check_block_fixture_4_elsewhere".into(), 0, 0),
             ],
             ..clean()
         };
         let e = b.check_claims("artifact 0 tag_join m::tag_join").unwrap_err();
-        assert!(e.contains("does not claim"), "{e}");
-        assert!(e.contains("frustrate_check_block_4_elsewhere"), "{e}");
+        assert!(e.contains("no linked bridge's census claims"), "{e}");
+        assert!(e.contains("frustrate_check_block_fixture_4_elsewhere"), "{e}");
+    }
+
+    const OTHER_ROOT: &str = "frustrate_check_block_other_0_tag_join";
+
+    /// Two linked bridges, one root each, which each own census claims.
+    fn two_bridges() -> Build {
+        Build {
+            funcs: vec![fun(ROOT, vec![0x01]), fun(OTHER_ROOT, vec![0x01]), fun(PANIC_FMT, vec![0x01])],
+            exports: vec![root_export(0), (OTHER_ROOT.to_string(), 0, 1)],
+            ..Default::default()
+        }
+    }
+
+    /// A library that links several bridges exports every bridge's roots, and
+    /// each is claimed by the census of the bridge whose crate name it carries.
+    /// Both bridges number their members from 0, and both have a `tag_join`.
+    #[test]
+    fn every_linked_bridges_roots_are_claimed_by_their_own_census() {
+        let ok = two_bridges()
+            .check_linked(&[
+                ("fixture", "artifact 0 tag_join m::tag_join"),
+                ("other", "artifact 0 tag_join n::tag_join\nplacement 3 Node::send"),
+            ])
+            .unwrap();
+        assert!(ok.contains("is clean"), "{ok}");
+        assert!(ok.contains("2 `no_block` root(s)"), "{ok}");
+        assert!(ok.contains("1 settled by placement"), "{ok}");
+    }
+
+    /// The roots of a bridge the check does not name fail, as they always
+    /// have: naming one of two linked bridges is not a pass, and the message
+    /// says whose roots they are.
+    #[test]
+    fn a_linked_bridge_no_census_names_is_refused() {
+        let e = two_bridges()
+            .check_linked(&[("fixture", "artifact 0 tag_join m::tag_join")])
+            .unwrap_err();
+        assert!(e.contains("no linked bridge's census claims"), "{e}");
+        assert!(e.contains("frustrate_check_block_other_0_tag_join — carries the crate of none of `fixture`"), "{e}");
+        assert!(e.contains("every linked bridge's `frustrate_bridge` goes in the check target's `bridge`"), "{e}");
+    }
+
+    /// A claim whose root is missing is named with the symbol its bridge's
+    /// crate gives it.
+    #[test]
+    fn a_missing_root_is_named_by_its_bridges_symbol() {
+        let e = two_bridges()
+            .check_linked(&[
+                ("fixture", "artifact 0 tag_join m::tag_join"),
+                ("other", "artifact 4 elsewhere n::elsewhere"),
+            ])
+            .unwrap_err();
+        assert!(e.contains("missing the check root"), "{e}");
+        assert!(e.contains("elsewhere — expected `frustrate_check_block_other_4_elsewhere`"), "{e}");
+    }
+
+    #[test]
+    fn a_stray_root_of_a_named_bridge_names_the_bridge() {
+        let c = linked(&[("fixture", "artifact 0 tag_join m::tag_join"), ("other", "placement 1 x")]).unwrap();
+        let roots = vec![ROOT.to_string(), OTHER_ROOT.to_string()];
+        let e = match_census(&roots, Some(&c), "//pkg:t").unwrap_err();
+        assert!(e.contains("frustrate_check_block_other_0_tag_join — of `other`, which claims no such member"), "{e}");
+        assert!(!e.contains(&format!("  {ROOT} —")), "{e}");
+    }
+
+    /// A finding in a linked library names the bridge it is in, since two
+    /// bridges can each have a `tag_join`.
+    #[test]
+    fn a_wait_is_named_with_the_bridge_whose_member_reaches_it() {
+        let b = Build {
+            funcs: vec![
+                fun(ROOT, vec![0x01]),
+                fun(OTHER_ROOT, call(3)),
+                fun(PANIC_FMT, vec![0x01]),
+                fun(FUTEX_WAIT, wait()),
+            ],
+            exports: vec![root_export(0), (OTHER_ROOT.to_string(), 0, 1)],
+            ..Default::default()
+        };
+        let e = b
+            .check_linked(&[
+                ("fixture", "artifact 0 tag_join m::tag_join"),
+                ("other", "artifact 0 tag_join n::tag_join"),
+            ])
+            .unwrap_err();
+        assert!(e.contains("other: tag_join"), "{e}");
+        assert!(!e.contains("fixture: tag_join"), "{e}");
+    }
+
+    #[test]
+    fn a_census_set_that_cannot_attribute_its_roots_is_refused() {
+        let twice = linked(&[("fixture", "placement 1 a"), ("fixture", "placement 1 b")]).unwrap_err();
+        assert!(twice.contains("both censuses of crate `fixture`"), "{twice}");
+        let crateless = Claims::merge(vec![
+            ("a.claims".into(), census_of("fixture", "placement 1 a").unwrap()),
+            (
+                "b.claims".into(),
+                Claims::parse(&format!("{CENSUS_HEADER}\nplacement 1 b"), "b.claims").unwrap(),
+            ),
+        ])
+        .unwrap_err();
+        assert!(crateless.contains("b.claims names no `crate`"), "{crateless}");
+    }
+
+    /// Nothing for any bridge to prove is still the empty state, however
+    /// many bridges say it.
+    #[test]
+    fn linked_bridges_that_claim_nothing_are_still_refused() {
+        let e = two_bridges().check_linked(&[("fixture", ""), ("other", "")]).unwrap_err();
+        assert!(e.contains("claims nothing this check can settle"), "{e}");
+    }
+
+    /// Fn ids are each bridge's own: a silence on one bridge's member 0 is not
+    /// the other's.
+    #[test]
+    fn a_silence_belongs_to_the_bridge_whose_census_wrote_it() {
+        let c = linked(&[
+            ("fixture", "artifact 0 tag_join m::tag_join\nallow 0 nanosleep"),
+            ("other", "artifact 0 tag_join n::tag_join"),
+        ])
+        .unwrap();
+        let mine = c.ids.get(ROOT).unwrap();
+        let theirs = c.ids.get(OTHER_ROOT).unwrap();
+        assert_ne!(mine, theirs);
+        assert!(c.allow.contains_key(mine), "{:?}", c.allow);
+        assert!(!c.allow.contains_key(theirs), "{:?}", c.allow);
     }
 
     /// A qualified member name resolves to the root symbol's bare tail —
@@ -3518,7 +3819,7 @@ mod tests {
         let e = clean()
             .check_claims("artifact-residue 0 tag_join\nartifact-residue 7 take")
             .unwrap_err();
-        assert!(e.contains("take — expected `frustrate_check_block_7_take`"), "{e}");
+        assert!(e.contains("take — expected `frustrate_check_block_fixture_7_take`"), "{e}");
         // A claims-only target cannot carry one: there is something to scan.
         let c = census("artifact-residue 0 tag_join").unwrap();
         let refused = claims_only("//pkg:demo", &c).unwrap_err();
@@ -3544,7 +3845,7 @@ mod tests {
         assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a wait"), "{e}");
         // The census names the member; the path still starts at its root.
         assert!(e.contains("  tag_join\n      reaches "), "{e}");
-        assert!(e.contains("        frustrate_check_block_0_tag_join\n"), "{e}");
+        assert!(e.contains("        frustrate_check_block_fixture_0_tag_join\n"), "{e}");
     }
 
     // ---- slow paths ---------------------------------------------------
@@ -3595,15 +3896,15 @@ mod tests {
     fn two_members(a_code: Vec<u8>) -> Build {
         Build {
             funcs: vec![
-                fun("frustrate_check_block_1_render", a_code),
-                fun("frustrate_check_block_2_title", call(4)),
+                fun("frustrate_check_block_fixture_1_render", a_code),
+                fun("frustrate_check_block_fixture_2_title", call(4)),
                 fun(JUDGE, call(3)),
                 fun(SLOW_MARK, vec![0x01]),
                 fun(PANIC_FMT, vec![0x01]),
             ],
             exports: vec![
-                ("frustrate_check_block_1_render".into(), 0, 0),
-                ("frustrate_check_block_2_title".into(), 0, 1),
+                ("frustrate_check_block_fixture_1_render".into(), 0, 0),
+                ("frustrate_check_block_fixture_2_title".into(), 0, 1),
             ],
             ..Default::default()
         }

@@ -51,7 +51,7 @@ rust_shared_library(
 # inside `PlanMsg::from_bytes` and build this target; the scan reports
 #
 #   from a claimed root:
-#     frustrate_check_block_1_stamp
+#     frustrate_check_block_async_claim_fixture_1_stamp
 #       async_claim_fixture::api::PlanMsg::from_bytes
 #         std::sync::poison::rwlock::RwLock::write::async_claim_fixture
 #           std::sys::sync::rwlock::futex::RwLock::write_contended

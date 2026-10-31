@@ -61,7 +61,7 @@ rust_shared_library(
 #
 # and the scan reports
 #
-#   frustrate_check_block_0_… → api::… → EndpointTicket::from_str
+#   frustrate_check_block_iroh_check_fixture_0_… → api::… → EndpointTicket::from_str
 #     → Ticket::decode_string → n0_error::meta::Meta::default
 #       → n0_error::meta::backtrace_enabled
 #         → OnceLock::get_or_init → Once::call_once_force

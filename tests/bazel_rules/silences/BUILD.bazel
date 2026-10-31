@@ -13,10 +13,15 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 # - stale: a member silence and a marked function that no analysis applies.
 #   Its `.silences` cannot be a target that fails, so silences_test runs the
 #   scanner's `--silences` over what its analyses wrote and asserts it fails.
+# - linked: a library linking two bridges, whose member silences are judged
+#   across both bridges' censuses: applied by the analyses that find the wait,
+#   and named with their bridge when no analysis applies them.
 dart_test(
     name = "silences_test",
     data = [
         "//bazel/wasm_block_check",
+        "//tests/bazel_rules/linked_fixture:applied",
+        "//tests/bazel_rules/linked_fixture:census",
         "//tests/bazel_rules/silences/stale:applied",
         "//tests/bazel_rules/silences/stale:census",
     ],

@@ -260,13 +260,21 @@ no_cc_allocator = rule(implementation = _no_cc_allocator_impl)
 
 # ----------------------------------------------------------------- tests --
 
-def _census(ctx):
-    census = ctx.attr.bridge[OutputGroupInfo].claims.to_list()
+def _census_of(bridge):
+    census = bridge[OutputGroupInfo].claims.to_list()
     if len(census) != 1:
-        fail("frustrate_no_block_check: %s is not a frustrate_bridge target — it " % ctx.attr.bridge.label +
+        fail("frustrate_no_block_check: %s is not a frustrate_bridge target — it " % bridge.label +
              "has no single `claims` output. Point `bridge` at the " +
              "frustrate_bridge that generated this crate's glue.")
     return census[0]
+
+def _censuses(ctx):
+    """The claim census of every bridge the crate links."""
+    return [_census_of(b) for b in ctx.attr.bridges]
+
+def _claims_args(flag, censuses):
+    """`flag` with the first census, and each further bridge's beside it."""
+    return [flag, censuses[0].path] + [a for c in censuses[1:] for a in ["--also-claims", c.path]]
 
 def _sink_args(ctx):
     return [a for p in ctx.attr.slow for a in ["--slow", p]] + \
@@ -313,7 +321,9 @@ def _verdict_test(ctx, inputs, arguments, mnemonic, extra_outputs = {}, applied 
     ]
 
 _SCANNER_ATTRS = {
-    "bridge": attr.label(mandatory = True, providers = [OutputGroupInfo]),
+    # The frustrate_bridge of every bridge the crate links: one, or each of a
+    # `frustrate_library`'s.
+    "bridges": attr.label_list(mandatory = True, allow_empty = False, providers = [OutputGroupInfo]),
     "_block_check": attr.label(
         default = Label("//bazel/wasm_block_check"),
         executable = True,
@@ -333,8 +343,8 @@ _SINK_ATTRS = {
 }
 
 def _census_test_impl(ctx):
-    census = _census(ctx)
-    return _verdict_test(ctx, [census], ["--claims-only", census.path], "FrustrateNoBlockCensus")
+    censuses = _censuses(ctx)
+    return _verdict_test(ctx, censuses, _claims_args("--claims-only", censuses), "FrustrateNoBlockCensus")
 
 _census_test = rule(
     implementation = _census_test_impl,
@@ -343,7 +353,7 @@ _census_test = rule(
 )
 
 def _wasm_test_impl(ctx):
-    census = _census(ctx)
+    censuses = _censuses(ctx)
     files = ctx.attr.crate[0][DefaultInfo].files.to_list()
     wasm = [f for f in files if f.extension == "wasm"]
     if len(wasm) != 1:
@@ -357,9 +367,9 @@ def _wasm_test_impl(ctx):
     # rewrote names or added an export would make the answer meaningless.
     return _verdict_test(
         ctx,
-        [wasm[0], census],
+        [wasm[0]] + censuses,
         (["--wasi"] if ctx.attr.wasi else []) + _sink_args(ctx) + _allow_args(ctx) +
-        ["--claims", census.path, wasm[0].path],
+        _claims_args("--claims", censuses) + [wasm[0].path],
         "FrustrateWasmBlockCheck",
         # The module, for `wasm-tools` or the scanner's `--report`.
         {"module": depset(wasm)},
@@ -381,12 +391,12 @@ _wasm_test = rule(
 )
 
 def _native_test_impl(ctx):
-    census = _census(ctx)
+    censuses = _censuses(ctx)
     ir = ctx.attr.crate[0][OutputGroupInfo].frustrate_native_ir.to_list()[0]
     return _verdict_test(
         ctx,
-        [ir, census],
-        ["--ir"] + _sink_args(ctx) + _allow_args(ctx) + ["--claims", census.path, ir.path],
+        [ir] + censuses,
+        ["--ir"] + _sink_args(ctx) + _allow_args(ctx) + _claims_args("--claims", censuses) + [ir.path],
         "FrustrateNativeBlockCheck",
         applied = True,
     )
@@ -408,12 +418,12 @@ _native_test = rule(
 )
 
 def _silences_test_impl(ctx):
-    census = _census(ctx)
+    censuses = _censuses(ctx)
     applied = [f for c in ctx.attr.checks for f in c[OutputGroupInfo].silences.to_list()]
     return _verdict_test(
         ctx,
-        [census] + applied,
-        _allow_args(ctx) + ["--silences", census.path] + [f.path for f in applied],
+        censuses + applied,
+        _allow_args(ctx) + _claims_args("--silences", censuses) + [f.path for f in applied],
         "FrustrateNoBlockSilences",
     )
 
@@ -451,21 +461,21 @@ _native_fixture_transition = transition(
 )
 
 def _native_artifacts_impl(ctx):
-    files = [_census(ctx)]
+    files = _censuses(ctx)
     for platform, crate in ctx.split_attr.crate.items():
         ir = ctx.actions.declare_file("%s/%s.ll" % (ctx.label.name, platform))
         ctx.actions.symlink(output = ir, target_file = crate[OutputGroupInfo].frustrate_native_ir.to_list()[0])
         files.append(ir)
     return [DefaultInfo(files = depset(files))]
 
-# The native analysis's inputs with no verdict: the claim census, and the check
-# build's IR for each platform as `<name>/<platform>.ll`, for a test that runs
-# the scanner over a fixture it expects to fail
+# The native analysis's inputs with no verdict: the claim census of each
+# bridge, and the check build's IR for each platform as `<name>/<platform>.ll`,
+# for a test that runs the scanner over a fixture it expects to fail
 # (//tests/bazel_rules/native_red:native_red_test).
-no_block_check_artifacts = rule(
+_no_block_check_artifacts = rule(
     implementation = _native_artifacts_impl,
     attrs = {
-        "bridge": attr.label(mandatory = True, providers = [OutputGroupInfo]),
+        "bridges": attr.label_list(mandatory = True, allow_empty = False, providers = [OutputGroupInfo]),
         "crate": attr.label(
             mandatory = True,
             cfg = _native_fixture_transition,
@@ -483,6 +493,14 @@ no_block_check_artifacts = rule(
 )
 
 # ----------------------------------------------------------------- macro --
+
+def _bridges(bridge):
+    """`bridge` as the list it names: one frustrate_bridge, or one per linked bridge."""
+    return [bridge] if type(bridge) == "string" or type(bridge) == "Label" else list(bridge)
+
+def no_block_check_artifacts(name, bridge, **kwargs):
+    """`_no_block_check_artifacts`, with `bridge` one label or a list of them."""
+    _no_block_check_artifacts(name = name, bridges = _bridges(bridge), **kwargs)
 
 def frustrate_no_block_check(
         name,
@@ -583,7 +601,11 @@ def frustrate_no_block_check(
     Args:
       name: The test_suite; the analyses are `<name>.<target>`.
       bridge: The frustrate_bridge that generated the crate's glue, for its
-        claim census.
+        claim census. For a `frustrate_library` that links several bridges, a
+        list of every one of them: the check settles all their claims over the
+        one build, and attributes each root to its bridge by the crate name the
+        root carries. A root that no listed bridge claims fails the check, so a
+        bridge the library links and the list lacks is not skipped.
       crate: The bridge's `rust_shared_library`. Omit it when every claim is
         settled by placement.
       targets: Where the bridge ships: any of `android`, `ios`, `linux`,
@@ -623,12 +645,13 @@ def frustrate_no_block_check(
       **kwargs: Common attributes (`tags`, `visibility`, `size`, ...) for
         every test and the suite.
     """
+    bridges = _bridges(bridge)
     if not crate:
         if slow or io or allow or targets != None:
             fail("frustrate_no_block_check: %s has no `crate`, so it builds " % name +
                  "nothing and `slow`, `io`, `allow` and `targets` would check nothing. " +
                  "Name the crate, or drop them.")
-        _census_test(name = name, bridge = bridge, **kwargs)
+        _census_test(name = name, bridges = bridges, **kwargs)
         return
 
     if not targets:
@@ -659,7 +682,7 @@ def frustrate_no_block_check(
             test = "%s.%s_%s" % (name, os, cpu)
             _native_test(
                 name = test,
-                bridge = bridge,
+                bridges = bridges,
                 crate = crate,
                 platform = Label("//bazel:%s_%s" % (os, cpu)),
                 slow = slow,
@@ -673,7 +696,7 @@ def frustrate_no_block_check(
     if "web_threads" in analyses:
         _wasm_test(
             name = name + ".web_threads",
-            bridge = bridge,
+            bridges = bridges,
             crate = crate,
             slow = slow,
             allow = allow,
@@ -688,7 +711,7 @@ def frustrate_no_block_check(
     if "wasi" in analyses:
         _wasm_test(
             name = name + ".wasi",
-            bridge = bridge,
+            bridges = bridges,
             crate = crate,
             slow = slow,
             io = io,
@@ -702,7 +725,7 @@ def frustrate_no_block_check(
         tests.append(name + ".wasi")
     _silences_test(
         name = name + ".silences",
-        bridge = bridge,
+        bridges = bridges,
         checks = [":" + t for t in tests],
         allow = allow,
         tags = tags,

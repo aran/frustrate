@@ -2590,7 +2590,7 @@ pub fn bump_plan(p: FakePlanMsg) -> FakePlanMsg {
 /// inside `from_bytes` and the scan reports
 ///
 /// ```text
-/// frustrate_check_block_N_merge_plans
+/// frustrate_check_block_test_api_N_merge_plans
 ///   test_api::api::FakePlanMsg::from_bytes
 ///     std::sync::poison::mutex::Mutex::lock
 ///       std::sys::sync::mutex::futex::Mutex::lock_contended
