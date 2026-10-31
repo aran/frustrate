@@ -270,8 +270,11 @@ _host_transition = transition(
 )
 
 _LlcInfo = provider(
-    doc = "The Rust toolchain's `llvm-cov`, beside which its `llc` ships; None without a toolchain.",
-    fields = ["llvm_cov"],
+    doc = "The Rust toolchain's `llc`: its path, and the files that put it in the execution root.",
+    fields = {
+        "path": "str: the path of `llc`; None without a toolchain.",
+        "files": "list[File]: `llvm-cov`, which `llc` ships beside, and the libLLVM both load.",
+    },
 )
 
 def _rust_llc_impl(ctx):
@@ -282,7 +285,16 @@ def _rust_llc_impl(ctx):
             "its llvm-tools component, and this toolchain has none. Declare the toolchain " +
             "with llvm-tools (rules_rust's `rust.toolchain` fetches it by default)."
         ) % ctx.label)
-    return [_LlcInfo(llvm_cov = toolchain.llvm_cov if toolchain else None)]
+    if not toolchain:
+        return [_LlcInfo(path = None, files = [])]
+
+    # rules_rust names no target for `llc`, but it ships in the same
+    # llvm-tools archive as `llvm-cov`, which the toolchain does declare, and
+    # loads the same libLLVM, which it declares too. The repository is fetched
+    # whole, so staging those puts `llc` in the execution root beside them.
+    llvm_cov = toolchain.llvm_cov
+    llc = llvm_cov.dirname + "/llc" + (".exe" if llvm_cov.extension == "exe" else "")
+    return [_LlcInfo(path = llc, files = [llvm_cov] + toolchain.llvm_lib)]
 
 frustrate_rust_llc = rule(
     implementation = _rust_llc_impl,
@@ -309,15 +321,12 @@ def _hot_patch_impl(ctx):
     # library's platform, as for a library a remote test host loads. Then the
     # manifest names no `llc`, and the patch builder refuses each patch saying
     # why, rather than this target failing analysis for everything above it.
-    llvm_cov = ctx.attr._llc[_LlcInfo].llvm_cov
+    llc = ctx.attr._llc[_LlcInfo]
 
     command = [ctx.executable._tool.path]
     command.extend(["--library", library.path])
-    if llvm_cov:
-        # rules_rust names no target for `llc`, but it ships in the same
-        # llvm-tools archive as `llvm-cov`, which the toolchain does declare.
-        # Staging llvm-cov is what puts that directory in the execution root.
-        command.extend(["--llc", llvm_cov.dirname + "/llc"])
+    if llc.path:
+        command.extend(["--llc", llc.path])
 
     # The units: each compilation the patch builder reads. The library's own
     # links the image, so the linker and its flags come from its argv. A single
@@ -374,8 +383,7 @@ def _hot_patch_impl(ctx):
     # that came from a cache is not downloaded unless something at the top
     # asks for it.
     return [DefaultInfo(files = depset(
-        [manifest, ctx.executable._tool, library] +
-        ([llvm_cov] if llvm_cov else []) + files,
+        [manifest, ctx.executable._tool, library] + llc.files + files,
     ))]
 
 _frustrate_hot_patch = rule(
