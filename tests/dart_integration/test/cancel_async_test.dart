@@ -40,6 +40,23 @@ Future<void> awaitDropped() async {
   );
 }
 
+/// Wait until [count] `awaits_until_cancelled` futures have been polled and so
+/// hold their drop sensor. Bounded, and reported as a failure rather than a
+/// hang.
+Future<void> awaitSensorsBuilt(int count) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 30));
+  while (cancelSensorsBuilt() < count && DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+  expect(
+    cancelSensorsBuilt(),
+    greaterThanOrEqualTo(count),
+    reason:
+        'the async fn was never polled, so no drop sensor exists to report '
+        'a drop',
+  );
+}
+
 void main() {
   setUpAll(initBridge);
 
@@ -58,17 +75,17 @@ void main() {
   test('cancelling a suspended async fn rejects the future and drops it', () async {
     final token = FrustrateCancelToken();
     final call = awaitsUntilCancelled(cancel: token);
-    // Give the call a turn to reach Rust and park. Not required for the claim
-    // — the id is registered synchronously — but **required for the
-    // assertion**, and that is worth stating rather than reading as politeness:
+    // Wait until the call has been polled. Not required for the claim — the id
+    // is registered synchronously — but **required for the assertion**:
     // `awaits_until_cancelled` constructs its `DropSensor` in the body, so the
     // sensor does not exist until the task has been polled once. Cancel before
     // the executor reaches it and the future is dropped exactly as it should be
     // with nothing inside it to report the drop — a false negative, not a leak.
     // (The window is widest on threaded web, where the first drain waits on the
-    // pool's workers booting. A `Deferred` actor method can do better: its
-    // sensor is built in the prefix — see cancel_deferred_test.dart.)
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    // pool's workers booting, and under machine load anywhere. A `Deferred`
+    // actor method can do better: its sensor is built in the prefix — see
+    // cancel_deferred_test.dart.)
+    await awaitSensorsBuilt(1);
     expect(
       cancelledFutureWasDropped(),
       isFalse,
@@ -114,7 +131,9 @@ void main() {
           onError: errors.add,
         ),
     ];
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    // All three must have been polled, or the one that was not would be dropped
+    // with no sensor to report it.
+    await awaitSensorsBuilt(3);
     token.cancel();
     await Future.wait(settled);
 

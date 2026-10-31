@@ -4398,6 +4398,11 @@ impl ReentrantProbe {
 /// cancellation *is*.
 static CANCEL_DROPPED_FUTURE: AtomicBool = AtomicBool::new(false);
 
+/// How many `awaits_until_cancelled` futures have been polled far enough to
+/// build their [`DropSensor`]. Lets a test wait for "the sensor exists" rather
+/// than guess how long the first poll takes.
+static CANCEL_SENSORS_BUILT: AtomicI64 = AtomicI64::new(0);
+
 /// Flips [`CANCEL_DROPPED_FUTURE`] when it dies. Held by the suspended future,
 /// so its drop is the future's drop.
 struct DropSensor;
@@ -4439,6 +4444,7 @@ impl std::future::Future for NeverReady {
 #[bridge]
 pub async fn awaits_until_cancelled() -> i64 {
     let _sensor = DropSensor;
+    CANCEL_SENSORS_BUILT.fetch_add(1, Ordering::SeqCst);
     NeverReady.await;
     0
 }
@@ -4452,12 +4458,20 @@ pub fn cancelled_future_was_dropped() -> bool {
     CANCEL_DROPPED_FUTURE.load(Ordering::SeqCst)
 }
 
+/// How many `awaits_until_cancelled` futures have built their drop sensor,
+/// i.e. have been polled at least once.
+#[bridge(sync)]
+pub fn cancel_sensors_built() -> i64 {
+    CANCEL_SENSORS_BUILT.load(Ordering::SeqCst)
+}
+
 /// Reset the sensor. Every suite in the local `dart test` flow shares this
 /// dylib, so a test that asserted on a flag another file had already set would
 /// pass for the wrong reason.
 #[bridge(sync)]
 pub fn reset_cancel_sensor() {
     CANCEL_DROPPED_FUTURE.store(false, Ordering::SeqCst);
+    CANCEL_SENSORS_BUILT.store(0, Ordering::SeqCst);
 }
 
 /// An ordinary `async fn` that answers immediately — the control for
