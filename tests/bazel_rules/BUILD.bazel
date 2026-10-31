@@ -5,10 +5,13 @@ load(
     "//bazel:defs.bzl",
     "frustrate_bridge_library",
     "frustrate_bridge_outputs",
+    "frustrate_library",
     "frustrate_no_block_check",
     "frustrate_wasm_module",
     "frustrate_wasm_opt",
 )
+load("//bazel:hot_patch.bzl", "frustrate_hot_patchable")
+load(":mispaired_bridge_test.bzl", "mispaired_bridge_test")
 
 # Dedicated rule tests for the frustrate Bazel rules: before this package
 # the rules were proven only by `bazel test //...` happening to build the
@@ -617,4 +620,34 @@ frustrate_wasm_module(
 build_test(
     name = "ext_getrandom_test",
     targets = [":getrandom_probe.wasm"],
+)
+
+# A bridge paired with a crate other than the one its glue was generated for
+# (alpha's library, beta's bridge) fails at analysis, in frustrate_library and
+# in frustrate_hot_patchable, rather than building a library whose code asset
+# for beta holds none of beta's exports. The fixtures are manual: they are
+# meant not to analyze.
+MISPAIRED_BRIDGES = {"//tests/compose/alpha:alpha_lib": "//tests/compose/beta:bridge"}
+
+frustrate_library(
+    name = "mispaired",
+    bridges = MISPAIRED_BRIDGES,
+    tags = ["manual"],
+)
+
+frustrate_hot_patchable(
+    name = "mispaired_hot",
+    bridges = MISPAIRED_BRIDGES,
+    library = "//tests/compose:composed",
+    tags = ["manual"],
+)
+
+mispaired_bridge_test(
+    name = "mispaired_library_test",
+    target_under_test = ":mispaired",
+)
+
+mispaired_bridge_test(
+    name = "mispaired_hot_patch_test",
+    target_under_test = ":mispaired_hot.hot_patch",
 )

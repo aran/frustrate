@@ -4,13 +4,13 @@ load(":defs.bzl", "code_asset_as")
 
 # Two bridges, one library: //tests/compose/alpha and //tests/compose/beta,
 # each its own crate, bindings and code-asset id, linked into one image with
-# one Rust runtime. Declares `:composed`, `:composed.alpha` and
-# `:composed.beta` (the code assets binding each bridge's id to it).
+# one Rust runtime. Declares `:composed`, `:composed.alpha_lib` and
+# `:composed.beta_lib` (the code assets binding each bridge's id to it).
 frustrate_library(
     name = "composed",
     bridges = {
-        "//tests/compose/alpha": "//tests/compose/alpha:bridge",
-        "//tests/compose/beta": "//tests/compose/beta:bridge",
+        "//tests/compose/alpha:alpha_lib": "//tests/compose/alpha:bridge",
+        "//tests/compose/beta:beta_lib": "//tests/compose/beta:bridge",
     },
     visibility = ["//tests:__subpackages__"],
 )
@@ -37,8 +37,8 @@ dart_test(
     main = "test/compose_test.dart",
     code_assets = [
         ":alpha_alone",
-        ":composed.alpha",
-        ":composed.beta",
+        ":composed.alpha_lib",
+        ":composed.beta_lib",
     ],
     deps = [
         "//runtime/dart:frustrate",

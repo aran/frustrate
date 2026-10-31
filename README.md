@@ -164,20 +164,22 @@ bridge: frustrateBridge)` is the way to load a library you built yourself.
 runtime, so bridges an app uses together are linked into one library.
 `frustrate_library` does that, keeping each bridge its own crate, bindings and
 asset id, and declares a code asset per bridge that binds its id to the
-combined library:
+combined library. Each key is a bridge's Rust library (the `<name>_lib` rlib
+`frustrate_bridge_library` declares), each value the `frustrate_bridge` its
+glue came from; a pair naming two different crates fails at analysis:
 
 ```starlark
 frustrate_library(
     name = "app_rust",
     bridges = {
-        "//main:main_rust": "//main:codegen",
-        "//compute:compute_rust": "//compute:codegen",
+        "//main:main_rust_lib": "//main:codegen",
+        "//compute:compute_rust_lib": "//compute:codegen",
     },
 )
 
 dart_binary(
     name = "dt",
-    code_assets = [":app_rust.main_rust", ":app_rust.compute_rust"],
+    code_assets = [":app_rust.main_rust_lib", ":app_rust.compute_rust_lib"],
     ...
 )
 ```
@@ -359,7 +361,7 @@ frustrate_hot_patchable(
     name = "app_rust_native." + bridge,
     binding_contract = ["//%s:codegen.ir" % bridge],
     hot_patch = ":app_rust_hot.hot_patch",
-    library = ":app_rust_hot." + bridge,  # the bridge library's target name
+    library = ":app_rust_hot.%s_lib" % bridge,  # the bridge's Rust library's target name
 ) for bridge in ("ping", "pong")]
 ```
 

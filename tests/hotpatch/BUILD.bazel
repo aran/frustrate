@@ -47,8 +47,8 @@ frustrate_hot_patchable(
 # Two bridges linked into one library, each its own crate with its own editions
 # under composed/: the same patch builder carries an edit to either.
 COMPOSED_BRIDGES = {
-    "//tests/hotpatch/composed/alpha": "//tests/hotpatch/composed/alpha:bridge",
-    "//tests/hotpatch/composed/beta": "//tests/hotpatch/composed/beta:bridge",
+    "//tests/hotpatch/composed/alpha:alpha_lib": "//tests/hotpatch/composed/alpha:bridge",
+    "//tests/hotpatch/composed/beta:beta_lib": "//tests/hotpatch/composed/beta:bridge",
 }
 
 frustrate_library(

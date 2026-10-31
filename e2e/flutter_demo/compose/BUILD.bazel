@@ -13,8 +13,8 @@ load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
 load("@rules_flutter//flutter:defs.bzl", "flutter_application", "flutter_native_library")
 
 BRIDGES = {
-    "//compose/ping": "//compose/ping:codegen",
-    "//compose/pong": "//compose/pong:codegen",
+    "//compose/ping:ping_lib": "//compose/ping:codegen",
+    "//compose/pong:pong_lib": "//compose/pong:codegen",
 }
 
 frustrate_library(
@@ -34,7 +34,7 @@ frustrate_hot_patchable(
     name = "compose_rust_native." + bridge,
     binding_contract = ["//compose/%s:codegen.ir" % bridge],
     hot_patch = ":compose_rust_hot.hot_patch",
-    library = ":compose_rust_hot." + bridge,
+    library = ":compose_rust_hot.%s_lib" % bridge,
 ) for bridge in ("ping", "pong")]
 
 flutter_application(

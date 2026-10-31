@@ -339,6 +339,14 @@ def _hot_patch_impl(ctx):
         files.extend(unit_files)
         for crate, bridge in zip(ctx.attr.crates, ctx.attr.bridges):
             bridge_info = bridge[FrustrateBridgeInfo]
+            if crate[rust_common.crate_info].name != bridge_info.crate_name:
+                fail("frustrate_hot_patchable %s: %s generated bindings for crate `%s`, but the library it is paired with, %s, is crate `%s`" % (
+                    ctx.label,
+                    bridge.label,
+                    bridge_info.crate_name,
+                    crate.label,
+                    crate[rust_common.crate_info].name,
+                ))
             args, unit_files = _unit(ctx, bridge_info.crate_name, crate[HotPatchIrInfo], bridge_info.ir)
             command.extend(args)
             files.extend(unit_files)
@@ -419,7 +427,7 @@ def frustrate_hot_patchable(name, library, binding_contract = None, bridges = No
 
         flutter_native_library(
             name = "app_native.ping",
-            library = ":app_hot.ping",  # `<name>.<the bridge library's target name>`
+            library = ":app_hot.ping_lib",  # `<name>.<the bridge's Rust library's target name>`
             binding_contract = ["//ping:codegen.ir"],
             hot_patch = ":app_hot.hot_patch",
         )
@@ -438,8 +446,7 @@ def frustrate_hot_patchable(name, library, binding_contract = None, bridges = No
     """
     if (binding_contract == None) == (bridges == None):
         fail("frustrate_hot_patchable %s: give `binding_contract` for one bridge, or `bridges` for a frustrate_library" % name)
-    libraries = [native.package_relative_label(lib) for lib in (bridges or {})]
-    crates = [lib.same_package_label(lib.name + "_lib") for lib in libraries]
+    crates = [native.package_relative_label(lib) for lib in (bridges or {})]
     frustrate_hot_patchable_library(name = name, library = library, crates = crates, visibility = visibility, **kwargs)
     _frustrate_hot_patch(
         name = name + ".hot_patch",
@@ -450,7 +457,7 @@ def frustrate_hot_patchable(name, library, binding_contract = None, bridges = No
         visibility = visibility,
         **kwargs
     )
-    for lib, bridge in zip(libraries, (bridges or {}).values()):
+    for lib, bridge in zip(crates, (bridges or {}).values()):
         frustrate_code_asset(
             name = "%s.%s" % (name, lib.name),
             bridge = bridge,

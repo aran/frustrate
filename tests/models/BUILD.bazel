@@ -38,8 +38,8 @@ dart_test(
 frustrate_library(
     name = "composed",
     bridges = {
-        "//tests/models/a:models_a": "//tests/models/a:bridge",
-        "//tests/models/b:models_b": "//tests/models/b:bridge",
+        "//tests/models/a:models_a_lib": "//tests/models/a:bridge",
+        "//tests/models/b:models_b_lib": "//tests/models/b:bridge",
     },
 )
 
@@ -48,8 +48,8 @@ dart_test(
     size = "small",
     main = "test/shared_composed_test.dart",
     code_assets = [
-        ":composed.models_a",
-        ":composed.models_b",
+        ":composed.models_a_lib",
+        ":composed.models_b_lib",
     ],
     deps = [
         "//runtime/dart:frustrate",
