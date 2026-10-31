@@ -10,6 +10,13 @@
 //! the IR keeps every call out of the Rust program as a call to an external
 //! declaration.
 //!
+//! The module is read as text. The crates that read LLVM IR (`llvm-ir`,
+//! `inkwell`) bind libLLVM through `llvm-sys`, which needs `llvm-config` and
+//! the headers of rustc's own LLVM version; the Rust toolchain ships neither.
+//! `opt`'s call graph has the direct calls only, not the address-takes in
+//! initialisers or where an indirect call's value came from, which
+//! [`super::provenance`] needs.
+//!
 //! # How it decides
 //!
 //! The graph's edges are every symbol a function body or a global initialiser
@@ -45,6 +52,14 @@
 //! census carries. The roots take the request bytes as real parameters, so no
 //! optimizer can delete a body behind a decode it proved fails; this control
 //! is what catches a build where the member was still not reached.
+//!
+//! **Inline asm is an external.** A body's inline asm with any instruction
+//! in its template (a template of assembler comments only, like zeroize's
+//! barrier, has none) is a call to an external named `asm "<template>"`, so a root that
+//! reaches it is "cannot verify" unless silenced by that name, or unless the
+//! template's instructions are, exactly, a sequence [`KNOWN_ASM`] lists for
+//! the module's architecture. Its `sym` operands are references like any
+//! other.
 //!
 //! Not followed: edges into the fatal entries ([`super::FATAL_ENTRIES`]),
 //! the panic handler among them.
@@ -154,8 +169,13 @@ struct Ir {
 
 impl Ir {
     /// The triple's architecture, its first component.
+    /// The target's architecture, by LLVM's name for it: Apple's triples
+    /// spell aarch64 `arm64`.
     fn arch(&self) -> &str {
-        self.triple.split('-').next().unwrap_or("")
+        match self.triple.split('-').next().unwrap_or("") {
+            "arm64" => "aarch64",
+            a => a,
+        }
     }
 
     fn id(&mut self, name: &str) -> u32 {
@@ -178,8 +198,11 @@ impl Ir {
 
 /// The `@symbol`s on one line, each with whether `(` follows it — which in a
 /// function body is a direct call, the only instruction that spells one.
-/// String constants (`c"…"`) and comments are skipped, so an `@` inside data
-/// is never read as a reference.
+/// Quoted text that is not a symbol's name (string constants, inline asm
+/// templates and constraints, attribute values) is skipped, and so is a
+/// comment, so neither an `@` inside data nor a `;` inside an asm template
+/// changes what the line references. IR spells a quote inside quoted text as
+/// `\22`, so the next `"` always closes it.
 fn symbols(line: &str) -> Vec<(String, bool)> {
     let b = line.as_bytes();
     let mut out = Vec::new();
@@ -187,8 +210,8 @@ fn symbols(line: &str) -> Vec<(String, bool)> {
     while i < b.len() {
         match b[i] {
             b';' => break,
-            b'c' if b.get(i + 1) == Some(&b'"') => {
-                i += 2;
+            b'"' => {
+                i += 1;
                 while i < b.len() && b[i] != b'"' {
                     i += 1;
                 }
@@ -221,6 +244,72 @@ fn symbols(line: &str) -> Vec<(String, bool)> {
         }
     }
     out
+}
+
+/// Inline asm known not to wait, per architecture: each group the exact
+/// instruction sequences of a template, as rustc's IR spells them, and why.
+/// A template matches only when its instructions are one sequence, in order
+/// and nothing else.
+pub(crate) const KNOWN_ASM: &[(&str, &[&[&str]], &str)] = &[
+    (
+        "x86_64",
+        &[&["mov ${0:q}, rbx", "cpuid", "xchg ${0:q}, rbx"]],
+        "`cpuid`, as std_detect issues it, with `rbx` (which LLVM reserves) kept \
+         around it: the CPU reports its features into registers. Under a \
+         hypervisor it exits to the hypervisor, which answers and returns; \
+         nothing waits on another thread",
+    ),
+    (
+        "aarch64",
+        &[&["fcvt ${0:h}, ${1:d}"], &["fcvt ${0:d}, ${1:h}"]],
+        "`fcvt` between half and double precision, as the `half` crate issues \
+         it: a conversion from one floating-point register to another. It \
+         touches no memory, and a floating-point exception only sets a flag \
+         in FPSR, since the OS leaves exception traps off",
+    ),
+];
+
+/// Whether an `asm "<template>"` external is one [`KNOWN_ASM`] lists for
+/// `arch`: its template's instructions, split at newlines and `;`, are
+/// exactly one of the sequences.
+fn known_asm(arch: &str, name: &str) -> bool {
+    let Some(template) = name.strip_prefix("asm \"").and_then(|t| t.strip_suffix('"')) else {
+        return false;
+    };
+    let insts: Vec<&str> = template
+        .split("\\0A")
+        .flat_map(|l| l.split(['\n', ';']))
+        .map(str::trim)
+        .filter(|i| !i.is_empty())
+        .collect();
+    KNOWN_ASM
+        .iter()
+        .filter(|(a, _, _)| *a == arch)
+        .any(|(_, seqs, _)| seqs.iter().any(|seq| *seq == insts.as_slice()))
+}
+
+/// The template of the inline asm a body line calls, as the IR spells it,
+/// when it holds any instruction. An empty template (`black_box`'s) does
+/// nothing, and neither does one of assembler comments only (zeroize's
+/// `# ${0}` barrier): a statement that begins with `#` or `//` is a comment
+/// on x86_64 and aarch64 alike. Any other can branch or trap into the OS
+/// without naming a symbol, so the caller records it as a call to an
+/// external named after it.
+fn inline_asm(line: &str) -> Option<&str> {
+    let head = &line[..line.find('"')?];
+    let words: Vec<&str> = head.split_whitespace().collect();
+    let is_call = words.iter().any(|w| matches!(*w, "call" | "invoke" | "callbr"));
+    if !is_call || !words.contains(&"asm") {
+        return None;
+    }
+    let rest = &line[head.len() + 1..];
+    let template = &rest[..rest.find('"')?];
+    let instruction = template
+        .split("\\0A")
+        .flat_map(|l| l.split(['\n', ';']))
+        .map(str::trim)
+        .any(|i| !i.is_empty() && !i.starts_with('#') && !i.starts_with("//"));
+    instruction.then_some(template)
 }
 
 /// A quoted IR name's `\XX` hex escapes.
@@ -271,6 +360,11 @@ fn parse(text: &str) -> Result<Ir, String> {
                 if call {
                     ir.calls[f as usize].insert(c);
                 }
+            }
+            if let Some(template) = inline_asm(line) {
+                let c = ir.id(&format!("asm \"{template}\""));
+                ir.refs[f as usize].insert(c);
+                ir.calls[f as usize].insert(c);
             }
             continue;
         }
@@ -342,7 +436,7 @@ fn sink_kinds(ir: &Ir, libc: &Libc, paths: &[Vec<String>], sinks: &Sinks) -> BTr
                     .filter(|c| c.native_call(libc.os, n))
                     .map(|c| format!("IO `{}`", c.name)),
             );
-            unknown = red.is_empty() && !libc.no_wait(n);
+            unknown = red.is_empty() && !libc.no_wait(n) && !known_asm(ir.arch(), n);
         } else {
             red.extend(
                 sinks
@@ -1267,6 +1361,114 @@ mod tests {
             syms,
             vec![("realpath$DARWIN_EXTSN".to_string(), true), ("x".to_string(), false)]
         );
+    }
+
+    #[test]
+    fn a_semicolon_inside_an_asm_template_does_not_end_the_line() {
+        // `asm!("nop; bl {f}", f = sym waiter)`, as rustc lowers it.
+        let syms = symbols(
+            r#"  %0 = call { i32, <2 x i64> } asm sideeffect alignstack "nop; bl ${1:c}", "={w0},={q0},s,~{memory}"(ptr @waiter), !srcloc !3"#,
+        );
+        assert_eq!(syms, vec![("waiter".to_string(), false)]);
+        let syms = symbols(r#"  call void asm "; @not_a_symbol", ""() #1 ; @comment"#);
+        assert_eq!(syms, vec![]);
+    }
+
+    #[test]
+    fn an_asm_template_is_read_from_rustcs_lowering() {
+        let line = r#"  %0 = call { i32, <2 x i64> } asm sideeffect alignstack "nop; bl ${1:c}", "={w0},={q0},s,~{memory}"(ptr @waiter), !srcloc !3"#;
+        assert_eq!(inline_asm(line), Some("nop; bl ${1:c}"));
+        assert_eq!(inline_asm(r#"  call void asm sideeffect "", "~{memory}"(), !srcloc !59339"#), None);
+        assert_eq!(inline_asm(r#"  store ptr @"asm \22x\22", ptr %p"#), None);
+    }
+
+    #[test]
+    fn a_wait_reached_from_an_asm_operand_is_found() {
+        let e = check(
+            &format!(
+                "{ROOT}define void @_RNvCs1_7example6render() {{\n  \
+                 call void asm sideeffect \"nop; bl ${{0:c}}\", \"s\"(ptr @_RNvCs1_7example6waiter)\n  ret void\n}}\n\
+                 define void @_RNvCs1_7example6waiter() {{\n  call i32 @sched_yield()\n  ret void\n}}\n\
+                 declare i32 @sched_yield()\n"
+            ),
+            &[],
+            &[],
+        )
+        .unwrap_err();
+        assert!(e.contains("reaches sched_yield — waits"), "{e}");
+    }
+
+    /// An asm template can wait without naming a symbol: `svc` here, or a
+    /// `bl` written into the template. Only an empty template is passed.
+    #[test]
+    fn inline_asm_with_instructions_cannot_be_verified() {
+        let body = |asm: &str| {
+            format!(
+                "{ROOT}define void @_RNvCs1_7example6render() {{\n  \
+                 {asm}\n  ret void\n}}\n"
+            )
+        };
+        let e = check(&body(r#"call void asm sideeffect "svc #0x80", "~{memory}"()"#), &[], &[]).unwrap_err();
+        assert!(e.contains(r#"cannot verify: reaches asm "svc #0x80""#), "{e}");
+        let e = check(&body(r#"%0 = call i32 asm sideeffect "bl _usleep", "={w0}"()"#), &[], &[]).unwrap_err();
+        assert!(e.contains(r#"asm "bl _usleep""#), "{e}");
+        check(&body(r#"call void asm sideeffect "", "r,~{memory}"(ptr %p)"#), &[], &[]).unwrap();
+        let ok = run_text(
+            &format!("{HEAD}{}", body(r#"call void asm sideeffect "svc #0x80", "~{memory}"()"#)),
+            None,
+            &sinks(&[], &[], &[r#"asm "svc #0x80""#]),
+        )
+        .unwrap();
+        assert!(ok.contains("is clean"), "{ok}");
+    }
+
+    /// std_detect's `cpuid` passes on x86_64; the same template with another
+    /// instruction in it, or on another architecture, does not.
+    #[test]
+    fn a_known_asm_template_passes_on_its_architecture_only() {
+        let cpuid = r#"%0 = call i64 asm sideeffect inteldialect "mov ${0:q}, rbx\0Acpuid\0Axchg ${0:q}, rbx", "=r,={ax},={cx},={dx},0,1,2"(i32 0, i32 0)"#;
+        let ok = run_text(&linux("x86_64-unknown-linux-gnu", &format!("  {cpuid}\n")), None, &Sinks::default()).unwrap();
+        assert!(ok.contains("is clean"), "{ok}");
+        let more = cpuid.replace("\\0Axchg", "\\0Asyscall\\0Axchg");
+        let e = run_text(&linux("x86_64-unknown-linux-gnu", &format!("  {more}\n")), None, &Sinks::default()).unwrap_err();
+        assert!(e.contains(r#"cannot verify: reaches asm "mov ${0:q}, rbx\0Acpuid\0Asyscall"#), "{e}");
+        let e = run_text(&linux("aarch64-unknown-linux-gnu", &format!("  {cpuid}\n")), None, &Sinks::default()).unwrap_err();
+        assert!(e.contains(r#"cannot verify: reaches asm "mov ${0:q}, rbx\0Acpuid"#), "{e}");
+    }
+
+    /// zeroize's barrier is a comment on both architectures; a comment
+    /// beside an instruction still leaves the instruction.
+    #[test]
+    fn a_template_of_comments_only_is_no_instruction() {
+        let line = |t: &str| format!(r#"  call void asm sideeffect "{t}", "r,~{{memory}}"(ptr %p), !srcloc !7"#);
+        assert_eq!(inline_asm(&line("# ${0}")), None);
+        assert_eq!(inline_asm(&line("# ${0:q}")), None);
+        assert_eq!(inline_asm(&line("// ${0}\\0A# ${0}")), None);
+        assert_eq!(inline_asm(&line("# ${0}\\0Asvc #0x80")), Some("# ${0}\\0Asvc #0x80"));
+        assert_eq!(inline_asm(&line("# ${0}; svc #0x80")), Some("# ${0}; svc #0x80"));
+    }
+
+    /// half's `fcvt` passes on aarch64 only, and only alone.
+    #[test]
+    fn halfs_fcvt_passes_on_aarch64() {
+        for t in ["fcvt ${0:h}, ${1:d}", "fcvt ${0:d}, ${1:h}"] {
+            let call = format!(r#"%0 = call double asm sideeffect "{t}", "=w,w"(half %h)"#);
+            let ok = run_text(&linux("aarch64-unknown-linux-gnu", &format!("  {call}\n")), None, &Sinks::default()).unwrap();
+            assert!(ok.contains("is clean"), "{ok}");
+            let e = run_text(&linux("x86_64-unknown-linux-gnu", &format!("  {call}\n")), None, &Sinks::default()).unwrap_err();
+            assert!(e.contains("cannot verify"), "{e}");
+        }
+        // Apple's triple names the architecture `arm64`.
+        let call = r#"%0 = call double asm sideeffect "fcvt ${0:h}, ${1:d}", "=w,w"(half %h)"#;
+        check(
+            &format!("{ROOT}define void @_RNvCs1_7example6render() {{\n  {call}\n  ret void\n}}\n"),
+            &[],
+            &[],
+        )
+        .unwrap();
+        let more = r#"%0 = call double asm sideeffect "fcvt ${0:h}, ${1:d}\0Asvc #0", "=w,w"(half %h)"#;
+        let e = run_text(&linux("aarch64-unknown-linux-gnu", &format!("  {more}\n")), None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("cannot verify"), "{e}");
     }
 
     #[test]

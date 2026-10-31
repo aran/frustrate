@@ -166,4 +166,10 @@ void main() {
       expect(err, contains('loaded from `native_red_callback::api::CALLBACK`'));
     },
   );
+
+  test('a member that sleeps from inline asm is red', () {
+    final (code, err) = red('asm', mac);
+    expect(code, isNot(0), reason: err);
+    expect(err, contains('jump\n      reaches nanosleep — waits'));
+  });
 }

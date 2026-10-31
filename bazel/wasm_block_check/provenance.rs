@@ -1368,18 +1368,16 @@ fn is_inert_external(name: &str) -> bool {
 }
 
 /// `%name` and `@name` tokens in an operand string, with quoted names.
+/// Other quoted text (string constants, inline asm templates and
+/// constraints) is skipped: a `%` or `@` there is data, not a value.
 fn refs(s: &str) -> Vec<(bool, String)> {
     let b = s.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
     while i < b.len() {
         let c = b[i];
-        if c == b'c' && b.get(i + 1) == Some(&b'"') {
-            i += 2;
-            while i < b.len() && b[i] != b'"' {
-                i += 1;
-            }
-            i += 1;
+        if c == b'"' {
+            i = skip_quoted(b, i);
             continue;
         }
         if c == b'!' {
@@ -1548,12 +1546,26 @@ fn split_module(text: &str) -> (Vec<Func>, Vec<Global>, Vec<String>) {
     (funcs, globals, declared)
 }
 
+/// The index just past the quoted text that opens at `open`. IR spells a
+/// quote inside quoted text as `\22`, so the next `"` always closes it.
+fn skip_quoted(b: &[u8], open: usize) -> usize {
+    let mut i = open + 1;
+    while i < b.len() && b[i] != b'"' {
+        i += 1;
+    }
+    i + 1
+}
+
 /// Where the callee's argument list opens: the `(` after the first `@name`
-/// or `%name` that a `(` immediately follows.
+/// or `%name` that a `(` immediately follows, outside quoted text.
 fn callee_open(rhs: &str) -> Option<usize> {
     let b = rhs.as_bytes();
     let mut i = 0;
     while i < b.len() {
+        if b[i] == b'"' {
+            i = skip_quoted(b, i);
+            continue;
+        }
         if b[i] == b'@' || b[i] == b'%' {
             let mut j = i + 1;
             if b.get(j) == Some(&b'"') {
@@ -1582,6 +1594,17 @@ fn callee_open(rhs: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quoted_text_names_no_value() {
+        // An AT&T asm template's registers and a `;` or `@` in it are data.
+        let line = r#"call void asm sideeffect "movq %rax, %rdi; call foo@PLT", "r,~{memory}"(ptr %p)"#;
+        assert_eq!(refs(line), vec![(false, "p".to_string())]);
+        let fake = r#"call void asm "jmp *%rax(", "r"(ptr %p)"#;
+        assert_eq!(callee_open(fake), None);
+        let named = r#"call void @"weird name"(ptr %p)"#;
+        assert_eq!(&named[..callee_open(named).unwrap()], r#"call void @"weird name""#);
+    }
 
     /// `depth` helpers, each calling through a field of what it is handed
     /// and handing it on, under a root that hands them a static's value.

@@ -16,6 +16,7 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 # - marked:    a member reaches a wait through a marked function -> passes
 # - logger:    the member logs through `log::set_logger`'s   -> cannot verify
 # - callback:  the member calls a `Box<dyn Fn>` in a static  -> cannot verify
+# - asm:       the member calls a sleep from inline asm       -> red
 # - hashmap:   the member builds a `HashMap`, whose keys std draws through
 #              a fallback the check vouches for                -> passes
 # - memchr:    the member calls memchr, which on x86_64 calls through a
@@ -32,6 +33,7 @@ dart_test(
     name = "native_red_test",
     data = [
         "//bazel/wasm_block_check",
+        "//tests/bazel_rules/native_red/asm:artifacts",
         "//tests/bazel_rules/native_red/callback:artifacts",
         "//tests/bazel_rules/native_red/dirty:artifacts",
         "//tests/bazel_rules/native_red/external:artifacts",
