@@ -42,15 +42,11 @@
 //! everything std marks unsupported. Both decay modes are made loud rather than
 //! silent: a missing name section is a hard error (see `SENTINEL`), and
 //! inlining turns `//tests/bazel_rules:wasm_std_check_test` red.
-//!
-//! The wasm parsing here duplicates `tests/bazel_rules/wasm_imports_test.dart`
-//! by about sixty lines. That is deliberate: the Dart parser cannot be shared
-//! into a Rust exec tool, and the two sections this reads have been frozen
-//! since the MVP, so there is no format drift for a shared implementation to
-//! protect against.
 
 use std::collections::BTreeSet;
 use std::process::ExitCode;
+
+use wasmparser::{KnownCustom, Name, Parser, Payload};
 
 /// A std facility, the mangled-symbol segments that identify a *call* to it,
 /// and the wasi import that would mean the platform serves it.
@@ -167,121 +163,47 @@ fn contains_segment(name: &str, segment: &str) -> bool {
         && name.contains(&format!("{}_{}", &segment[..digits], ident))
 }
 
-fn uleb(d: &[u8], i: &mut usize) -> Result<u64, String> {
-    let (mut r, mut s) = (0u64, 0u32);
-    loop {
-        let b = *d.get(*i).ok_or("truncated LEB128")?;
-        *i += 1;
-        r |= ((b & 0x7f) as u64) << s;
-        if b & 0x80 == 0 {
-            return Ok(r);
-        }
-        s += 7;
-        if s > 63 {
-            return Err("LEB128 too long".into());
-        }
-    }
-}
-
-fn name(d: &[u8], i: &mut usize) -> Result<String, String> {
-    let len = uleb(d, i)? as usize;
-    let end = i.checked_add(len).ok_or("name length overflow")?;
-    let s = d.get(*i..end).ok_or("truncated name")?;
-    *i = end;
-    Ok(String::from_utf8_lossy(s).into_owned())
-}
-
-/// `(section id, body)` for each section, in order.
-fn sections(d: &[u8]) -> Result<Vec<(u8, &[u8])>, String> {
-    if d.len() < 8 || &d[..4] != b"\0asm" {
+/// The sections of a core module. A module that does not decode completely is
+/// an error rather than a partial answer.
+fn payloads(d: &[u8]) -> Result<Vec<Payload<'_>>, String> {
+    if !Parser::is_core_wasm(d) {
         return Err("not a wasm module".into());
     }
-    let mut i = 8;
-    let mut out = Vec::new();
-    while i < d.len() {
-        let id = d[i];
-        i += 1;
-        let size = uleb(d, &mut i)? as usize;
-        let end = i.checked_add(size).ok_or("section overruns file")?;
-        out.push((id, d.get(i..end).ok_or("truncated section")?));
-        i = end;
-    }
-    Ok(out)
+    Parser::new(0)
+        .parse_all(d)
+        .collect::<wasmparser::Result<_>>()
+        .map_err(|e| e.to_string())
 }
 
-/// Every `(module, name)` in the import section (id 2).
+/// Every `(module, name)` in the import section.
 fn imports(d: &[u8]) -> Result<Vec<(String, String)>, String> {
     let mut out = Vec::new();
-    for (id, body) in sections(d)? {
-        if id != 2 {
-            continue;
-        }
-        let mut i = 0;
-        let count = uleb(body, &mut i)?;
-        for _ in 0..count {
-            let m = name(body, &mut i)?;
-            let n = name(body, &mut i)?;
-            let kind = *body.get(i).ok_or("truncated import kind")?;
-            i += 1;
-            match kind {
-                0 => {
-                    uleb(body, &mut i)?;
-                }
-                1 => {
-                    i += 1; // reftype
-                    let flags = *body.get(i).ok_or("truncated table limits")?;
-                    i += 1;
-                    uleb(body, &mut i)?;
-                    if flags & 0x01 != 0 {
-                        uleb(body, &mut i)?;
-                    }
-                }
-                2 => {
-                    let flags = *body.get(i).ok_or("truncated memory limits")?;
-                    i += 1;
-                    uleb(body, &mut i)?;
-                    if flags & 0x01 != 0 {
-                        uleb(body, &mut i)?;
-                    }
-                }
-                3 => i += 2, // valtype + mutability
-                k => return Err(format!("unknown import kind {k} in {m}.{n}")),
+    for p in payloads(d)? {
+        if let Payload::ImportSection(r) = p {
+            for i in r.into_imports() {
+                let i = i.map_err(|e| e.to_string())?;
+                out.push((i.module.to_string(), i.name.to_string()));
             }
-            out.push((m, n));
         }
     }
     Ok(out)
 }
 
-/// Function names from the `name` custom section's function subsection (1).
+/// Function names from the `name` custom section's function subsection.
 fn function_names(d: &[u8]) -> Result<Vec<String>, String> {
-    for (id, body) in sections(d)? {
-        if id != 0 {
-            continue;
-        }
-        let mut i = 0;
-        if name(body, &mut i)? != "name" {
-            continue;
-        }
-        let mut out = Vec::new();
-        while i < body.len() {
-            let sub = body[i];
-            i += 1;
-            let size = uleb(body, &mut i)? as usize;
-            let end = i.checked_add(size).ok_or("name subsection overruns")?;
-            if sub == 1 {
-                let mut k = i;
-                let count = uleb(body, &mut k)?;
-                for _ in 0..count {
-                    uleb(body, &mut k)?; // function index
-                    out.push(name(body, &mut k)?);
+    let mut out = Vec::new();
+    for p in payloads(d)? {
+        let Payload::CustomSection(c) = p else { continue };
+        let KnownCustom::Name(names) = c.as_known() else { continue };
+        for sub in names {
+            if let Name::Function(map) = sub.map_err(|e| e.to_string())? {
+                for n in map {
+                    out.push(n.map_err(|e| e.to_string())?.name.to_string());
                 }
             }
-            i = end;
         }
-        return Ok(out);
     }
-    Ok(Vec::new())
+    Ok(out)
 }
 
 fn run(path: &str, label: &str, allowed: &[String]) -> Result<(), String> {

@@ -58,15 +58,11 @@
 //! cannot be instantiated by frustrate's runtime at all, so no valid target
 //! needs the exemption — the same stance `frustrate_no_block_check` takes, and for
 //! the same reason.
-//!
-//! The wasm parsing here is a third copy of a decode that also lives in
-//! `bazel/wasm_std_check` and `tests/bazel_rules/wasm_imports_test.dart`. Same
-//! reasoning as there: the sections it walks have been frozen since the MVP,
-//! one of the three is Dart, and forty lines of LEB128 is cheaper than a
-//! dependency shared across two languages and an exec configuration.
 
 use std::collections::BTreeMap;
 use std::process::ExitCode;
+
+use wasmparser::{ExternalKind, Parser, Payload, TypeRef};
 
 /// The import namespaces frustrate's web runtime supplies itself.
 ///
@@ -116,47 +112,17 @@ fn is_bindgen_namespace(ns: &str) -> bool {
     ns.starts_with("./") && ns.ends_with("_bg.js")
 }
 
-fn uleb(d: &[u8], i: &mut usize) -> Result<u64, String> {
-    let mut result: u64 = 0;
-    let mut shift = 0;
-    loop {
-        let b = *d.get(*i).ok_or("truncated LEB128")?;
-        *i += 1;
-        result |= u64::from(b & 0x7f) << shift;
-        if b & 0x80 == 0 {
-            return Ok(result);
-        }
-        shift += 7;
-        if shift > 63 {
-            return Err("LEB128 too long".into());
-        }
-    }
-}
-
-fn name(d: &[u8], i: &mut usize) -> Result<String, String> {
-    let len = uleb(d, i)? as usize;
-    let end = i.checked_add(len).ok_or("name length overflow")?;
-    let s = d.get(*i..end).ok_or("truncated name")?;
-    *i = end;
-    Ok(String::from_utf8_lossy(s).into_owned())
-}
-
-/// `(section id, body)` for each section, in order.
-fn sections(d: &[u8]) -> Result<Vec<(u8, &[u8])>, String> {
-    if d.len() < 8 || &d[..4] != b"\0asm" {
+/// The sections of a core module, each item decoded. A module that does not
+/// decode completely is an error: a partial answer would be a pass for a
+/// module this never finished examining.
+fn payloads(d: &[u8]) -> Result<Vec<Payload<'_>>, String> {
+    if !Parser::is_core_wasm(d) {
         return Err("not a wasm module".into());
     }
-    let mut i = 8;
-    let mut out = Vec::new();
-    while i < d.len() {
-        let id = d[i];
-        i += 1;
-        let size = uleb(d, &mut i)? as usize;
-        let end = i.checked_add(size).ok_or("section overruns file")?;
-        out.push((id, d.get(i..end).ok_or("truncated section")?));
-        i = end;
-    }
-    Ok(out)
+    Parser::new(0)
+        .parse_all(d)
+        .collect::<wasmparser::Result<_>>()
+        .map_err(|e| e.to_string())
 }
 
 /// One entry of the import section: its namespace, and — when it is a memory —
@@ -168,87 +134,46 @@ struct Import {
     memory: Option<(u64, Option<u64>, bool)>,
 }
 
-/// Every entry of the import section (id 2), in order.
-///
-/// An unknown import kind is an error rather than a stop, because the kinds are
-/// what the decoder walks to reach the next entry: a kind it cannot size leaves
-/// it unable to read the rest of the section, and a partial namespace list
-/// would be a pass for a module it never finished examining.
+/// Every entry of the import section, in order.
 fn imports(d: &[u8]) -> Result<Vec<Import>, String> {
     let mut out = Vec::new();
-    for (id, body) in sections(d)? {
-        if id != 2 {
-            continue;
-        }
-        let mut i = 0;
-        let count = uleb(body, &mut i)?;
-        for _ in 0..count {
-            let m = name(body, &mut i)?;
-            let n = name(body, &mut i)?;
-            let kind = *body.get(i).ok_or("truncated import kind")?;
-            i += 1;
-            let mut memory = None;
-            match kind {
-                0 => {
-                    uleb(body, &mut i)?;
-                }
-                1 => {
-                    i += 1; // reftype
-                    let flags = *body.get(i).ok_or("truncated table limits")?;
-                    i += 1;
-                    uleb(body, &mut i)?;
-                    if flags & 0x01 != 0 {
-                        uleb(body, &mut i)?;
-                    }
-                }
-                2 => {
-                    // Bit 0 is "has a maximum", bit 1 is "shared". (Bit 2, the
-                    // memory64 flag, changes the *meaning* of the numbers and
-                    // not their encoding, so the walk is the same either way.)
-                    let flags = *body.get(i).ok_or("truncated memory limits")?;
-                    i += 1;
-                    let min = uleb(body, &mut i)?;
-                    let max = if flags & 0x01 != 0 {
-                        Some(uleb(body, &mut i)?)
-                    } else {
-                        None
-                    };
-                    memory = Some((min, max, flags & 0x02 != 0));
-                }
-                3 => i += 2, // valtype + mutability
-                k => return Err(format!("unknown import kind {k} in {m}.{n}")),
+    for p in payloads(d)? {
+        if let Payload::ImportSection(r) = p {
+            for i in r.into_imports() {
+                let i = i.map_err(|e| e.to_string())?;
+                out.push(Import {
+                    module: i.module.to_string(),
+                    field: i.name.to_string(),
+                    memory: match i.ty {
+                        TypeRef::Memory(m) => Some((m.initial, m.maximum, m.shared)),
+                        _ => None,
+                    },
+                });
             }
-            out.push(Import {
-                module: m,
-                field: n,
-                memory,
-            });
         }
     }
     Ok(out)
 }
 
-/// `(name, kind)` for every entry of the export section (id 7), in order.
-///
-/// Kinds are 0 function, 1 table, 2 memory, 3 global. Unlike an import, an
-/// export is a fixed three fields, so there is no kind this cannot walk past.
-fn exports(d: &[u8]) -> Result<Vec<(String, u8)>, String> {
+/// `(name, kind)` for every entry of the export section, in order.
+fn exports(d: &[u8]) -> Result<Vec<(String, ExternalKind)>, String> {
     let mut out = Vec::new();
-    for (id, body) in sections(d)? {
-        if id != 7 {
-            continue;
-        }
-        let mut i = 0;
-        let count = uleb(body, &mut i)?;
-        for _ in 0..count {
-            let n = name(body, &mut i)?;
-            let kind = *body.get(i).ok_or("truncated export kind")?;
-            i += 1;
-            uleb(body, &mut i)?;
-            out.push((n, kind));
+    for p in payloads(d)? {
+        if let Payload::ExportSection(r) = p {
+            for e in r {
+                let e = e.map_err(|e| e.to_string())?;
+                out.push((e.name.to_string(), e.kind));
+            }
         }
     }
     Ok(out)
+}
+
+/// Whether the module has a start function.
+fn has_start(d: &[u8]) -> Result<bool, String> {
+    Ok(payloads(d)?
+        .iter()
+        .any(|p| matches!(p, Payload::StartSection { .. })))
 }
 
 /// A module importing something from `env` that the runtime does not put there.
@@ -504,9 +429,9 @@ fn run_post_pass(path: &str, label: &str) -> Result<(), String> {
     if memories.is_empty() {
         return Ok(()); // Single-threaded: it exports its own memory. Not this check's question.
     }
-    let sections = sections(&bytes).map_err(|e| cannot_read("section list", e))?;
+    let has_start = has_start(&bytes).map_err(|e| cannot_read("section list", e))?;
     let exports = exports(&bytes).map_err(|e| cannot_read("export section", e))?;
-    let exported = |n: &str, kind: u8| exports.iter().any(|(e, k)| e == n && *k == kind);
+    let exported = |n: &str, kind: ExternalKind| exports.iter().any(|(e, k)| e == n && *k == kind);
 
     let fail = |invariant: &str, detail: String| -> Result<(), String> {
         Err(format!(
@@ -562,7 +487,7 @@ fn run_post_pass(path: &str, label: &str) -> Result<(), String> {
             ),
         );
     }
-    if !exported("memory", 2) {
+    if !exported("memory", ExternalKind::Memory) {
         return fail(
             "It does not re-export the memory it imports — the single fact the \
              whole design rests on.",
@@ -574,7 +499,7 @@ fn run_post_pass(path: &str, label: &str) -> Result<(), String> {
                 .to_string(),
         );
     }
-    if !exported("__wbindgen_start", 0) {
+    if !exported("__wbindgen_start", ExternalKind::Func) {
         return fail(
             "It exports no `__wbindgen_start`, which is the transform's whole \
              per-thread bootstrap.",
@@ -598,7 +523,7 @@ fn run_post_pass(path: &str, label: &str) -> Result<(), String> {
             );
         }
     }
-    if sections.iter().any(|(id, _)| *id == 8) {
+    if has_start {
         return fail(
             "It still has a start section, which runs at instantiation — \
              before the sidecar has been handed the instance.",
@@ -1188,23 +1113,28 @@ mod tests {
         assert!(e.contains("cannot read the import section"), "{e}");
     }
 
+    /// A tag import (exception handling) is read like any other, and so is
+    /// what follows it; a kind no proposal defines is an error, not a pass.
     #[test]
-    fn an_unknown_import_kind_is_an_error_not_a_pass() {
-        // Kind 4 is a tag import (the exception-handling proposal). No frustrate
-        // module carries one today; if one ever does, refusing to judge is the
-        // right answer, because the kind is what the decoder walks to reach the
-        // next entry.
-        let mut imp = Vec::new();
-        uleb_out(1, &mut imp);
-        s("frustrate", &mut imp);
-        s("tag", &mut imp);
-        imp.push(4);
-        imp.push(0);
-        let mut m = b"\0asm\x01\0\0\0".to_vec();
-        m.push(2);
-        uleb_out(imp.len(), &mut m);
-        m.extend_from_slice(&imp);
-        let e = check(&m).unwrap_err();
-        assert!(e.contains("unknown import kind 4 in frustrate.tag"), "{e}");
+    fn a_tag_import_is_judged_and_an_unknown_kind_is_an_error() {
+        let with_kind = |kind: &[u8]| {
+            let mut imp = Vec::new();
+            uleb_out(2, &mut imp);
+            s("env", &mut imp);
+            s("tag", &mut imp);
+            imp.extend_from_slice(kind);
+            s("__wbindgen_placeholder__", &mut imp);
+            s("__wbg_new", &mut imp);
+            imp.extend_from_slice(&[0, 0]); // func, typeidx 0
+            let mut m = b"\0asm\x01\0\0\0".to_vec();
+            m.push(2);
+            uleb_out(imp.len(), &mut m);
+            m.extend_from_slice(&imp);
+            check(&m).unwrap_err()
+        };
+        let e = with_kind(&[4, 0, 0]); // tag: attribute 0, typeidx 0
+        assert!(e.contains("__wbindgen_placeholder__ (1 import)"), "{e}");
+        let e = with_kind(&[0x7f, 0]);
+        assert!(e.contains("cannot read the import section"), "{e}");
     }
 }
