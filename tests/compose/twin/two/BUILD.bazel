@@ -1,0 +1,53 @@
+load("@rules_dart//dart:defs.bzl", "dart_library")
+load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
+
+# The sources of //tests/compose/twin, unchanged.
+genrule(
+    name = "twin_sources",
+    srcs = [
+        "//tests/compose/twin:api.rs",
+        "//tests/compose/twin:lib.rs",
+    ],
+    outs = [
+        "src/api.rs",
+        "src/lib.rs",
+    ],
+    cmd = "cp $(location //tests/compose/twin:api.rs) $(location src/api.rs) && " +
+          "cp $(location //tests/compose/twin:lib.rs) $(location src/lib.rs)",
+)
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "compose_twin_two",
+    module_paths = ["crate::api"],
+    package_name = "compose_twin_two",
+    visibility = ["//tests/compose/twin:__subpackages__"],
+)
+
+frustrate_bridge_library(
+    name = "two",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "compose_twin_two",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    # Only ever ships inside //tests/compose/twin:twins.
+    shared_library = False,
+    visibility = ["//tests/compose/twin:__subpackages__"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+dart_library(
+    name = "bindings",
+    srcs = [":bridge.dart"],
+    package_name = "compose_twin_two",
+    visibility = ["//tests/compose/twin:__subpackages__"],
+    deps = [
+        "//runtime/dart:frustrate",
+        "@pub_deps//:ffi",
+    ],
+)

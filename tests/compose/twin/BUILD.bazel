@@ -1,0 +1,31 @@
+load("@rules_dart//dart:defs.bzl", "dart_test")
+load("//bazel:defs.bzl", "frustrate_library")
+
+exports_files(["api.rs", "lib.rs"])
+
+# Two bridges with the same type and member names, one library: //tests/compose/twin/one
+# and /two are one source compiled as two crates. Declares `:twins`,
+# `:twins.one_lib` and `:twins.two_lib`.
+frustrate_library(
+    name = "twins",
+    bridges = {
+        "//tests/compose/twin/one:one_lib": "//tests/compose/twin/one:bridge",
+        "//tests/compose/twin/two:two_lib": "//tests/compose/twin/two:bridge",
+    },
+)
+
+dart_test(
+    name = "twin_test",
+    size = "small",
+    main = "test/twin_test.dart",
+    code_assets = [
+        ":twins.one_lib",
+        ":twins.two_lib",
+    ],
+    deps = [
+        "//runtime/dart:frustrate",
+        "//tests/compose/twin/one:bindings",
+        "//tests/compose/twin/two:bindings",
+        "@pub_deps//:test",
+    ],
+)
