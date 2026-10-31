@@ -66,12 +66,6 @@ extension type _WasmMemory._(JSObject _) implements JSObject {
   external _WasmMemory(JSObject descriptor);
 }
 
-/// `Object.assign`, for copying an ES module namespace before overriding one
-/// of its keys. A namespace object is frozen, so the copy is the only way; and
-/// Dart has no spread for a `JSObject`.
-@JS('Object.assign')
-external JSObject _objectAssign(JSObject target, JSObject source);
-
 /// Maximum size of a threaded wasm shared memory, in 64KiB wasm pages. Must not
 /// exceed the module's link-time `--max-memory` (the fixture builds use
 /// 1GiB = 16384 pages); a provided maximum above the declared one fails
@@ -97,7 +91,7 @@ const _poolWorkerStackBytes = 1 << 20;
 ///
 /// Keyed on the import Kind and nothing else, because the namespace it arrives
 /// under is not stable: rustc emits `env.memory`, and wasm-bindgen's thread
-/// transform relocates it to the generated sidecar's namespace. "Imports a
+/// transform relocates it to its generated glue's namespace. "Imports a
 /// memory at all" is the fact both spellings share.
 ///
 /// That it is also *shared* cannot be read here — the `WebAssembly.Module`
@@ -234,10 +228,24 @@ external int _frustrateCallInt(
 /// JS `Error:` wrapping; everything after is the engine's own message.
 const String _trapMarker = 'frustrate-wasm-trap:';
 
-/// Dynamic `import()`, reached through the glue (see frustrate.js). Loading the
-/// wasm-bindgen sidecar is the one thing the runtime cannot do in Dart alone.
-@JS(r'$frustrateImport')
-external JSPromise<JSObject> _frustrateImport(JSString url);
+/// Fills every import namespace the app supplies into an import object, by
+/// dynamic `import()` of the host modules it named (`hostImports` in
+/// frustrate.js, which the two worker pumps call too), and answers their
+/// attach step.
+@JS(r'$frustrateHostImports')
+external JSPromise<_HostImports> _frustrateHostImports(
+  JSObject module,
+  JSObject imports,
+  JSObject hostUrls,
+  JSString? bindgenUrl,
+  JSObject? memory,
+);
+
+extension type _HostImports._(JSObject _) implements JSObject {
+  /// Runs every host module's attach step, given
+  /// `{exports, memory, actor, stackSize}`.
+  external JSPromise<JSAny?> attach(JSObject context);
+}
 
 @JS('URL')
 extension type _Url._(JSObject _) implements JSObject {
@@ -254,6 +262,55 @@ String _absolute(String url) {
   final here = _location?.getProperty<JSString>('href'.toJS);
   if (here == null) return url;
   return _Url(url.toJS, here).href.toDart;
+}
+
+/// The JS modules an app names to supply its bridge module's foreign import
+/// namespaces (see [FrustrateWeb.init]), resolved against the page. Equal when
+/// they name the same URLs, because they are part of a bridge's identity.
+final class _Suppliers {
+  _Suppliers(String? bindgenGlueUrl, Map<String, String> hostImports)
+    : bindgenGlueUrl = bindgenGlueUrl == null
+          ? null
+          : _absolute(bindgenGlueUrl),
+      hostImports = {
+        for (final ns in hostImports.keys.toList()..sort())
+          ns: _absolute(hostImports[ns]!),
+      };
+
+  final String? bindgenGlueUrl;
+
+  /// Namespace to absolute URL, in namespace order.
+  final Map<String, String> hostImports;
+
+  /// [hostImports] as a JS object, for the glue.
+  JSObject hostUrls() {
+    final urls = JSObject();
+    hostImports.forEach((name, url) => urls.setProperty(name.toJS, url.toJS));
+    return urls;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _Suppliers &&
+      other.bindgenGlueUrl == bindgenGlueUrl &&
+      other.hostImports.length == hostImports.length &&
+      hostImports.entries.every((e) => other.hostImports[e.key] == e.value);
+
+  @override
+  int get hashCode => Object.hash(
+    bindgenGlueUrl,
+    Object.hashAll([
+      for (final MapEntry(:key, :value) in hostImports.entries)
+        Object.hash(key, value),
+    ]),
+  );
+
+  /// How an installed module is named in a repeated-init disagreement.
+  String describe(String module) => [
+    module,
+    if (bindgenGlueUrl != null) 'bindgenGlueUrl $bindgenGlueUrl',
+    if (hostImports.isNotEmpty) 'hostImports $hostImports',
+  ].join(' with ');
 }
 
 /// The served glue's URL, when the page has one: set by frustrate.js itself
@@ -382,42 +439,57 @@ class FrustrateWeb {
   ///
   /// **How a module is identified**, since bytes are not cheap to compare: by
   /// what the caller named it — the URL for [initFromUrl], the module's size
-  /// for this entry point — together with [bindgenGlueUrl], which is part of
-  /// what the module *is* (the same bytes with a different sidecar are a
-  /// different bridge). So two different modules of byte-identical length,
-  /// passed as bytes, are not told apart: the check is a fence against the
-  /// accident, not an identity comparison.
+  /// for this entry point — together with [bindgenGlueUrl] and [hostImports],
+  /// which are part of what the module *is* (the same bytes with different JS
+  /// behind their imports are a different bridge). So two different modules of
+  /// byte-identical length, passed as bytes, are not told apart: the check is a
+  /// fence against the accident, not an identity comparison.
   ///
   /// The compiled `WebAssembly.Module` is kept: actor hosts post it to their
   /// workers (compiled code is shared; memory is per-instance).
   ///
-  /// [bindgenGlueUrl] is required if and only if the bridge crate's dependency
-  /// graph contains `wasm-bindgen` — anything reaching a browser API from Rust,
-  /// which for a real dependency is the common case rather than the exotic one.
-  /// Such a module links against an import namespace of generated shims that
-  /// only wasm-bindgen's own output can satisfy; point this at that file
-  /// (`<crate>_bg.js`, served beside the `.wasm`). Omitting it when the module
-  /// needs it fails at instantiation with a message naming the namespace.
-  /// Modules with no wasm-bindgen in the graph need nothing and are unaffected.
+  /// **The module's imports.** The runtime supplies `frustrate`, `env` and
+  /// `wasi_snapshot_preview1` itself. Every other import namespace comes from
+  /// an ES module the app serves beside the `.wasm`, by URL:
   ///
-  /// A module built for `wasm32-wasip1` needs no argument: its
-  /// `wasi_snapshot_preview1` host is supplied unconditionally from the glue.
+  ///  * [hostImports] maps a namespace the module imports (a Rust
+  ///    `#[link(wasm_import_module = "...")]` block) to the URL of the module
+  ///    that implements it. Its exports are the namespace's functions. It may
+  ///    also export `attach({exports, memory, actor})`, which the runtime calls
+  ///    on every instance after instantiation and before any of the bridge's
+  ///    code runs, and awaits if it returns a promise. `exports` and `memory`
+  ///    are that instance's. `actor` is `{bridge, type}` for the actor the
+  ///    instance serves: its bridge's Rust crate name and its Rust type name.
+  ///    It is null on the page's instance and in pool workers.
+  ///    Every realm that instantiates the module — the page, each actor's
+  ///    Worker, each pool worker — imports its own copy of the JS module, so
+  ///    module state is per realm and never shared.
+  ///  * [bindgenGlueUrl] names wasm-bindgen's generated JS (`<stem>_bg.js`),
+  ///    which supplies wasm-bindgen's namespace: the one its post-pass names
+  ///    `./<stem>_bg.js`. [hostImports] may not name a namespace of that form.
+  ///    The glue's attach step is wasm-bindgen's own start-up handshake.
+  ///    Required if and only if the bridge crate's dependency graph contains
+  ///    `wasm-bindgen`.
+  ///
+  /// A namespace with no module fails at instantiation, with a message naming
+  /// it; so does a URL that fails to load. A module built for `wasm32-wasip1`
+  /// that imports nothing else needs neither argument.
   static Future<void> init(
     Uint8List wasmModuleBytes, {
     String? bindgenGlueUrl,
+    Map<String, String> hostImports = const {},
   }) async {
     // Before anything else, because a build that must not exist should not get
     // as far as compiling a module.
     _checkNumberBackend();
-    final glue = bindgenGlueUrl == null ? null : _absolute(bindgenGlueUrl);
+    final suppliers = _Suppliers(bindgenGlueUrl, hostImports);
     // Size stands in for the bytes; see the identity note above.
-    final source = ('bytes', wasmModuleBytes.length, glue);
-    final description = _describe(
+    final source = ('bytes', wasmModuleBytes.length, suppliers);
+    final description = suppliers.describe(
       'a ${wasmModuleBytes.length}-byte module',
-      glue,
     );
     if (Frustrate.initializedFrom(source, description)) return;
-    await _instantiate(wasmModuleBytes, glue, source, description);
+    await _instantiate(wasmModuleBytes, suppliers, source, description);
   }
 
   /// Fetch the bridge module from [url] (same COOP/COEP-isolated origin) and
@@ -431,14 +503,18 @@ class FrustrateWeb {
   ///
   /// Note that this and [init] name a module in two different ways, so
   /// initializing through one and then the other is reported as a disagreement.
-  static Future<void> initFromUrl(String url, {String? bindgenGlueUrl}) async {
+  static Future<void> initFromUrl(
+    String url, {
+    String? bindgenGlueUrl,
+    Map<String, String> hostImports = const {},
+  }) async {
     // Same reason as in [init]: a build that must not exist should not get as
     // far as fetching a module.
     _checkNumberBackend();
-    final glue = bindgenGlueUrl == null ? null : _absolute(bindgenGlueUrl);
+    final suppliers = _Suppliers(bindgenGlueUrl, hostImports);
     final resolved = _absolute(url);
-    final source = ('url', resolved, glue);
-    final description = _describe('the module at $resolved', glue);
+    final source = ('url', resolved, suppliers);
+    final description = suppliers.describe('the module at $resolved');
     if (Frustrate.initializedFrom(source, description)) return;
     final response = await _fetch(url.toJS).toDart;
     if (!response.ok) {
@@ -447,22 +523,19 @@ class FrustrateWeb {
       );
     }
     final buffer = await response.arrayBuffer().toDart;
-    await _instantiate(buffer.toDart.asUint8List(), glue, source, description);
+    await _instantiate(
+      buffer.toDart.asUint8List(),
+      suppliers,
+      source,
+      description,
+    );
   }
-
-  /// How an installed module is named in a repeated-init disagreement.
-  /// [bindgenGlueUrl] is part of the name because it is part of the bridge.
-  static String _describe(String module, String? bindgenGlueUrl) =>
-      bindgenGlueUrl == null
-      ? module
-      : '$module with bindgenGlueUrl $bindgenGlueUrl';
 
   /// Compile, instantiate and install — everything both entry points share,
   /// reached only once the repeated-init guard has let the call through.
-  /// [bindgenGlueUrl] is already resolved against the page.
   static Future<void> _instantiate(
     Uint8List wasmModuleBytes,
-    String? bindgenGlueUrl,
+    _Suppliers suppliers,
     Object source,
     String description,
   ) async {
@@ -472,8 +545,7 @@ class FrustrateWeb {
     // hot restart costs a pool's width once instead of once per restart.
     if (!Frustrate.isInstalled) _reapOrphanedWorkers();
     await _installGlue();
-    final runtime = _WebTransport._();
-    runtime._bindgenGlueUrl = bindgenGlueUrl;
+    final runtime = _WebTransport._(suppliers);
     final moduleBytes = wasmModuleBytes.toJS; // per-byte: Dart-heap init only
     final module = await _wasmCompile(moduleBytes).toDart;
     final bridges = _bridgesIn(module);
@@ -498,12 +570,16 @@ class FrustrateWeb {
     if (_importsMemory(module)) {
       runtime._sharedMemory = _makeSharedMemory();
     }
-    final bindgen = await runtime._loadBindgen(module);
-    final instance = await _wasmInstantiateModule(
+    final imports = runtime._imports();
+    final hosts = await _frustrateHostImports(
       module,
-      runtime._imports(bindgen),
+      imports,
+      suppliers.hostUrls(),
+      suppliers.bindgenGlueUrl?.toJS,
+      runtime._sharedMemory,
     ).toDart;
-    runtime._start(instance, bindgen);
+    final instance = await _wasmInstantiateModule(module, imports).toDart;
+    await runtime._start(instance, hosts);
     // The browser's UTF-8 encoder, for strings big enough to be worth a JS
     // call. Byte-identical to `utf8.encode` — `string_encoder_hook_test` and
     // `utf8_equivalence_test` are what say so — and its result is JS-born, so
@@ -557,68 +633,26 @@ final class _WebTransport {
   /// The compiled bridge module, shared with every worker (both pumps).
   late final JSObject _module;
 
-  /// Absolute URL of the wasm-bindgen sidecar, or null when the module needs
-  /// none.
-  String? _bindgenGlueUrl;
+  _WebTransport._(this._suppliers);
+
+  /// The JS modules that supply the module's foreign import namespaces.
+  final _Suppliers _suppliers;
 
   /// The head both worker-init messages share. Handing a worker the compiled
-  /// module and handing it the sidecar URL are one act: the module's foreign
-  /// import namespaces are exactly what only the sidecar can satisfy, so a
-  /// worker given the module alone instantiates nothing and fails at startup
-  /// with an error telling the developer to pass a URL they already passed.
-  /// Built in one place so neither pump can be given half of it —
-  /// test/worker_init_message_test.dart pins that it stays that way.
+  /// module and handing it the URLs of the JS behind its imports are one act:
+  /// a worker given the module alone instantiates nothing and fails at startup
+  /// with an error telling the developer to pass URLs they already passed.
+  /// Built in one place so neither pump can be given half of it.
   ///
-  /// The URL rather than the namespace object: an ES module namespace is not
+  /// URLs rather than module namespace objects: an ES module namespace is not
   /// structured-cloneable, so each worker imports its own copy. Absolute
   /// already (resolved against the document at init), because a worker's base
   /// URL is the glue's, not the page's.
   JSObject _moduleInitMessage(String type) => JSObject()
     ..setProperty('type'.toJS, type.toJS)
     ..setProperty('module'.toJS, _module)
-    ..setProperty('bindgenGlueUrl'.toJS, _bindgenGlueUrl?.toJS);
-
-  /// Namespaces this runtime supplies itself, so an import from one of them is
-  /// NOT evidence that the module needs a wasm-bindgen sidecar. Mirrors
-  /// `selfSupplied` in frustrate.js.
-  ///
-  /// `wasi_snapshot_preview1` is here for the same reason `frustrate` is: it is
-  /// in the import object [_imports] builds, unconditionally. Omitting it made
-  /// every wasm32-wasip1 module fail to load with an error naming wasm-bindgen
-  /// — a branch of the platform decision tree that cannot use wasm-bindgen at
-  /// all.
-  static const Set<String> _selfSuppliedNamespaces = {
-    'frustrate',
-    'env',
-    'wasi_snapshot_preview1',
-  };
-
-  /// Load the wasm-bindgen namespace this module needs, or null if it needs
-  /// none. Mirrors `bindgenImports` in frustrate.js — same rule, same error,
-  /// two contexts.
-  Future<JSObject?> _loadBindgen(JSObject module) async {
-    final foreign = <String>{};
-    for (final entry in _wasmModuleImports(module).toDart) {
-      final ns = entry.getProperty<JSString>('module'.toJS).toDart;
-      if (!_selfSuppliedNamespaces.contains(ns)) foreign.add(ns);
-    }
-    if (foreign.isEmpty) return null;
-    final url = _bindgenGlueUrl;
-    if (url == null) {
-      throw StateError(
-        'frustrate: this bridge module imports ${foreign.join(', ')}, which '
-        "only wasm-bindgen's generated JS can satisfy. Pass its URL as "
-        'FrustrateWeb.init(bindgenGlueUrl: ...) and serve it beside the '
-        '.wasm module. Bazel: frustrate_wasm_module(bindgen = ...)',
-      );
-    }
-    _bindgenNamespaces = foreign;
-    return await _frustrateImport(url.toJS).toDart;
-  }
-
-  /// The import namespaces [_loadBindgen] found, all satisfied by the one
-  /// module it loaded.
-  Set<String> _bindgenNamespaces = const {};
+    ..setProperty('bindgenGlueUrl'.toJS, _suppliers.bindgenGlueUrl?.toJS)
+    ..setProperty('hostImports'.toJS, _suppliers.hostUrls());
 
   /// Threads only: the shared linear memory this instance and its pool
   /// workers run on. Null on single-threaded modules (they export their
@@ -715,13 +749,12 @@ final class _WebTransport {
   /// Message captured by the panic hook for the trap currently propagating.
   String? _lastPanic;
 
-  _WebTransport._();
-
-  /// The `frustrate.*` import object (plus `env.memory` when threaded). Built
-  /// before instantiation; the closures reach back into this runtime once
-  /// `_start` has run (the module cannot call them earlier than its own
-  /// instantiation).
-  JSObject _imports([JSObject? bindgen]) {
+  /// The import object of the namespaces the runtime supplies itself
+  /// (`frustrate`, `wasi_snapshot_preview1`, `env`); `hostImports` in
+  /// frustrate.js adds the rest. Built before instantiation; the closures reach
+  /// back into this runtime once `_start` has run (the module cannot call them
+  /// earlier than its own instantiation).
+  JSObject _imports() {
     final post = (JSAny callId, int ptr, JSAny len, JSAny cap) {
       _onPost(_jsNumber(callId), ptr, _jsNumber(len), _jsNumber(cap));
     }.toJS;
@@ -807,43 +840,24 @@ final class _WebTransport {
       );
       env.setProperty('memory'.toJS, shared);
     }
-    if (bindgen != null) {
-      // On a threaded module the sidecar is also where wasm-bindgen's thread
-      // transform put the memory import, and the generated ES module creates
-      // one of its own at the top level — one per realm, so adopting it would
-      // hand every Worker a different shared memory. Supply this runtime's
-      // instead, on a copy because a module namespace is frozen. Nothing reads
-      // the binding we shadow: the module re-exports the memory it imports and
-      // every generated view goes through `wasm.memory.buffer` on the
-      // instance. Mirrors `bindgenImports` in frustrate.js, which does the
-      // same for the two worker pumps.
-      final supplied = shared == null
-          ? bindgen
-          : (_objectAssign(JSObject(), bindgen)
-              ..setProperty('memory'.toJS, shared));
-      for (final name in _bindgenNamespaces) {
-        imports.setProperty(name.toJS, supplied);
-      }
-    }
     return imports;
   }
 
   late final JSFunction _allocFn;
   late final JSFunction _freeFn;
 
-  void _start(JSObject instance, [JSObject? bindgen]) {
+  Future<void> _start(JSObject instance, _HostImports hosts) async {
     _exports = instance.getProperty<JSObject>('exports'.toJS);
-    // wasm-bindgen's two-step handshake, and the order is load-bearing: hand
-    // the generated JS the instance it closes over, then run the module's
-    // start function — both before any frustrate export, because a shim
-    // called before `__wbg_set_wasm` dereferences `undefined`.
-    if (bindgen != null) {
-      bindgen.callMethod('__wbg_set_wasm'.toJS, _exports);
-      if (_exports.getProperty<JSAny?>('__wbindgen_start'.toJS) != null) {
-        _call(_export('__wbindgen_start'));
-      }
-    }
     _memory = _sharedMemory ?? _exports.getProperty<JSObject>('memory'.toJS);
+    // Before any frustrate export. The page's instance serves no actor.
+    await hosts
+        .attach(
+          JSObject()
+            ..setProperty('exports'.toJS, _exports)
+            ..setProperty('memory'.toJS, _memory)
+            ..setProperty('actor'.toJS, null),
+        )
+        .toDart;
     _checkRuntimeAbi();
     _allocFn = _export('frustrate_alloc');
     _freeFn = _export('frustrate_buffer_free');
@@ -2003,7 +2017,8 @@ final class _WebActorHost implements ActorHost {
 
   /// The actor's type name (generated constructors pass it), so
   /// host-attributed errors — the disposed-deferred StateError above all —
-  /// name the actor rather than an anonymous worker.
+  /// name the actor rather than an anonymous worker, and host modules'
+  /// `attach` can tell which actor its instance serves.
   final String? _debugName;
 
   /// Deferred calls in flight on this worker (`ActorHost.call(deferred:)`).
@@ -2039,6 +2054,17 @@ final class _WebActorHost implements ActorHost {
     // The bridge's own `call_async` export: an actor instance serves one
     // bridge, so its pump resolves the entry once rather than per call.
     final init = _rt._moduleInitMessage('init')
+      // What a host module's `attach` sees as `actor`: the bridge's crate
+      // name and the actor's type name, because bridges composed into one
+      // module may each have an actor of the same name. Never null here, which
+      // is what tells an actor's instance from the page's: a host spawned
+      // without a name is still an actor's, with `type` null.
+      ..setProperty(
+        'actor'.toJS,
+        JSObject()
+          ..setProperty('bridge'.toJS, _view.servedBridge.crate.toJS)
+          ..setProperty('type'.toJS, _debugName?.toJS),
+      )
       ..setProperty('callAsync'.toJS, callAsyncExport.toJS)
       ..setProperty('memInitial'.toJS, _sharedMemoryInitialPages.toJS)
       ..setProperty('memMaximum'.toJS, _sharedMemoryMaxPages.toJS);

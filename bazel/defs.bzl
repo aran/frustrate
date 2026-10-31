@@ -579,9 +579,10 @@ def _frustrate_wasm_module_impl(ctx):
         )
         module = processed
         bindgen_js = [js]
-        post_pass = True
+        # The namespace the post-pass writes into the module's imports.
+        bindgen_namespace = "./" + js.basename
     else:
-        post_pass = False
+        bindgen_namespace = None
 
     # wasm-opt, when the app named a binary — AFTER the wasm-bindgen post-pass.
     # That order is wasm-pack's and it is the only one that can work: the CLI
@@ -614,10 +615,13 @@ def _frustrate_wasm_module_impl(ctx):
     # this sits after wasm-opt rather than inside either branch above. A check
     # that reads a module the app does not serve is a check of something else.
     #
-    # Two questions, one tool, chosen by whether the post-pass ran:
+    # One rule: every namespace the module imports is one the runtime puts in
+    # the import object, one `host_imports` declares, or the one the post-pass
+    # wrote, which its generated JS supplies. Without it, a graph that needed
+    # `bindgen` and did not get it builds green and dies at
+    # `WebAssembly.instantiate`, in a browser, with 126 unsatisfiable imports.
     #
-    # `--post-pass`: the CLI rewrote the module, its foreign namespace is now
-    # the sidecar's, and what is left to check is the shape the CLI's thread
+    # A post-passed module is also checked for the shape the CLI's thread
     # transform produced — it fires whenever the memory is shared and cannot be
     # switched off, rewrites the memory import, deletes the bootstrap symbols
     # the pool pump used to call, and hands per-thread setup to
@@ -625,30 +629,21 @@ def _frustrate_wasm_module_impl(ctx):
     # the *app's* pin rather than frustrate's, so those facts are checked here
     # rather than discovered in a browser. A no-op on a single-threaded module.
     #
-    # Plain: no post-pass, so rustc's output (optimized or not) is the module
-    # that ships, and every namespace it imports has to be one the runtime puts
-    # in the import object. Without it, a graph that needed `bindgen` and did
-    # not get it builds green and dies at `WebAssembly.instantiate`, in a
-    # browser, with 126 unsatisfiable imports. Once the post-pass HAS run the
-    # foreign namespace is `./<stem>_bg.js`, which the runtime satisfies by
-    # pointing *any* foreign namespace at the loaded glue module
-    # (`bindgenImports` in runtime/dart/lib/src/js/frustrate.js) — so there is
-    # no namespace-level fact left to check, and pinning wasm-bindgen's naming
-    # convention would only be a way to fail a valid build.
-    #
     # A validation action for the same reasons the std check is one, and in the
     # same output group.
-    check_marker = ctx.actions.declare_file(
-        ctx.label.name + (".post_pass_check" if post_pass else ".import_check"),
-    )
+    check_marker = ctx.actions.declare_file(ctx.label.name + ".import_check")
+    check_args = []
+    for ns in ctx.attr.host_imports:
+        check_args += ["--host", ns]
+    if bindgen_namespace:
+        check_args += ["--bindgen", bindgen_namespace]
     ctx.actions.run(
         executable = ctx.executable._import_check,
         inputs = [module],
         outputs = [check_marker],
-        arguments = (["--post-pass"] if post_pass else []) +
-                    [module.path, str(ctx.label), check_marker.path],
-        mnemonic = "FrustrateWasmPostPassCheck" if post_pass else "FrustrateWasmImportCheck",
-        progress_message = ("checking the wasm-bindgen post-pass contract in %{label}" if post_pass else "checking unsatisfiable imports in %{label}"),
+        arguments = check_args + [module.path, str(ctx.label), check_marker.path],
+        mnemonic = "FrustrateWasmImportCheck",
+        progress_message = "checking the imports of %{label}",
     )
     validations.append(check_marker)
 
@@ -755,6 +750,27 @@ frustrate_wasm_module = rule(
                   "not a browser one: without the post-pass the module keeps " +
                   "imports nothing can satisfy, and //bazel/wasm_import_check " +
                   "names them.",
+        ),
+        "host_imports": attr.string_list(
+            doc = "Import namespaces the app's own JavaScript supplies — how " +
+                  "a module reaches JS without wasm-bindgen. Rust declares " +
+                  "the functions in a " +
+                  "`#[link(wasm_import_module = \"my_ns\")] extern \"C\" { … }` " +
+                  "block; the app serves an ES module whose exports are " +
+                  "those functions and names its URL in " +
+                  "`FrustrateWeb.init(hostImports: {'my_ns': 'my_ns.js'})`. " +
+                  "That module may also export " +
+                  "`attach({exports, memory, actor})`, which the runtime " +
+                  "awaits on every instance before any of the bridge's code " +
+                  "runs; `actor` is the Rust type name of the actor the " +
+                  "instance serves, null on the page and in pool workers. " +
+                  "Every realm that instantiates the module (the page, each " +
+                  "actor's Worker, each pool worker) imports its own copy of " +
+                  "the JS module, so its state is per realm.\n\n" +
+                  "The build fails on an import namespace that is not the " +
+                  "runtime's own, listed here, or the one the `bindgen` " +
+                  "post-pass writes, so list exactly the namespaces the app " +
+                  "supplies.",
         ),
         "wasm_opt": attr.label(
             executable = True,

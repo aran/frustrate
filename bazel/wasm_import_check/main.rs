@@ -1,15 +1,11 @@
 //! Fail the build when a wasm module is one frustrate's web runtime cannot
 //! instantiate.
 //!
-//! Two modes, for the two branches of `frustrate_wasm_module`, because the
-//! post-pass changes which facts decide that question. Default: the module
-//! rustc emitted is the one that ships, so every import namespace has to be one
-//! the runtime supplies — the rest of this comment. `--post-pass`: the
-//! wasm-bindgen CLI rewrote the module, its foreign namespace is now the
-//! sidecar's (which the runtime satisfies by pointing *any* foreign namespace
-//! at it, so there is no namespace fact left to check), and what is left to
-//! check is the shape the CLI's thread transform produced — see
-//! [`run_post_pass`].
+//! One rule over the module that ships: every import namespace is one the
+//! runtime supplies itself, one the target declares in `host_imports` (`--host`),
+//! or — when the wasm-bindgen post-pass ran — the namespace it wrote
+//! (`--bindgen`, `./<stem>_bg.js`). A post-passed module must also have the
+//! shape the CLI's thread transform produces, which [`run_post_pass`] checks.
 //!
 //! # Why this exists
 //!
@@ -20,7 +16,8 @@
 //! that pass runs only when `frustrate_wasm_module` is given the `bindgen`
 //! attribute. Omit it and the module builds, links and passes every other
 //! check: the 126 unsatisfiable imports are as legal a wasm module as any
-//! other, and nothing about the build says otherwise.
+//! other, and nothing about the build says otherwise. The same holds for a
+//! namespace of the app's own JS that the target forgot to declare.
 //!
 //! The failure lands at `WebAssembly.instantiate`, in a browser, as a
 //! LinkError, for someone who opened the page. The fact was decidable the
@@ -28,19 +25,21 @@
 //!
 //! # How it decides
 //!
-//! **Every import namespace must be one frustrate's web runtime puts in the
-//! import object** (see [`SELF_SUPPLIED`]). Anything else can be satisfied only
-//! by wasm-bindgen's generated JS, which exists only if the post-pass ran — so
-//! this check runs exactly when it did not, over rustc's own output, which in
-//! that case *is* the module that ships. There is no "which module was
+//! **Every import namespace must be one the runtime will supply**: its own
+//! (see [`SELF_SUPPLIED`]), a declared host namespace, which the app supplies
+//! from its own JS module at load, or the post-pass's, which wasm-bindgen's
+//! generated JS supplies. A namespace is wasm-bindgen's exactly when it has the
+//! form the post-pass writes ([`is_bindgen_namespace`]), so `host_imports` may
+//! not declare one. The check reads the module after every pass, so the
+//! module it examines *is* the module that ships. There is no "which module was
 //! examined" caveat of the kind `bazel/wasm_std_check` carries.
 //!
 //! Import-keyed for the same reason that check is: `frustrate_wasm_module`
 //! documents that any `platform()` works, so a rule that compared platform
 //! labels would silently not apply to a consumer's own. It is also the rule the
-//! runtime itself applies — `bindgenImports` in
-//! `runtime/dart/lib/src/js/frustrate.js` decides the same question, from the
-//! same list, at instantiation.
+//! runtime itself applies — `hostImports` in
+//! `runtime/dart/lib/src/js/frustrate.js` decides the same question at
+//! instantiation.
 //!
 //! # What it claims
 //!
@@ -71,11 +70,10 @@ use std::process::ExitCode;
 
 /// The import namespaces frustrate's web runtime supplies itself.
 ///
-/// The authority is the runtime, in two places that must agree with this one:
-/// `selfSupplied` in `runtime/dart/lib/src/js/frustrate.js` and
-/// `_selfSuppliedNamespaces` in `runtime/dart/lib/src/runtime_web.dart`. A
-/// namespace added there widens what a module may import; adding one here
-/// without it lets a module through that then fails to instantiate.
+/// The authority is the runtime, `selfSupplied` in
+/// `runtime/dart/lib/src/js/frustrate.js`. `--print-self-supplied` writes this
+/// list, and `host_imports_web_test.dart` requires the runtime to claim every
+/// namespace on it.
 ///
 /// `frustrate` is the bridge ABI plus the custom-std facilities, `env` is the
 /// shared memory and `__stack_chk_fail`, `wasi_snapshot_preview1` is the
@@ -109,6 +107,14 @@ const ENV_SUPPLIED: &[&str] = &["memory", "__stack_chk_fail"];
 /// of the generic one; nothing else in a bridge module's import list starts
 /// this way.
 const BINDGEN_PREFIX: &str = "__wbindgen";
+
+/// Whether `ns` is wasm-bindgen's namespace: `--target bundler` writes the one
+/// namespace its generated JS supplies as `./<out-name>_bg.js`. The runtime's
+/// `isBindgenNamespace` in `runtime/dart/lib/src/js/frustrate.js` is the same
+/// predicate, and gives every such namespace to `bindgenGlueUrl`.
+fn is_bindgen_namespace(ns: &str) -> bool {
+    ns.starts_with("./") && ns.ends_with("_bg.js")
+}
 
 fn uleb(d: &[u8], i: &mut usize) -> Result<u64, String> {
     let mut result: u64 = 0;
@@ -285,7 +291,44 @@ fn stray_env_error(label: &str, stray: &[String]) -> Result<(), String> {
     Err(msg)
 }
 
-fn run(path: &str, label: &str) -> Result<(), String> {
+/// The one rule: every import namespace is the runtime's own, one the target
+/// declares in `host_imports` (`hosts`), or — when the wasm-bindgen post-pass
+/// ran — the namespace it wrote (`bindgen`), whose module must then also have
+/// the shape [`run_post_pass`] checks.
+fn run(path: &str, label: &str, hosts: &[String], bindgen: Option<&str>) -> Result<(), String> {
+    check_namespaces(path, label, hosts, bindgen)?;
+    match bindgen {
+        Some(_) => run_post_pass(path, label),
+        None => Ok(()),
+    }
+}
+
+fn check_namespaces(
+    path: &str,
+    label: &str,
+    hosts: &[String],
+    bindgen: Option<&str>,
+) -> Result<(), String> {
+    if let Some(ns) = hosts.iter().find(|ns| SELF_SUPPLIED.contains(&ns.as_str())) {
+        return Err(format!(
+            "frustrate_wasm_module: {label} declares host_imports = [\"{ns}\"], \
+             a namespace frustrate's web runtime supplies itself. Drop it."
+        ));
+    }
+    if let Some(ns) = hosts.iter().find(|ns| is_bindgen_namespace(ns)) {
+        return Err(format!(
+            "frustrate_wasm_module: {label} declares host_imports = [\"{ns}\"], \
+             which has the form of wasm-bindgen's namespace (`./<name>_bg.js`). \
+             Only wasm-bindgen's generated JS supplies such a namespace: run its \
+             post-pass with `bindgen = ...`, and name the JS in \
+             `FrustrateWeb.init(bindgenGlueUrl:)`."
+        ));
+    }
+    if let Some(ns) = bindgen.filter(|ns| !is_bindgen_namespace(ns)) {
+        return Err(format!(
+            "wasm_import_check: --bindgen {ns} is not of the form `./<name>_bg.js`"
+        ));
+    }
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     let entries = imports(&bytes).map_err(|e| {
         format!(
@@ -301,6 +344,9 @@ fn run(path: &str, label: &str) -> Result<(), String> {
     let mut foreign: BTreeMap<String, usize> = BTreeMap::new();
     let mut stray_env: Vec<String> = Vec::new();
     for entry in entries {
+        if hosts.contains(&entry.module) || bindgen == Some(entry.module.as_str()) {
+            continue;
+        }
         if !SELF_SUPPLIED.contains(&entry.module.as_str()) {
             *foreign.entry(entry.module).or_insert(0) += 1;
         } else if entry.module == "env" && !ENV_SUPPLIED.contains(&entry.field.as_str()) {
@@ -354,17 +400,44 @@ fn run(path: &str, label: &str) -> Result<(), String> {
         );
     } else {
         msg.push_str(&format!(
-            "frustrate's web runtime supplies {} and nothing else. Any other \
-             namespace can only come from wasm-bindgen's generated JS, which this \
-             target does not produce (`bindgen` is unset) — and if the import is \
-             not a wasm-bindgen one, nothing can satisfy it at all: drop whatever \
-             declares it.",
+            "frustrate's web runtime supplies {}. Any other namespace comes from \
+             a JS module the app serves: if one of yours implements it, declare \
+             it on this target —\n\
+             \n\
+             \x20   host_imports = [{}],\n\
+             \n\
+             — and name that module's URL for it in \
+             `FrustrateWeb.init(hostImports: …)`. Otherwise nothing can satisfy \
+             it: drop whatever declares it.",
             SELF_SUPPLIED
                 .iter()
                 .map(|s| format!("`{s}`"))
                 .collect::<Vec<_>>()
+                .join(", "),
+            foreign
+                .keys()
+                .map(|ns| format!("\"{ns}\""))
+                .collect::<Vec<_>>()
                 .join(", ")
         ));
+        if !hosts.is_empty() {
+            msg.push_str(&format!(
+                "\n\nThis target declares host_imports = [{}].",
+                hosts
+                    .iter()
+                    .map(|ns| format!("\"{ns}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if let Some(ns) = bindgen {
+            msg.push_str(&format!(
+                "\n\nThe wasm-bindgen post-pass wrote `{ns}`, which its generated \
+                 JS supplies. Any other namespace it leaves (a `snippets/` module \
+                 from `#[wasm_bindgen(module = …)]` or `inline_js`) is not served \
+                 by frustrate."
+            ));
+        }
     }
     Err(msg)
 }
@@ -386,10 +459,10 @@ const MEASURED_BINDGEN: &str = "0.2.126";
 ///
 /// # Why this exists at all
 ///
-/// `run` above asks whether an un-post-passed module imports only namespaces
-/// the runtime supplies. This is the other half of the same question — can
-/// frustrate's runtime instantiate this module — for the branch where the
-/// post-pass *did* run, and where the answer stopped being about namespaces.
+/// `check_namespaces` asks whether a module imports only namespaces the
+/// runtime supplies. This is the rest of the same question — can frustrate's
+/// runtime instantiate this module — for a module the post-pass rewrote, where
+/// the answer is also about shape.
 ///
 /// The CLI has a thread transform that fires, with no way to switch it off,
 /// whenever the module's memory is shared — which is exactly what `+atomics`
@@ -540,18 +613,53 @@ fn run_post_pass(path: &str, label: &str) -> Result<(), String> {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() == 5 && args[1] == "--post-pass" {
-        return finish(run_post_pass(&args[2], &args[3]), &args[4]);
-    }
-    if args.len() != 4 {
+    let usage = || {
         eprintln!(
-            "usage: wasm_import_check <module.wasm> <label> <marker-out>\n\
-             \x20      wasm_import_check --post-pass <module.wasm> <label> <marker-out>"
+            "usage: wasm_import_check [--host <namespace>]... [--bindgen <namespace>] \
+             <module.wasm> <label> <marker-out>\n\
+             \x20      wasm_import_check --print-self-supplied <json-out>"
         );
-        return ExitCode::FAILURE;
+        ExitCode::FAILURE
+    };
+    if std::env::args().nth(1).as_deref() == Some("--print-self-supplied") {
+        let rest: Vec<String> = std::env::args().skip(2).collect();
+        let [out] = rest.as_slice() else {
+            return usage();
+        };
+        let json = format!(
+            "[{}]\n",
+            SELF_SUPPLIED
+                .iter()
+                .map(|ns| format!("\"{ns}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        return match std::fs::write(out, json) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("wasm_import_check: writing {out}: {e}");
+                ExitCode::FAILURE
+            }
+        };
     }
-    finish(run(&args[1], &args[2]), &args[3])
+    let mut bindgen: Option<String> = None;
+    let mut hosts: Vec<String> = Vec::new();
+    let mut positional: Vec<String> = Vec::new();
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--bindgen" | "--host" => match args.next() {
+                Some(ns) if arg == "--host" => hosts.push(ns),
+                Some(ns) => bindgen = Some(ns),
+                None => return usage(),
+            },
+            _ => positional.push(arg),
+        }
+    }
+    let [path, label, marker] = positional.as_slice() else {
+        return usage();
+    };
+    finish(run(path, label, &hosts, bindgen.as_deref()), marker)
 }
 
 fn finish(verdict: Result<(), String>, marker: &str) -> ExitCode {
@@ -645,6 +753,18 @@ mod tests {
     /// Writes `bytes` to a temp file and runs the check over it, so the test
     /// exercises the same entry point the action does.
     fn check(bytes: &[u8]) -> Result<(), String> {
+        check_with_hosts(bytes, &[])
+    }
+
+    /// [`check`] for a target declaring `host_imports = hosts`.
+    fn check_with_hosts(bytes: &[u8], hosts: &[&str]) -> Result<(), String> {
+        check_full(bytes, hosts, None)
+    }
+
+    /// [`check`] for a target declaring `host_imports = hosts`, whose
+    /// wasm-bindgen post-pass, if any, wrote the namespace `bindgen`.
+    fn check_full(bytes: &[u8], hosts: &[&str], bindgen: Option<&str>) -> Result<(), String> {
+        let hosts: Vec<String> = hosts.iter().map(|s| s.to_string()).collect();
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!(
             "wasm_import_check_{}_{}",
@@ -654,7 +774,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("m.wasm");
         std::fs::write(&path, bytes).unwrap();
-        let r = run(path.to_str().unwrap(), "//pkg:mod.wasm");
+        let r = run(path.to_str().unwrap(), "//pkg:mod.wasm", &hosts, bindgen);
         std::fs::remove_dir_all(&dir).ok();
         r
     }
@@ -705,6 +825,78 @@ mod tests {
         // supply instead.
         assert!(!e.contains("bindgen = "), "{e}");
         assert!(e.contains("`wasi_snapshot_preview1`"), "{e}");
+    }
+
+    #[test]
+    fn a_declared_host_namespace_passes() {
+        let m = module(&[
+            ("frustrate", "post", Kind::Func),
+            ("example_opfs", "read", Kind::Func),
+            ("example_opfs", "write", Kind::Func),
+        ]);
+        assert_eq!(check_with_hosts(&m, &["example_opfs"]), Ok(()));
+    }
+
+    #[test]
+    fn an_undeclared_namespace_fails_beside_a_declared_one() {
+        let m = module(&[
+            ("example_opfs", "read", Kind::Func),
+            ("other_js", "f", Kind::Func),
+        ]);
+        let e = check_with_hosts(&m, &["example_opfs"]).unwrap_err();
+        assert!(e.contains("other_js (1 import)"), "{e}");
+        assert!(e.contains("host_imports = [\"other_js\"]"), "{e}");
+        assert!(e.contains("declares host_imports = [\"example_opfs\"]"), "{e}");
+        assert!(!e.contains("example_opfs (1 import)"), "{e}");
+    }
+
+    #[test]
+    fn declaring_a_host_namespace_does_not_admit_the_bindgen_placeholder() {
+        let m = module(&[("__wbindgen_placeholder__", "__wbg_new", Kind::Func)]);
+        let e = check_with_hosts(&m, &["example_opfs"]).unwrap_err();
+        assert!(e.contains("bindgen = "), "{e}");
+    }
+
+    #[test]
+    fn the_post_pass_namespace_passes_beside_a_declared_one() {
+        let m = module(&[
+            ("./demo_bg.js", "__wbg_new", Kind::Func),
+            ("example_opfs", "read", Kind::Func),
+        ]);
+        assert_eq!(check_full(&m, &["example_opfs"], Some("./demo_bg.js")), Ok(()));
+    }
+
+    #[test]
+    fn a_post_pass_snippet_namespace_fails() {
+        let m = module(&[
+            ("./demo_bg.js", "__wbg_new", Kind::Func),
+            ("./snippets/x-1a2b/inline0.js", "f", Kind::Func),
+        ]);
+        let e = check_full(&m, &[], Some("./demo_bg.js")).unwrap_err();
+        assert!(e.contains("./snippets/x-1a2b/inline0.js (1 import)"), "{e}");
+        assert!(!e.contains("./demo_bg.js ("), "{e}");
+    }
+
+    #[test]
+    fn declaring_a_bindgen_namespace_as_a_host_namespace_fails() {
+        let m = module(&[("./demo_bg.js", "__wbg_new", Kind::Func)]);
+        let e = check_with_hosts(&m, &["./demo_bg.js"]).unwrap_err();
+        assert!(e.contains("host_imports = [\"./demo_bg.js\"]"), "{e}");
+        assert!(e.contains("bindgenGlueUrl"), "{e}");
+    }
+
+    #[test]
+    fn the_bindgen_namespace_form_is_the_post_pass_output_name() {
+        assert!(is_bindgen_namespace("./demo_bg.js"));
+        assert!(!is_bindgen_namespace("demo_bg.js"));
+        assert!(!is_bindgen_namespace("./snippets/x-1a2b/inline0.js"));
+        assert!(!is_bindgen_namespace("__wbindgen_placeholder__"));
+    }
+
+    #[test]
+    fn declaring_a_namespace_the_runtime_supplies_fails() {
+        let e = check_with_hosts(&module(&[]), &["env"]).unwrap_err();
+        assert!(e.contains("host_imports = [\"env\"]"), "{e}");
     }
 
     #[test]

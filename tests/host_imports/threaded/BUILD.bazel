@@ -1,0 +1,17 @@
+load("//bazel:defs.bzl", "frustrate_wasm_module")
+
+# //tests/host_imports on threaded wasm, where pool workers instantiate the
+# module too. Its own package because the module is named by the target, and
+# the two builds keep the same name.
+#
+# Tagged manual: threaded wasm needs the locally built +atomics std (`bazel run
+# //toolchain/custom_std:build` first). `bazel run
+# //tests/dart_integration:web_test -- --threaded` builds it.
+
+frustrate_wasm_module(
+    name = "host_imports_api.wasm",
+    crate = "//tests/host_imports:host_imports_api",
+    host_imports = ["frustrate_test_host"],
+    platform = "//bazel:wasm32_threads",
+    tags = ["manual"],
+)

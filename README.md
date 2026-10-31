@@ -384,7 +384,9 @@ yes: Rust can call Dart, so if the browser API is only being reached because the
 Rust side happens to own that step, moving the step to Dart drops the whole
 wasm-bindgen dependency. This is what we do for new code, or code under our
 control. Keep it in Rust when a crate you want declares the dependency
-structurally and no feature flag gets you out.
+structurally and no feature flag gets you out. And if what you need is a few JS
+functions you write yourself, [host imports](#calling-your-own-javascript-from-rust)
+reach them from any web build, wasip1 included, without wasm-bindgen.
 
 **Does your Rust need std facilities a browser has no host for?** Reading a clock
 (`SystemTime::now`, `Instant::now`), entropy — and so `rand`, `uuid`, `ring` —
@@ -415,3 +417,68 @@ atomics and a shared memory. It needs a nightly toolchain and a locally built
 std. If you want parallelism, you can have it, but it's slightly more work and
 risk.
 
+### Calling your own JavaScript from Rust
+
+A bridge module reaches JavaScript through import namespaces. The runtime
+supplies `frustrate`, `env` and `wasi_snapshot_preview1`; every other namespace
+comes from an ES module your app serves beside the `.wasm`. Declare the
+functions in Rust:
+
+```rust
+#[link(wasm_import_module = "my_files")]
+extern "C" {
+    fn read(buf: *mut u8, cap: usize) -> i32;
+}
+```
+
+Declare the namespace on the module, so the build accepts it (an import from
+any namespace that is not the runtime's or declared fails the build):
+
+```starlark
+frustrate_wasm_module(
+    name = "app.wasm",
+    crate = ":app_rust",
+    host_imports = ["my_files"],
+)
+```
+
+Write the module, whose exports are the namespace's functions, and name its URL
+at init:
+
+```js
+// my_files.js
+let memory, handle;
+
+export async function attach({ exports, memory: m, actor }) {
+  memory = m;
+  if (actor?.bridge === 'app_rust' && actor.type === 'Core') {
+    const root = await navigator.storage.getDirectory();
+    const file = await root.getFileHandle('db', { create: true });
+    handle = await file.createSyncAccessHandle();
+  }
+}
+
+export function read(ptr, cap) {
+  if (!handle) return -1; // unsupported in this realm
+  return handle.read(new Uint8Array(memory.buffer, ptr, cap), { at: 0 });
+}
+```
+
+```dart
+await FrustrateWeb.initFromUrl('app.wasm',
+    hostImports: {'my_files': 'my_files.js'});
+```
+
+Every realm that instantiates the module imports its own copy of the JS module:
+the page, each actor's Worker, and each pool worker on threaded wasm. Module
+state is per realm and never shared. The optional `attach` runs on each
+instance after instantiation and before any of the bridge's code, and is
+awaited if it returns a promise. `exports` and `memory` are that instance's.
+`actor` is `{bridge, type}` for the actor the instance serves, its bridge's Rust
+crate name and its Rust type name, and null on the page and in pool workers. Rust calls the functions synchronously, so an actor's
+Worker is where a synchronous browser API such as `FileSystemSyncAccessHandle`
+is available.
+
+wasm-bindgen's generated JS is a host module too. Its post-pass names the one
+namespace it supplies `./<stem>_bg.js`; `bindgenGlueUrl` names the JS for that
+namespace, and its attach step is wasm-bindgen's own start-up handshake.

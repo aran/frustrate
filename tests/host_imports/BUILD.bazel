@@ -1,0 +1,59 @@
+load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
+load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_wasm_module")
+
+# A bridge whose Rust calls JavaScript the app supplies, through an import
+# namespace of its own (`host_imports`), with no wasm-bindgen.
+# `bazel run //tests/dart_integration:web_test` stages the module, test_host.js
+# and the bindings, and runs host_imports_web_test.dart on them; `-- --threaded`
+# stages the build in ./threaded instead.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "host_imports_api",
+    module_paths = ["crate::api"],
+    package_name = "host_imports_api",
+    visibility = ["//tests:__subpackages__"],
+)
+
+frustrate_bridge_library(
+    name = "host_imports_api",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "host_imports_api",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    # Built only as a wasm module; its imports exist nowhere else.
+    target_compatible_with = ["@platforms//cpu:wasm32"],
+    visibility = ["//tests:__subpackages__"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+frustrate_wasm_module(
+    name = "host_imports_api.wasm",
+    crate = ":host_imports_api",
+    host_imports = ["frustrate_test_host"],
+    platform = "//bazel:wasm32_wasi",
+    visibility = ["//tests:__subpackages__"],
+)
+
+exports_files(
+    ["test_host.js"],
+    visibility = ["//tests:__subpackages__"],
+)
+
+# The namespaces the build check takes to be the runtime's own, which
+# host_imports_web_test.dart requires the runtime to claim.
+run_binary(
+    name = "self_supplied",
+    outs = ["self_supplied.json"],
+    args = [
+        "--print-self-supplied",
+        "$(location self_supplied.json)",
+    ],
+    tool = "//bazel/wasm_import_check",
+    visibility = ["//tests:__subpackages__"],
+)

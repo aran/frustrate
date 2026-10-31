@@ -58,11 +58,14 @@ Future<void> main(List<String> args) async {
   final bazel = workspace != null;
   if (workspace != null) {
     _stageComposed(packageDir);
-    if (!await _stageBindgen(packageDir, workspace, threaded)) exit(1);
+    for (final fixture in _fixtures) {
+      if (!await fixture.stage(packageDir, workspace, threaded)) exit(1);
+    }
   } else {
     stdout.writeln(
       'not under `bazel run`: leaving out the bazel_fixture tests '
-      '(compose_web_test.dart, bindgen_web_test.dart), whose fixtures only '
+      '(compose_web_test.dart, bindgen_web_test.dart, '
+      'host_imports_web_test.dart), whose fixtures only '
       'Bazel builds',
     );
   }
@@ -120,43 +123,76 @@ void _stageComposed(String packageDir) {
   stdout.writeln('staged the composed fixture from $module');
 }
 
-/// Stage the wasm-bindgen fixture (//tests/bindgen): the module and its
-/// wasm-bindgen JS under build/bindgen/, the bindings under lib/.
+/// A Bazel-built fixture: its module and the JS beside it, staged under
+/// build/<package>/, and its bindings, staged under lib/.
 ///
 /// The single-threaded build is in this binary's runfiles. The threaded one
 /// needs the locally built +atomics std, and as a dependency of this binary it
 /// would make every run need that std, so under `--threaded` it is built here,
-/// after `bazel run` has released the workspace.
-Future<bool> _stageBindgen(
-  String packageDir,
-  String workspace,
-  bool threaded,
-) async {
-  var from = 'tests/bindgen';
-  if (threaded) {
-    const target = '//tests/bindgen/threaded';
-    final built = await _run('bazel', [
-      'build',
-      '$target:bindgen_api.wasm',
-      '$target:bindgen_api_bg_js',
-    ], workspace);
-    if (built != 0) return false;
-    // Only the crate under the rule is transitioned, so the rule's own
-    // outputs are where `bazel-bin` points.
-    from = '$workspace/bazel-bin/tests/bindgen/threaded';
+/// from the fixture's `threaded` package, after `bazel run` has released the
+/// workspace.
+final class _Fixture {
+  const _Fixture(this.package, {required this.built, this.sources = const []});
+
+  /// The fixture's package under tests/, and its directory under build/.
+  final String package;
+
+  /// Files a target of the package builds: (file name, target name).
+  final List<(String, String)> built;
+
+  /// Files in this binary's runfiles (its `data`), staged as they are under
+  /// their base names, whichever build is staged.
+  final List<String> sources;
+
+  Future<bool> stage(String packageDir, String workspace, bool threaded) async {
+    var from = 'tests/$package';
+    if (threaded) {
+      final target = '//tests/$package/threaded';
+      final ran = await _run('bazel', [
+        'build',
+        for (final (_, name) in built) '$target:$name',
+      ], workspace);
+      if (ran != 0) return false;
+      // Only the crate under the rule is transitioned, so the rule's own
+      // outputs are where `bazel-bin` points.
+      from = '$workspace/bazel-bin/tests/$package/threaded';
+    }
+    final out = Directory('$packageDir/build/$package')
+      ..createSync(recursive: true);
+    for (final (file, _) in built) {
+      File('$from/$file').copySync('${out.path}/$file');
+    }
+    for (final file in sources) {
+      File(file).copySync('${out.path}/${file.split('/').last}');
+    }
+    final lib = Directory('tests/$package/lib');
+    for (final file in lib.listSync(recursive: true).whereType<File>()) {
+      final relative = file.path.substring(lib.path.length + 1);
+      final staged = File('$packageDir/lib/$relative')
+        ..parent.createSync(recursive: true);
+      file.copySync(staged.path);
+    }
+    stdout.writeln('staged the $package fixture from $from');
+    return true;
   }
-  final out = Directory('$packageDir/build/bindgen')
-    ..createSync(recursive: true);
-  for (final name in ['bindgen_api.wasm', 'bindgen_api_bg.js']) {
-    File('$from/$name').copySync('${out.path}/$name');
-  }
-  final lib = Directory('tests/bindgen/lib');
-  for (final file in lib.listSync(recursive: true).whereType<File>()) {
-    final relative = file.path.substring(lib.path.length + 1);
-    final staged = File('$packageDir/lib/$relative')
-      ..parent.createSync(recursive: true);
-    file.copySync(staged.path);
-  }
-  stdout.writeln('staged the wasm-bindgen fixture from $from');
-  return true;
 }
+
+const _fixtures = [
+  // //tests/bindgen: an actor reaching browser APIs through wasm-bindgen.
+  _Fixture(
+    'bindgen',
+    built: [
+      ('bindgen_api.wasm', 'bindgen_api.wasm'),
+      ('bindgen_api_bg.js', 'bindgen_api_bg_js'),
+    ],
+  ),
+  // //tests/host_imports: Rust calling JS the app supplies.
+  _Fixture(
+    'host_imports',
+    built: [('host_imports_api.wasm', 'host_imports_api.wasm')],
+    sources: [
+      'tests/host_imports/test_host.js',
+      'tests/host_imports/self_supplied.json',
+    ],
+  ),
+];

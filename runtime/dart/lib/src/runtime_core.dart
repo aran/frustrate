@@ -315,7 +315,8 @@ abstract interface class FrustrateRuntime implements FrustrateChannel {
   /// [debugName] is the actor's type name (generated constructors pass it),
   /// carried into host-attributed reports — most importantly the
   /// disposed-deferred `StateError` — so they name the actor rather than an
-  /// anonymous host.
+  /// anonymous host. On web it is also the `type` a host module's `attach`
+  /// sees in `actor` (`FrustrateWeb.init`).
   Future<ActorHost> spawnActorHost({String? debugName});
 
   /// Whether async bridge calls run on real worker threads. True on native

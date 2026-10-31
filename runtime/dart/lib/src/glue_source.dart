@@ -190,23 +190,73 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
     });
   };
 
-  // Load the wasm-bindgen sidecar an app named in
-  // `FrustrateWeb.init(bindgenGlueUrl:)`, and check it is the shape frustrate
-  // can drive. Defined before the main/worker branch because all three
-  // instantiation sites reach it: the main instance through
-  // `$frustrateImport` below (runtime_web.dart's `_loadBindgen` is its only
-  // caller), the pool worker and the actor worker through `bindgenImports`.
+  // Namespaces the runtime puts in every import object itself. Every other
+  // namespace a module imports is supplied by a host module: an ES module the
+  // app serves, named by URL in `FrustrateWeb.init`. //bazel/wasm_import_check
+  // admits the same three at build time; host_imports_web_test.dart runs this
+  // file against that tool's list.
+  const selfSupplied = ['frustrate', 'env', 'wasi_snapshot_preview1'];
+
+  // Whether `ns` is wasm-bindgen's namespace. `--target bundler` writes the one
+  // namespace its generated JS supplies as `./<out-name>_bg.js`, so a namespace
+  // of that form is the glue's (`bindgenGlueUrl`) and no other is.
+  // //bazel/wasm_import_check holds a build to the same rule.
+  const isBindgenNamespace = (ns) =>
+      ns.startsWith('./') && ns.endsWith('_bg.js');
+
+  // A host module the app wrote: its exports are the namespace's functions,
+  // and its optional `attach({exports, memory, actor})` is its attach step.
+  const appHost = async (ns, url) => {
+    let host;
+    try {
+      host = await import(url);
+    } catch (err) {
+      throw new Error('frustrate: loading the module for import namespace \'' +
+          ns + '\' from ' + url + ', named in ' +
+          'FrustrateWeb.init(hostImports:), failed: ' + String(err));
+    }
+    return {
+      exports: host,
+      attach: ({ exports, memory, actor }) => typeof host.attach === 'function'
+          ? host.attach({ exports, memory, actor })
+          : undefined,
+    };
+  };
+
+  // wasm-bindgen's generated JS (`--target bundler`'s `_bg.js`) as a host
+  // module. Everything wasm-bindgen-specific about loading a module is here.
   //
-  // `__wbg_set_wasm` is the whole check, because it is the whole handshake:
-  // wasm-bindgen's `--target bundler` output is a `_bg.js` of shims closing
-  // over a `let wasm` that this setter fills in, plus an entry module that
-  // does nothing but call it (and `__wbindgen_start`) — which is exactly what
-  // `bindgenStart` replicates, since frustrate owns instantiation. Every
-  // other target instantiates the module itself and exports no setter, so a
-  // namespace without one is either the wrong `--target` or not wasm-bindgen
-  // output at all. Checking here rather than at the handshake is what lets
-  // the message name the URL that is wrong.
-  const bindgenNamespace = async (url) => {
+  // Its attach step is wasm-bindgen's two-step handshake, in the order it
+  // requires: hand the generated JS the instance it closes over, THEN run the
+  // module's start function. `__wbg_set_wasm` is `--target bundler`'s
+  // internal, not a documented API; frustrate pins it because it owns
+  // instantiation, and this is the same handshake wasm-bindgen's own generated
+  // entry module performs. It has existed since 0.2.84. Every other target
+  // instantiates the module itself and exports no setter, so a module without
+  // one is the wrong `--target` or not wasm-bindgen output at all — checked at
+  // load, where the message can name the URL.
+  //
+  // `__wbindgen_start` is exported iff the module had a start section, which
+  // is why the call is guarded. On a threaded module it is also the whole
+  // per-thread bootstrap (the transform unstarts the module and exports its
+  // injected start), and it takes the stack size in bytes for THIS thread,
+  // ignored on the first thread of a memory because that thread keeps the
+  // linked stack pointer. 0 — what an omitted `stackSize` becomes on the way
+  // into wasm — means the transform's own 2 MiB default. Only the pool pump
+  // passes one; every other caller is a first thread.
+  //
+  // `memory` is the memory THIS caller means the module to run on, supplied in
+  // place of the module's own export of that name. On a threaded build the
+  // thread transform moves the memory import out of `env` and into this
+  // namespace, and the generated JS's top level runs
+  // `export const memory = new WebAssembly.Memory({… shared: true})` — once per
+  // realm, so every Worker importing it would otherwise get a *different*
+  // shared memory and the threads would share nothing. Overriding the key on a
+  // copy of the (frozen) namespace is enough because no shim ever reads that
+  // binding: the module re-exports the memory it imports and every generated
+  // view goes through `wasm.memory.buffer` on the instance. Null when the
+  // caller has no memory to supply (single-threaded modules export their own).
+  const bindgenHost = async (url, memory) => {
     const ns = await import(url);
     if (typeof ns.__wbg_set_wasm !== 'function') {
       throw new Error('frustrate: ' + url + ' exports no __wbg_set_wasm, so ' +
@@ -214,7 +264,82 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
           'generated *_bg.js — Bazel: the `bindgen_js` output group of ' +
           'frustrate_wasm_module(bindgen = ...).');
     }
-    return ns;
+    return {
+      exports: memory ? Object.assign({}, ns, { memory }) : ns,
+      attach: ({ exports, stackSize }) => {
+        ns.__wbg_set_wasm(exports);
+        if (exports.__wbindgen_start) exports.__wbindgen_start(stackSize);
+      },
+    };
+  };
+
+  // Supply every import namespace the runtime does not own itself, from the
+  // host modules the app named in `FrustrateWeb.init`, and answer the attach
+  // step: `attach({exports, memory, actor, stackSize})` runs each host's after
+  // instantiation, awaiting each in turn, and the caller runs it before any
+  // frustrate export. Defined before the main/worker branch because all three
+  // instantiation sites call it: the main instance (through
+  // `$frustrateHostImports`, from runtime_web.dart), the pool worker and the
+  // actor worker. Each realm imports its own copy of every module, so no
+  // module state is shared between realms.
+  //
+  // `hostUrls` maps a namespace to its module's URL. `bindgenUrl` is
+  // wasm-bindgen's generated JS, which supplies the module's wasm-bindgen
+  // namespace (`isBindgenNamespace`). URLs are already absolute: the page
+  // resolves them against its own location before any worker sees them.
+  //
+  // `actor` is `{bridge, type}` for the actor the instance serves, and null on
+  // the page and in pool workers. The wasm-bindgen glue attaches first,
+  // because a shim called before its handshake dereferences `undefined`; the
+  // app's hosts follow in namespace order.
+  const hostImports = async (module, imports, hostUrls, bindgenUrl, memory) => {
+    const urls = hostUrls || {};
+    for (const ns of Object.keys(urls)) {
+      if (selfSupplied.includes(ns)) {
+        throw new Error('frustrate: FrustrateWeb.init(hostImports:) names ' +
+            'the namespace \'' + ns + '\', which the runtime supplies itself.');
+      }
+      if (isBindgenNamespace(ns)) {
+        throw new Error('frustrate: FrustrateWeb.init(hostImports:) names ' +
+            'the namespace \'' + ns + '\', which is wasm-bindgen\'s. Name ' +
+            'its generated JS in FrustrateWeb.init(bindgenGlueUrl:) instead.');
+      }
+    }
+    const foreign = [...new Set(WebAssembly.Module.imports(module)
+        .map((i) => i.module)
+        .filter((ns) => !selfSupplied.includes(ns)))].sort();
+    const named = foreign.filter((ns) => urls[ns]);
+    const bindgen = foreign.filter(isBindgenNamespace);
+    const unnamed = foreign.filter((ns) => !urls[ns] && !isBindgenNamespace(ns));
+    if (unnamed.length > 0) {
+      const quoted = unnamed.map((ns) => '\'' + ns + '\'');
+      const one = unnamed.length === 1;
+      throw new Error('frustrate: this bridge module imports the namespace' +
+          (one ? ' ' : 's ') + quoted.join(', ') +
+          ', and FrustrateWeb.init(hostImports:) names no module for ' +
+          (one ? 'it' : 'them') + '. Pass hostImports: {' +
+          quoted.map((ns) => ns + ': \'<url>\'').join(', ') +
+          '}, naming the ES module that implements each, and serve it beside ' +
+          'the .wasm module.');
+    }
+    if (bindgen.length > 0 && !bindgenUrl) {
+      throw new Error('frustrate: this bridge module imports wasm-bindgen\'s ' +
+          'namespace \'' + bindgen[0] + '\'. Serve its generated JS beside ' +
+          'the .wasm module and name it in ' +
+          'FrustrateWeb.init(bindgenGlueUrl: ...).');
+    }
+    const glue = bindgen.length > 0
+        ? await bindgenHost(bindgenUrl, memory)
+        : null;
+    const hosts = await Promise.all(named.map((ns) => appHost(ns, urls[ns])));
+    named.forEach((ns, i) => { imports[ns] = hosts[i].exports; });
+    for (const ns of bindgen) imports[ns] = glue.exports;
+    const ordered = glue ? [glue, ...hosts] : hosts;
+    return {
+      attach: async (context) => {
+        for (const host of ordered) await host.attach(context);
+      },
+    };
   };
 
   if (typeof WorkerGlobalScope === 'undefined') {
@@ -264,16 +389,12 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
         document.currentScript.src) {
       globalThis.$frustrateGlueUrl = document.currentScript.src;
     }
-    // The main instance's wasm-bindgen sidecar loader, for the Dart runtime.
-    // A bridge crate whose graph contains wasm-bindgen (iroh, and anything
-    // else that reaches the browser's own APIs from Rust) links against an
-    // import namespace only wasm-bindgen's generated JS can satisfy; that
-    // file is an ES module and an app asset, so it has to be loaded by URL
-    // rather than embedded here. Keeping the import() in JS keeps the glue
-    // the only place that ever touches script loading, and stays clean under
-    // `script-src 'self'`. Async, so the check inside it reaches Dart as a
-    // rejected promise rather than a synchronous throw.
-    globalThis.$frustrateImport = bindgenNamespace;
+    // The main instance's loader for the import namespaces apps supply, for
+    // the Dart runtime. Keeping the import() in JS keeps the glue the only
+    // place that ever touches script loading, and stays clean under
+    // `script-src 'self'`. Async, so its checks reach Dart as a rejected
+    // promise rather than a synchronous throw.
+    globalThis.$frustrateHostImports = hostImports;
     return;
   }
 
@@ -288,89 +409,6 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
   // instance serves one bridge, and the bridge's exports carry its crate name.
   let callAsync = null;
   const td = new TextDecoder();
-
-  // Satisfy every import namespace the runtime does not own itself.
-  //
-  // A bridge crate whose dependency graph contains wasm-bindgen links against
-  // a namespace of generated shims — the module name is a relative path such
-  // as './demo_bg.js', and there can be over a hundred of them. Only
-  // wasm-bindgen's own generated ES module can supply them, and that module is
-  // a *build artifact of the app*, not of frustrate. So it is loaded by URL,
-  // exactly as the .wasm module is, and this glue file stays byte-identical
-  // for every app.
-  //
-  // Returns the namespace object, or null if the module needs none — in which
-  // case no URL was required and none is fetched. `url` is already absolute
-  // (the main thread resolves it against location.href before sending, so a
-  // worker's own base URL cannot change its meaning).
-  //
-  // `memory` is the memory THIS caller means the module to run on, and it is
-  // supplied under the sidecar's namespace rather than under `env`. On a
-  // threaded build wasm-bindgen's thread transform moves the memory import out
-  // of `env` and into the generated module, whose top level runs
-  // `export const memory = new WebAssembly.Memory({… shared: true})` — once per
-  // realm, so every Worker importing it would otherwise get a *different*
-  // shared memory and the threads would share nothing. Overriding the key on a
-  // copy of the (frozen) namespace is enough because no shim ever reads that
-  // binding: the module re-exports the memory it imports and every generated
-  // view goes through `wasm.memory.buffer` on the instance. Pass null when the
-  // caller has no memory to supply (single-threaded modules export their own).
-
-  // Namespaces this runtime supplies itself, so an import from one of them is
-  // NOT evidence that the module needs a wasm-bindgen sidecar. Keep in sync
-  // with `_selfSuppliedNamespaces` in runtime_web.dart — same rule, two
-  // contexts. `wasi_snapshot_preview1` belongs here for the same reason
-  // `frustrate` does: it is in the import object a few lines below.
-  const selfSupplied = ['frustrate', 'env', 'wasi_snapshot_preview1'];
-
-  const bindgenImports = async (module, imports, url, memory) => {
-    const foreign = new Set();
-    for (const i of WebAssembly.Module.imports(module)) {
-      if (!selfSupplied.includes(i.module)) foreign.add(i.module);
-    }
-    if (foreign.size === 0) return null;
-    if (!url) {
-      throw new Error(
-          'frustrate: this bridge module imports ' + [...foreign].join(', ') +
-          ', which only wasm-bindgen\'s generated JS can satisfy. Pass its ' +
-          'URL as FrustrateWeb.init(bindgenGlueUrl: ...) and serve it beside ' +
-          'the .wasm module.');
-    }
-    const ns = await bindgenNamespace(url);
-    const supplied = memory ? Object.assign({}, ns, { memory }) : ns;
-    for (const name of foreign) imports[name] = supplied;
-    return ns;
-  };
-
-  // wasm-bindgen's two-step handshake, in the order it requires: hand the
-  // generated JS the instance it closes over, THEN run the module's start
-  // function. Both must precede any frustrate export — `frustrate_web_init`
-  // included — because a wasm-bindgen shim called before `__wbg_set_wasm`
-  // dereferences `undefined`.
-  //
-  // `__wbg_set_wasm` is `--target bundler`'s internal, not a documented API;
-  // frustrate pins it because it owns instantiation, and this is the same
-  // handshake wasm-bindgen's own generated entry module performs. It has
-  // existed since 0.2.84 (before that, bundler output imported the .wasm
-  // statically and no host could instantiate it at all). Its absence is
-  // caught at load, in `bindgenNamespace` — nothing to re-check here.
-  //
-  // `__wbindgen_start` is exported iff the module had a start section, which
-  // is why the call is guarded rather than assumed. On a threaded module it is
-  // also the whole per-thread bootstrap (the transform unstarts the module and
-  // exports its injected start), and it takes one argument: the stack size in
-  // bytes for THIS thread, ignored on the first thread of a memory because
-  // that thread keeps the linked stack pointer. 0 — which is what an omitted
-  // `stackSize` becomes on the way into wasm — means the transform's own 2 MiB
-  // default. Only the pool pump passes one; every other caller is a first
-  // thread, where the value cannot matter.
-  const bindgenStart = (ns, instanceExports, stackSize) => {
-    if (!ns) return;
-    ns.__wbg_set_wasm(instanceExports);
-    if (instanceExports.__wbindgen_start) {
-      instanceExports.__wbindgen_start(stackSize);
-    }
-  };
 
   // `-fstack-protector` is hardcoded in toolchains_llvm's default compile
   // flags and is not behind a Bazel feature, so any C in the crate graph
@@ -391,8 +429,9 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
   //
   // The memory arrives twice, under two namespaces, because which one the
   // module asks through depends on whether the wasm-bindgen post-pass ran:
-  // `env.memory` is where rustc's own output imports it, the sidecar namespace
-  // is where the thread transform moves it to (see `bindgenImports`). Both are
+  // `env.memory` is where rustc's own output imports it, the wasm-bindgen
+  // glue's namespace is where the thread transform moves it to (see
+  // `bindgenHost`). Both are
   // supplied unconditionally — instantiation only looks up what a module
   // declares — so there is one shared memory either way and no branch to get
   // wrong.
@@ -401,7 +440,7 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
     let exports = null;
     // Whether this worker ever entered the runtime's loop, which is what
     // separates the two failure reports below. Instantiating is not the line:
-    // the sidecar handshake, the stack pointer and TLS init all run on a live
+    // the stack pointer and TLS init and the attach step all run on a live
     // `exports` and still precede any job.
     let entered = false;
     const imports = {
@@ -452,22 +491,24 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
       },
     };
     try {
-      const ns = await bindgenImports(module, imports, m.bindgenGlueUrl, memory);
+      const hosts = await hostImports(
+          module, imports, m.hostImports, m.bindgenGlueUrl, memory);
       const instance = await WebAssembly.instantiate(module, imports);
       exports = instance.exports;
-      bindgenStart(ns, exports, stackSize);
       // Two bootstraps, and the module says which it wants. wasm-bindgen's
       // thread transform DELETES `__wasm_init_tls`/`__tls_size`/`__tls_align`
       // and takes per-thread setup over itself, inside the `__wbindgen_start`
-      // that `bindgenStart` just called — so on a post-passed module this
-      // thread already has its stack and its TLS block, and the page sent
-      // neither pointer. Keyed on the export rather than on the message so an
-      // older served glue meeting a newer module fails here, loudly, instead of
-      // running a half-bootstrapped thread.
+      // that its glue's attach step calls below — so on a post-passed module
+      // the page sent neither pointer. Keyed on the export rather than on the
+      // message so an older served glue meeting a newer module fails here,
+      // loudly, instead of running a half-bootstrapped thread. Before the
+      // attach step, so a host's attach may call into the module.
       if (exports.__wasm_init_tls) {
         exports.__stack_pointer.value = stackTop;
         exports.__wasm_init_tls(tlsPtr);
       }
+      // A pool worker serves no actor.
+      await hosts.attach({ exports, memory, actor: null, stackSize });
       entered = true;
       exports.frustrate_worker_entry(entryPtr);
       throw new Error('frustrate: pool worker loop returned');
@@ -619,8 +660,8 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
       // state — it just allocates its own (shared-with-nobody) memory here
       // instead of exporting one, and hands it to every namespace the module
       // might ask through. Detected by import KIND, not by name: rustc puts the
-      // memory in `env`, wasm-bindgen's thread transform moves it into the
-      // sidecar's namespace, and only "imports a memory at all" is true of
+      // memory in `env`, wasm-bindgen's thread transform moves it into its
+      // glue's namespace, and only "imports a memory at all" is true of
       // both.
       let created = null;
       imports.env = { __stack_chk_fail: stackChkFail };
@@ -631,13 +672,15 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
         imports.env.memory = created;
       }
       try {
-        const ns =
-            await bindgenImports(m.module, imports, m.bindgenGlueUrl, created);
+        const hosts = await hostImports(
+            m.module, imports, m.hostImports, m.bindgenGlueUrl, created);
         const instance = await WebAssembly.instantiate(m.module, imports);
         exports = instance.exports;
         callAsync = exports[m.callAsync];
         mem = created || exports.memory;
-        bindgenStart(ns, exports);
+        // The page sends no call before 'ready', so nothing reaches the
+        // instance while this is pending.
+        await hosts.attach({ exports, memory: mem, actor: m.actor });
         exports.frustrate_web_init();
         // Tell the executor this instance is an actor's: on threaded builds
         // its Scheduler must use the microtask drain above rather than the
