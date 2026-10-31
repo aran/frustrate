@@ -17,8 +17,9 @@ pub use frustrate_macros::no_block;
 
 /// What `#[frustrate::no_block(allow)]` makes a function call first, in the
 /// no_block check's build only. It does nothing and is never inlined, so the
-/// native scanner finds the call in the function that made it; the export
-/// name is how it knows this function.
+/// scanner finds the call in the function that made it. The native scanner
+/// knows this function by its export name; a wasm check module exports only
+/// its roots, so there the scanner knows it by its path.
 #[doc(hidden)]
 #[cfg(frustrate_block_check)]
 #[inline(never)]

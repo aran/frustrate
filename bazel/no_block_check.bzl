@@ -275,18 +275,27 @@ def _sink_args(ctx):
 def _allow_args(ctx):
     return [a for s in ctx.attr.allow for a in ["--allow", s]]
 
-def _verdict_test(ctx, inputs, arguments, mnemonic, extra_outputs = {}):
+def _verdict_test(ctx, inputs, arguments, mnemonic, extra_outputs = {}, applied = False):
     """Run the scanner as a build action and make its verdict a test.
 
     A red verdict fails the action, so the test fails to build; a test that
     runs is green, and its log is what was checked. The test's executable is
     the scanner itself, told by the environment to print the verdict.
+
+    With `applied`, the action also writes the silences it applied, as the
+    `silences` output group, for the declaration's `.silences` test.
     """
     verdict = ctx.actions.declare_file(ctx.label.name + ".verdict")
+    outputs = [verdict]
+    if applied:
+        applied_file = ctx.actions.declare_file(ctx.label.name + ".applied")
+        outputs.append(applied_file)
+        arguments = ["--applied", applied_file.path] + arguments
+        extra_outputs = extra_outputs | {"silences": depset([applied_file])}
     ctx.actions.run(
         executable = ctx.executable._block_check,
         inputs = inputs,
-        outputs = [verdict],
+        outputs = outputs,
         arguments = arguments + [str(ctx.label), verdict.path],
         mnemonic = mnemonic,
         progress_message = "checking no_block claims in %{label}",
@@ -318,6 +327,7 @@ _SCANNER_ATTRS = {
 }
 
 _SINK_ATTRS = {
+    "allow": attr.string_list(),
     "io": attr.string_list(),
     "slow": attr.string_list(),
 }
@@ -348,11 +358,12 @@ def _wasm_test_impl(ctx):
     return _verdict_test(
         ctx,
         [wasm[0], census],
-        (["--wasi"] if ctx.attr.wasi else []) + _sink_args(ctx) +
+        (["--wasi"] if ctx.attr.wasi else []) + _sink_args(ctx) + _allow_args(ctx) +
         ["--claims", census.path, wasm[0].path],
         "FrustrateWasmBlockCheck",
         # The module, for `wasm-tools` or the scanner's `--report`.
         {"module": depset(wasm)},
+        applied = True,
     )
 
 _wasm_test = rule(
@@ -377,13 +388,13 @@ def _native_test_impl(ctx):
         [ir, census],
         ["--ir"] + _sink_args(ctx) + _allow_args(ctx) + ["--claims", census.path, ir.path],
         "FrustrateNativeBlockCheck",
+        applied = True,
     )
 
 _native_test = rule(
     implementation = _native_test_impl,
     test = True,
     attrs = _SCANNER_ATTRS | _SINK_ATTRS | {
-        "allow": attr.string_list(),
         "crate": attr.label(
             mandatory = True,
             cfg = _native_check_transition,
@@ -393,6 +404,28 @@ _native_test = rule(
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
+    },
+)
+
+def _silences_test_impl(ctx):
+    census = _census(ctx)
+    applied = [f for c in ctx.attr.checks for f in c[OutputGroupInfo].silences.to_list()]
+    return _verdict_test(
+        ctx,
+        [census] + applied,
+        _allow_args(ctx) + ["--silences", census.path] + [f.path for f in applied],
+        "FrustrateNoBlockSilences",
+    )
+
+# A silence's name is what one target's finding names, so only the union of
+# the analyses can say one matches nothing. Depending on every analysis makes
+# this incompatible wherever one of them is, so it is never judged on a part.
+_silences_test = rule(
+    implementation = _silences_test_impl,
+    test = True,
+    attrs = _SCANNER_ATTRS | {
+        "allow": attr.string_list(),
+        "checks": attr.label_list(mandatory = True, providers = [OutputGroupInfo]),
     },
 )
 
@@ -506,6 +539,10 @@ def frustrate_no_block_check(
       the stock std, scanned for `poll_oneoff` (wasip1's only wait), `slow`,
       and `io`. Hermetic.
 
+    And `<name>.silences`, which fails on a silence that no analysis
+    applied (see `allow`). It needs every analysis, so it is SKIPPED wherever
+    one of them is.
+
     SKIPPED is Bazel's report that an analysis cannot run here, not a pass:
     it is in every `bazel test` summary, and naming the skipped test directly
     is an error that says why.
@@ -572,15 +609,17 @@ def frustrate_no_block_check(
         Writes to an open descriptor are in no class, because stdout, stderr
         and the panic report are such writes. //bazel/wasm_block_check/io.rs
         has the maps and what each covers.
-      allow: For the native analyses: silences for every claim the target
-        checks, for code you cannot annotate. A name is what a finding says to silence
-        it as. In your own code, put `#[frustrate::no_block(allow)]` on the
-        function instead; for one member's finding, `no_block(allow(<name>))`
-        in its `#[bridge(...)]`, its impl's, or its file's `bridge_file!`. The
-        check lists every silence it applied, and fails on one that silences
-        nothing. Only the native analyses read silences, these and the ones
-        in source: `web_threads` and `wasi` neither apply them nor fail on
-        them.
+      allow: Silences for every claim the target checks, for code you cannot
+        annotate. A name is what a finding says to silence it as, and each
+        analysis names its findings its own way (natively a wait is the C
+        function that waits, on `web_threads` the function holding the wait
+        instruction), so a finding on two targets wants a name for each. In
+        your own code, put `#[frustrate::no_block(allow)]` on the function
+        instead, which every analysis reads the same way; for one member's
+        finding, `no_block(allow(<name>))` in its `#[bridge(...)]`, its
+        impl's, or its file's `bridge_file!`. Each analysis lists the
+        silences it applied, and `<name>.silences` fails on one that none of
+        them applied.
       **kwargs: Common attributes (`tags`, `visibility`, `size`, ...) for
         every test and the suite.
     """
@@ -608,9 +647,6 @@ def frustrate_no_block_check(
     if io and not [t for t in analyses if t in _NATIVE or t == "wasi"]:
         fail("frustrate_no_block_check: %s names `io`, but only the native " % name +
              "targets and `wasi` check IO: a web build has none that blocks.")
-    if allow and not [t for t in analyses if t in _NATIVE]:
-        fail("frustrate_no_block_check: %s names `allow`, which only the " % name +
-             "native analyses read.")
 
     tags = kwargs.pop("tags", [])
     compatible = kwargs.pop("target_compatible_with", [])
@@ -640,6 +676,7 @@ def frustrate_no_block_check(
             bridge = bridge,
             crate = crate,
             slow = slow,
+            allow = allow,
             platform = Label("//bazel:wasm32_threads"),
             tags = tags,
             target_compatible_with = compatible + (
@@ -655,6 +692,7 @@ def frustrate_no_block_check(
             crate = crate,
             slow = slow,
             io = io,
+            allow = allow,
             platform = Label("//bazel:wasm32_wasi"),
             wasi = True,
             tags = tags,
@@ -662,6 +700,16 @@ def frustrate_no_block_check(
             **kwargs
         )
         tests.append(name + ".wasi")
+    _silences_test(
+        name = name + ".silences",
+        bridge = bridge,
+        checks = [":" + t for t in tests],
+        allow = allow,
+        tags = tags,
+        target_compatible_with = compatible,
+        **kwargs
+    )
+    tests.append(name + ".silences")
     native.test_suite(
         name = name,
         tests = [":" + t for t in tests],

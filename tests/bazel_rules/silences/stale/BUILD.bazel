@@ -1,0 +1,56 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+
+# Silences that silence nothing on any analysis. See ../BUILD.bazel.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "silences_stale",
+    package_name = "silences_stale",
+    module_paths = ["crate::api"],
+)
+
+rust_shared_library(
+    name = "stale_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "silences_stale",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+# Manual: its `.silences` is meant to fail. The analyses are green, and
+# ../silences_test reads what they applied.
+frustrate_no_block_check(
+    name = "stale_check",
+    bridge = ":bridge",
+    crate = ":stale_shared",
+    tags = ["manual"],
+    targets = [
+        "macos",
+        "wasi",
+    ],
+)
+
+filegroup(
+    name = "census",
+    srcs = [":bridge"],
+    output_group = "claims",
+    visibility = ["//tests/bazel_rules/silences:__pkg__"],
+)
+
+filegroup(
+    name = "applied",
+    srcs = [
+        ":stale_check.macos_aarch64",
+        ":stale_check.wasi",
+    ],
+    output_group = "silences",
+    testonly = True,
+    visibility = ["//tests/bazel_rules/silences:__pkg__"],
+)

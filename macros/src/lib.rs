@@ -188,7 +188,7 @@ pub fn bridge_file(_input: TokenStream) -> TokenStream {
 /// function. In an ordinary build the function is emitted unchanged. Under
 /// `--cfg frustrate_block_check` (the no_block check's build) it is
 /// `#[inline(never)]`, and its body begins with a call to
-/// `frustrate::__no_block_allow`, which the native scanner reads as a stop
+/// `frustrate::__no_block_allow`, which every analysis reads as a stop
 /// point. A call in the body survives every generic instantiation, which a
 /// static could not; `inline(never)` keeps the call from moving into a
 /// caller, which would widen the silence to the caller.

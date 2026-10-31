@@ -55,10 +55,10 @@
 //! `#[frustrate::no_block(allow)]` calls [`MARKER`] first, and a function
 //! that calls it is a stop point: no claim's traversal enters it, so it and
 //! everything it reaches are excluded, the bounded lock's section proof
-//! included. Each applied silence is listed in the verdict, and one that
-//! silences nothing is an error (for a marked function: one a claimed member
-//! reaches, whose subtree holds no finding), so a silence cannot outlive what
-//! it was for. A marked function no claim reaches is ignored.
+//! included. Each applied silence is listed in the verdict and written for
+//! [`super::silences`], which fails on one that no analysis of the check
+//! target applied (for a marked function: one a claimed member reaches, whose
+//! subtree holds no finding). A marked function no claim reaches is ignored.
 //!
 //! # What green does not cover
 //!
@@ -80,7 +80,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::libc::{self, Libc};
-use super::{match_census, own_path, readable, Claims, Sinks, FATAL_ENTRIES, ROOT_PREFIX};
+use super::silences::{Applied, Silence};
+use super::{match_census, own_path, readable, Claims, Green, Sinks, FATAL_ENTRIES, ROOT_PREFIX};
 
 /// The export name `runtime/rust/src/bounded.rs` gives the bounded lock's
 /// acquire in the check build.
@@ -453,7 +454,7 @@ fn is_member(path: &[String], krate: &str, want: &[String], display: &[&str]) ->
 /// a free function's mangling (`_RI`, then `N<ns>`s, then `C`). A symbol of
 /// another shape (an instance of a generic method, say) keeps all its
 /// segments, so each of its instances stands alone.
-fn marked_key(sym: &str) -> (String, bool) {
+pub(crate) fn marked_key(sym: &str) -> (String, bool) {
     let mut path = own_path(sym);
     let mut grouped = true;
     if let Some(rest) = sym.strip_prefix("_RI") {
@@ -541,7 +542,7 @@ pub(crate) fn run_ir(
     label: &str,
     claims: Option<&Claims>,
     sinks: &Sinks,
-) -> Result<String, String> {
+) -> Result<Green, String> {
     super::budget::set(path, label);
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
     let mut ir = parse(&text).map_err(|e| format!("wasm_block_check: {label}: {e}"))?;
@@ -764,7 +765,6 @@ pub(crate) fn run_ir(
         .filter(|(_, k)| sinks.allowed.iter().any(|w| w == *k))
         .map(|(s, _)| *s)
         .collect();
-    let all_kinds = kinds.clone();
     for s in &target_silenced {
         kinds.remove(s);
     }
@@ -800,12 +800,12 @@ pub(crate) fn run_ir(
         }
     }
     let empty: Vec<String> = Vec::new();
-    let member_allow = |sym: &str| -> &Vec<String> {
+    let member_allow = |sym: &str| -> (&str, &Vec<String>) {
         claims
-            .and_then(|c| c.ids.get(sym).and_then(|id| c.allow.get(id)))
-            .unwrap_or(&empty)
+            .and_then(|c| c.ids.get(sym).and_then(|id| c.allow.get(id).map(|a| (id.as_str(), a))))
+            .unwrap_or(("", &empty))
     };
-    let mut stale: Vec<String> = Vec::new();
+    let mut applied = Applied::default();
     let mut silences: Vec<String> = Vec::new();
     // Marked functions a claim reaches, by path: whether any of the
     // instances holds a finding the marker keeps out of the verdict.
@@ -832,7 +832,7 @@ pub(crate) fn run_ir(
         for g in closure.iter().filter(|g| target_silenced.contains(g)) {
             used_target.insert(key_of[g].clone());
         }
-        let mine = member_allow(sym);
+        let (id, mine) = member_allow(sym);
         let mut used_mine: BTreeSet<&str> = BTreeSet::new();
         let reached: BTreeSet<u32> = closure
             .iter()
@@ -849,16 +849,9 @@ pub(crate) fn run_ir(
                 None => true,
             })
             .collect();
-        for w in mine {
-            if used_mine.contains(w.as_str()) {
-                silences.push(format!("  `{w}` in {}", display(sym)));
-            } else {
-                stale.push(format!(
-                    "  `{w}` on {}: its closure reaches nothing by that name that \
-                     this check cannot verify",
-                    display(sym)
-                ));
-            }
+        for w in mine.iter().filter(|w| used_mine.contains(w.as_str())) {
+            silences.push(format!("  `{w}` in {}", display(sym)));
+            applied.silences.insert(Silence::Member(id.to_string(), w.clone()));
         }
         // Red ahead of unprovable: a wait is the finding when there is one.
         let worst = reached.iter().map(|f| kinds[f].0).min();
@@ -914,54 +907,18 @@ pub(crate) fn run_ir(
         }
     }
 
-    // Silences on claims with no root silence nothing.
-    if let Some(c) = claims {
-        let rooted: BTreeSet<&String> = c.roots().filter_map(|(s, _)| c.ids.get(s)).collect();
-        for (id, entries) in &c.allow {
-            if rooted.contains(id) {
-                continue;
-            }
-            let who = c.ids.iter().find(|(_, i)| *i == id).map(|(k, _)| k.as_str()).unwrap_or(id);
-            for w in entries {
-                stale.push(format!(
-                    "  `{w}` on {who}: the claim is settled without a root, so nothing \
-                     it reaches is scanned"
-                ));
-            }
-        }
-    }
-    for (path, live) in &marks {
-        if *live {
+    for (path, live) in marks {
+        if live {
             silences.push(format!("  `{path}` in every claim (`#[frustrate::no_block(allow)]`)"));
+            applied.silences.insert(Silence::Mark(path));
         } else {
-            stale.push(format!(
-                "  `{path}` (`#[frustrate::no_block(allow)]`): a claimed member reaches it, \
-                 but nothing it reaches is a finding"
-            ));
+            applied.idle_marks.insert(path);
         }
     }
-    for w in &sinks.allowed {
-        if used_target.contains(w) {
-            silences.push(format!("  `{w}` in every claim (the check target's `allow`)"));
-        } else {
-            stale.push(format!(
-                "  `{w}` in the check target's `allow`: no claim or bounded-lock \
-                 section reaches anything by that name that this check cannot verify"
-            ));
-        }
+    for w in sinks.allowed.iter().filter(|w| used_target.contains(*w)) {
+        silences.push(format!("  `{w}` in every claim (the check target's `allow`)"));
+        applied.silences.insert(Silence::Target(w.clone()));
     }
-    if !stale.is_empty() {
-        return Err(format!(
-            "wasm_block_check: {label}: {} silence(s) silence nothing:\n\n{}\n\n\
-             A silence that matches nothing would hide whatever later comes to \
-             match it, so it is an error rather than a no-op. Remove it, or \
-             correct what it names to what the check reports (for an attribute, \
-             remove `#[frustrate::no_block(allow)]` from the function).",
-            stale.len(),
-            stale.join("\n")
-        ));
-    }
-    let _ = &all_kinds;
     let silence_note = if silences.is_empty() {
         String::new()
     } else {
@@ -975,7 +932,7 @@ pub(crate) fn run_ir(
     };
 
     if findings.is_empty() {
-        return Ok(format!(
+        let text = format!(
             "wasm_block_check: {label} is clean — {} `no_block` root(s) on `{}` reach \
              only externals known not to wait{sink_note}; {}{}.{silence_note}",
             roots.len(),
@@ -986,7 +943,8 @@ pub(crate) fn run_ir(
                 "no bounded lock is present"
             },
             claims.map(Claims::accounting).unwrap_or_default()
-        ));
+        );
+        return Ok(Green { text, applied });
     }
 
     findings.sort_by_key(|f| f.verdict);
@@ -1106,6 +1064,10 @@ mod tests {
     const HEAD: &str = "target triple = \"arm64-apple-macosx11.0.0\"\n";
 
     fn run_text(text: &str, claims: Option<&Claims>, sinks: &Sinks) -> Result<String, String> {
+        run_green(text, claims, sinks).map(|g| g.text)
+    }
+
+    fn run_green(text: &str, claims: Option<&Claims>, sinks: &Sinks) -> Result<Green, String> {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!("ir_block_check_{}", std::process::id()));
@@ -1383,12 +1345,21 @@ mod tests {
         }
     }
 
+    /// A silence that silences nothing here is not applied; whether another
+    /// analysis applies it is `--silences`' question.
     #[test]
-    fn a_silence_that_silences_nothing_is_an_error() {
+    fn a_silence_that_silences_nothing_here_is_not_applied() {
         let text = format!("{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n  ret void\n}}\n");
-        let e = run_text(&text, None, &sinks_allowing(&["sqlite3_step"])).unwrap_err();
-        assert!(e.contains("silence nothing"), "{e}");
-        assert!(e.contains("`sqlite3_step` in the check target's `allow`"), "{e}");
+        let g = run_green(&text, None, &sinks_allowing(&["sqlite3_step"])).unwrap();
+        assert!(!g.text.contains("Silenced"), "{}", g.text);
+        assert!(g.applied.silences.is_empty());
+        let g = run_green(
+            &format!("{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n  call i32 @sqlite3_step(ptr null)\n  ret void\n}}\ndeclare i32 @sqlite3_step(ptr)\n"),
+            None,
+            &sinks_allowing(&["sqlite3_step"]),
+        )
+        .unwrap();
+        assert!(g.applied.silences.contains(&Silence::Target("sqlite3_step".into())));
     }
 
     /// A member's own silence covers that member and no other.
@@ -1443,15 +1414,15 @@ mod tests {
     }
 
     #[test]
-    fn a_marked_function_whose_subtree_holds_no_finding_fails_the_check() {
-        let e = run_text(
+    fn a_marked_function_whose_subtree_holds_no_finding_is_idle() {
+        let g = run_green(
             &marked("  call void @_RNvCs1_7example4wrap()\n", "  call ptr @malloc(i64 8)\n"),
             None,
             &Sinks::default(),
         )
-        .unwrap_err();
-        assert!(e.contains("silence nothing"), "{e}");
-        assert!(e.contains("`example::wrap` (`#[frustrate::no_block(allow)]`)"), "{e}");
+        .unwrap();
+        assert!(g.applied.silences.is_empty());
+        assert!(g.applied.idle_marks.contains("example::wrap"));
     }
 
     #[test]

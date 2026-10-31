@@ -39,6 +39,14 @@
 //! mangled Rust symbols), that every *function* export is a check root, and that
 //! there is at least one root — a gate over zero roots gates nothing.
 //!
+//! **Silences**, as natively ([`ir`]): a red site is silenced by naming it (a
+//! function by its path, an import by its field) in `--allow` for every claim
+//! or in a census `allow` row for one member, and a function marked
+//! `#[frustrate::no_block(allow)]` (one that calls [`MARKER_PATH`] first) is a
+//! stop point no root's walk enters. What was applied is written for
+//! [`silences`], which judges every silence across the check target's
+//! analyses.
+//!
 //! # Not every claim wants an artifact
 //!
 //! `no_block` says a caller on the Dart main thread cannot be stalled. A body
@@ -113,6 +121,7 @@ mod io;
 mod provenance;
 mod ir;
 mod libc;
+mod silences;
 
 #[global_allocator]
 static ALLOC: budget::Budgeted = budget::Budgeted;
@@ -290,6 +299,20 @@ const FATAL_ENTRIES: &[FatalEntry] = &[
 /// wakes, it never blocks, and it is legal on the main thread.
 const WAIT32: &str = "memory.atomic.wait32";
 const WAIT64: &str = "memory.atomic.wait64";
+
+/// The path of the function `#[frustrate::no_block(allow)]` makes a function
+/// call first, in the check build (`runtime/rust/src/lib.rs`). A wasm module
+/// knows it by its name-section path; natively it is exported as
+/// [`ir::MARKER`].
+const MARKER_PATH: &[&str] = &["frustrate", "__no_block_allow"];
+
+/// A green verdict: what was checked, and the silences that kept findings out
+/// of it.
+#[derive(Debug)]
+struct Green {
+    text: String,
+    applied: silences::Applied,
+}
 
 /// A function the project names as slow work (`--slow <path>`): a claimed
 /// body may no more reach it than a wait.
@@ -1398,6 +1421,17 @@ impl Claims {
         self.artifact.len() + self.residue.len()
     }
 
+    /// How a claim is named in a message, by its fn id.
+    fn display_of<'a>(&'a self, id: &'a str) -> &'a str {
+        let Some((key, _)) = self.ids.iter().find(|(_, i)| *i == id) else {
+            return id;
+        };
+        self.roots()
+            .find(|(s, _)| s == key)
+            .map(|(_, d)| d.as_str())
+            .unwrap_or(key)
+    }
+
     /// How the crate is named in a message.
     fn who(&self) -> String {
         if self.crate_name.is_empty() {
@@ -1487,6 +1521,20 @@ impl Claims {
 /// covers it.
 fn claims_only(label: &str, c: &Claims) -> Result<String, String> {
     c.refuse_empty(label)?;
+    let silences: Vec<String> = c
+        .allow
+        .iter()
+        .flat_map(|(id, names)| names.iter().map(move |w| format!("  `{w}` on {}", c.display_of(id))))
+        .collect();
+    if !silences.is_empty() {
+        return Err(format!(
+            "wasm_block_check: {label}: {} silence(s) silence nothing:\n\n{}\n\n\
+             Every claim here is settled by placement, so nothing it reaches is \
+             scanned and a silence on it has nothing to silence. Remove it.",
+            silences.len(),
+            silences.join("\n")
+        ));
+    }
     if c.root_count() > 0 {
         let names: Vec<String> = c
             .roots()
@@ -1519,7 +1567,7 @@ fn claims_only(label: &str, c: &Claims) -> Result<String, String> {
 /// the module alone.
 #[cfg(test)]
 fn run(path: &str, label: &str) -> Result<String, String> {
-    run_with(path, label, None, &Sinks::default())
+    run_with(path, label, None, &Sinks::default()).map(|g| g.text)
 }
 
 fn run_with(
@@ -1527,7 +1575,7 @@ fn run_with(
     label: &str,
     claims: Option<&Claims>,
     sinks: &Sinks,
-) -> Result<String, String> {
+) -> Result<Green, String> {
     budget::set(path, label);
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     let m = parse(&bytes)?;
@@ -1809,6 +1857,129 @@ fn run_with(
         exempt_fatal += 1;
     }
 
+    // Functions marked `#[frustrate::no_block(allow)]`: each calls the
+    // marker first, and no claim's walk enters one, so nothing under it is a
+    // finding.
+    let marker = m
+        .names
+        .iter()
+        .find(|(f, n)| m.scan_of(**f).is_some() && own_path(n) == MARKER_PATH)
+        .map(|(f, _)| *f);
+    let marked: BTreeSet<u32> = match marker {
+        Some(k) => (0..m.bodies.len() as u32)
+            .map(|n| n + m.func_imports)
+            .filter(|f| *f != k && m.scan_of(*f).is_some_and(|s| s.calls.contains(&k)))
+            .collect(),
+        None => BTreeSet::new(),
+    };
+    let mut stops = cut.clone();
+    stops.extend(&marked);
+
+    // What a silence names: an import by its field, a function by its path.
+    let key_of = |f: u32| -> String {
+        match m.imports.get(f as usize) {
+            Some((_, field)) => field.clone(),
+            None => m
+                .names
+                .get(&f)
+                .map(|n| own_path(n).join("::"))
+                .unwrap_or_else(|| m.label(f)),
+        }
+    };
+    // The check target's silences apply to every claim.
+    let target_silenced: BTreeSet<u32> = red
+        .iter()
+        .map(|w| w.func)
+        .filter(|f| sinks.allowed.contains(&key_of(*f)))
+        .collect();
+    let findable: BTreeSet<u32> = red
+        .iter()
+        .map(|w| w.func)
+        .filter(|f| !target_silenced.contains(f))
+        .collect();
+    let display = |sym: &str| -> String {
+        claims
+            .and_then(|c| c.roots().find(|(s, _)| s == sym).map(|(_, d)| d.clone()))
+            .unwrap_or_else(|| sym.to_string())
+    };
+    let empty: Vec<String> = Vec::new();
+    let member_allow = |sym: &str| -> (&str, &Vec<String>) {
+        claims
+            .and_then(|c| c.ids.get(sym).and_then(|id| c.allow.get(id).map(|a| (id.as_str(), a))))
+            .unwrap_or(("", &empty))
+    };
+    let mut applied = silences::Applied::default();
+    let mut listed: Vec<String> = Vec::new();
+    let mut used_target: BTreeSet<String> = BTreeSet::new();
+    // Marked functions a claim reaches, by path: whether any instance holds a
+    // finding the marker keeps out of the verdict.
+    let mut marks: BTreeMap<String, bool> = BTreeMap::new();
+    // Grouped by member, because that is the unit an author fixes: one slow
+    // marker reached from forty members is forty findings, not one. Each
+    // member gets the shortest path to the nearest site it reaches.
+    let mut members: Vec<(String, Vec<u32>, usize)> = Vec::new();
+    for (r, sym) in roots.iter().zip(&root_names) {
+        let closure = reach(&m, &[*r], &stops);
+        for k in marked.iter().filter(|k| {
+            closure
+                .iter()
+                .any(|f| m.scan_of(*f).is_some_and(|s| s.calls.contains(k)))
+        }) {
+            let (key, grouped) = ir::marked_key(m.names.get(k).map(String::as_str).unwrap_or(""));
+            // An instance of a generic method is not grouped with its siblings,
+            // so it is never called idle: a sibling may hold the finding.
+            let mut inside = stops.clone();
+            inside.remove(k);
+            let live = !grouped || reach(&m, &[*k], &inside).iter().any(|f| findable.contains(f));
+            *marks.entry(key).or_default() |= live;
+        }
+        used_target.extend(closure.iter().filter(|f| target_silenced.contains(f)).map(|f| key_of(*f)));
+        let (id, mine) = member_allow(sym);
+        let mut used_mine: BTreeSet<String> = BTreeSet::new();
+        let reached: BTreeSet<u32> = closure
+            .iter()
+            .copied()
+            .filter(|f| findable.contains(f))
+            .filter(|f| {
+                let k = key_of(*f);
+                let silenced = mine.contains(&k);
+                if silenced {
+                    used_mine.insert(k);
+                }
+                !silenced
+            })
+            .collect();
+        for w in mine.iter().filter(|w| used_mine.contains(*w)) {
+            listed.push(format!("  `{w}` in {}", display(sym)));
+            applied.silences.insert(silences::Silence::Member(id.to_string(), w.clone()));
+        }
+        if let Some(path) = witness(&m, &[*r], &reached, &stops) {
+            members.push((display(sym), path, reached.len()));
+        }
+    }
+    // Live only from the start function: no member to name.
+    let from_start: BTreeSet<u32> = match m.start {
+        Some(st) => reach(&m, &[st], &stops),
+        None => BTreeSet::new(),
+    };
+    used_target.extend(from_start.iter().filter(|f| target_silenced.contains(f)).map(|f| key_of(*f)));
+    let start_red: Vec<&&Finding> = red
+        .iter()
+        .filter(|w| findable.contains(&w.func) && from_start.contains(&w.func))
+        .collect();
+    for (path, live) in marks {
+        if live {
+            listed.push(format!("  `{path}` in every claim (`#[frustrate::no_block(allow)]`)"));
+            applied.silences.insert(silences::Silence::Mark(path));
+        } else {
+            applied.idle_marks.insert(path);
+        }
+    }
+    for w in sinks.allowed.iter().filter(|w| used_target.contains(*w)) {
+        listed.push(format!("  `{w}` in every claim (the check target's `allow`)"));
+        applied.silences.insert(silences::Silence::Target(w.clone()));
+    }
+
     let slow_note = if sinks.is_empty() {
         String::new()
     } else {
@@ -1829,45 +2000,31 @@ fn run_with(
         }
         _ => "",
     };
-    if red.is_empty() {
-        return Ok(format!(
+    if members.is_empty() && start_red.is_empty() {
+        let silence_note = if listed.is_empty() {
+            String::new()
+        } else {
+            format!("\nSilenced:\n{}", listed.join("\n"))
+        };
+        let text = format!(
             "wasm_block_check: {label} is clean — {} `no_block` root(s){slow_note}, \
-             {} site(s) exempt on the fatal-path rule, {} on the start function{}.{no_waits}",
+             {} site(s) exempt on the fatal-path rule, {} on the start function{}.{no_waits}{silence_note}",
             roots.len(),
             exempt_fatal,
             exempt_start,
             claims.map(Claims::accounting).unwrap_or_default()
-        ));
+        );
+        return Ok(Green { text, applied });
     }
 
-    // Grouped by member, because that is the unit an author fixes: one slow
-    // marker reached from forty members is forty findings, not one. Each
-    // member gets the shortest path to the nearest site it reaches.
-    let red_set: BTreeSet<u32> = red.iter().map(|w| w.func).collect();
     let kinds_of = |f: u32| -> String {
-        red.iter()
+        let kinds = red
+            .iter()
             .find(|w| w.func == f)
             .map(|w| w.kinds.join(", "))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        format!("{kinds} (silence it as `{}`)", key_of(f))
     };
-    let display = |sym: &str| -> String {
-        claims
-            .and_then(|c| c.roots().find(|(s, _)| s == sym).map(|(_, d)| d.clone()))
-            .unwrap_or_else(|| sym.to_string())
-    };
-    let mut members: Vec<(String, Vec<u32>, usize)> = Vec::new();
-    let mut attributed: BTreeSet<u32> = BTreeSet::new();
-    for (r, sym) in roots.iter().zip(&root_names) {
-        let reached: BTreeSet<u32> = reach(&m, &[*r], &cut)
-            .intersection(&red_set)
-            .copied()
-            .collect();
-        if let Some(path) = witness(&m, &[*r], &reached, &cut) {
-            attributed.extend(reached.iter().copied());
-            members.push((display(sym), path, reached.len()));
-        }
-    }
-
     let mut msg = format!(
         "wasm_block_check: {label}: {} `#[bridge(no_block)]` member(s) reach {}.\n\n",
         members.len(),
@@ -1896,12 +2053,11 @@ fn run_with(
         }
         msg.push('\n');
     }
-    for w in red.iter().filter(|w| !attributed.contains(&w.func)) {
-        // Live only from the start function: no member to name.
+    for w in &start_red {
         msg.push_str(&format!(
             "  {} — {}, reached from the start function\n",
             m.label(w.func),
-            w.kinds.join(", ")
+            kinds_of(w.func)
         ));
     }
     msg.push_str(
@@ -1921,6 +2077,12 @@ fn run_with(
          it is honest, and\n   `on_contention` plus \
          `Capabilities::blocking_allowed` already describe a body that\n   \
          may block.\n\
+         \n\
+         If a finding cannot stall the caller in practice, silence it: \
+         `no_block(allow(<name>))` on the\nmember, its impl or its file \
+         (`bridge_file!`), or `allow` in the check target for every claim, or \
+         put\n`#[frustrate::no_block(allow)]` on a function of your own that \
+         the member reaches.\n\
          \n",
     );
     msg.push_str("Sites behind these entries are exempt, and were not counted above:\n");
@@ -2545,6 +2707,8 @@ fn main() -> ExitCode {
     let mut slow = Sinks::default();
     // `--ir`: the input is a native build's LLVM IR, not a wasm module.
     let mut ir_mode = false;
+    // `--applied <file>`: where a green check writes the silences it applied.
+    let mut applied_out: Option<String> = None;
     let mut raw = std::env::args();
     while let Some(a) = raw.next() {
         if a == "--ir" {
@@ -2554,6 +2718,16 @@ fn main() -> ExitCode {
         // `--wasi`: the module targets wasip1, so `poll_oneoff` is a wait.
         if a == "--wasi" {
             slow.wasi = true;
+            continue;
+        }
+        if a == "--applied" {
+            match raw.next() {
+                Some(v) => applied_out = Some(v),
+                None => {
+                    eprintln!("wasm_block_check: `--applied` wants a value");
+                    return ExitCode::FAILURE;
+                }
+            }
             continue;
         }
         if a != "--slow" && a != "--io" && a != "--allow" {
@@ -2575,13 +2749,6 @@ fn main() -> ExitCode {
             eprintln!("{e}");
             return ExitCode::FAILURE;
         }
-    }
-    if !ir_mode && !slow.allowed.is_empty() {
-        eprintln!(
-            "wasm_block_check: `--allow` is read only by the native analysis \
-             (`--ir`); a wasm scan would ignore it."
-        );
-        return ExitCode::FAILURE;
     }
     if let Err(e) = self_test() {
         eprintln!("wasm_block_check: {e}");
@@ -2610,12 +2777,14 @@ fn main() -> ExitCode {
     // The three gate shapes. `--claims` is what both real drivers pass; the
     // bare positional form is kept because it is what a hand run reaches for,
     // and it is the only one whose verdict rests on the module alone.
-    let usage = "usage: wasm_block_check [--wasi] [--slow <path> | --io <category>]... \
-         <module.wasm> <label> [marker-out]\n\
-         \x20      wasm_block_check [--wasi] [--slow ... | --io ...] --claims <census> <module.wasm> <label> [marker-out]\n\
-         \x20      wasm_block_check --ir [--slow <path> | --io <category> | --allow <name>]... \
+    let usage = "usage: wasm_block_check [--wasi] [--slow <path> | --io <category> | --allow <name>]... \
+         [--applied <file>] <module.wasm> <label> [marker-out]\n\
+         \x20      wasm_block_check [--wasi] [--slow ... | --io ... | --allow ...] [--applied <file>] \
+         --claims <census> <module.wasm> <label> [marker-out]\n\
+         \x20      wasm_block_check --ir [--slow ... | --io ... | --allow ...] [--applied <file>] \
          [--claims <census>] <module.ll> <label> [marker-out]\n\
          \x20      wasm_block_check --claims-only <census> <label> [marker-out]\n\
+         \x20      wasm_block_check [--allow <name>]... --silences <census> <applied>... <label> <marker-out>\n\
          \x20      wasm_block_check --report <module.wasm> [label]";
     let (verdict, marker) = match args.get(1).map(String::as_str) {
         Some("--claims") if args.len() >= 5 => {
@@ -2653,12 +2822,32 @@ fn main() -> ExitCode {
             });
             (v, args.get(5))
         }
+        // Every silence the check target declares, against the files its
+        // analyses wrote with `--applied` (silences.rs).
+        Some("--silences") if args.len() >= 5 => {
+            let n = args.len();
+            let v = std::fs::read_to_string(&args[2])
+                .map_err(|e| format!("wasm_block_check: {}: {e}", args[2]))
+                .and_then(|t| Claims::parse(&t, &args[2]))
+                .and_then(|c| {
+                    let checks = args[3..n - 2]
+                        .iter()
+                        .map(|p| {
+                            std::fs::read_to_string(p)
+                                .map_err(|e| format!("wasm_block_check: {p}: {e}"))
+                                .and_then(|t| silences::Applied::parse(&t, p))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    silences::judge(&args[n - 2], &c, &slow.allowed, &checks)
+                });
+            (v.map(|text| Green { text, applied: silences::Applied::default() }), args.get(n - 1))
+        }
         Some("--claims-only") if args.len() >= 4 => {
             let v = std::fs::read_to_string(&args[2])
                 .map_err(|e| format!("wasm_block_check: {}: {e}", args[2]))
                 .and_then(|t| Claims::parse(&t, &args[2]))
                 .and_then(|c| claims_only(&args[3], &c));
-            (v, args.get(4))
+            (v.map(|text| Green { text, applied: silences::Applied::default() }), args.get(4))
         }
         Some(flag) if flag.starts_with("--") => {
             eprintln!("{usage}");
@@ -2671,9 +2860,19 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let label = match args.get(1).map(String::as_str) {
+        Some("--claims") => args.get(4),
+        _ => args.get(2),
+    };
     match verdict {
-        Ok(report) => {
+        Ok(Green { text: report, applied }) => {
             println!("{report}");
+            if let (Some(out), Some(label)) = (&applied_out, label) {
+                if let Err(e) = std::fs::write(out, applied.text(label)) {
+                    eprintln!("wasm_block_check: writing {out}: {e}");
+                    return ExitCode::FAILURE;
+                }
+            }
             if let Some(marker) = marker {
                 // Bazel's declared output for the check action; writing it is
                 // what lets a pass be cached. The test runner prints it.
@@ -2938,7 +3137,7 @@ mod tests {
                 allowed: Vec::new(),
             };
             let c = rows.map(census).transpose()?;
-            run_with(p.to_str().unwrap(), "//pkg:target.wasm", c.as_ref(), &sinks)
+            run_with(p.to_str().unwrap(), "//pkg:target.wasm", c.as_ref(), &sinks).map(|g| g.text)
         }
 
         /// The same module through `--report`. Separate from [`Self::check`]
@@ -2973,7 +3172,7 @@ mod tests {
                     c.who()
                 ));
             }
-            run_with(p.to_str().unwrap(), "//pkg:target.wasm", Some(&c), &Sinks::default())
+            run_with(p.to_str().unwrap(), "//pkg:target.wasm", Some(&c), &Sinks::default()).map(|g| g.text)
         }
     }
 
@@ -4072,5 +4271,133 @@ mod tests {
         let e = run_with(p.to_str().unwrap(), "//pkg:t", Some(&c), &Sinks::default()).unwrap_err();
         assert!(e.contains("no longer reach their member's glue"), "{e}");
         assert!(e.contains("  tag_join"), "{e}");
+    }
+
+    // ---- silences ------------------------------------------------------
+
+    const MARKER: &str = "_RNvCs1_9frustrate16___no_block_allow";
+    const WRAP: &str = "_RNvCs1_7fixture4wrap";
+
+    /// A root that reaches the wait through `wrap`, which calls the marker
+    /// first when `marked`, and directly too when `around`.
+    fn silenced(marked: bool, around: bool) -> Build {
+        let mut wrap = if marked { call(2) } else { Vec::new() };
+        wrap.extend(call(3));
+        let mut root = call(1);
+        if around {
+            root.extend(call(3));
+        }
+        Build {
+            funcs: vec![
+                fun(ROOT, root),
+                fun(WRAP, wrap),
+                fun(MARKER, vec![0x01]),
+                fun(FUTEX_WAIT, wait()),
+                fun(PANIC_FMT, vec![0x01]),
+            ],
+            exports: vec![root_export(0)],
+            ..Default::default()
+        }
+    }
+
+    /// The scan with a census and the check target's `allow`.
+    fn check_allowing(b: &Build, rows: &str, allowed: &[&str]) -> Result<Green, String> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!("wasm_block_silences_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
+        std::fs::write(&p, b.with_glue().wasm()).unwrap();
+        let c = census(rows)?;
+        let sinks = Sinks {
+            allowed: allowed.iter().map(|a| a.to_string()).collect(),
+            ..Sinks::default()
+        };
+        run_with(p.to_str().unwrap(), "//pkg:target.wasm", Some(&c), &sinks)
+    }
+
+    const ROW: &str = "artifact 0 tag_join m::tag_join\n";
+
+    /// A finding says what silences it: the path of the function holding the
+    /// wait.
+    #[test]
+    fn a_wait_names_what_silences_it() {
+        let e = check_allowing(&silenced(false, false), ROW, &[]).unwrap_err();
+        assert!(e.contains("(silence it as `std::sys::pal::wasm::futex::futex_wait`)"), "{e}");
+    }
+
+    #[test]
+    fn a_member_silence_is_applied_and_recorded() {
+        let rows = format!("{ROW}allow 0 std::sys::pal::wasm::futex::futex_wait\n");
+        let g = check_allowing(&silenced(false, false), &rows, &[]).unwrap();
+        assert!(g.text.contains("`std::sys::pal::wasm::futex::futex_wait` in tag_join"), "{}", g.text);
+        assert!(g.applied.silences.contains(&silences::Silence::Member(
+            "0".into(),
+            "std::sys::pal::wasm::futex::futex_wait".into()
+        )));
+    }
+
+    #[test]
+    fn a_target_silence_is_applied_and_recorded() {
+        let g = check_allowing(&silenced(false, false), ROW, &["std::sys::pal::wasm::futex::futex_wait"]).unwrap();
+        assert!(g.text.contains("in every claim (the check target's `allow`)"), "{}", g.text);
+        assert!(g
+            .applied
+            .silences
+            .contains(&silences::Silence::Target("std::sys::pal::wasm::futex::futex_wait".into())));
+    }
+
+    /// A silence that matches nothing here is not an error here: another
+    /// analysis may apply it, which `--silences` settles.
+    #[test]
+    fn a_silence_that_matches_nothing_here_is_not_applied() {
+        let rows = format!("{ROW}allow 0 pthread_mutex_lock\n");
+        let g = check_allowing(&clean(), &rows, &["sqlite3_step"]).unwrap();
+        assert!(g.applied.silences.is_empty(), "{:?}", g.applied);
+    }
+
+    #[test]
+    fn a_marked_function_is_a_stop_point() {
+        let g = check_allowing(&silenced(true, false), ROW, &[]).unwrap();
+        assert!(g.text.contains("`fixture::wrap` in every claim (`#[frustrate::no_block(allow)]`)"), "{}", g.text);
+        assert!(g.applied.silences.contains(&silences::Silence::Mark("fixture::wrap".into())));
+        // The same wait reached around the marked function is still a finding.
+        let e = check_allowing(&silenced(true, true), ROW, &[]).unwrap_err();
+        assert!(e.contains("futex_wait"), "{e}");
+    }
+
+    #[test]
+    fn a_marked_function_with_nothing_under_it_is_idle() {
+        let mut b = silenced(true, false);
+        b.funcs[3].code = vec![0x01];
+        let g = check_allowing(&b, ROW, &[]).unwrap();
+        assert!(g.applied.silences.is_empty(), "{:?}", g.applied);
+        assert!(g.applied.idle_marks.contains("fixture::wrap"), "{:?}", g.applied);
+    }
+
+    /// An import is silenced by its field, as a C function is natively.
+    #[test]
+    fn an_import_is_silenced_by_its_field() {
+        let b = Build {
+            imports: vec![("wasi_snapshot_preview1", "poll_oneoff")],
+            funcs: vec![fun(ROOT, call(0)), fun(PANIC_FMT, vec![0x01])],
+            exports: vec![(ROOT.to_string(), 0, 1)],
+            ..Default::default()
+        };
+        let mut c = b.clone();
+        c.funcs[0].code = call(0);
+        let dir = std::env::temp_dir().join(format!("wasm_block_import_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("m.wasm");
+        std::fs::write(&p, c.with_glue().wasm()).unwrap();
+        let sinks = |allowed: &[&str]| Sinks {
+            wasi: true,
+            allowed: allowed.iter().map(|a| a.to_string()).collect(),
+            ..Sinks::default()
+        };
+        let e = run_with(p.to_str().unwrap(), "//pkg:t", None, &sinks(&[])).unwrap_err();
+        assert!(e.contains("(silence it as `poll_oneoff`)"), "{e}");
+        let g = run_with(p.to_str().unwrap(), "//pkg:t", None, &sinks(&["poll_oneoff"])).unwrap();
+        assert!(g.applied.silences.contains(&silences::Silence::Target("poll_oneoff".into())));
     }
 }

@@ -110,8 +110,8 @@ prove something there:
   bridge crate compiled for the platform with fat LTO, its whole-program LLVM
   IR read from each claimed member's root. A call out of the Rust program
   passes only if the platform's C library (Apple's libSystem, Android's bionic,
-  glibc) is known to return from it without waiting, or the claim or the
-  check target allows it; anything else is "cannot verify". Each library has its own
+  glibc) is known to return from it without waiting, or the claim or the check
+  target allows it; anything else is "cannot verify". Each library has its own
   list, drawn from its implementation, so the same call can differ: glibc
   registers a thread-local's destructor under the dynamic loader's lock, which
   `dlopen` holds while it runs constructors, so there a member's first use of

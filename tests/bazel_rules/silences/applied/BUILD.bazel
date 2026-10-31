@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "silences_applied",
+    package_name = "silences_applied",
+    module_paths = ["crate::api"],
+)
+
+rust_shared_library(
+    name = "applied_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "silences_applied",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+frustrate_no_block_check(
+    name = "applied_check",
+    bridge = ":bridge",
+    crate = ":applied_shared",
+    targets = [
+        "android",
+        "ios",
+        "linux",
+        "macos",
+        "web_threads",
+        "wasi",
+    ],
+)

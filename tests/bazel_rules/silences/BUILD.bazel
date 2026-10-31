@@ -1,0 +1,28 @@
+load("@rules_dart//dart:defs.bzl", "dart_test")
+
+# Silences across a check target's analyses. A finding's name differs per
+# target, so `<name>.silences` judges every silence against what all the
+# analyses applied:
+#
+# - applied: `:applied_check` is green only if each silence is applied by some
+#   analysis. `read` names each native C library's wait (Apple's, then the
+#   futex both Linux libraries wait in) and the threaded-web one, each of which
+#   only its own analyses apply; `add` reaches a `Mutex` through a
+#   marked function, which every analysis stops at, and which finds nothing
+#   under it on wasip1.
+# - stale: a member silence and a marked function that no analysis applies.
+#   Its `.silences` cannot be a target that fails, so silences_test runs the
+#   scanner's `--silences` over what its analyses wrote and asserts it fails.
+dart_test(
+    name = "silences_test",
+    data = [
+        "//bazel/wasm_block_check",
+        "//tests/bazel_rules/silences/stale:applied",
+        "//tests/bazel_rules/silences/stale:census",
+    ],
+    main = "silences_test.dart",
+    deps = [
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)

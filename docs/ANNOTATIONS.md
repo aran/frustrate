@@ -69,16 +69,19 @@ claim — on the member, its impl block, or `bridge_file!(no_block(allow(...)))`
 — and silences a finding that names `name` for the claims in that scope; the
 check target's `allow` does the same for every claim it checks, for what a
 dependency or the build decides. `name` is
-what the finding says to silence it as. The check lists every silence it
-applied, and a silence that matches nothing is an error. Only the native check
-reads silences, these and the attribute below: on threaded web and wasip1 a
-silenced finding stays red, and a silence is neither applied nor checked.
+what the finding says to silence it as. Each target names a finding its own
+way: natively a wait is the C function that waits (`pthread_mutex_lock` on
+Apple platforms; on Android and Linux std's locks wait in a futex,
+`syscall::SYS_futex::FUTEX_WAIT_BITSET`), on threaded web the function holding
+the wait instruction, so a finding on two targets wants a name for each. Each analysis lists the silences it applied, and
+the check target's `.silences` test fails on a silence that none of its
+analyses applied.
 
 **Silencing a whole function:** `#[frustrate::no_block(allow)]` on a function
 of your own — free, a method or generic — means a claimed member that reaches
-it is fine there: the native check does not follow into it, so nothing it calls
-is a finding. It also takes the function out of the bounded lock's section
-proof. Use it for your own code, including a small wrapper that narrows a
+it is fine there: no analysis follows into it, so nothing it calls is a
+finding, on any target. Natively it also takes the function out of the bounded
+lock's section proof. Use it for your own code, including a small wrapper that narrows a
 third-party call to one call site:
 
 ```rust
@@ -89,8 +92,8 @@ fn lock_uncontended_here(m: &Mutex<State>) -> MutexGuard<'_, State> { m.lock().u
 Use the check target's `allow` for code you cannot annotate, and the member's
 `allow` as a convenience when the name is enough. In an ordinary build the
 function is unchanged; the attribute costs nothing in release. The attribute
-fails the check when a claimed member reaches the function but nothing under it
-would be a finding; a marked function no claim reaches is ignored.
+fails `.silences` when a claimed member reaches the function but no analysis
+finds anything under it; a marked function no claim reaches is ignored.
 
 ## `native_only`
 
