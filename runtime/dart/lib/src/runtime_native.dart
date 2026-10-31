@@ -101,7 +101,83 @@ typedef _IdleNotifyDart = void Function(int);
 typedef _IdleReadC = Uint64 Function();
 typedef _IdleReadDart = int Function();
 
-/// The native library that serves a bridge's exports, resolved by name.
+/// The Rust runtime's own exports, by name: one each per library, however
+/// many bridges it links. Generated bridge libraries name these in their
+/// `@Native` declarations, so each symbol is spelled once, here.
+abstract final class RuntimeSymbol {
+  static const callCancel = 'frustrate_call_cancel';
+  static const bufferFree = 'frustrate_buffer_free';
+  static const initDl = 'frustrate_init_dl';
+  static const exitPort = 'frustrate_exit_port';
+  static const runtimeAbi = 'frustrate_runtime_abi';
+  static const callbackRespond = 'frustrate_callback_respond';
+  static const streamCancel = 'frustrate_stream_cancel';
+  static const streamPause = 'frustrate_stream_pause';
+  static const streamResume = 'frustrate_stream_resume';
+  static const residentAttach = 'frustrate_resident_attach';
+  static const residentReclaimable = 'frustrate_resident_reclaimable';
+  static const residentLeaked = 'frustrate_resident_leaked';
+  static const actorSpawn = 'frustrate_actor_spawn';
+  static const actorShutdown = 'frustrate_actor_shutdown';
+  static const actorRetain = 'frustrate_actor_retain';
+  static const actorRelease = 'frustrate_actor_release';
+  static const actorReap = 'frustrate_actor_reap';
+  static const manualDrain = 'frustrate_manual_drain';
+  static const idleNotify = 'frustrate_idle_notify';
+  static const idlePending = 'frustrate_idle_pending';
+  static const idleGeneration = 'frustrate_idle_generation';
+}
+
+/// The fixed exports the native runtime resolves through a [BridgeLibrary]:
+/// the Rust runtime's own ([RuntimeSymbol]) and the entries every bridge's
+/// glue defines under its crate name ([FrustrateBridge.symbol]).
+///
+/// A generated bridge library answers [BridgeLibrary.address] with an
+/// exhaustive `switch` over these, so an export added here and not to codegen
+/// fails to compile in the bindings rather than at first use.
+enum NativeExport {
+  callCancel(RuntimeSymbol.callCancel),
+  bufferFree(RuntimeSymbol.bufferFree),
+  initDl(RuntimeSymbol.initDl),
+  exitPort(RuntimeSymbol.exitPort),
+  runtimeAbi(RuntimeSymbol.runtimeAbi),
+  callbackRespond(RuntimeSymbol.callbackRespond),
+  streamCancel(RuntimeSymbol.streamCancel),
+  streamPause(RuntimeSymbol.streamPause),
+  streamResume(RuntimeSymbol.streamResume),
+  residentAttach(RuntimeSymbol.residentAttach),
+  residentReclaimable(RuntimeSymbol.residentReclaimable),
+  residentLeaked(RuntimeSymbol.residentLeaked),
+  actorSpawn(RuntimeSymbol.actorSpawn),
+  actorShutdown(RuntimeSymbol.actorShutdown),
+  actorRetain(RuntimeSymbol.actorRetain),
+  actorRelease(RuntimeSymbol.actorRelease),
+  actorReap(RuntimeSymbol.actorReap),
+  manualDrain(RuntimeSymbol.manualDrain),
+  idleNotify(RuntimeSymbol.idleNotify),
+  idlePending(RuntimeSymbol.idlePending),
+  idleGeneration(RuntimeSymbol.idleGeneration),
+  callSync.bridge('call_sync'),
+  callAsync.bridge('call_async'),
+  actorCall.bridge('actor_call'),
+  schemaHash.bridge('schema_hash');
+
+  const NativeExport(String this._runtimeSymbol) : _entry = null;
+  const NativeExport.bridge(String this._entry) : _runtimeSymbol = null;
+
+  final String? _runtimeSymbol;
+  final String? _entry;
+
+  /// The name [bridge]'s library exports this under.
+  String symbolFor(FrustrateBridge bridge) =>
+      _runtimeSymbol ?? bridge.symbol(_entry!);
+}
+
+/// A handle class's two exports: the drop `dispose()` calls, and the finalize
+/// the GC path calls, which ends the object's channels as leaked.
+typedef HandleExports = ({Pointer<Void> drop, Pointer<Void> finalize});
+
+/// The native library that serves a bridge's exports.
 ///
 /// Generated bindings declare one `const` (`<crate>Bridge`) that resolves the
 /// bridge as a Dart code asset, so the build decides which library file backs
@@ -115,12 +191,16 @@ abstract class BridgeLibrary {
   /// `frustrateBridge`.
   FrustrateBridge get bridge;
 
-  /// The address of the export called [symbol].
+  /// The address of [export].
   ///
   /// Throws an [ArgumentError] when the library has no such export. The
   /// runtime relies on that for the exports a bridge may lack (the manual
   /// scheduler, actors, streams, resident types).
-  Pointer<Void> lookup(String symbol);
+  Pointer<Void> address(NativeExport export);
+
+  /// The exports of the handle class whose drop export is [dropSymbol]: the
+  /// name generated code passes to `FrustrateRuntime.handleDrop`.
+  HandleExports handle(String dropSymbol);
 
   /// [library]'s exports for [bridge], named [name] in errors.
   ///
@@ -151,7 +231,24 @@ final class _DynamicBridgeLibrary implements BridgeLibrary {
   });
 
   @override
-  Pointer<Void> lookup(String symbol) => _library.lookup<Void>(symbol);
+  Pointer<Void> address(NativeExport export) =>
+      _library.lookup<Void>(export.symbolFor(bridge));
+
+  /// A library opened by name has only names to go on, so the finalize
+  /// export is found by the glue's naming scheme: `drop_<Type>` beside
+  /// `finalize_<Type>`.
+  @override
+  HandleExports handle(String dropSymbol) {
+    final prefix = bridge.symbol('drop_');
+    if (!dropSymbol.startsWith(prefix)) {
+      throw ArgumentError.value(dropSymbol, 'dropSymbol', 'not $bridge\'s');
+    }
+    final type = dropSymbol.substring(prefix.length);
+    return (
+      drop: _library.lookup<Void>(dropSymbol),
+      finalize: _library.lookup<Void>(bridge.symbol('finalize_$type')),
+    );
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -175,9 +272,14 @@ final class _DynamicBridgeLibrary implements BridgeLibrary {
 /// discarded transport has already re-registered this isolate's exit listener
 /// (see [Frustrate.initializedFrom]).
 class FrustrateNative {
-  /// The transport this class built, and how to name it in an error.
-  static _NativeTransport? _transport;
-  static String? _description;
+  /// The native transport [Frustrate.install] recorded, if one is installed.
+  static _NativeTransport? get _transport {
+    final installed = Frustrate.installedTransport;
+    return installed is _NativeTransport ? installed : null;
+  }
+
+  static String _describe(BridgeLibrary library) =>
+      'the bridge library "${library.name}"';
 
   /// Serve [library]'s bridge from this isolate's Rust runtime, building the
   /// transport on the first call.
@@ -189,7 +291,7 @@ class FrustrateNative {
   /// same [library] again is a no-op; generated libraries are `const`, so the
   /// same one is always the same object.
   static void init(BridgeLibrary library) {
-    final description = 'the bridge library "${library.name}"';
+    final description = _describe(library);
     final transport = _transport;
     if (transport != null) {
       transport.attach(library, description);
@@ -213,8 +315,6 @@ class FrustrateNative {
       source: library,
       description: description,
     );
-    _transport = built;
-    _description = description;
   }
 
   /// The drain of the installed bridge's manual scheduler, for a test harness
@@ -247,12 +347,12 @@ class FrustrateNative {
     final _ManualDrainDart drain;
     try {
       drain = transport._primary
-          .lookup('frustrate_manual_drain')
+          .address(NativeExport.manualDrain)
           .cast<NativeFunction<_ManualDrainC>>()
           .asFunction<_ManualDrainDart>();
     } on ArgumentError {
       throw StateError(
-        'frustrate: $_description was built without the '
+        'frustrate: ${_describe(transport._primary)} was built without the '
         'manual scheduler, so its Rust tasks run on the thread pool and '
         'there is nothing to drain. Build it through '
         'frustrate_manual_scheduler_library '
@@ -282,21 +382,22 @@ class FrustrateNative {
     try {
       return IdleBarrier._(
         library
-            .lookup('frustrate_idle_notify')
+            .address(NativeExport.idleNotify)
             .cast<NativeFunction<_IdleNotifyC>>()
             .asFunction<_IdleNotifyDart>(),
         library
-            .lookup('frustrate_idle_pending')
+            .address(NativeExport.idlePending)
             .cast<NativeFunction<_IdleReadC>>()
             .asFunction<_IdleReadDart>(),
         library
-            .lookup('frustrate_idle_generation')
+            .address(NativeExport.idleGeneration)
             .cast<NativeFunction<_IdleReadC>>()
             .asFunction<_IdleReadDart>(),
       );
     } on ArgumentError {
       throw StateError(
-        'frustrate: $_description was built without the idle barrier, so '
+        'frustrate: ${_describe(library)} was built without the idle '
+        'barrier, so '
         'it counts no work. Build it through frustrate_idle_barrier_library '
         '(@frustrate//bazel:idle_barrier.bzl).',
       );
@@ -362,7 +463,7 @@ final class _NativeTransport {
 
   /// Where `frustrate_runtime_abi` resolves in [_primary]: how [attach] tells
   /// the same image from another one.
-  late final int _image = _primary.lookup('frustrate_runtime_abi').address;
+  late final int _image = _primary.address(NativeExport.runtimeAbi).address;
 
   /// Where request blocks come from. `malloc` in every shipping configuration;
   /// injectable so a test can count allocations and frees.
@@ -376,7 +477,7 @@ final class _NativeTransport {
   final Allocator _alloc;
 
   late final _BufferFreeDart _bufferFree = _primary
-      .lookup('frustrate_buffer_free')
+      .address(NativeExport.bufferFree)
       .cast<NativeFunction<_BufferFreeC>>()
       .asFunction<_BufferFreeDart>();
 
@@ -385,7 +486,7 @@ final class _NativeTransport {
   /// A runtime export since ABI 4, so every loaded bridge has it and the lookup
   /// cannot fail on a module this transport already accepted.
   late final _CallCancelDart _callCancel = _primary
-      .lookup('frustrate_call_cancel')
+      .address(NativeExport.callCancel)
       .cast<NativeFunction<_CallCancelC>>()
       .asFunction<_CallCancelDart>();
 
@@ -456,7 +557,7 @@ final class _NativeTransport {
       // and not to another isolate; a negative return is a failed handshake.
       id =
           _primary
-              .lookup('frustrate_init_dl')
+              .address(NativeExport.initDl)
               .cast<NativeFunction<_InitDlC>>()
               .asFunction<_InitDlDart>()(
             NativeApi.initializeApiDLData,
@@ -503,7 +604,7 @@ final class _NativeTransport {
   /// finds the listener installed.
   void _registerExitNotice(int id) {
     final port = _primary
-        .lookup('frustrate_exit_port')
+        .address(NativeExport.exitPort)
         .cast<NativeFunction<_ExitPortC>>()
         .asFunction<_ExitPortDart>()();
     Isolate.current.addOnExitListener(port as SendPort, response: id);
@@ -518,7 +619,7 @@ final class _NativeTransport {
     final int abi;
     try {
       abi = _primary
-          .lookup('frustrate_runtime_abi')
+          .address(NativeExport.runtimeAbi)
           .cast<NativeFunction<_RuntimeAbiC>>()
           .asFunction<_RuntimeAbiDart>()();
     } on ArgumentError catch (e) {
@@ -578,7 +679,7 @@ final class _NativeTransport {
     if (_runtimes.containsKey(library)) return;
     final int theirs;
     try {
-      theirs = library.lookup('frustrate_runtime_abi').address;
+      theirs = library.address(NativeExport.runtimeAbi).address;
     } on ArgumentError catch (e) {
       throw StateError(
         'frustrate: $description has no runtime ABI export, or did not '
@@ -678,22 +779,22 @@ final class _NativeTransport {
   // absent — and never needed. pause/resume share the cancel signature
   // (`void(u64)`).
   late final _StreamCancelDart _streamCancel = _primary
-      .lookup('frustrate_stream_cancel')
+      .address(NativeExport.streamCancel)
       .cast<NativeFunction<_StreamCancelC>>()
       .asFunction<_StreamCancelDart>();
   late final _StreamCancelDart _streamPause = _primary
-      .lookup('frustrate_stream_pause')
+      .address(NativeExport.streamPause)
       .cast<NativeFunction<_StreamCancelC>>()
       .asFunction<_StreamCancelDart>();
   late final _StreamCancelDart _streamResume = _primary
-      .lookup('frustrate_stream_resume')
+      .address(NativeExport.streamResume)
       .cast<NativeFunction<_StreamCancelC>>()
       .asFunction<_StreamCancelDart>();
 
   // Lazy like the stream/actor exports: present exactly when the bridge
   // crate has a member that needs it.
   late final _CallbackRespondDart _callbackRespond = _primary
-      .lookup('frustrate_callback_respond')
+      .address(NativeExport.callbackRespond)
       .cast<NativeFunction<_CallbackRespondC>>()
       .asFunction<_CallbackRespondDart>();
 
@@ -714,30 +815,30 @@ final class _NativeTransport {
 
   /// Looked up lazily: a bridge crate with no resident types never calls them.
   late final _ResidentAttachDart _residentAttach = _primary
-      .lookup('frustrate_resident_attach')
+      .address(NativeExport.residentAttach)
       .cast<NativeFunction<_ResidentAttachC>>()
       .asFunction<_ResidentAttachDart>();
   late final _ResidentReclaimableDart _residentReclaimable = _primary
-      .lookup('frustrate_resident_reclaimable')
+      .address(NativeExport.residentReclaimable)
       .cast<NativeFunction<_ResidentReclaimableC>>()
       .asFunction<_ResidentReclaimableDart>();
 
   // Actor exports are looked up lazily: a bridge crate with no actor types
   // doesn't have them, and never needs them.
   late final _ActorSpawnDart _actorSpawn = _primary
-      .lookup('frustrate_actor_spawn')
+      .address(NativeExport.actorSpawn)
       .cast<NativeFunction<_ActorSpawnC>>()
       .asFunction<_ActorSpawnDart>();
   late final _ActorShutdownDart _actorShutdown = _primary
-      .lookup('frustrate_actor_shutdown')
+      .address(NativeExport.actorShutdown)
       .cast<NativeFunction<_ActorShutdownC>>()
       .asFunction<_ActorShutdownDart>();
   late final _ActorRetainDart _actorRetain = _primary
-      .lookup('frustrate_actor_retain')
+      .address(NativeExport.actorRetain)
       .cast<NativeFunction<_ActorRetainC>>()
       .asFunction<_ActorRetainDart>();
   late final Pointer<NativeFunction<_DropC>> _actorReleaseFn = _primary
-      .lookup('frustrate_actor_release')
+      .address(NativeExport.actorRelease)
       .cast<NativeFunction<_DropC>>();
   late final _DropDart _actorRelease = _actorReleaseFn.asFunction<_DropDart>();
 
@@ -749,7 +850,7 @@ final class _NativeTransport {
   /// vary. A field so it stays reachable for the life of the runtime — a
   /// `NativeFinalizer` that is itself collected finalizes nothing.
   late final NativeFinalizer _actorReaper = NativeFinalizer(
-    _primary.lookup('frustrate_actor_reap').cast<NativeFunction<_DropC>>(),
+    _primary.address(NativeExport.actorReap).cast<NativeFunction<_DropC>>(),
   );
 
   /// Releases the count a `_NativeActorHost` holds on its Rust host when the
@@ -770,7 +871,7 @@ final class _NativeTransport {
   int get residentLeakCount {
     try {
       return _primary
-          .lookup('frustrate_resident_leaked')
+          .address(NativeExport.residentLeaked)
           .cast<NativeFunction<_ResidentLeakedC>>()
           .asFunction<_ResidentLeakedDart>()();
     } on ArgumentError {
@@ -853,11 +954,11 @@ final class NativeRuntime implements FrustrateRuntime {
   );
 
   late final _CallSyncDart _callSync = library
-      .lookup(servedBridge.symbol('call_sync'))
+      .address(NativeExport.callSync)
       .cast<NativeFunction<_CallSyncC>>()
       .asFunction<_CallSyncDart>();
   late final _CallAsyncDart _callAsync = library
-      .lookup(servedBridge.symbol('call_async'))
+      .address(NativeExport.callAsync)
       .cast<NativeFunction<_CallAsyncC>>()
       .asFunction<_CallAsyncDart>();
   @override
@@ -973,17 +1074,11 @@ final class NativeRuntime implements FrustrateRuntime {
     cancel: cancel,
   );
 
-  /// The finalize export beside the drop export [symbol] names.
-  String _finalizeSymbol(String symbol) => symbol.replaceFirst(
-    servedBridge.symbol('drop_'),
-    servedBridge.symbol('finalize_'),
-  );
-
   // Always present (every generated glue emits it), so looked up eagerly. The
   // u64 return comes back signed-reinterpreted in the Dart int; normalize to
   // an unsigned 64-bit BigInt to compare with the compiled-in fingerprint.
   late final _SchemaHashDart _schemaHash = library
-      .lookup(servedBridge.symbol('schema_hash'))
+      .address(NativeExport.schemaHash)
       .cast<NativeFunction<_SchemaHashC>>()
       .asFunction<_SchemaHashDart>();
 
@@ -1021,41 +1116,35 @@ final class NativeRuntime implements FrustrateRuntime {
 
   @override
   HandleDrop residentHandleDrop(String symbol) =>
-      _residentDrops[symbol] ??= ResidentHandleDrop(
-        library
-            .lookup(_finalizeSymbol(symbol))
-            .cast<NativeFunction<_DropC>>()
-            .asFunction<_DropDart>(),
-        library
-            .lookup(symbol)
-            .cast<NativeFunction<_DropC>>()
-            .asFunction<_DropDart>(),
-        _t._residentAttach,
-        _t._residentReclaimable,
-        _t._isolateId,
-      );
+      _residentDrops[symbol] ??= _lookupResidentHandleDrop(symbol);
+
+  HandleDrop _lookupResidentHandleDrop(String symbol) {
+    final exports = library.handle(symbol);
+    return ResidentHandleDrop(
+      exports.finalize.cast<NativeFunction<_DropC>>().asFunction<_DropDart>(),
+      exports.drop.cast<NativeFunction<_DropC>>().asFunction<_DropDart>(),
+      _t._residentAttach,
+      _t._residentReclaimable,
+      _t._isolateId,
+    );
+  }
 
   HandleDrop _lookupHandleDrop(String symbol) {
-    // The GC finalizer uses the drop export's `frustrate_finalize_*` sibling.
-    // Both retire whatever channels the object holds; they differ in what the
-    // terminal says. Eager dispose() closes them normally, while the finalize
-    // variant ends them as *leaked* and names the type — reaching it proves
-    // dispose() was never called, because dispose() detaches this finalizer
-    // before dropping (`stream::finalize_scope`).
-    final finalizeSymbol = _finalizeSymbol(symbol);
+    // The GC finalizer uses the type's finalize export. Both retire whatever
+    // channels the object holds; they differ in what the terminal says. Eager
+    // dispose() closes them normally, while the finalize variant ends them as
+    // *leaked* and names the type — reaching it proves dispose() was never
+    // called, because dispose() detaches this finalizer before dropping
+    // (`stream::finalize_scope`).
+    final exports = library.handle(symbol);
     return NativeHandleDrop(
-      NativeFinalizer(
-        library.lookup(finalizeSymbol).cast<NativeFunction<_DropC>>(),
-      ),
-      library
-          .lookup(symbol)
-          .cast<NativeFunction<_DropC>>()
-          .asFunction<_DropDart>(),
+      NativeFinalizer(exports.finalize.cast<NativeFunction<_DropC>>()),
+      exports.drop.cast<NativeFunction<_DropC>>().asFunction<_DropDart>(),
     );
   }
 
   late final _ActorCallDart _actorCall = library
-      .lookup(servedBridge.symbol('actor_call'))
+      .address(NativeExport.actorCall)
       .cast<NativeFunction<_ActorCallC>>()
       .asFunction<_ActorCallDart>();
 

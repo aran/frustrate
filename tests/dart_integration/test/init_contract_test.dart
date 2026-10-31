@@ -37,8 +37,12 @@ final class _AbsentBridge implements BridgeLibrary {
   FrustrateBridge get bridge => const FrustrateBridge('not_the_bridge');
 
   @override
-  Pointer<Void> lookup(String symbol) =>
-      throw ArgumentError('the absent bridge has no $symbol');
+  Pointer<Void> address(NativeExport export) =>
+      throw ArgumentError('the absent bridge has no $export');
+
+  @override
+  HandleExports handle(String dropSymbol) =>
+      throw ArgumentError('the absent bridge has no $dropSymbol');
 }
 
 void main() {

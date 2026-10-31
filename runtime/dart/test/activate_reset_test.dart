@@ -44,8 +44,12 @@ final class _AbsentBridge implements BridgeLibrary {
   FrustrateBridge get bridge => _testBridge;
 
   @override
-  Pointer<Void> lookup(String symbol) =>
-      throw StateError('the absent bridge was asked for $symbol');
+  Pointer<Void> address(NativeExport export) =>
+      throw StateError('the absent bridge was asked for $export');
+
+  @override
+  HandleExports handle(String dropSymbol) =>
+      throw StateError('the absent bridge was asked for $dropSymbol');
 }
 
 /// A transport with settable liveness, so the quiescence rule can be tested

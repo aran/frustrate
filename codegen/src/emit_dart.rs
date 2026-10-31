@@ -234,51 +234,46 @@ fn emit_surface(iface: &Interface, web: bool, dart_package: &str) -> String {
     out
 }
 
-/// Every export the Dart runtime looks up by a fixed name
-/// (`runtime/dart/lib/src/runtime_native.dart`): the runtime's own, which a
-/// library has once however many bridges it links.
+/// The Rust runtime's own exports, by their `NativeExport` value in
+/// `runtime/dart/lib/src/runtime_native.dart`, which is also the
+/// `RuntimeSymbol` constant that spells the symbol: a library has these once
+/// however many bridges it links.
+///
+/// The Dart compiler checks this list against the runtime: the bridge
+/// library's `address` is an exhaustive `switch` over `NativeExport`, so a
+/// value missing here, or a name the runtime does not have, fails to compile.
 const RUNTIME_EXPORTS: &[&str] = &[
-    "frustrate_call_cancel",
-    "frustrate_buffer_free",
-    "frustrate_init_dl",
-    "frustrate_exit_port",
-    "frustrate_runtime_abi",
-    "frustrate_callback_respond",
-    "frustrate_stream_cancel",
-    "frustrate_stream_pause",
-    "frustrate_stream_resume",
-    "frustrate_resident_attach",
-    "frustrate_resident_reclaimable",
-    "frustrate_resident_leaked",
-    "frustrate_actor_spawn",
-    "frustrate_actor_shutdown",
-    "frustrate_actor_retain",
-    "frustrate_actor_release",
-    "frustrate_actor_reap",
-    "frustrate_manual_drain",
-    "frustrate_idle_notify",
-    "frustrate_idle_pending",
-    "frustrate_idle_generation",
+    "callCancel",
+    "bufferFree",
+    "initDl",
+    "exitPort",
+    "runtimeAbi",
+    "callbackRespond",
+    "streamCancel",
+    "streamPause",
+    "streamResume",
+    "residentAttach",
+    "residentReclaimable",
+    "residentLeaked",
+    "actorSpawn",
+    "actorShutdown",
+    "actorRetain",
+    "actorRelease",
+    "actorReap",
+    "manualDrain",
+    "idleNotify",
+    "idlePending",
+    "idleGeneration",
 ];
 
-/// The fixed exports this bridge's glue defines under its crate name
-/// ([`Interface::export_symbol`]). `FrustrateBridge.symbol` in the runtime
-/// spells the same names.
-const BRIDGE_ENTRIES: &[&str] = &["call_sync", "call_async", "actor_call", "schema_hash"];
-
-/// Every export the native surface can ask the loaded library for: the
-/// runtime's, this bridge's fixed ones, and a drop and a finalizer per handle
-/// class. An actor has neither of the last two (it drops through its
-/// executor).
-fn bridge_exports(iface: &Interface) -> Vec<String> {
-    let mut exports: Vec<String> = RUNTIME_EXPORTS.iter().map(|s| s.to_string()).collect();
-    exports.extend(BRIDGE_ENTRIES.iter().map(|e| iface.export_symbol(e)));
-    for o in iface.opaques.iter().filter(|o| o.model != Model::Actor) {
-        exports.push(iface.export_symbol(&format!("drop_{}", o.name)));
-        exports.push(iface.export_symbol(&format!("finalize_{}", o.name)));
-    }
-    exports
-}
+/// The exports this bridge's glue defines under its crate name: each one's
+/// `NativeExport` value and the entry [`Interface::export_symbol`] names it by.
+const BRIDGE_ENTRIES: &[(&str, &str)] = &[
+    ("callSync", "call_sync"),
+    ("callAsync", "call_async"),
+    ("actorCall", "actor_call"),
+    ("schemaHash", "schema_hash"),
+];
 
 /// The native surface's handle on the bridge library: a `const BridgeLibrary`
 /// the app passes to `FrustrateNative.init`.
@@ -291,17 +286,37 @@ fn bridge_exports(iface: &Interface) -> Vec<String> {
 /// symbol, so an export the library lacks (a bridge with no actors, no
 /// resident types, no manual scheduler) fails only for a caller who asks for
 /// it, with the `ArgumentError` the runtime's optional-export paths expect.
+///
+/// The runtime asks for the fixed exports by `NativeExport` value and for a
+/// handle class's drop and finalize together, by the drop symbol its bindings
+/// pass to `handleDrop`. An actor has neither (it drops through its executor).
 fn emit_bridge_library(out: &mut String, iface: &Interface, dart_package: &str) {
     let crate_name = &iface.crate_name;
     let asset_id = format!("package:{dart_package}/{crate_name}");
     let class = format!("_{}Bridge", crate_name.to_upper_camel_case());
-    let exports = bridge_exports(iface);
-    for (i, symbol) in exports.iter().enumerate() {
+    let mut declared = 0;
+    let mut declare = |out: &mut String, symbol: String| {
         let _ = write!(
             out,
-            "@ffi.Native<ffi.Void Function()>(symbol: '{symbol}', assetId: '{asset_id}')\n\
-             external void _fs{i}();\n\n"
+            "@ffi.Native<ffi.Void Function()>(symbol: {symbol}, assetId: '{asset_id}')\n\
+             external void _fs{declared}();\n\n"
         );
+        declared += 1;
+        format!("ffi.Native.addressOf<ffi.NativeFunction<ffi.Void Function()>>(_fs{}).cast()", declared - 1)
+    };
+    let mut fixed = Vec::new();
+    for value in RUNTIME_EXPORTS {
+        fixed.push((value.to_string(), declare(out, format!("RuntimeSymbol.{value}"))));
+    }
+    for (value, entry) in BRIDGE_ENTRIES {
+        fixed.push((value.to_string(), declare(out, format!("'{}'", iface.export_symbol(entry)))));
+    }
+    let mut handles = Vec::new();
+    for o in iface.opaques.iter().filter(|o| o.model != Model::Actor) {
+        let drop_symbol = iface.export_symbol(&format!("drop_{}", o.name));
+        let drop = declare(out, format!("'{drop_symbol}'"));
+        let finalize = declare(out, format!("'{}'", iface.export_symbol(&format!("finalize_{}", o.name))));
+        handles.push((drop_symbol, drop, finalize));
     }
     let _ = write!(
         out,
@@ -312,27 +327,29 @@ fn emit_bridge_library(out: &mut String, iface: &Interface, dart_package: &str) 
          \x20 @override\n\
          \x20 FrustrateBridge get bridge => frustrateBridge;\n\n\
          \x20 @override\n\
-         \x20 ffi.Pointer<ffi.Void> lookup(String symbol) {{\n\
-         \x20   switch (symbol) {{\n"
+         \x20 ffi.Pointer<ffi.Void> address(NativeExport export) => switch (export) {{\n"
     );
-    for (i, symbol) in exports.iter().enumerate() {
-        let _ = write!(
-            out,
-            "      case '{symbol}':\n\
-             \x20       return ffi.Native.addressOf<ffi.NativeFunction<ffi.Void Function()>>(_fs{i}).cast();\n"
-        );
+    for (value, address) in &fixed {
+        let _ = writeln!(out, "    NativeExport.{value} => {address},");
     }
     let _ = write!(
         out,
-        "      default:\n\
-         \x20       // Not ArgumentError: that means \"the library lacks this export\",\n\
-         \x20       // which the runtime accepts for optional exports. A name missing\n\
-         \x20       // from this table is bindings and runtime disagreeing.\n\
-         \x20       throw StateError('frustrate: the {crate_name} bindings have no entry for '\n\
-         \x20           '\"$symbol\"; regenerate them with the codegen that matches '\n\
-         \x20           'package:frustrate');\n\
-         \x20   }}\n\
-         \x20 }}\n\
+        "  }};\n\n\
+         \x20 @override\n\
+         \x20 HandleExports handle(String dropSymbol) => switch (dropSymbol) {{\n"
+    );
+    for (symbol, drop, finalize) in &handles {
+        let _ = writeln!(out, "    '{symbol}' => (drop: {drop}, finalize: {finalize}),");
+    }
+    let _ = write!(
+        out,
+        "    // Not ArgumentError: that means \"the library lacks this export\".\n\
+         \x20   // A drop symbol missing from this table is bindings and runtime\n\
+         \x20   // disagreeing.\n\
+         \x20   _ => throw StateError('frustrate: the {crate_name} bindings have no '\n\
+         \x20       'handle class whose drop export is \"$dropSymbol\"; regenerate them '\n\
+         \x20       'with the codegen that matches package:frustrate'),\n\
+         \x20 }};\n\
          }}\n\n\
          /// The `{crate_name}` bridge library, resolved as the `{asset_id}` code\n\
          /// asset. Pass it to `FrustrateNative.init`.\n\
@@ -5527,7 +5544,7 @@ mod tests {
         assert!(native.contains("String get name => 'package:my_app/test_api';"), "{native}");
         assert!(native.contains("const BridgeLibrary testApiBridge = _TestApiBridge();"), "{native}");
         assert!(
-            native.contains("throw StateError('frustrate: the test_api bindings have no entry for '"),
+            native.contains("_ => throw StateError('frustrate: the test_api bindings have no '"),
             "{native}"
         );
         let web = &bindings.web;
@@ -5544,57 +5561,59 @@ mod tests {
         }
     }
 
-    /// Every export the runtime looks up by a fixed name has a `case`, and so
-    /// does the drop and finalizer of every handle class: a name missing from
-    /// the table is a handle that fails the first time it is minted.
+    /// Every fixed export has an arm in `address`, and every handle class's
+    /// drop symbol an arm in `handle` pairing its drop and finalize: a drop
+    /// symbol missing from the table is a handle that fails the first time it
+    /// is minted. That `address` covers what the runtime asks for is the Dart
+    /// compiler's to check (an exhaustive `switch` over `NativeExport`).
     #[test]
     fn the_bridge_library_names_every_export_the_generated_code_can_ask_for() {
         let native = emit_all(HANDLE_SHAPES).native;
-        let cases: Vec<&str> = native
+        let arms: Vec<&str> = native
             .lines()
-            .filter_map(|l| l.trim().strip_prefix("case '")?.strip_suffix("':"))
+            .filter_map(|l| l.trim().strip_prefix("NativeExport.")?.split_once(" => ").map(|(v, _)| v))
             .collect();
-        for fixed in super::RUNTIME_EXPORTS {
-            assert!(cases.contains(fixed), "no case for {fixed}: {cases:?}");
+        for value in super::RUNTIME_EXPORTS {
+            assert!(arms.contains(value), "no arm for {value}: {arms:?}");
+            assert!(native.contains(&format!("(symbol: RuntimeSymbol.{value}, ")), "{value} undeclared");
         }
         // The bridge's own entries are under its crate name, which is what
         // lets two bridges' tables point into one library.
-        for entry in super::BRIDGE_ENTRIES {
-            let symbol = format!("frustrate_test_api_{entry}");
-            assert!(cases.contains(&symbol.as_str()), "no case for {symbol}: {cases:?}");
+        for (value, entry) in super::BRIDGE_ENTRIES {
+            assert!(arms.contains(value), "no arm for {value}: {arms:?}");
+            assert!(
+                native.contains(&format!("(symbol: 'frustrate_test_api_{entry}', ")),
+                "{entry} undeclared"
+            );
         }
         assert!(native.contains("FrustrateBridge get bridge => frustrateBridge;"), "{native}");
-        for ty in ["Doc", "Scene", "Store"] {
+        let handles: Vec<&str> = native
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("'frustrate_test_api_drop_")?.split_once("' => (drop: "))
+            .map(|(ty, _)| ty)
+            .collect();
+        assert_eq!(handles, ["Doc", "Scene", "Store"], "{native}");
+        for ty in &handles {
             for prefix in ["frustrate_test_api_drop_", "frustrate_test_api_finalize_"] {
-                let symbol = format!("{prefix}{ty}");
-                assert!(cases.contains(&symbol.as_str()), "no case for {symbol}: {cases:?}");
+                assert!(native.contains(&format!("(symbol: '{prefix}{ty}', ")), "{prefix}{ty} undeclared");
             }
         }
         // An actor drops through its executor: no per-type export to name.
-        assert!(
-            !cases.iter().any(|c| c.ends_with("_Miner")),
-            "an actor has no drop export: {cases:?}"
-        );
-        // Every drop symbol a handle class passes to the runtime is covered.
+        assert!(!native.contains("frustrate_test_api_drop_Miner"), "an actor has no drop export: {native}");
+        // Every drop symbol a handle class passes to the runtime has an arm.
         let mut passed = 0;
         for line in native.lines() {
             let Some((_, rest)) = line.split_once("Drop('frustrate_test_api_drop_") else { continue };
             let ty = rest.split('\'').next().unwrap();
             passed += 1;
-            for prefix in ["frustrate_test_api_drop_", "frustrate_test_api_finalize_"] {
-                let symbol = format!("{prefix}{ty}");
-                assert!(cases.contains(&symbol.as_str()), "no case for {symbol}");
-            }
+            assert!(handles.contains(&ty), "no handle arm for {ty}");
         }
         assert_eq!(passed, 3, "{native}");
-        // One case per name, and each case names its own declaration.
-        let mut sorted = cases.clone();
-        sorted.sort_unstable();
-        sorted.dedup();
-        assert_eq!(sorted.len(), cases.len(), "duplicate case: {cases:?}");
-        assert_eq!(native.matches("external void _fs").count(), cases.len(), "{native}");
-        for i in 0..cases.len() {
-            assert!(native.contains(&format!("(_fs{i}).cast()")), "_fs{i} unused");
+        // Each declaration is used exactly once.
+        let declared = native.matches("external void _fs").count();
+        assert_eq!(declared, arms.len() + 2 * handles.len(), "{native}");
+        for i in 0..declared {
+            assert_eq!(native.matches(&format!("(_fs{i}).cast()")).count(), 1, "_fs{i}");
         }
     }
 

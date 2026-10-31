@@ -32,6 +32,7 @@ import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+import 'package:frustrate/frustrate.dart' show NativeExport;
 import 'package:frustrate_integration/test_api.frustrate.dart';
 import 'package:test/test.dart';
 
@@ -84,7 +85,7 @@ void main() {
   setUpAll(() async {
     await initBridge();
     callSync = testApiBridge
-        .lookup(frustrateBridge.symbol('call_sync'))
+        .address(NativeExport.callSync)
         .cast<NativeFunction<_CallSyncC>>()
         .asFunction<_CallSyncDart>();
   });

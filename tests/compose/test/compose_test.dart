@@ -19,7 +19,7 @@ final class _FakeBeta extends beta.FakeComposeBeta {
 }
 
 @Native<Uint64 Function()>(
-  symbol: 'frustrate_runtime_abi',
+  symbol: RuntimeSymbol.runtimeAbi,
   assetId: 'package:compose_alpha/alone',
 )
 external int _aloneRuntimeAbi();
@@ -36,12 +36,16 @@ final class _AlphaAlone implements BridgeLibrary {
   FrustrateBridge get bridge => alpha.frustrateBridge;
 
   @override
-  Pointer<Void> lookup(String symbol) => switch (symbol) {
-    'frustrate_runtime_abi' =>
+  Pointer<Void> address(NativeExport export) => switch (export) {
+    NativeExport.runtimeAbi =>
       Native.addressOf<NativeFunction<Uint64 Function()>>(_aloneRuntimeAbi)
           .cast(),
     _ => throw ArgumentError('the test asks alpha alone only for its ABI'),
   };
+
+  @override
+  HandleExports handle(String dropSymbol) =>
+      throw ArgumentError('the test asks alpha alone only for its ABI');
 }
 
 /// Everything a stream-taking call delivers, through to its end.
@@ -66,8 +70,8 @@ void main() {
     // What the runtime decides "one image" by: a runtime export resolves to
     // one address through both bridges' tables.
     expect(
-      beta.composeBetaBridge.lookup('frustrate_runtime_abi').address,
-      alpha.composeAlphaBridge.lookup('frustrate_runtime_abi').address,
+      beta.composeBetaBridge.address(NativeExport.runtimeAbi).address,
+      alpha.composeAlphaBridge.address(NativeExport.runtimeAbi).address,
     );
   });
 

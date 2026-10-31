@@ -811,6 +811,11 @@ class Frustrate {
   /// workers of a previous heap are still that init's to reap.
   static bool get isInstalled => _transport != null;
 
+  /// The installed platform transport ([FrustrateRuntime.bridgeIdentity] of
+  /// every runtime [install] accepted), or null before the first install. A
+  /// platform init reads it back to reach the transport it built.
+  static Object? get installedTransport => _transport;
+
   /// The repeated-init decision, taken by a platform init **before it
   /// constructs anything**.
   ///

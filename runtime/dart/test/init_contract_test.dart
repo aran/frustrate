@@ -68,7 +68,10 @@ final class _AbsentBridge implements BridgeLibrary {
   FrustrateBridge get bridge => _testBridge;
 
   @override
-  Pointer<Void> lookup(String symbol) => throw _LibraryAbsent();
+  Pointer<Void> address(NativeExport export) => throw _LibraryAbsent();
+
+  @override
+  HandleExports handle(String dropSymbol) => throw _LibraryAbsent();
 }
 
 const _bridgeA = _AbsentBridge('bridge A');
@@ -176,15 +179,34 @@ void main() {
       expect(one, isNot(equals(other)));
     });
 
-    test('looks up an export, and refuses one the library lacks', () {
+    test('names a runtime export as the runtime does and a bridge entry '
+        'under its crate', () {
+      expect(
+        NativeExport.runtimeAbi.symbolFor(_testBridge),
+        RuntimeSymbol.runtimeAbi,
+      );
+      expect(
+        NativeExport.callSync.symbolFor(_testBridge),
+        'frustrate_test_call_sync',
+      );
+    });
+
+    test('refuses an export the library lacks', () {
       final bridge = BridgeLibrary.dynamic(
         DynamicLibrary.process(),
         name: 'process',
         bridge: _testBridge,
       );
-      expect(bridge.lookup('malloc'), isNot(nullptr));
       expect(
-        () => bridge.lookup('frustrate_no_such_export'),
+        () => bridge.address(NativeExport.runtimeAbi),
+        throwsArgumentError,
+      );
+      expect(
+        () => bridge.handle('frustrate_test_drop_Doc'),
+        throwsArgumentError,
+      );
+      expect(
+        () => bridge.handle('frustrate_other_drop_Doc'),
         throwsArgumentError,
       );
     });
