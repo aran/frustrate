@@ -6305,6 +6305,16 @@ impl Slicer {
     pub fn spawn_panic(&mut self, message: String) {
         frustrate::runtime::spawn(async move { panic!("{message}") });
     }
+
+    /// Spawn a `runtime::spawn_local` task that panics with `message`.
+    /// `spawn_local` exists only on single-threaded wasm; elsewhere this
+    /// panics in the call instead.
+    pub fn spawn_local_panic(&mut self, message: String) {
+        #[cfg(all(target_family = "wasm", not(target_feature = "atomics")))]
+        frustrate::runtime::spawn_local(async move { panic!("{message}") });
+        #[cfg(not(all(target_family = "wasm", not(target_feature = "atomics"))))]
+        panic!("runtime::spawn_local exists only on single-threaded wasm, not here ({message})");
+    }
 }
 
 /// Spawn a detached task that panics with `message`, from a sync call: work

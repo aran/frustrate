@@ -121,7 +121,10 @@ something to the actor. The mechanics are in `runtime/rust/src/addr.rs`.
 - **Panics.** A posted closure, or a task the actor spawns, answers no call.
   If it panics, the panic is an uncaught error in the zone the actor was built
   in, and a `call` waiting on the closure resolves to `Err(Gone)`. The actor
-  keeps serving.
+  keeps serving. On web the same goes for a panic in a wasm-bindgen closure the
+  browser calls (an event handler, a timer), and a promise rejection nothing
+  handles is an uncaught `BridgeException` in that zone. A panic hook of your
+  own in place of frustrate's leaves only the trap's text in the message.
 - **No waiting on yourself.** Awaiting `call` on the actor's own executor
   (a `block_on` in a method body) panics at once, because the executor that
   would run the closure is the one waiting.

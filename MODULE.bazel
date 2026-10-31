@@ -153,14 +153,42 @@ crate.from_cargo(
 )
 use_repo(crate, "frustrate_crates")
 
-# The native check's memchr fixture (//tests/bazel_rules/native_red/memchr):
-# its crate in a hub of its own and dev-only, so it neither reaches a module
-# that depends on frustrate nor grows `frustrate_crates`' resolution.
+# The wasm-bindgen fixture (//tests/bindgen): its third-party crates and the
+# wasm-bindgen CLI, each a hub of its own and dev-only, so neither reaches a
+# module that depends on frustrate nor grows `frustrate_crates`' resolution.
 crate_dev = use_extension(
     "@rules_rust//crate_universe:extensions.bzl",
     "crate",
     dev_dependency = True,
 )
+crate_dev.from_cargo(
+    name = "bindgen_test_crates",
+    cargo_lockfile = "//tests/bindgen:Cargo.lock",
+    manifests = ["//tests/bindgen:Cargo.toml"],
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "wasm32-unknown-unknown",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+
+# The CLI's version must equal the `wasm-bindgen` pin in the fixture's lock.
+# Upstream's own `[[bin]] wasm-bindgen`, opted into by name.
+crate_dev.from_cargo(
+    name = "wasm_bindgen_crates",
+    cargo_lockfile = "//tests/bindgen/cli:Cargo.lock",
+    manifests = ["//tests/bindgen/cli:Cargo.toml"],
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+crate_dev.annotation(
+    crate = "wasm-bindgen-cli",
+    gen_binaries = ["wasm-bindgen"],
+    repositories = ["wasm_bindgen_crates"],
+)
+# The native check's memchr fixture (//tests/bazel_rules/native_red/memchr).
 crate_dev.from_cargo(
     name = "native_red_crates",
     cargo_lockfile = "//tests/bazel_rules/native_red/memchr:Cargo.lock",
@@ -173,7 +201,7 @@ crate_dev.from_cargo(
         "x86_64-unknown-linux-gnu",
     ],
 )
-use_repo(crate_dev, "native_red_crates")
+use_repo(crate_dev, "bindgen_test_crates", "native_red_crates", "wasm_bindgen_crates")
 
 dart = use_extension("@rules_dart//dart:extensions.bzl", "dart")
 dart.toolchain(dart_version = "3.13.2")

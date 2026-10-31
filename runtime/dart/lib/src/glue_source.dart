@@ -526,6 +526,29 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
     }
   };
 
+  // Errors that escape outside every entry point above, once the actor is up:
+  // a Rust panic inside a wasm-bindgen closure the browser invoked (an event
+  // handler, a timer, a promise reaction) and a rejected promise nobody
+  // handled. No call owns either, so the page hands each to the actor's zone:
+  // a panic (or any other error) as a trap under call id 0, and a rejection
+  // that no panic caused as a `rejection`. preventDefault keeps it from also
+  // reaching the page's `Worker.onerror` and the console.
+  const watchEscapes = () => {
+    addEventListener('error', (e) => {
+      e.preventDefault();
+      postMessage({ type: 'trap', callId: 0,
+                    message: lastPanic || String(e.error ?? e.message) });
+      lastPanic = null;
+    });
+    addEventListener('unhandledrejection', (e) => {
+      e.preventDefault();
+      postMessage(lastPanic
+          ? { type: 'trap', callId: 0, message: lastPanic }
+          : { type: 'rejection', message: String(e.reason) });
+      lastPanic = null;
+    });
+  };
+
   // Actor pump: instantiates its own instance of the shared module and
   // drives the same call_async export the main transport uses
   // (inline execution, serialized by the instance's single thread).
@@ -620,6 +643,7 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
         // its Scheduler must use the microtask drain above rather than the
         // pool it does not have (a deferred method is what spawns on it).
         exports.frustrate_mark_actor_instance();
+        watchEscapes();
         postMessage({ type: 'ready' });
       } catch (err) {
         postMessage({ type: 'initError', message: lastPanic || String(err) });

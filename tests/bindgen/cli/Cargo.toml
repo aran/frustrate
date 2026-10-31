@@ -1,0 +1,21 @@
+# The wasm-bindgen CLI, as a build tool for //tests/bindgen: a crate hub of its
+# own (//:MODULE.bazel), because its graph (walrus, clap) has nothing to do with
+# the fixture's. Resolution-only: Bazel builds upstream's `[[bin]]
+# wasm-bindgen`, surfaced by `gen_binaries` in //:MODULE.bazel.
+#
+# Pinned exactly to the `wasm-bindgen` pin in //tests/bindgen:Cargo.toml. The
+# CLI refuses a module whose schema version differs from its own, so change
+# both or neither.
+[package]
+name = "frustrate_wasm_bindgen_tool"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+wasm-bindgen-cli = "=0.2.126"
+
+[workspace]

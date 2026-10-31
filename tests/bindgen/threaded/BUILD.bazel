@@ -1,0 +1,24 @@
+load("//bazel:defs.bzl", "frustrate_wasm_module")
+
+# //tests/bindgen on threaded wasm, where the wasm-bindgen post-pass also runs
+# its thread transform. Its own package because the module and its JS are
+# named by the target, and the two builds keep the same names.
+#
+# Tagged manual: threaded wasm needs the locally built +atomics std (`bazel run
+# //toolchain/custom_std:build` first). `bazel run
+# //tests/dart_integration:web_test -- --threaded` builds it.
+
+frustrate_wasm_module(
+    name = "bindgen_api.wasm",
+    bindgen = "@wasm_bindgen_crates//:wasm-bindgen-cli__wasm-bindgen",
+    crate = "//tests/bindgen:bindgen_api",
+    platform = "//bazel:wasm32_threads",
+    tags = ["manual"],
+)
+
+filegroup(
+    name = "bindgen_api_bg_js",
+    srcs = [":bindgen_api.wasm"],
+    output_group = "bindgen_js",
+    tags = ["manual"],
+)

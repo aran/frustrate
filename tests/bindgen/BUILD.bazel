@@ -1,0 +1,61 @@
+load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_wasm_module")
+
+# A bridge whose actor reaches browser APIs from Rust through wasm-bindgen,
+# web-sys and js-sys: the root test of frustrate's wasm-bindgen support.
+# `bazel run //tests/dart_integration:web_test` stages the module, its
+# wasm-bindgen JS and the bindings, and runs bindgen_web_test.dart on them;
+# `-- --threaded` stages the build in ./threaded instead.
+#
+# Its third-party crates come from `@bindgen_test_crates`, a dev-only hub of
+# its own (//:MODULE.bazel), and the CLI from `@wasm_bindgen_crates`.
+
+# Cargo.toml/Cargo.lock exist for the crate hub, not for cargo.
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "bindgen_api",
+    module_paths = ["crate::api"],
+    package_name = "bindgen_api",
+    visibility = ["//tests:__subpackages__"],
+)
+
+frustrate_bridge_library(
+    name = "bindgen_api",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "bindgen_api",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    # Built only as a wasm module; the browser APIs it calls exist nowhere else.
+    target_compatible_with = ["@platforms//cpu:wasm32"],
+    visibility = ["//tests:__subpackages__"],
+    deps = [
+        "//runtime/rust:frustrate",
+        "@bindgen_test_crates//:js-sys",
+        "@bindgen_test_crates//:wasm-bindgen",
+        "@bindgen_test_crates//:wasm-bindgen-futures",
+        "@bindgen_test_crates//:web-sys",
+    ],
+)
+
+frustrate_wasm_module(
+    name = "bindgen_api.wasm",
+    bindgen = "@wasm_bindgen_crates//:wasm-bindgen-cli__wasm-bindgen",
+    crate = ":bindgen_api",
+    visibility = ["//tests:__subpackages__"],
+)
+
+filegroup(
+    name = "bindgen_api_bg_js",
+    srcs = [":bindgen_api.wasm"],
+    output_group = "bindgen_js",
+    visibility = ["//tests:__subpackages__"],
+)

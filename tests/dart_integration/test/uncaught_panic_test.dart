@@ -13,6 +13,7 @@ library;
 
 import 'dart:async';
 
+import 'package:frustrate/frustrate.dart' show Frustrate;
 import 'package:frustrate_integration/test_api.frustrate.dart';
 import 'package:test/test.dart';
 
@@ -93,6 +94,26 @@ void main() {
     expect(await s.slices(), 0, reason: 'the actor still answers');
     await s.dispose();
   });
+
+  test(
+    'a spawn_local task an actor spawns reaches the actor\'s zone',
+    () async {
+      // `runtime::spawn_local` exists only on single-threaded wasm; making it
+      // exist for actor instances on threaded wasm is a separate decision.
+      if (isNativeVm || Frustrate.instance.asyncIsParallel) {
+        markTestSkipped(
+          'runtime::spawn_local exists only on single-threaded wasm',
+        );
+        return;
+      }
+      final (s, heard) = await _guarded(Slicer.new_);
+      await s.spawnLocalPanic(message: 'a spawn_local task panicked');
+      await _until(heard);
+      expect(heard, [_panic('a spawn_local task panicked')]);
+      expect(await s.slices(), 0, reason: 'the actor still answers');
+      await s.dispose();
+    },
+  );
 
   test('a detached task on no actor reaches the zone frustrate was '
       'initialised in', () async {

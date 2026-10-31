@@ -14,11 +14,15 @@ exports_files(["lib/fake_plan.dart"])
 #   bazel run //tests/dart_integration:web_test -- --threaded   # threaded wasm
 # It builds the wasm fixture, then runs `dart test -p chrome -c dart2wasm`.
 #
-# `data` is the composed fixture (//tests/compose: two bridges, one module),
-# which the driver stages beside the cargo-built one for compose_web_test.dart.
+# `data` is the composed fixture (//tests/compose: two bridges, one module) and
+# the wasm-bindgen one (//tests/bindgen), which the driver stages beside the
+# cargo-built one for compose_web_test.dart and bindgen_web_test.dart.
 dart_binary(
     name = "web_test",
     data = [
+        "//tests/bindgen:bindgen_api.wasm",
+        "//tests/bindgen:bindgen_api_bg_js",
+        "//tests/bindgen:bridge.dart",
         "//tests/compose:composed.wasm",
         "//tests/compose/alpha:bridge.dart",
         "//tests/compose/beta:bridge.dart",

@@ -2051,8 +2051,9 @@ final class _WebActorHost implements ActorHost {
   /// spawn, held for the page's lifetime. Both entry paths (a script that
   /// never loaded, an instantiation that failed) end here, matching the pool,
   /// which already terminated on both of its own.
-  /// No-op once the host is up: `onerror` also fires for a *later* worker
-  /// error, and a host that already served calls is not a failed spawn.
+  /// No-op once the host is up: a host that already served calls is not a
+  /// failed spawn, and the worker reports its own later errors to the actor's
+  /// zone (`watchEscapes` in frustrate.js).
   void _failedToStart(StateError error) {
     if (_readyC.isCompleted) return;
     _stopped = true;
@@ -2130,6 +2131,18 @@ final class _WebActorHost implements ActorHost {
             StackTrace.empty,
           );
         }
+      case 'rejection':
+        // A JS promise in the worker rejected and nothing handled it. Not a
+        // panic, and no call owns it: the actor's zone's, like a trap no call
+        // owns.
+        final reason = m.getProperty<JSString>('message'.toJS).toDart;
+        _zone.handleUncaughtError(
+          BridgeException(
+            'unhandled promise rejection in actor '
+            '${_debugName ?? 'worker'}: $reason',
+          ),
+          StackTrace.empty,
+        );
     }
   }
 

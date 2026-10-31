@@ -8,7 +8,9 @@
 library;
 
 /// The Rust function returned `Err`; [message] is the error's Display output
-/// (`{:#}`, so anyhow chains are included).
+/// (`{:#}`, so anyhow chains are included). On web, also a JS promise rejected
+/// in an actor's Worker with nothing to handle it, as an uncaught error in the
+/// actor's zone.
 class BridgeException implements Exception {
   final String message;
   BridgeException(this.message);
