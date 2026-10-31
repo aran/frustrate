@@ -79,6 +79,7 @@ rust_library(
         ":log",
         "@frustrate_crates//:async-task",
         "@frustrate_crates//:futures-sink",
+        "@frustrate_crates//:once_cell",
     ],
     link_deps = select({
         "//bazel:hot_patch_apple": [":hot_patch_link_macho"],

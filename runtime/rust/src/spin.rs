@@ -69,13 +69,14 @@
 //! the point of this module being compiled on every target rather than only
 //! where a `cfg` selects it. `tools/analyze.dart` runs that pass.
 //!
-//! # The second primitive: initialising once without a `Once`
+//! # Initialising once without a `Once`
 //!
 //! `OnceLock`/`Once` park for the same reason a `Mutex` does, so the same ban
 //! applies to them. Wherever the value can be `const`-built the answer is a
 //! plain `static` with no initialiser to get stuck in, which is what
-//! `pool::QUEUE`, `stream::REGISTRY` and `callback::INVOCATIONS` all are.
-//! [`RaceOnce`] is for the one value that cannot be.
+//! `pool::QUEUE`, `stream::REGISTRY` and `callback::INVOCATIONS` all are. The
+//! one value that cannot be, the global executor, lives in
+//! `once_cell::race::OnceBox` (executor.rs).
 //!
 //! # Why it is one type
 //!
@@ -90,7 +91,7 @@
 
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// A spin lock over `T`: the bounded lock's (bounded.rs) arm on wasm with
 /// `+atomics`. Compiled on every target so its tests and Miri reach it.
@@ -182,111 +183,9 @@ impl<T> Drop for Held<'_, T> {
     }
 }
 
-// -------------------------------------------------------- one-time init --
-
-/// A `T` published exactly once, and never by parking.
-///
-/// [`std::sync::OnceLock`] is the obvious type and is the wrong one here for
-/// the same reason `Mutex` is: `get_or_init` parks the loser of an
-/// initialisation race in `Once`'s futex, and on `+atomics` wasm that is
-/// `memory.atomic.wait32` — a trap on the browser main thread rather than a
-/// wait. `pool::QUEUE` records the page that died to it. The one value it is
-/// for is the global [`crate::executor::Executor`], which owns boxed closures
-/// and so cannot be `const`-built.
-///
-/// # The trade
-///
-/// The initialiser may run **more than once**. Threads that arrive at an
-/// unpublished cell together each build a value, one compare-exchange decides
-/// which is published, and the losers drop theirs on the spot. So this is not
-/// a `Once` in the "runs exactly once" sense, and it is only correct where
-/// construction is side-effect-free and cheap — building an `Executor` is
-/// three allocations and no observable effect. The fast path is exactly
-/// `OnceLock`'s, one acquire load, and no path waits on any thread.
-pub(crate) struct RaceOnce<T> {
-    /// Null until some thread publishes; after that, a `Box<T>` this cell owns
-    /// and never replaces.
-    ptr: AtomicPtr<T>,
-    /// Suppresses the auto `Send`/`Sync`, which `AtomicPtr<T>` would otherwise
-    /// hand out unconditionally, so the two below are the whole story.
-    owned: PhantomData<*mut T>,
-}
-
-// Safety: `Sync` needs **both** bounds, and the second is the easy one to miss.
-// `T: Sync` because every thread that asks gets a `&T` to the published value.
-// `T: Send` because the value does cross threads: any thread holding only a
-// `&RaceOnce` can be the one that builds and publishes, and the value is then
-// dropped by whoever owns the cell. This is the bound `std`'s `OnceLock`
-// carries for the same reason.
-unsafe impl<T: Send + Sync> Sync for RaceOnce<T> {}
-
-// Safety: moving the cell moves the value it owns, and nothing else.
-unsafe impl<T: Send> Send for RaceOnce<T> {}
-
-impl<T> RaceOnce<T> {
-    /// An empty cell, in a `const` context — so a `static` needs no
-    /// initialiser, the property that keeps `pool::QUEUE` unwedgeable.
-    pub(crate) const fn new() -> Self {
-        RaceOnce {
-            ptr: AtomicPtr::new(std::ptr::null_mut()),
-            owned: PhantomData,
-        }
-    }
-
-    /// The published value, initialising the cell if nothing has yet.
-    ///
-    /// `init` runs **outside** any critical section — there is none — so it may
-    /// allocate and take other locks freely, unlike an `f` handed to
-    /// [`SpinLock::with`].
-    pub(crate) fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
-        let published = self.ptr.load(Ordering::Acquire);
-        if !published.is_null() {
-            // Safety: non-null means some thread published a `Box` this cell
-            // owns. It is never replaced, and only freed by `Drop`, which
-            // needs `&mut self` and so cannot run while this `&self` borrow is
-            // alive. The `Acquire` pairs with the publisher's `Release` below,
-            // so the pointee is fully initialised as seen from this thread.
-            return unsafe { &*published };
-        }
-        let mine = Box::into_raw(Box::new(init()));
-        match self.ptr.compare_exchange(
-            std::ptr::null_mut(),
-            mine,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        ) {
-            // Safety: this thread published `mine` and nothing ever replaces a
-            // published pointer.
-            Ok(_) => unsafe { &*mine },
-            Err(winner) => {
-                // Lost the race. `mine` was never published, so no other thread
-                // can have seen it; dropping it here is the whole cost of the
-                // trade, and it happens on this thread with no lock held.
-                // Safety: `mine` came from `Box::into_raw` just above and is
-                // reclaimed exactly once.
-                drop(unsafe { Box::from_raw(mine) });
-                // Safety: as the load above.
-                unsafe { &*winner }
-            }
-        }
-    }
-}
-
-impl<T> Drop for RaceOnce<T> {
-    fn drop(&mut self) {
-        let published = *self.ptr.get_mut();
-        if !published.is_null() {
-            // Safety: `&mut self` proves no `&T` handed out by `get_or_init` is
-            // still alive, and a published pointer is reclaimed exactly once.
-            drop(unsafe { Box::from_raw(published) });
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicI32;
 
     /// A `static` built in a `const` context — the property `pool::QUEUE`
     /// depends on. If `new` ever stops being `const` this stops compiling,
@@ -345,115 +244,5 @@ mod tests {
             }
         });
         assert_eq!(COUNTER.with(|v| *v), 2000, "no update was lost");
-    }
-
-    // ---- RaceOnce ----
-
-    /// `new` in a `const` context — what lets `executor::global`'s `static`
-    /// have no initialiser to get stuck in. An anonymous `const` rather than a
-    /// `static`: a `static` that published would never drop, and these tests
-    /// run under Miri with leak checking on.
-    const _: RaceOnce<u32> = RaceOnce::new();
-
-    #[test]
-    fn it_publishes_one_value_and_every_later_caller_sees_it() {
-        let calls = AtomicI32::new(0);
-        let cell: RaceOnce<u32> = RaceOnce::new();
-        let first = cell.get_or_init(|| {
-            calls.fetch_add(1, Ordering::SeqCst);
-            7
-        });
-        let second = cell.get_or_init(|| {
-            calls.fetch_add(1, Ordering::SeqCst);
-            9
-        });
-        assert_eq!(*first, 7);
-        assert_eq!(*second, 7, "a published value is never replaced");
-        assert_eq!(
-            calls.load(Ordering::SeqCst),
-            1,
-            "a published cell does not run the initialiser again"
-        );
-        assert!(
-            std::ptr::eq(first, second),
-            "and it hands out the one value, not a copy"
-        );
-    }
-
-    /// The cell may *build* more than one value — that is the documented trade
-    /// — but it must **publish** exactly one, and every thread must come away
-    /// with that one.
-    #[test]
-    fn racing_initialisers_all_come_away_with_the_same_value() {
-        let cell: RaceOnce<u64> = RaceOnce::new();
-        let seen: SpinLock<Vec<usize>> = SpinLock::new(Vec::new());
-        std::thread::scope(|s| {
-            for _ in 0..8 {
-                s.spawn(|| {
-                    let v = cell.get_or_init(|| 0x00C0_FFEE);
-                    assert_eq!(*v, 0x00C0_FFEE);
-                    seen.with(|log| log.push(v as *const u64 as usize));
-                });
-            }
-        });
-        let addrs = seen.with(|log| log.clone());
-        assert_eq!(addrs.len(), 8);
-        assert!(
-            addrs.iter().all(|a| *a == addrs[0]),
-            "every thread must observe the single published value"
-        );
-    }
-
-    /// Live instances of `Counted`, so a value built and thrown away is
-    /// visible. The borrow keeps each test's count its own.
-    struct Counted<'a>(&'a AtomicI32);
-
-    impl<'a> Counted<'a> {
-        fn new(live: &'a AtomicI32) -> Self {
-            live.fetch_add(1, Ordering::SeqCst);
-            Counted(live)
-        }
-    }
-
-    impl Drop for Counted<'_> {
-        fn drop(&mut self) {
-            self.0.fetch_sub(1, Ordering::SeqCst);
-        }
-    }
-
-    /// Neither side of the race leaks: the loser drops the value it built, and
-    /// dropping the cell frees the one it published. Both are what keeps
-    /// `cargo miri test -p frustrate --lib spin` clean.
-    ///
-    /// The race is *forced*, not hoped for: both threads are held inside their
-    /// initialiser until the other has also passed the empty load, so both
-    /// really do build a value and exactly one of them has to be discarded.
-    #[test]
-    fn the_losing_racer_drops_its_value_and_the_cell_frees_the_published_one() {
-        let live = AtomicI32::new(0);
-        let gate = std::sync::Barrier::new(2);
-        {
-            let cell: RaceOnce<Counted> = RaceOnce::new();
-            std::thread::scope(|s| {
-                for _ in 0..2 {
-                    s.spawn(|| {
-                        cell.get_or_init(|| {
-                            gate.wait();
-                            Counted::new(&live)
-                        });
-                    });
-                }
-            });
-            assert_eq!(
-                live.load(Ordering::SeqCst),
-                1,
-                "two values were built; the loser's must have been dropped"
-            );
-        }
-        assert_eq!(
-            live.load(Ordering::SeqCst),
-            0,
-            "dropping the cell frees what it published"
-        );
     }
 }

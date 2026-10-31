@@ -651,12 +651,9 @@ fn arrange_drain() {
 /// instead of a property to re-derive from the call graph.
 ///
 /// Why it is worth a line: it means the initialisation race in [`ExecCell`]
-/// never runs. `RaceOnce`'s trade is that threads arriving together each build
+/// never runs. `OnceBox`'s trade is that threads arriving together each build
 /// an `Executor` and all but one throw theirs away; a cell already published
-/// before a second thread exists has no race to lose. (This used to be load
-/// bearing for a stronger reason — the cell was an `OnceLock`, whose cold path
-/// could put the browser main thread into `Once`'s futex, the failure
-/// `pool::QUEUE` records. That hazard is gone from the primitive itself.)
+/// before a second thread exists has no race to lose.
 ///
 /// Idempotent, and safe to call from an actor instance's pump too: that
 /// instance has its own memory, so it is initialising its own `EXEC`.
@@ -665,15 +662,15 @@ pub(crate) fn init_global() {
     let _ = global();
 }
 
-/// The cell the global executor lives in: [`crate::spin::RaceOnce`] on every
+/// The cell the global executor lives in: `once_cell::race::OnceBox` on every
 /// target. `OnceLock::get_or_init` parks a thread that arrives while another
 /// is initialising, and the caller here can be the main isolate's thread
 /// (every actor and async call reserves its id through [`global`]): on
 /// `+atomics` wasm that parking traps, and natively it is a wait the no_block
-/// check would rightly count. `RaceOnce` never waits; its cost is that racing
+/// check would rightly count. `OnceBox` never waits; its cost is that racing
 /// threads may each build an `Executor`, which is three allocations and no
 /// observable effect, and all but one are dropped.
-type ExecCell = crate::spin::RaceOnce<Executor>;
+type ExecCell = once_cell::race::OnceBox<Executor>;
 
 /// The process/page-global executor. Its completion hook is
 /// [`crate::post::respond`] (already native/web abstracted); its Scheduler is
@@ -681,9 +678,9 @@ type ExecCell = crate::spin::RaceOnce<Executor>;
 fn global() -> &'static Executor {
     static EXEC: ExecCell = ExecCell::new();
     EXEC.get_or_init(|| {
-        Executor::new(arrange_drain, |call_id, bytes| {
+        Box::new(Executor::new(arrange_drain, |call_id, bytes| {
             crate::post::respond(call_id, bytes)
-        })
+        }))
     })
 }
 

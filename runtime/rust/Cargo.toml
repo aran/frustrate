@@ -37,6 +37,10 @@ wasm-threads = []
 
 [dependencies]
 async-task = "4.7.1"
+# `race::OnceBox` holds the global executor (executor.rs): initialised once
+# without any thread waiting for another. `race` and `alloc` only; the crate's
+# `std` cell parks, which is what the executor must not do.
+once_cell = { version = "1.21", default-features = false, features = ["race", "alloc"] }
 # Trait only (default-features off drops the `std`/`alloc` cruft): lets the
 # StreamController-shaped `StreamSink` implement `futures::Sink`, so an async
 # producer can drive it through `forward`/`send_all` with backpressure. The

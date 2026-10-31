@@ -1,5 +1,5 @@
 {
-  "checksum": "8b52e96496e7b09bd09f7238e6c655d6f6728ef8c4d707600585439ff1d0c73f",
+  "checksum": "8d01fda5392bd87d8238e5c1f876f217db486d926c9cd713a588e50d8bd47f07",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -206,6 +206,10 @@
           {
             "id": "log 0.4.34",
             "target": "log"
+          },
+          {
+            "id": "once_cell 1.21.4",
+            "target": "once_cell"
           }
         ],
         "edition": "2021"
@@ -711,6 +715,39 @@
         }
       ],
       "version": "0.37.3"
+    },
+    "once_cell 1.21.4": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "race"
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "once_cell",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "once_cell",
+      "package_url": "https://github.com/matklad/once_cell",
+      "repository": {
+        "Http": {
+          "sha256": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+          "url": "https://static.crates.io/crates/once_cell/1.21.4/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "once_cell",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.21.4"
     },
     "pollster 1.0.1": {
       "common_attrs": {
@@ -1479,6 +1516,7 @@
     "heck 0.5.0",
     "log 0.4.34",
     "object 0.37.3",
+    "once_cell 1.21.4",
     "pollster 1.0.1",
     "proc-macro2 1.0.106",
     "rustc-demangle 0.1.28",
