@@ -105,7 +105,7 @@ List<_Step> _matrix(String pin) => [
     // Its own directory: these rustflags differ from every other leg's, so
     // a shared one would rebuild the world in both directions on every
     // run. `\x1f`-separated because plain RUSTFLAGS is word-split, which
-    // silently mangles multi-word flags — see tools/check_block.dart.
+    // silently mangles multi-word flags.
     env: {
       'CARGO_TARGET_DIR': 'target/analyze-wasm-threads',
       'CARGO_ENCODED_RUSTFLAGS':
@@ -216,19 +216,6 @@ List<_Step> _matrix(String pin) => [
         'only thread forever, unobservably. Source lints cannot see it '
         '(it arrives through a dependency), so this reads the artifact.',
     ['dart', 'run', 'tools/check_no_park.dart'],
-  ),
-  _Step(
-    'block-check (no_block claims)',
-    'Settles every `#[bridge(no_block)]` claim that needs an artifact — '
-        'the ones placement does not already settle. Codegen checks the '
-        'declared half (FR0048, FR0049) and stops at the crate boundary, '
-        'so it cannot see a `Mutex` three dependencies down that becomes '
-        '`memory.atomic.wait32` on threaded wasm. Also the only thing '
-        'anywhere that builds the `--cfg frustrate_block_check` '
-        'configuration — `bazel test //...` never does, because the check '
-        'targets are `manual` — so it is the only place a regression to '
-        'the executor\'s `+atomics` lock arm can surface at all.',
-    ['dart', 'run', 'tools/check_block.dart'],
   ),
 
   // ------------------------------------------------------------ dart --

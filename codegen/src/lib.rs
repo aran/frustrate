@@ -59,7 +59,7 @@ pub struct GenerateConfig {
     /// Optional: where to write the finalized interface IR as JSON.
     pub ir_out: Option<PathBuf>,
     /// Optional: where to write the `#[bridge(no_block)]` claim census
-    /// ([`emit_rust::claim_census`]) — what the two `no_block` drivers read to
+    /// ([`emit_rust::claim_census`]) — what `frustrate_no_block_check` reads to
     /// tell "nothing to prove" from "the proof is missing".
     ///
     /// Separate from [`GenerateConfig::ir_out`] because the IR JSON is the wire

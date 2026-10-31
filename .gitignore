@@ -7,7 +7,6 @@ target/
 *.frustrate.web.dart
 *.frustrate.models.dart
 frustrate_generated.rs
-frustrate_claims.txt
 frustrate_ir.json
 tests/dart_integration/build/
 node_modules/

@@ -110,7 +110,7 @@
 //!
 //! Measured, and worth knowing before reading a number: two axes fold, and the
 //! second is conditional. `no_block` never reaches the dispatch body — it only
-//! feeds the claim census, which `check_block.dart` gates separately — so its
+//! feeds the claim census, which `frustrate_no_block_check` reads — so its
 //! two values always emit the same code. `native_only` folds only where the
 //! member is *already* native-only by derivation (an `on_contention = "block"`
 //! contract, a returning callback on a non-`async fn`), because there the

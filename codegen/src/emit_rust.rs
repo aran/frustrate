@@ -357,9 +357,8 @@ impl Residue<'_> {
 /// The claim census: one line per `#[bridge(no_block)]` member, saying how its
 /// claim is settled.
 ///
-/// Its readers are the two `no_block` drivers — `tools/check_block.dart` and
-/// the `frustrate_no_block_check` Bazel rule — by way of the scanner that owns the
-/// verdict. It exists because neither driver can otherwise tell three states
+/// Its reader is the `frustrate_no_block_check` Bazel rule, by way of the scanner
+/// that owns the verdict. It exists because the rule cannot otherwise tell three states
 /// apart that must report differently: a claim set with nothing to prove (green
 /// with no artifact), a claim set whose roots are missing from the artifact (the
 /// cfg never reached rustc), and no claims at all (a gate over nothing).
@@ -4819,9 +4818,9 @@ const NATIVE_ONLY_CFG: &str = "#[cfg(not(target_family = \"wasm\"))]\n";
 /// wait is exempt only if every section of it in the program is checked, and
 /// sections reached only from a production export would otherwise be absent.
 ///
-/// `frustrate_block_check` is set by nothing that ships — only by
-/// `tools/check_block.dart` and the `frustrate_no_block_check` Bazel rule, both of
-/// which build an artifact that is scanned and thrown away. With the cfg off
+/// `frustrate_block_check` is set by nothing that ships — only by the
+/// `frustrate_no_block_check` Bazel rule, which builds an artifact that is
+/// scanned and thrown away. With the cfg off
 /// this constant contributes no bytes, so production output is unchanged.
 ///
 /// Why a source gate at all: restricting a wasm module's exports from the link

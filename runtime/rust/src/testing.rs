@@ -73,7 +73,7 @@ pub enum Terminal {
 ///
 /// Not for contention — a captured end has one producer and one probe. It is
 /// that these locks are *linked into every build*, including the throwaway
-/// module `tools/check_block.dart` scans. `Inner::capture` is `None` in every
+/// module `frustrate_no_block_check` scans. `Inner::capture` is `None` in every
 /// stream a generated binding builds, so this branch never runs in a shipped
 /// app; but lld cannot know that, and a `#[bridge(no_block)]` body that calls
 /// `sink.add` links it. With a parking `Mutex` here the gate read

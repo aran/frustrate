@@ -31,9 +31,8 @@ use std::sync::{Arc, Mutex};
 
 // ------------------------------------------------------------- functions --
 
-/// Also the block-check fixture's **sync** half (`tools/check_block.dart`), and
-/// the member its red fence is proven on: the simplest witness the gate can
-/// produce, since the root calls `call_N_add_i32` which calls this body, so a
+/// Also the block-check fixture's **sync** half (`block_check_coverage_test.dart`):
+/// the simplest witness the gate can produce, since the root calls `call_N_add_i32` which calls this body, so a
 /// lock taken here appears as a named root-to-wait path with nothing clever in
 /// between.
 #[bridge(sync, no_block)]
@@ -1267,10 +1266,10 @@ pub fn withdraw_async(balance: i64, amount: i64) -> Result<i64, WithdrawError> {
 /// an actor method: FR0029.)
 ///
 /// Also the block-check fixture's **`async fn`** claim, and it must stay: it is
-/// the only `async fn` whose claim either driver reports, and the shape whose
+/// the only `async fn` whose claim the check reports, and the shape whose
 /// settlement is easiest to get wrong. Nothing is built for it and nothing is
 /// scanned — the census says `placement-dispatch`
-/// (`tools/check_block.dart`, `_requiredDispatch`).
+/// (`block_check_coverage_test.dart`).
 ///
 /// Why that is sound, for a body that suspends. `executor::spawn` constructs
 /// the future on the calling thread and hands its **first** poll to the
@@ -1658,7 +1657,7 @@ pub fn snapshot_total_len(snap: &Snapshot) -> usize {
 /// else — no `spawn_*` call, no body. If the drop edge were dropped from the
 /// residue this member would have no root at all, and the census would say
 /// `placement-dispatch` instead of `artifact-residue`, which is what
-/// `tools/check_block.dart`'s fixture guard notices.
+/// `block_check_coverage_test.dart` notices.
 ///
 /// `Snapshot` has **no** `Drop` impl, deliberately: what stays covered here is
 /// the linkage — `frozen_drop::<Snapshot>` → `Arc::drop_slow` →
@@ -2117,7 +2116,7 @@ pub fn count_to(n: i64, sink: StreamSink<i64>) {
     }
 }
 
-/// The block-check fixture's **stream** half (`tools/check_block.dart`), and
+/// The block-check fixture's **stream** half (`block_check_coverage_test.dart`), and
 /// the reason it exists: every other claimed member is scalar-in, scalar-out,
 /// so nothing kept `StreamSink`'s code in the gate's reachable set. It was not
 /// wait-free — `add` reaches `frustrate::testing::CaptureState`, the capture
@@ -3016,7 +3015,7 @@ impl Miner {
     /// the free function [`std_sleep_millis`].
     ///
     /// Also the block-check fixture's **placement** half
-    /// (`tools/check_block.dart`): a claim settled by where the body runs
+    /// (`block_check_coverage_test.dart`): a claim settled by where the body runs
     /// rather than by an artifact. The claim is not a euphemism here — this
     /// body genuinely waits, and it is still true that main-thread Dart
     /// calling `sleepOnExecutor` only serializes bytes and posts them. That is
@@ -3967,7 +3966,7 @@ pub struct LiveProbe {}
 #[bridge]
 impl LiveProbe {
     /// Also the block-check fixture's **handed-out handle** half
-    /// (`tools/check_block.dart`): a claimed member whose return value is an
+    /// (`block_check_coverage_test.dart`): a claimed member whose return value is an
     /// opaque with a real `Drop`.
     ///
     /// The claim covers more than this body. `dispose()` calls

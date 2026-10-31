@@ -52,8 +52,7 @@ const _facilityFlavour = 'clock-random-stdio-thread';
 /// A fixed stem rather than an empty one, because a web panic's only
 /// attribution is the `file:line` the `frustrate_web_init` hook ships:
 /// `panicked at /frustrate/runtime/rust/src/spin.rs:42:5` names the file as
-/// precisely as the absolute path did. `tools/check_block.dart` carries the
-/// full argument, and a control that fails when the remap stops applying.
+/// precisely as the absolute path did.
 const _remapTo = '/frustrate';
 
 /// Link flags for threaded wasm. --max-memory must stay in sync with the
@@ -146,9 +145,8 @@ void main(List<String> args) {
     // `CARGO_ENCODED_RUSTFLAGS`, not `RUSTFLAGS`: cargo word-splits the latter,
     // and two of the flags below carry a path. A checkout under `~/My
     // Projects/` would have `--sysroot` torn in half and the build would
-    // *succeed* against the wrong std — see tools/check_block.dart, which
-    // names this file as the reason it uses the encoded form. `\x1f`-separated
-    // and never split, so the argument vector is what it says it is.
+    // *succeed* against the wrong std. `\x1f`-separated and never split, so
+    // the argument vector is what it says it is.
     environment: {
       'CARGO_ENCODED_RUSTFLAGS': [
         '--remap-path-prefix',

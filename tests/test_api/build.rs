@@ -41,11 +41,7 @@ fn main() {
         // parsing 120KB of Rust with syn inside the interpreter would cost
         // more than every request it then builds.
         ir_out: Some(manifest.join("src/frustrate_ir.json")),
-        // The claim census `tools/check_block.dart` reads: which `no_block`
-        // claims want an artifact, and which are already settled by placement.
-        // Beside the generated glue for the same reason it is — one directory
-        // holds everything this crate's codegen produces.
-        claims_out: Some(manifest.join("src/frustrate_claims.txt")),
+        claims_out: None,
     })
     .expect("frustrate codegen failed");
 }

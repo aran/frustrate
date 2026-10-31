@@ -16,8 +16,7 @@ import 'dart:io';
 /// crate grows a `path = "../../runtime/rust"` dependency, `frustrate` bodies
 /// monomorphized here come back absolute — reconstructed from the `working_dir`
 /// in that crate's metadata — and the module quietly becomes a different file
-/// in every checkout. `tools/check_block.dart` carries the full argument for
-/// the same flag.
+/// in every checkout.
 ///
 /// The `~/.rustup` and `~/.cargo/registry` paths that `-Zbuild-std` leaves in
 /// the module are deliberately untouched: they are machine-specific but

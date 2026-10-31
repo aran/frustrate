@@ -43,7 +43,7 @@ import 'dart:io';
 import 'patch.dart';
 
 /// What the checkout's path is rewritten to in the staged rlibs. Kept the same
-/// string as `tools/check_block.dart` and `build_web_fixture.dart` use, so a
+/// string as `build_web_fixture.dart` uses, so a
 /// module and the std it links name the checkout the same way or not at all.
 const _remapTo = '/frustrate';
 
@@ -104,8 +104,7 @@ void main(List<String> args) {
   // What rustc is actually invoked with. `CARGO_ENCODED_RUSTFLAGS`, not
   // `RUSTFLAGS`: `--remap-path-prefix` carries the checkout's absolute path,
   // and cargo word-splits `RUSTFLAGS`, so a checkout under `~/My Projects/`
-  // would tear it in half. `\x1f`-separated and never split. See
-  // tools/check_block.dart for the longer version.
+  // would tear it in half. `\x1f`-separated and never split.
   //
   // The remap is what keeps the *staged std* out of the reproducibility
   // problem, and it is not optional here even though the app-side builds have

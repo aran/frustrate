@@ -21,10 +21,8 @@
 //!    8), nothing `call`s it, it is not exported and it is not table-resident.
 //!    That is lld's `__wasm_init_memory`: it runs once at instantiation, before
 //!    any export can be called, and its wait is the passive-data-init barrier.
-//!    Needed only in the Bazel flow, where `--shared-memory` comes from the
-//!    atomics toolchain (`bazel/custom_std.bzl`) and cannot be subtracted
-//!    downstream. The cargo flow drops those link args, so it has no start
-//!    section at all.
+//!    `--shared-memory` comes from the atomics toolchain
+//!    (`bazel/custom_std.bzl`) and cannot be subtracted downstream.
 //! 2. **No direct-call path at all** to `W` — from a root, from the start
 //!    function, or from a fatal entry — an error, not a pass. It means the
 //!    direct-call graph cannot account for how `W` is alive (reached only
@@ -69,7 +67,7 @@
 //! Which leaves three states a bare module cannot tell apart, and they must
 //! report differently: a claim set with nothing to prove, a claim set whose
 //! roots are *missing* (the cfg never reached rustc), and no claims at all. So
-//! codegen also writes a **claim census** ([`Claims`]), and both drivers hand it
+//! codegen also writes a **claim census** ([`Claims`]), and the driver hands it
 //! over. With one, this tool matches roots against rows in both directions —
 //! strictly sharper than "at least one root" — and can be green over a claim set
 //! that needs no module at all (`--claims-only`, which takes no `.wasm`). That
@@ -150,8 +148,6 @@ const ROOT_PREFIX: &str = "frustrate_check_block_";
 /// `toolchain/custom_std/dist/atomics/manifest.json`, and a downstream target
 /// cannot subtract a link arg — the same situation, from the same manifest
 /// line, that `__wasm_init_memory` already gets a structural exemption for.
-/// Only the Bazel flow sees these: the cargo driver drops the shared-memory
-/// link args entirely and its artifact has neither.
 ///
 /// Excluded from `roots` as well as from `strays`, deliberately. It is not a
 /// claimed body, so nothing it reaches may count as reachable-from-a-root; a
@@ -2915,8 +2911,7 @@ mod tests {
 
     /// lld synthesises `__wasm_init_memory` as the start function under
     /// `--shared-memory`, and its wait is the passive-data-init barrier. The
-    /// Bazel flow cannot subtract those link args, so the exemption is needed
-    /// there; the cargo flow has no start section at all.
+    /// check build cannot subtract those link args, so the exemption is needed.
     #[test]
     fn the_start_functions_own_barrier_is_exempt() {
         let b = Build {

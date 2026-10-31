@@ -1,4 +1,4 @@
-load("@rules_dart//dart:defs.bzl", "dart_library")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_test")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_no_block_check", "frustrate_wasm_module")
 load("//bazel:idle_barrier.bzl", "frustrate_idle_barrier_library")
@@ -50,7 +50,24 @@ frustrate_no_block_check(
         "linux",
         "macos",
         "web",
+        "web_threads",
     ],
+)
+
+dart_test(
+    name = "block_check_coverage_test",
+    data = [":bridge.claims"],
+    main = "block_check_coverage_test.dart",
+    deps = [
+        "@pub_deps//:test",
+        "@rules_dart//dart/runfiles",
+    ],
+)
+
+filegroup(
+    name = "bridge.claims",
+    srcs = [":bridge"],
+    output_group = "claims",
 )
 
 rust_shared_library(

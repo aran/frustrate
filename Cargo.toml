@@ -1,11 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    # A workspace member so `cargo test` covers it and `tools/check_block.dart`
-    # runs the same binary the Bazel validation action does — one predicate, two
-    # drivers, no drift. Its siblings `bazel/wasm_std_check` and
-    # `bazel/wasm_import_check` have no second driver, so they are Bazel-only
-    # and deliberately stay out.
+    # A workspace member so its dependencies (wasmparser, rustc-demangle) reach
+    # the @frustrate_crates hub, which its Bazel-only siblings
+    # `bazel/wasm_std_check` and `bazel/wasm_import_check` also draw on.
     "bazel/wasm_block_check",
     "codegen",
     # ext/: glue for a third-party crate that cannot be expected to know about
