@@ -105,16 +105,15 @@
 //! memory.atomic.wait` over printed WAT returns 1 on an artifact with **zero**
 //! wait instructions — the match is inside a data-section string — and a raw
 //! `0xFE 0x01` byte scan fires on `i32.const 254`. Nothing short of decoding the
-//! code section is honest here, which is what [`step`] does.
-//!
-//! # Zero dependencies
-//!
-//! Same stance as `bazel/wasm_std_check`, for the same reason: a crate
-//! dependency would drag the `@frustrate_crates` hub into every consumer's exec
-//! configuration.
+//! code section is honest here, which is what [`parse`] does, with `wasmparser`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
+
+use wasmparser::{
+    BinaryReader, ConstExpr, CustomSectionReader, ElementItems, ElementKind, ExternalKind,
+    KnownCustom, Name, Operator, OperatorsReader, Parser, Payload, TypeRef,
+};
 
 mod budget;
 mod io;
@@ -446,81 +445,6 @@ fn own_path(sym: &str) -> Vec<String> {
 
 // --------------------------------------------------------------- decoding --
 
-fn uleb(d: &[u8], i: &mut usize) -> Result<u64, String> {
-    let (mut r, mut s) = (0u64, 0u32);
-    loop {
-        let b = *d.get(*i).ok_or("truncated LEB128")?;
-        *i += 1;
-        r |= ((b & 0x7f) as u64) << s;
-        if b & 0x80 == 0 {
-            return Ok(r);
-        }
-        s += 7;
-        if s > 63 {
-            return Err("LEB128 too long".into());
-        }
-    }
-}
-
-fn uleb32(d: &[u8], i: &mut usize) -> Result<u32, String> {
-    let v = uleb(d, i)?;
-    u32::try_from(v).map_err(|_| format!("index {v} does not fit in u32"))
-}
-
-fn sleb(d: &[u8], i: &mut usize) -> Result<i64, String> {
-    let (mut r, mut s) = (0i64, 0u32);
-    loop {
-        let b = *d.get(*i).ok_or("truncated signed LEB128")?;
-        *i += 1;
-        if s < 64 {
-            r |= ((b & 0x7f) as i64) << s;
-        }
-        s += 7;
-        if b & 0x80 == 0 {
-            if s < 64 && b & 0x40 != 0 {
-                r |= -1i64 << s;
-            }
-            return Ok(r);
-        }
-        if s > 70 {
-            return Err("signed LEB128 too long".into());
-        }
-    }
-}
-
-fn name(d: &[u8], i: &mut usize) -> Result<String, String> {
-    let len = uleb(d, i)? as usize;
-    let end = i.checked_add(len).ok_or("name length overflow")?;
-    let s = d.get(*i..end).ok_or("truncated name")?;
-    *i = end;
-    Ok(String::from_utf8_lossy(s).into_owned())
-}
-
-/// `(section id, body)` for each section, in order.
-fn sections(d: &[u8]) -> Result<Vec<(u8, &[u8])>, String> {
-    if d.len() < 8 || &d[..4] != b"\0asm" {
-        return Err("not a wasm module".into());
-    }
-    let mut i = 8;
-    let mut out = Vec::new();
-    while i < d.len() {
-        let id = d[i];
-        i += 1;
-        let size = uleb(d, &mut i)? as usize;
-        let end = i.checked_add(size).ok_or("section overruns file")?;
-        out.push((id, d.get(i..end).ok_or("truncated section")?));
-        i = end;
-    }
-    Ok(out)
-}
-
-/// What one instruction did to the block nesting depth.
-enum Eff {
-    Open,
-    Close,
-    Flat,
-}
-
 /// Everything one instruction sequence tells this tool.
 #[derive(Default)]
 struct Scan {
@@ -534,255 +458,32 @@ struct Scan {
     waits: Vec<&'static str>,
 }
 
-/// `align`, an optional multi-memory `memidx`, and `offset`.
-fn memarg(d: &[u8], i: &mut usize) -> Result<(), String> {
-    let align = uleb(d, i)?;
-    if align & 0x40 != 0 {
-        uleb(d, i)?; // multi-memory: an explicit memidx rides in the align bits
+/// Decode an instruction sequence to its `end`, and check it ends there with
+/// its blocks balanced: an instruction read wrongly is an error, never a
+/// shorter or longer scan.
+fn scan_ops(mut r: OperatorsReader<'_>, out: &mut Scan) -> wasmparser::Result<()> {
+    while !r.eof() {
+        match r.read()? {
+            // `return_call` is a real call edge too; rustc only emits it under
+            // `+tail-call`, but a missed edge would be a silent
+            // under-approximation of reachability.
+            Operator::Call { function_index } | Operator::ReturnCall { function_index } => {
+                out.calls.push(function_index)
+            }
+            Operator::RefFunc { function_index } => out.refs.push(function_index),
+            Operator::MemoryAtomicWait32 { .. } => out.waits.push(WAIT32),
+            Operator::MemoryAtomicWait64 { .. } => out.waits.push(WAIT64),
+            _ => {}
+        }
     }
-    uleb(d, i)?;
-    Ok(())
+    r.finish()
 }
 
-/// Consume a `blocktype`: `0x40` (empty), a single-byte valtype, or a
-/// non-negative `s33` type index.
-fn blocktype(d: &[u8], i: &mut usize) -> Result<(), String> {
-    match *d.get(*i).ok_or("truncated blocktype")? {
-        0x40 | 0x7f | 0x7e | 0x7d | 0x7c | 0x7b | 0x70 | 0x6f => {
-            *i += 1;
-            Ok(())
-        }
-        b => {
-            let v = sleb(d, i)?;
-            if v < 0 {
-                Err(format!("unknown blocktype 0x{b:02x}"))
-            } else {
-                Ok(())
-            }
-        }
-    }
-}
-
-fn valtype(d: &[u8], i: &mut usize) -> Result<(), String> {
-    let b = *d.get(*i).ok_or("truncated valtype")?;
-    *i += 1;
-    match b {
-        0x7f | 0x7e | 0x7d | 0x7c | 0x7b | 0x70 | 0x6f => Ok(()),
-        _ => Err(format!("unknown valtype 0x{b:02x}")),
-    }
-}
-
-/// Decode exactly one instruction.
-///
-/// Every arm either consumes its immediates or fails. There is no "skip until
-/// something recognisable" fallback and no default arm that shrugs: an opcode
-/// this does not know is an error, because the alternative is a decoder that
-/// silently desynchronises and then reports a clean module. If a future
-/// toolchain turns on SIMD (`0xFD`), exception handling (`0x06`-`0x0A`) or
-/// `call_ref`, this stops the build and asks to be extended — which is the
-/// cheap failure.
-fn step(d: &[u8], i: &mut usize, out: &mut Scan) -> Result<Eff, String> {
-    let op = *d.get(*i).ok_or("truncated code")?;
-    *i += 1;
-    match op {
-        // control
-        0x00 | 0x01 | 0x05 | 0x0f => Ok(Eff::Flat), // unreachable, nop, else, return
-        // block, loop, if — the three that open a frame and carry a blocktype
-        0x02..=0x04 => {
-            blocktype(d, i)?;
-            Ok(Eff::Open)
-        }
-        0x0b => Ok(Eff::Close),
-        0x0c | 0x0d => {
-            uleb(d, i)?; // labelidx
-            Ok(Eff::Flat)
-        }
-        0x0e => {
-            let n = uleb(d, i)?;
-            for _ in 0..=n {
-                uleb(d, i)?;
-            }
-            Ok(Eff::Flat)
-        }
-        // `return_call` is a real call edge, so it is decoded rather than
-        // refused; rustc only emits it under `+tail-call`, which this repo does
-        // not set, but a missed edge here would be a silent under-approximation
-        // of reachability and those are what this tool exists to prevent.
-        0x10 | 0x12 => {
-            out.calls.push(uleb32(d, i)?);
-            Ok(Eff::Flat)
-        }
-        0x11 | 0x13 => {
-            uleb(d, i)?; // typeidx
-            uleb(d, i)?; // tableidx
-            Ok(Eff::Flat)
-        }
-        // parametric
-        0x1a | 0x1b => Ok(Eff::Flat),
-        0x1c => {
-            let n = uleb(d, i)?;
-            for _ in 0..n {
-                valtype(d, i)?;
-            }
-            Ok(Eff::Flat)
-        }
-        // variable / table access
-        0x20..=0x26 => {
-            uleb(d, i)?;
-            Ok(Eff::Flat)
-        }
-        // memory access
-        0x28..=0x3e => {
-            memarg(d, i)?;
-            Ok(Eff::Flat)
-        }
-        0x3f | 0x40 => {
-            uleb(d, i)?; // memidx
-            Ok(Eff::Flat)
-        }
-        // constants
-        0x41 | 0x42 => {
-            sleb(d, i)?;
-            Ok(Eff::Flat)
-        }
-        0x43 | 0x44 => {
-            let w = if op == 0x43 { 4 } else { 8 };
-            let end = i.checked_add(w).ok_or("truncated float constant")?;
-            if end > d.len() {
-                return Err("truncated float constant".into());
-            }
-            *i = end;
-            Ok(Eff::Flat)
-        }
-        // numeric and sign extension: no immediates
-        0x45..=0xc4 => Ok(Eff::Flat),
-        // reference types
-        0xd0 => {
-            let h = *d.get(*i).ok_or("truncated heaptype")?;
-            *i += 1;
-            match h {
-                0x70 | 0x6f => Ok(Eff::Flat),
-                _ => Err(format!("unknown heaptype 0x{h:02x} in ref.null")),
-            }
-        }
-        0xd1 => Ok(Eff::Flat),
-        0xd2 => {
-            out.refs.push(uleb32(d, i)?);
-            Ok(Eff::Flat)
-        }
-        0xfc => {
-            let sub = uleb(d, i)?;
-            match sub {
-                0..=7 => Ok(Eff::Flat), // i32/i64.trunc_sat_*
-                8 => {
-                    uleb(d, i)?; // dataidx
-                    uleb(d, i)?; // memidx
-                    Ok(Eff::Flat)
-                }
-                9 | 11 | 13 | 15 | 16 | 17 => {
-                    uleb(d, i)?;
-                    Ok(Eff::Flat)
-                }
-                10 | 12 | 14 => {
-                    uleb(d, i)?;
-                    uleb(d, i)?;
-                    Ok(Eff::Flat)
-                }
-                _ => Err(format!(
-                    "unknown 0xFC instruction {sub} — this decoder must be \
-                     extended before it can speak for this module"
-                )),
-            }
-        }
-        0xfe => {
-            let sub = uleb(d, i)?;
-            match sub {
-                0x00 => {
-                    memarg(d, i)?; // memory.atomic.notify: wakes, never blocks
-                    Ok(Eff::Flat)
-                }
-                0x01 | 0x02 => {
-                    memarg(d, i)?;
-                    out.waits
-                        .push(if sub == 0x01 { WAIT32 } else { WAIT64 });
-                    Ok(Eff::Flat)
-                }
-                0x03 => {
-                    *i += 1; // atomic.fence, one reserved byte
-                    if *i > d.len() {
-                        return Err("truncated atomic.fence".into());
-                    }
-                    Ok(Eff::Flat)
-                }
-                0x10..=0x4e => {
-                    memarg(d, i)?; // atomic loads, stores and read-modify-writes
-                    Ok(Eff::Flat)
-                }
-                _ => Err(format!(
-                    "unknown 0xFE (threads) instruction 0x{sub:02x} — this \
-                     decoder must be extended before it can speak for this module"
-                )),
-            }
-        }
-        0xfd => Err(
-            "0xFD (SIMD) instruction: this decoder does not know SIMD immediate \
-             shapes, so it cannot skip them, and a decoder that guesses reports \
-             a clean module. Extend `step` before building with SIMD on."
-                .into(),
-        ),
-        _ => Err(format!(
-            "unknown opcode 0x{op:02x} — a decoder that skipped it would \
-             desynchronise and then report a clean module, so this is an error. \
-             Extend `step`."
-        )),
-    }
-}
-
-/// Decode an instruction sequence.
-///
-/// `end = Some(e)` frames a function body: decoding must land **exactly** on
-/// `e` with the nesting balanced. That frame is the strongest internal control
-/// here — it turns any immediate this decoder gets wrong into a loud desync
-/// rather than a misread instruction stream.
-///
-/// `end = None` decodes a constant expression (an element or global
-/// initialiser), which ends at its own `end` opcode.
-fn decode_seq(d: &[u8], i: &mut usize, end: Option<usize>, out: &mut Scan) -> Result<(), String> {
-    let mut depth: i32 = 1;
-    loop {
-        if let Some(e) = end {
-            if *i >= e {
-                break;
-            }
-        }
-        match step(d, i, out)? {
-            Eff::Open => depth += 1,
-            Eff::Close => {
-                depth -= 1;
-                if depth == 0 {
-                    if end.is_none() {
-                        return Ok(());
-                    }
-                    continue;
-                }
-                if depth < 0 {
-                    return Err("instruction sequence closes more blocks than it opens".into());
-                }
-            }
-            Eff::Flat => {}
-        }
-    }
-    let e = end.expect("constant expressions return at their own end opcode");
-    if *i != e {
-        return Err(format!(
-            "code entry desynchronised: decoding ran to {i} in a body that ends \
-             at {e}. An instruction's immediates were read wrongly, so nothing \
-             this module reports can be trusted."
-        ));
-    }
-    if depth != 0 {
-        return Err("function body ends with unbalanced blocks".into());
-    }
+/// The `ref.func`s in a constant expression (an element or global initialiser).
+fn const_refs(e: &ConstExpr<'_>, table: &mut BTreeSet<u32>) -> wasmparser::Result<()> {
+    let mut s = Scan::default();
+    scan_ops(e.get_operators_reader(), &mut s)?;
+    table.extend(s.refs);
     Ok(())
 }
 
@@ -801,7 +502,8 @@ struct Module {
     /// wait instruction, so a clean scan says nothing about waits.
     atomics: Option<bool>,
     names: BTreeMap<u32, String>,
-    /// `(name, kind, index)`; kind 0 is a function.
+    /// `(name, kind, index)`, kind as the binary format codes it: 0 is a
+    /// function.
     exports: Vec<(String, u8, u32)>,
     start: Option<u32>,
     /// Functions an element segment, a global initialiser or a `ref.func`
@@ -825,7 +527,16 @@ impl Module {
     }
 }
 
+/// Decode a core wasm module. Any decoding error fails the whole parse: a
+/// module this cannot read completely is one it cannot speak for.
 fn parse(d: &[u8]) -> Result<Module, String> {
+    if !Parser::is_core_wasm(d) {
+        return Err("not a wasm module (a component is not one either)".into());
+    }
+    parse_module(d).map_err(|e| format!("cannot decode this wasm module: {e}"))
+}
+
+fn parse_module(d: &[u8]) -> wasmparser::Result<Module> {
     let mut m = Module {
         func_imports: 0,
         imports: Vec::new(),
@@ -836,209 +547,99 @@ fn parse(d: &[u8]) -> Result<Module, String> {
         table: BTreeSet::new(),
         bodies: Vec::new(),
     };
-    for (id, body) in sections(d)? {
-        match id {
-            0 => {
-                parse_names(body, &mut m)?;
-                parse_target_features(body, &mut m)?;
-            }
-            2 => {
-                m.imports = function_imports(body)?;
+    for payload in Parser::new(0).parse_all(d) {
+        match payload? {
+            Payload::ImportSection(r) => {
+                for i in r.into_imports() {
+                    let i = i?;
+                    if let TypeRef::Func(_) | TypeRef::FuncExact(_) = i.ty {
+                        m.imports.push((i.module.to_string(), i.name.to_string()));
+                    }
+                }
                 m.func_imports = m.imports.len() as u32;
             }
-            6 => parse_globals(body, &mut m)?,
-            7 => parse_exports(body, &mut m)?,
-            8 => {
-                let mut i = 0;
-                m.start = Some(uleb32(body, &mut i)?);
+            Payload::GlobalSection(r) => {
+                for g in r {
+                    const_refs(&g?.init_expr, &mut m.table)?;
+                }
             }
-            9 => parse_elements(body, &mut m)?,
-            10 => parse_code(body, &mut m)?,
+            Payload::ExportSection(r) => {
+                for e in r {
+                    let e = e?;
+                    let kind = match e.kind {
+                        ExternalKind::Func | ExternalKind::FuncExact => 0,
+                        ExternalKind::Table => 1,
+                        ExternalKind::Memory => 2,
+                        ExternalKind::Global => 3,
+                        ExternalKind::Tag => 4,
+                    };
+                    m.exports.push((e.name.to_string(), kind, e.index));
+                }
+            }
+            Payload::StartSection { func, .. } => m.start = Some(func),
+            Payload::ElementSection(r) => {
+                for e in r {
+                    let e = e?;
+                    if let ElementKind::Active { offset_expr, .. } = &e.kind {
+                        const_refs(offset_expr, &mut m.table)?;
+                    }
+                    match e.items {
+                        ElementItems::Functions(fs) => {
+                            for f in fs {
+                                m.table.insert(f?);
+                            }
+                        }
+                        ElementItems::Expressions(_, es) => {
+                            for x in es {
+                                const_refs(&x?, &mut m.table)?;
+                            }
+                        }
+                    }
+                }
+            }
+            Payload::CodeSectionEntry(body) => {
+                let mut s = Scan::default();
+                scan_ops(body.get_operators_reader()?, &mut s)?;
+                // An address-take in a body is as good as an element-segment
+                // entry: `ref.func` puts a callable reference in a value, and
+                // `table.set` can install it at run time.
+                m.table.extend(s.refs.iter().copied());
+                m.bodies.push(s);
+            }
+            Payload::CustomSection(c) => match c.as_known() {
+                KnownCustom::Name(names) => {
+                    for sub in names {
+                        if let Name::Function(map) = sub? {
+                            for n in map {
+                                let n = n?;
+                                m.names.insert(n.index, n.name.to_string());
+                            }
+                        }
+                    }
+                }
+                _ if c.name() == "target_features" => {
+                    m.atomics = Some(target_features_atomics(&c)?);
+                }
+                _ => {}
+            },
             _ => {}
         }
     }
     Ok(m)
 }
 
-fn function_imports(body: &[u8]) -> Result<Vec<(String, String)>, String> {
-    let mut i = 0;
-    let count = uleb(body, &mut i)?;
-    let mut funcs = Vec::new();
-    for _ in 0..count {
-        let m = name(body, &mut i)?;
-        let n = name(body, &mut i)?;
-        let kind = *body.get(i).ok_or("truncated import kind")?;
-        i += 1;
-        match kind {
-            0 => {
-                uleb(body, &mut i)?;
-                funcs.push((m.clone(), n.clone()));
-            }
-            1 => {
-                i += 1; // reftype
-                let flags = *body.get(i).ok_or("truncated table limits")?;
-                i += 1;
-                uleb(body, &mut i)?;
-                if flags & 0x01 != 0 {
-                    uleb(body, &mut i)?;
-                }
-            }
-            2 => {
-                let flags = *body.get(i).ok_or("truncated memory limits")?;
-                i += 1;
-                uleb(body, &mut i)?;
-                if flags & 0x01 != 0 {
-                    uleb(body, &mut i)?;
-                }
-            }
-            3 => i += 2, // valtype + mutability
-            k => return Err(format!("unknown import kind {k} in {m}.{n}")),
-        }
-    }
-    Ok(funcs)
-}
-
 /// The `target_features` custom section: a vector of `(prefix, name)`, where
-/// prefix `+` means the feature was used. Any other custom section is ignored.
-fn parse_target_features(body: &[u8], m: &mut Module) -> Result<(), String> {
-    let mut i = 0;
-    if name(body, &mut i)? != "target_features" {
-        return Ok(());
-    }
-    let count = uleb(body, &mut i)?;
+/// prefix `+` means the feature was used. True if `atomics` was.
+fn target_features_atomics(c: &CustomSectionReader<'_>) -> wasmparser::Result<bool> {
+    let mut r = BinaryReader::new(c.data(), c.data_offset());
     let mut atomics = false;
-    for _ in 0..count {
-        let prefix = *body.get(i).ok_or("truncated target_features entry")?;
-        i += 1;
-        if name(body, &mut i)? == "atomics" && prefix == b'+' {
+    for _ in 0..r.read_var_u32()? {
+        let prefix = r.read_u8()?;
+        if r.read_string()? == "atomics" && prefix == b'+' {
             atomics = true;
         }
     }
-    m.atomics = Some(atomics);
-    Ok(())
-}
-
-fn parse_exports(body: &[u8], m: &mut Module) -> Result<(), String> {
-    let mut i = 0;
-    let count = uleb(body, &mut i)?;
-    for _ in 0..count {
-        let n = name(body, &mut i)?;
-        let kind = *body.get(i).ok_or("truncated export kind")?;
-        i += 1;
-        let idx = uleb32(body, &mut i)?;
-        m.exports.push((n, kind, idx));
-    }
-    Ok(())
-}
-
-fn parse_globals(body: &[u8], m: &mut Module) -> Result<(), String> {
-    let mut i = 0;
-    let count = uleb(body, &mut i)?;
-    for _ in 0..count {
-        valtype(body, &mut i)?;
-        i += 1; // mutability
-        let mut s = Scan::default();
-        decode_seq(body, &mut i, None, &mut s)?;
-        m.table.extend(s.refs);
-    }
-    Ok(())
-}
-
-fn parse_elements(body: &[u8], m: &mut Module) -> Result<(), String> {
-    let mut i = 0;
-    let count = uleb(body, &mut i)?;
-    for _ in 0..count {
-        let flags = uleb(body, &mut i)?;
-        // The seven-and-a-bit shapes of the element section. Grouped by which
-        // of the four optional pieces each carries, in encoding order:
-        // tableidx, offset expression, element kind/reftype, then either a
-        // vector of function indices or a vector of constant expressions.
-        let (has_table, has_offset, has_kind, exprs) = match flags {
-            0 => (false, true, false, false),
-            1 => (false, false, true, false),
-            2 => (true, true, true, false),
-            3 => (false, false, true, false),
-            4 => (false, true, false, true),
-            5 => (false, false, true, true),
-            6 => (true, true, true, true),
-            7 => (false, false, true, true),
-            f => return Err(format!("unknown element segment flags {f}")),
-        };
-        if has_table {
-            uleb(body, &mut i)?;
-        }
-        if has_offset {
-            let mut s = Scan::default();
-            decode_seq(body, &mut i, None, &mut s)?;
-            m.table.extend(s.refs);
-        }
-        if has_kind {
-            i += 1; // elemkind (0x00) or reftype
-            if i > body.len() {
-                return Err("truncated element segment".into());
-            }
-        }
-        let n = uleb(body, &mut i)?;
-        for _ in 0..n {
-            if exprs {
-                let mut s = Scan::default();
-                decode_seq(body, &mut i, None, &mut s)?;
-                m.table.extend(s.refs);
-            } else {
-                m.table.insert(uleb32(body, &mut i)?);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn parse_code(body: &[u8], m: &mut Module) -> Result<(), String> {
-    let mut i = 0;
-    let count = uleb(body, &mut i)?;
-    for n in 0..count {
-        let size = uleb(body, &mut i)? as usize;
-        let end = i.checked_add(size).ok_or("code entry overruns section")?;
-        if end > body.len() {
-            return Err(format!("code entry {n} is truncated"));
-        }
-        let locals = uleb(body, &mut i)?;
-        for _ in 0..locals {
-            uleb(body, &mut i)?; // repeat count
-            valtype(body, &mut i)?;
-        }
-        let mut s = Scan::default();
-        decode_seq(body, &mut i, Some(end), &mut s)
-            .map_err(|e| format!("code entry {n}: {e}"))?;
-        // An address-take in a body is as good as an element-segment entry:
-        // `ref.func` puts a callable reference in a value, and `table.set` can
-        // install it at run time.
-        m.table.extend(s.refs.iter().copied());
-        m.bodies.push(s);
-    }
-    Ok(())
-}
-
-fn parse_names(body: &[u8], m: &mut Module) -> Result<(), String> {
-    let mut i = 0;
-    if name(body, &mut i)? != "name" {
-        return Ok(());
-    }
-    while i < body.len() {
-        let sub = body[i];
-        i += 1;
-        let size = uleb(body, &mut i)? as usize;
-        let end = i.checked_add(size).ok_or("name subsection overruns")?;
-        if sub == 1 {
-            let mut k = i;
-            let count = uleb(body, &mut k)?;
-            for _ in 0..count {
-                let idx = uleb32(body, &mut k)?;
-                m.names.insert(idx, name(body, &mut k)?);
-            }
-        }
-        i = end;
-    }
-    Ok(())
+    Ok(atomics)
 }
 
 // ------------------------------------------------------------- legibility --
@@ -2660,13 +2261,6 @@ fn self_test() -> Result<(), String> {
             innocent.waits.len()
         ));
     }
-    // The decoder must refuse what it cannot skip, rather than desynchronise.
-    if decode_body(&[0xfd, 0x00]).is_ok() {
-        return Err("self-test: a SIMD opcode was accepted, so an unknown \
-                    immediate shape could be skipped wrongly and the scan after \
-                    it would be nonsense"
-            .into());
-    }
     Ok(())
 }
 
@@ -2675,9 +2269,8 @@ fn decode_body(instrs: &[u8]) -> Result<Scan, String> {
     let mut d = instrs.to_vec();
     d.push(0x0b);
     let mut s = Scan::default();
-    let end = d.len();
-    let mut i = 0;
-    decode_seq(&d, &mut i, Some(end), &mut s)?;
+    scan_ops(OperatorsReader::new(BinaryReader::new(&d, 0)), &mut s)
+        .map_err(|e| format!("self-test: {e}"))?;
     Ok(s)
 }
 
@@ -3637,31 +3230,55 @@ mod tests {
 
     #[test]
     fn an_unknown_opcode_is_an_error_never_a_pass() {
-        for (op, what) in [(vec![0xfd, 0x00], "SIMD"), (vec![0x06], "unknown opcode")] {
+        for op in [
+            vec![0x27],
+            vec![0xfe, 0x60],
+            vec![0xfc, 0x40],
+            vec![0xfd, 0xff, 0x7f],
+        ] {
             let b = Build {
                 funcs: vec![fun(ROOT, op), fun(PANIC_FMT, vec![0x01])],
                 exports: vec![root_export(0)],
                 ..Default::default()
             };
             let e = b.check().unwrap_err();
-            assert!(e.contains(what), "expected {what} in: {e}");
+            assert!(e.contains("cannot decode this wasm module"), "{e}");
         }
     }
 
+    /// SIMD and exception-handling instructions are decoded like any other:
+    /// a `v128.const` whose bytes spell a wait32 is not a wait, and a call
+    /// inside a `try_table` is still an edge.
     #[test]
-    fn an_unknown_prefixed_instruction_is_an_error() {
-        for op in [vec![0xfe, 0x60], vec![0xfc, 0x40]] {
-            let b = Build {
-                funcs: vec![fun(ROOT, op), fun(PANIC_FMT, vec![0x01])],
-                exports: vec![root_export(0)],
-                ..Default::default()
-            };
-            assert!(b.check().unwrap_err().contains("must be extended"));
-        }
+    fn simd_and_exception_handling_are_scanned() {
+        let mut simd = vec![0xfd, 0x0c]; // v128.const
+        simd.extend_from_slice(&[0xfe, 0x01, 0x02, 0x00].repeat(4));
+        simd.push(0x1a); // drop
+        assert!(panic_shaped(simd.clone())
+            .check()
+            .unwrap()
+            .contains("clean"));
+
+        simd.extend_from_slice(&call(4));
+        let e = panic_shaped(simd).check().unwrap_err();
+        assert!(
+            e.contains("futex_wait") && e.contains("not panic paths"),
+            "{e}"
+        );
+
+        // try_table (empty blocktype, no catch clauses) call 4 end
+        let mut eh = vec![0x1f, 0x40, 0x00];
+        eh.extend_from_slice(&call(4));
+        eh.push(0x0b);
+        let e = panic_shaped(eh).check().unwrap_err();
+        assert!(
+            e.contains("futex_wait") && e.contains("not panic paths"),
+            "{e}"
+        );
     }
 
-    /// The frame check: an immediate read wrongly leaves the cursor off the
-    /// body's declared end, and that is reported rather than absorbed.
+    /// A body whose declared size disagrees with its instructions is reported
+    /// rather than absorbed.
     #[test]
     fn a_body_that_does_not_end_where_it_says_is_an_error() {
         let mut b = Build {
@@ -3682,7 +3299,7 @@ mod tests {
         let p = dir.join("desync.wasm");
         std::fs::write(&p, &b).unwrap();
         let e = run(p.to_str().unwrap(), "//pkg:x").unwrap_err();
-        assert!(e.contains("desynchronised") || e.contains("truncated"), "{e}");
+        assert!(e.contains("cannot decode this wasm module"), "{e}");
     }
 
     #[test]
@@ -3699,7 +3316,7 @@ mod tests {
         let p = dir.join("short.wasm");
         std::fs::write(&p, &b).unwrap();
         let e = run(p.to_str().unwrap(), "//pkg:x").unwrap_err();
-        assert!(e.contains("truncated") || e.contains("overruns"), "{e}");
+        assert!(e.contains("cannot decode this wasm module"), "{e}");
     }
 
     #[test]

@@ -24,15 +24,13 @@ rust_test(
 # With `--ir` it reads a native build's whole-program LLVM IR instead (ir.rs). See main.rs for the
 # decision procedure, the panic-path exemption and what green does not claim.
 #
-# Zero dependencies, matching //bazel/wasm_std_check and
-# //codegen:frustrate_codegen_bin as exec tools: a crate would drag the
-# @frustrate_crates hub into every consumer's exec configuration. It is also a cargo workspace
-# member, so `tools/check_block.dart` and the Bazel check action run the
-# identical binary.
+# It is also a cargo workspace member, so `tools/check_block.dart` and the Bazel
+# check action run the identical binary.
 rust_binary(
     name = "wasm_block_check",
     srcs = ["budget.rs", "io.rs", "ir.rs", "libc.rs", "main.rs", "provenance.rs", "silences.rs"],
     edition = "2021",
+    deps = ["@frustrate_crates//:wasmparser"],
     rustc_flags = ["-Dwarnings"],
     visibility = ["//visibility:public"],
 )

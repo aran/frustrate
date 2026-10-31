@@ -8,8 +8,7 @@ default-run = "wasm_block_check"
 description = "Scans a --cfg frustrate_block_check wasm module for reachable memory.atomic.wait"
 
 # The source sits at the package root rather than in `src/`, so the Bazel
-# `rust_binary` and this manifest name the same file. Dependencies are
-# deliberately absent; see main.rs.
+# `rust_binary` and this manifest name the same file.
 [[bin]]
 name = "wasm_block_check"
 path = "main.rs"
@@ -17,3 +16,8 @@ path = "main.rs"
 [[bin]]
 name = "frustrate-link-filter"
 path = "link_filter.rs"
+
+[dependencies]
+# Without default features it depends only on `bitflags`; `simd` decodes 0xFD
+# instructions, and with `features` off every proposal is read.
+wasmparser = { version = "0.244", default-features = false, features = ["std", "simd"] }

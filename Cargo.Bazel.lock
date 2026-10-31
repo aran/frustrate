@@ -1,5 +1,5 @@
 {
-  "checksum": "8d01fda5392bd87d8238e5c1f876f217db486d926c9cd713a588e50d8bd47f07",
+  "checksum": "d32518739f2ae570a250634080dbeec2c4c5d20e75b6a1b69d5a51b6debbcf99",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -134,6 +134,35 @@
       ],
       "version": "4.7.1"
     },
+    "bitflags 2.13.2": {
+      "common_attrs": {
+        "edition": "2021"
+      },
+      "library_target_name": "bitflags",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "bitflags",
+      "package_url": "https://github.com/bitflags/bitflags",
+      "repository": {
+        "Http": {
+          "sha256": "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06",
+          "url": "https://static.crates.io/crates/bitflags/2.13.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitflags",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "2.13.2"
+    },
     "cfg-if 1.0.4": {
       "common_attrs": {
         "edition": "2018"
@@ -191,6 +220,35 @@
         }
       ],
       "version": "0.1.13"
+    },
+    "equivalent 1.0.3": {
+      "common_attrs": {
+        "edition": "2015"
+      },
+      "library_target_name": "equivalent",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "equivalent",
+      "package_url": "https://github.com/indexmap-rs/equivalent",
+      "repository": {
+        "Http": {
+          "sha256": "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826",
+          "url": "https://static.crates.io/crates/equivalent/1.0.3/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "equivalent",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.0.3"
     },
     "frustrate 0.1.0": {
       "common_attrs": {
@@ -505,6 +563,35 @@
       ],
       "version": "0.3.4"
     },
+    "hashbrown 0.17.1": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "hashbrown",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "hashbrown",
+      "package_url": "https://github.com/rust-lang/hashbrown",
+      "repository": {
+        "Http": {
+          "sha256": "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a",
+          "url": "https://static.crates.io/crates/hashbrown/0.17.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hashbrown",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.17.1"
+    },
     "heck 0.5.0": {
       "common_attrs": {
         "edition": "2021"
@@ -533,6 +620,45 @@
         }
       ],
       "version": "0.5.0"
+    },
+    "indexmap 2.14.2": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "equivalent 1.0.3",
+            "target": "equivalent"
+          },
+          {
+            "id": "hashbrown 0.17.1",
+            "target": "hashbrown"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "indexmap",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "indexmap",
+      "package_url": "https://github.com/indexmap-rs/indexmap",
+      "repository": {
+        "Http": {
+          "sha256": "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855",
+          "url": "https://static.crates.io/crates/indexmap/2.14.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "indexmap",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "2.14.2"
     },
     "itoa 1.0.18": {
       "common_attrs": {
@@ -1385,6 +1511,12 @@
     },
     "wasm-block-check 0.1.0": {
       "common_attrs": {
+        "deps": [
+          {
+            "id": "wasmparser 0.244.0",
+            "target": "wasmparser"
+          }
+        ],
         "edition": "2021"
       },
       "license": "Apache-2.0",
@@ -1395,6 +1527,44 @@
       "repository": null,
       "targets": [],
       "version": "0.1.0"
+    },
+    "wasmparser 0.244.0": {
+      "common_attrs": {
+        "crate_features": [
+          "simd",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "bitflags 2.13.2",
+            "target": "bitflags"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "wasmparser",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "wasmparser",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "sha256": "47b807c72e1bac69382b3a6fb3dbe8ea4c0ed87ff5629b8685ae6b9a611028fe",
+          "url": "https://static.crates.io/crates/wasmparser/0.244.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.244.0"
     },
     "wit-bindgen 0.57.1": {
       "build_script_attrs": {},
@@ -1522,7 +1692,8 @@
     "rustc-demangle 0.1.28",
     "serde 1.0.228",
     "serde_json 1.0.150",
-    "syn 2.0.117"
+    "syn 2.0.117",
+    "wasmparser 0.244.0"
   ],
   "direct_dev_deps": [
     "pretty_assertions 1.4.1"
