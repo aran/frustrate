@@ -8,7 +8,7 @@ executor works even where no thread may block.
 
 ## The invariant: the browser main thread never blocks
 
-On web, synchronous waiting is confined to pool workers; on native it is also
+On web, synchronous waiting is confined to workers; on native it is also
 allowed wherever a member declares it ([blocking.md](blocking.md)). What a
 violation looks like depends on the build:
 
@@ -17,8 +17,8 @@ violation looks like depends on the build:
   call that caused it.
 - **Single-threaded web.** There is no wait instruction at all. Most of std's
   blocking primitives refuse, but `thread::park` returns immediately, so a body
-  that parks in a loop spins the only thread forever. Nothing reports it, and
-  `tools/check_no_park.dart` exists to catch it at link time.
+  that parks in a loop spins the only thread forever. Nothing reports it;
+  `tools/check_no_park.dart` gates frustrate's own module, not a bridge's.
 
 Whether shared memory (SharedArrayBuffer) is available depends on cross-origin
 isolation, not on threads. So single-threaded-with-shared-memory is a real

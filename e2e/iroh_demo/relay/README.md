@@ -11,8 +11,8 @@ package really owns — a check that a relay relays, in three shapes: a test tha
 spawns its own server, a fixture a harness can start, and a health check for a
 deployment. There is no Flutter, Dart, or frustrate machinery in it.
 
-**The demo does not need it.** Dialing by ticket over n0's public relays
-connects across networks with zero configuration. Self-hosting buys owning the
+**The demo does not need it.** With `PRESET=n0`, dialing by ticket over n0's
+public relays connects across networks. Self-hosting buys owning the
 stack, and it becomes *non-optional* for a browser peer: a page served over
 HTTPS can only talk to a `wss://` relay with a publicly trusted certificate, and
 `insecure_skip_verify` is native-only.
@@ -34,7 +34,7 @@ either lockfile: `iroh_relay::server` sits behind the `server` feature that
 `@relay_crates` already enables.
 
 The server is an alias rather than a `rust_binary` of our own on purpose:
-upstream's `main.rs` is 959 lines of CLI and TOML-config handling, and a
+upstream's `main.rs` is the whole CLI and TOML-config handling, and a
 vendored copy would drift from the schema this README documents. What this
 package owns is the configuration and the deployment.
 
@@ -84,12 +84,13 @@ Point the app at a local relay with:
 bazel run //tools:two_peers -- --relay http://localhost:3340
 ```
 
-which passes it to the app as `--dart-define=RELAY_URL=…` and to `peerbot` as
-`--relay`. Both reach `Endpoint::builder` as:
+which builds the app with `--dart-define=PRESET=minimal` and
+`--dart-define=RELAY_URL=…` and starts `peerbot` with `--relay`. Both reach
+`Endpoint::builder` as:
 
 ```rust
 let url: RelayUrl = "http://localhost:3340".parse()?;
-Endpoint::builder(presets::N0).relay_mode(RelayMode::custom([url]))
+Endpoint::builder(presets::Minimal).relay_mode(RelayMode::custom([url]))
 ```
 
 Three things that are easy to get wrong here:
@@ -97,9 +98,10 @@ Three things that are easy to get wrong here:
 - **`presets::Empty` does not work.** It sets no `crypto_provider`, which is a
   mandatory builder option, so `bind()` always fails — its own rustdoc says so.
   The two shapes that do work are `presets::N0` plus a `relay_mode` (keeps
-  pkarr/DNS discovery, replaces only the relay — what `bridge/src/node.rs`'s
-  `builder_for` uses, and why) and `presets::Minimal` plus a `relay_mode` (no
-  discovery at all — what `peerbot --preset minimal --relay …` uses).
+  pkarr/DNS discovery, replaces only the relay — `PRESET=n0` with a
+  `RELAY_URL`) and `presets::Minimal` plus a `relay_mode` (no discovery at all
+  — what `two_peers --relay` gives both peers). `bridge/src/node.rs`'s
+  `builder_for` and `peerbot` build either, from the preset they are given.
   `Builder::relay_mode` *replaces* the relay transport rather than appending
   one, which is what makes "preset, then override" a one-line change.
 - **No turbofish is needed.** `RelayMode::custom` takes an
@@ -136,12 +138,9 @@ From `iroh-relay/src/defaults.rs`, which is authoritative. The crate README's
 bazel build //relay:iroh_relay --platforms=//relay:linux_x86_64
 ```
 
-This works from macOS — it produces an `ELF 64-bit LSB pie executable, x86-64`
-in ~30s. It needs a Linux **C** toolchain, and the reason is easy to
-misdiagnose, so it is worth stating why.
-
-Until `//:MODULE.bazel` registered a Linux `cc_toolchain` (`@llvm`,
-zero-sysroot — see the comment there), it failed with:
+This works from macOS — it produces an `ELF 64-bit LSB pie executable, x86-64`.
+It needs a Linux **C** toolchain, which `//:MODULE.bazel` registers (`@llvm`,
+zero-sysroot — see the comment there). Without one, analysis fails with:
 
 ```
 ERROR: .../rules_rust+/ffi/cc/allocator_library/BUILD.bazel:21:11: While resolving
@@ -150,26 +149,13 @@ No matching toolchains found for types:
   @@bazel_tools//tools/cpp:toolchain_type
 ```
 
-The Rust half is entirely fine. `--toolchain_resolution_debug` confirms the
-cross toolchain resolves:
+The Rust cross toolchain resolves either way; the first thing to need a **C**
+toolchain is not `ring` but rules_rust's own allocator shim, which every
+`rust_binary` links.
 
-```
-Selected execution platform @@platforms//host:host, type @@rules_rust+//rust:toolchain_type
-  -> toolchain @@rules_rust++rust+rust_macos_aarch64__x86_64-unknown-linux-gnu__stable_tools//:rust_toolchain
-```
-
-and no crate resolved to `//:incompatible`, so `supported_platform_triples` is
-right. What was missing is a **C** toolchain for Linux — and the first thing to
-need one is not `ring`, it is rules_rust's own allocator shim, which every
-`rust_binary` links. Supplying it means registering a Linux `cc_toolchain`,
-which no module in these three repos did.
-
-`deploy/deploy_relay.dart` builds **on the VM**, natively. Since the
-cross-compile works, the shorter path is to build `//relay:iroh_relay
---platforms=//relay:linux_x86_64` on the developer's machine and upload one
-binary — which also retires the awkwardness where Bazel's whole-graph module
-resolution forces the whole frustrate worktree to be uploaded in order to build
-a relay that uses none of it.
+`deploy/deploy_relay.dart` builds **on the VM**, natively, and Bazel's
+whole-graph module resolution makes it upload the whole frustrate worktree to
+build a relay that uses none of it.
 
 Also note `@rules_rust//rust/platform:x86_64-unknown-linux-gnu` is **not** a
 platform — it is a constraint bundle, and passing it to `--platforms` fails
@@ -212,8 +198,8 @@ Creates, all in the active project:
   the disk (and the cached certificate on it) rather than deleting it.
 
 The startup script installs `build-essential`, bazelisk, and a 4 GB swapfile.
-The swap is not optional: e2-medium has 4 GB of RAM and this build has ~350
-crates in it. Pass `--machine-type=e2-standard-4` if it still thrashes; the
+The swap is not optional: e2-medium has 4 GB of RAM and this build has
+several hundred crates in it. Pass `--machine-type=e2-standard-4` if it still thrashes; the
 relay only needs e2-medium to *run*.
 
 It prints the IP and stops.
@@ -243,7 +229,7 @@ dart run relay/deploy/deploy_relay.dart iroh-relay
 ```
 
 Uploads the frustrate source tree, runs `bazel build -c opt --jobs=2
-//relay:iroh_relay` on the VM (15-40 minutes on e2-medium), then installs:
+//relay:iroh_relay` on the VM, then installs:
 
 | On the VM | From |
 | --- | --- |
@@ -251,7 +237,7 @@ Uploads the frustrate source tree, runs `bazel build -c opt --jobs=2
 | `/etc/iroh-relay/relay.toml` | `relay/relay.toml` |
 | `/etc/systemd/system/iroh-relay.service` | `relay/iroh-relay.service` |
 
-and runs `systemctl enable --now iroh-relay`. The unit runs under
+and enables and restarts the `iroh-relay` unit. The unit runs under
 `DynamicUser=yes` with `AmbientCapabilities=CAP_NET_BIND_SERVICE` — unprivileged,
 but able to bind 80 and 443 — and keeps its ACME cache in the systemd-managed
 `/var/lib/iroh-relay/certs`, which is what makes a restart cheap instead of a
@@ -280,9 +266,9 @@ bazel run //relay:relay_smoke -- https://relay.<your-domain>
 
 - **Preemption.** Spot means it will be stopped, without warning, and every
   relayed connection dies with it. `gcloud compute instances start iroh-relay`
-  brings it back on the same IP; systemd starts the relay on boot. The app is
-  guaranteed only to show a `Left` per peer at that moment — whether it can
-  produce an `Offline` → `Online` transition is unverified.
+  brings it back on the same IP; systemd starts the relay on boot. The app
+  shows a `Left` per peer at that moment; it has no event for the relay going
+  away.
 - **Logs.** `gcloud compute ssh iroh-relay --command 'sudo journalctl -u iroh-relay -f'`
 - **Metrics.** Loopback only, by design:
   `gcloud compute ssh iroh-relay --command 'curl -s localhost:9090/metrics'`

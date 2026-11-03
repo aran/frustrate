@@ -16,7 +16,9 @@ what they carry.
 - **Anything Dart did not catch** reaches whatever the app already installed.
   An unhandled failure goes to the zone that issued the call, which is what
   `runZonedGuarded` observes and what Flutter routes to
-  `PlatformDispatcher.onError`. frustrate adds no catch-all of its own; it
+  `PlatformDispatcher.onError`. A panic no call waits on (an actor's posted
+  closure, a spawned task) goes there too, in the zone its actor was built in
+  or frustrate was installed in. frustrate adds no catch-all of its own; it
   would be a second place to register the same reporter.
 
 Generated async bindings rethrow a failure with their own stack, so a report

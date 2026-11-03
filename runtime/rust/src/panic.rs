@@ -4,8 +4,9 @@
 //!
 //! Without it the Rust half of an app is unreportable. A Dart `catch` sees
 //! only what survived encoding into the response envelope — a message string,
-//! no location, no backtrace — and nothing at all for a panic that killed a
-//! thread instead of answering a call.
+//! no location, no backtrace. A panic in work no call waits on reaches Dart
+//! only as an uncaught error in a zone (`uncaught.rs`), and one on a thread
+//! frustrate does not own reaches no Dart at all.
 //!
 //! ```
 //! // once, at init — re-registrable; see `register`

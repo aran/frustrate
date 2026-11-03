@@ -24,7 +24,7 @@ generated.
 - **A mirror method never runs inside the Rust call that posts to it**, on any
   platform. Re-entering the bridge from a callback is legal.
 - **A void Dart method that throws** terminates that channel: Rust's next send
-  returns `false`, and the error goes to the current zone. There is no reply
+  returns `false`, and the error goes to the zone frustrate was installed in. There is no reply
   frame to carry it, and swallowing it is not acceptable.
 - **A `DartFunction`'s Dart side is `R Function(T)`**: it answers synchronously
   and cannot itself wait. Anything Dart must wait for is a request out on a

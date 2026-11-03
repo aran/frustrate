@@ -4,8 +4,8 @@ Two people paste each other's ticket and talk directly, phone to laptop, over
 [iroh](https://github.com/n0-computer/iroh). It runs on macOS, iOS, Android,
 Linux and in a browser, from one `lib/main.dart` and one bridged Rust surface.
 
-This is frustrate's demanding example: a real dependency with a real graph (379
-lock packages, one C-heavy crate), a real async runtime frustrate does not
+This is frustrate's demanding example: a real dependency with a real graph (hundreds
+of lock packages, one C-heavy crate), a real async runtime frustrate does not
 provide, real platform permissions, and a real network. `e2e/flutter_demo` is
 the feature gallery — every bridged shape, nothing else going on. This one is
 the opposite: one narrow feature, and everything that comes with shipping it.
@@ -24,8 +24,8 @@ is a plain `Box<T>` needing neither `Send` nor `Sync`, so it can own a
 *inline on the main thread* — where `thread::park` is not a trap but a no-op
 (`Parker::park` is `{}` there, and nothing can unpark it), so the call spins the
 page's only thread at 100% CPU forever, with no error and no way to recover.
-That silent form is the worse one, and it is why `tools/check_no_park.dart`
-exists. A
+That silent form is the worse one, and it is why frustrate's
+`tools/check_no_park.dart` exists. A
 `#[bridge] async fn` is not automatically better: frustrate's cooperative
 executor has no reactor of its own, so an unregistered tokio leaf panics at
 construction ("there is no reactor running"). On native you can lend it one —
@@ -103,20 +103,17 @@ are not, and each cost real time to find.
   and names only `wasm32` and `linux-x86_64` as targets. Naming a macOS target
   would register a darwin `cc_toolchain` that outranks Xcode's for every host
   build, and rules_apple would then link against `@llvm`'s curated SDK subset
-  instead of Xcode's. The Linux capability costs ~40 lines in one file and no
-  sysroot at all — `@llvm` cross-compiles glibc and libc++ from source.
+  instead of Xcode's. It needs no sysroot at all — `@llvm` cross-compiles
+  glibc and libc++ from source.
 
 `e2e/flutter_demo` deliberately does **not** carry that wiring: its `app_linux`
 builds on a Linux host and is not cross-buildable from macOS. This demo is
 where the Linux cross path is proven.
 
-**Nothing here has run on a device.** Every platform above is covered by a
-`build_test`, which proves the bundle assembles with the Rust artifact inside it
-at the path the loader will look for — not that a single bridge call crosses.
-No iPhone, Android phone, Linux machine, simulator or emulator has been booted;
-every functional claim in this repo is a macOS + Chromium claim. Closing that
-needs hardware and, for `//:app_ios_device`, a `//device:profile` package
-(gitignored; `device.example/` is the template).
+A platform's `build_test` proves the bundle assembles with the Rust artifact
+inside it at the path the loader will look for — not that a single bridge call
+crosses. `//:app_ios_device` has none, because it needs a `//device:profile`
+package (gitignored; `device.example/` is the template).
 
 **Who the app talks to is a build-time choice**, and it is visible in the
 running app's transport chip. `PRESET` defaults to `minimal` — no relays, no
@@ -145,8 +142,7 @@ holds the workspace lock that inner build needs.
 **What no test here asserts.** The path badge flipping to `direct` mid-session:
 every automated run pairs on one host, where the badge starts `direct` and never
 changes, so the transition is only observable across two real networks. Also the
-first Android device install, and anything involving a deployed relay
-(`relay/README.md` is explicit that nothing in it has ever been deployed).
+first Android device install, and anything involving a deployed relay.
 
 ## Layout
 

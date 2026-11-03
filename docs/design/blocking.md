@@ -69,14 +69,15 @@ blocks. It can see **where the body runs**, and that settles most claims:
 
 - An **actor member** runs entirely on the actor's own executor, parameter
   decode included, so a wait there falls under rule 3 on every configuration.
-- A **dispatched member** runs off the caller wherever the wait instruction
-  exists. It runs inline on the caller only on single-threaded web, where the
+- A **dispatched member**'s body runs off the caller wherever the wait
+  instruction exists. It runs inline on the caller only on single-threaded web, where the
   module contains no wait instruction at all. These are two different
   arguments. Together they cover every configuration only because the
   remaining pairing, `+atomics` without `wasm-threads`, is a `compile_error!`
   in `runtime/rust/src/pool.rs`.
-- A **`#[bridge(sync)]` body** runs in the caller's frame. Only these need the
-  artifact check, `bazel/wasm_block_check`.
+- A **`#[bridge(sync)]` body** runs in the caller's frame, and so does what a
+  dispatched member leaves on the caller: its parameter decode and the `Drop`
+  of a handle it returns. Only these need `frustrate_no_block_check`.
 
 Placement is what makes the claim usable on real dependencies. In the iroh
 demo, any fallible iroh call builds an error that asks a `OnceLock` whether
@@ -124,8 +125,8 @@ prove something there:
   frustrate's registries share one lock type, `bounded::Lock`, whose wait is
   exempt only because the scanner checks every critical section of it in the
   program and finds none that waits or takes it again.
-  A call through a value loaded from a static, or returned by a C function,
-  is "cannot verify": someone else installed it (`bazel/wasm_block_check/ir.rs`
+  A call through a value loaded from a mutable static, or returned or written
+  by a C function, is "cannot verify": someone else installed it (`bazel/wasm_block_check/ir.rs`
   and `provenance.rs` have the procedure). A static only the program can name,
   into which it stores only its own functions (memchr's CPU dispatch), is not
   that: the call is followed into each of them. The panic path is not checked.
@@ -143,7 +144,7 @@ An analysis that cannot run where it is asked (threaded web without the
 locally built std) is incompatible there, so `bazel test` reports it SKIPPED
 rather than passing it.
 
-## Why the check scans a purpose-built module
+## Why the wasm analyses scan a purpose-built module
 
 Analysing the call graph of the shipped module cannot be made sound.
 Monomorphised code shares a handful of wasm function signatures, so filtering

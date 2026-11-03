@@ -36,7 +36,7 @@ The screenshot is an artifact, never evidence: nothing is concluded from it.
 |---|---|
 | `--screenshot PATH` | where the PNG goes (default `$TMPDIR/tin_can_two_peers.png`) |
 | `--no-shutdown` | leave the app and the bot running after the assertions |
-| `--probe-restart` | after passing, issue `app.restart` and report whether the control channel survives (it does not, when the native library changed) |
+| `--probe-restart` | after passing, issue `app.restart` and report whether the control channel survives |
 | `--relay URL` | put **both** peers on `presets::Minimal` through that relay: one relay of ours, no n0 service at all. Start one with `bazel run //relay:relay_dev` |
 | `--n0` | build the app with `PRESET=n0` — n0's public relays, pkarr and DNS. The only reason to use it is to check that path still works |
 
@@ -64,8 +64,8 @@ app's crate hub, whose one feature-unified graph cannot add `tokio/signal`.
 **It is not a `bazel test`.** It has to invoke bazel (the dev tool builds and
 installs the app), and inside a test action bazel is off `PATH`,
 `BUILD_WORKSPACE_DIRECTORY` is empty, and `$TEST_TMPDIR` makes an inner bazel
-fork a second server with its own output base — which would rebuild iroh's 373
-crates from scratch on every run. So `bazel test //...` does not run it and
+fork a second server with its own output base — which would rebuild iroh's whole
+crate graph from scratch on every run. So `bazel test //...` does not run it and
 nothing forces it to keep working.
 
 **It is not a browser test.** Everything here is native, and the one peer that

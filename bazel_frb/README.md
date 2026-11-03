@@ -51,9 +51,13 @@ declared as inputs, byte-identical output.
 
 ```sh
 cd bazel_frb
+cargo vendor codegen_action/vendor
 bazel build //codegen_action:codegen_offline_vendored_blocked \
     --action_env=FRB_HOST_HOME=$HOME --action_env=FRB_HOST_PATH="$PATH"
 ```
+
+Every rung exits 0 so that a failure still leaves its log; a rung passed when
+`bazel-bin/codegen_action/<rung>.log` contains `Done!`.
 
 ## Formatting inside the sandbox
 

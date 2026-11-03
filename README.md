@@ -186,7 +186,8 @@ dart_binary(
 
 `FrustrateNative.init` each bridge's library: the first builds the transport,
 the rest attach to it. A library built separately is refused. On web,
-`frustrate_wasm_module(crate = ":app_rust")` builds the one module, and
+`frustrate_wasm_module(name = "app_rust.wasm", crate = ":app_rust")` builds the
+one module, and
 `FrustrateWeb.initFromUrl(main.frustrateBridge, 'app_rust.wasm')` serves a
 bridge from it, once per bridge, the same way. Generated code reaches its
 runtime with `Frustrate.of(frustrateBridge)`; `Frustrate.instance` answers
@@ -325,7 +326,8 @@ The protocol, and how to set an agent up to use it, is in rules_flutter's
 [dev tool docs](https://github.com/aran/rules_flutter#driving-the-app-from-a-script).
 
 Hot reload needs a native target and a `-c dbg` build. Opt in by wrapping the
-bridge library:
+bridge library, binding the code asset to the wrapper, and wrapping the asset
+for rules_flutter:
 
 ```starlark
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
@@ -336,16 +338,22 @@ frustrate_hot_patchable(
     library = ":my_bridge",
 )
 
+frustrate_code_asset(
+    name = "bridge_asset",
+    bridge = ":codegen",
+    library = ":my_bridge_hot",
+)
+
 flutter_native_library(
     name = "my_bridge_native",
     binding_contract = [":codegen.ir"],
     hot_patch = ":my_bridge_hot.hot_patch",
-    library = ":my_bridge_hot",
+    library = ":bridge_asset",
 )
 ```
 
-Then name `my_bridge_native` in the plugin's `native_deps`, in place of the
-library itself.
+Then list `my_bridge_native` in the bindings package's `code_assets`, in place
+of the bare asset.
 
 For a `frustrate_library`, pass the same `bridges` dict instead of a contract.
 That also declares each bridge's code asset over the patchable library
@@ -454,7 +462,7 @@ let memory, handle;
 
 export async function attach({ exports, memory: m, actor }) {
   memory = m;
-  if (actor?.bridge === 'app_rust' && actor.type === 'Core') {
+  if (actor?.bridge === 'my_bridge' && actor.type === 'Core') {
     const root = await navigator.storage.getDirectory();
     const file = await root.getFileHandle('db', { create: true });
     handle = await file.createSyncAccessHandle();

@@ -785,8 +785,9 @@ frustrate_wasm_module = rule(
                   "That module may also export " +
                   "`attach({exports, memory, actor})`, which the runtime " +
                   "awaits on every instance before any of the bridge's code " +
-                  "runs; `actor` is the Rust type name of the actor the " +
-                  "instance serves, null on the page and in pool workers. " +
+                  "runs; `actor` is `{bridge, type}` for the actor the " +
+                  "instance serves (its bridge's crate name and its Rust " +
+                  "type name), null on the page and in pool workers. " +
                   "Every realm that instantiates the module (the page, each " +
                   "actor's Worker, each pool worker) imports its own copy of " +
                   "the JS module, so its state is per realm.\n\n" +

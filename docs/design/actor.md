@@ -110,8 +110,8 @@ something to the actor. The mechanics are in `runtime/rust/src/addr.rs`.
   worker sends itself through a `MessageChannel` of its own, so the worker
   returns to its event loop between posts and the browser runs whatever else
   has arrived. Calls that reach the worker during a slice therefore run
-  before the job's next slice or soon after; `addr_test` measures how long a
-  call waits behind a job that keeps posting. Which of a call and a post runs
+  before the job's next slice or soon after; `addr_test` counts how many
+  slices a call waits behind a job that keeps posting. Which of a call and a post runs
   first is not fixed on web, so do not rely on it. (A `MessageChannel` rather
   than `setTimeout(0)`, which browsers clamp to 4 ms once timers nest.)
 - **Teardown.** A closure whose turn comes after the actor was disposed or
