@@ -28,6 +28,7 @@ use frustrate::bridge;
 
 /// An actor, so its methods run on its own executor: a dedicated thread
 /// natively, a dedicated Worker on web.
+#[derive(Default)]
 #[bridge(actor)]
 pub struct Digger {
     depth: i64,

@@ -441,6 +441,8 @@ fn rwlock_conflict_probe() -> i64 {
     }
     let lock = std::sync::RwLock::new(0i64);
     let _read = lock.read().unwrap();
+    // A write is the point: a second read would not conflict.
+    #[allow(clippy::readonly_write_lock)]
     let write = lock.write().unwrap();
     *write
 }

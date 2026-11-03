@@ -52,6 +52,7 @@ pub fn tally(x: i64) -> i64 {
 
 /// An actor: its own thread, its own state. A patch to a method here has to
 /// route `frustrate_actor_call`, a different entry point from the sync one.
+#[derive(Default)]
 #[bridge(actor)]
 pub struct Ledger {
     entries: i64,

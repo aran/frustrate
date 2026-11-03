@@ -455,6 +455,10 @@ _wasm_platform_transition = transition(
     outputs = ["//command_line_option:platforms"],
 )
 
+# For rules that analyze a crate under the platform `frustrate_wasm_module`
+# would build it for (bazel/clippy.bzl). The rule has a `platform` attribute.
+wasm_platform_transition = _wasm_platform_transition
+
 def _run_wasm_opt(ctx, module, out):
     """Run the binaryen `wasm-opt` pass over `module`, producing `out`.
 

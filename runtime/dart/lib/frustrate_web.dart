@@ -13,7 +13,7 @@
 /// The cost of leaving that alone is not the noise. It is that the package
 /// cannot be analysed at all as a gate — a nonzero baseline is not a baseline —
 /// so *every* other error in it goes unnoticed too. This library is what lets
-/// `tools/analyze.dart` include the integration tests.
+/// `bazel test` analyse the integration tests.
 ///
 ///     import 'package:frustrate/frustrate_web.dart';
 ///

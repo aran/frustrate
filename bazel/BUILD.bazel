@@ -95,6 +95,15 @@ constraint_value(
     visibility = ["//visibility:public"],
 )
 
+# The same, for the facility std (`wasm32_custom`).
+constraint_setting(name = "wasm_facility_std")
+
+constraint_value(
+    name = "wasm_facility_std_staged",
+    constraint_setting = ":wasm_facility_std",
+    visibility = ["//visibility:public"],
+)
+
 # For select()s that must react to which std a wasm platform links (e.g.
 # :wasm_facility_std_build below, the one platform whose std has a clock and
 # entropy behind it).

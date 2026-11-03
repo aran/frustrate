@@ -92,8 +92,8 @@ impl Library {
         assert_eq!(unsafe { abi() }, 1);
         let apply = sym(c"flutter_hot_patch_apply");
         Library {
-            call_sync: unsafe { std::mem::transmute(sym(call_sync)) },
-            apply: unsafe { std::mem::transmute(apply) },
+            call_sync: unsafe { std::mem::transmute::<*mut c_void, CallSync>(sym(call_sync)) },
+            apply: unsafe { std::mem::transmute::<*mut c_void, Apply>(apply) },
             anchor: apply as usize,
         }
     }

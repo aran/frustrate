@@ -28,6 +28,7 @@
 use frustrate::bridge;
 
 /// Shared mutable state, so the member below really does take a guard.
+#[derive(Default)]
 #[bridge(locked)]
 pub struct Tally {
     count: i64,

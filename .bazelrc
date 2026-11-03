@@ -6,6 +6,14 @@ test --output_groups=+dart_analyze
 test --output_groups=+dart_format
 common --@rules_dart//dart:analysis_config=//:analysis_config
 
+# Clippy runs as an aspect over every Rust target a `bazel test` names, so a new
+# crate is analysed without anyone listing it. Findings are errors: `-Dwarnings`
+# reaches only clippy actions. The wasm configurations, which the aspect never
+# sees, are //tools:clippy_wasm*.
+test --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
+test --output_groups=+clippy_checks
+build --@rules_rust//rust/settings:clippy_flags=-Dwarnings
+
 # Linux builds here use the `llvm` C toolchain (MODULE.bazel), whose libunwind
 # a Rust shared library has to link itself; see //runtime/rust:unwinder.
 common --//runtime/rust:unwinder=//toolchain/cc:libunwind

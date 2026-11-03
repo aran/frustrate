@@ -1,6 +1,6 @@
 //! Gate: a hostile request must never reach undefined behaviour.
 //!
-//!     cargo +<pin> miri test -p test_api --lib hostile
+//!     bazel run //tools:miri -- hostile
 //!
 //! The Dart side of this bridge is generated and type-safe, but the *wire* is
 //! bytes, and a member's glue meets those bytes before anything checks them.
@@ -794,7 +794,7 @@ fn settle(env: &mut Env, acqs: &[Acq], assign: &[(u64, u8)], taken: bool) {
 /// fixture here — five hundred more members — took this pass from minutes to
 /// hours under Miri, for a run whose whole point is to sit in the ordinary
 /// analysis loop; sampling one member per (arm, model, dyn, params) only
-/// halved that. `dart run tools/analyze.dart` prints what the leg costs now.
+/// halved that. `bazel run //tools:miri -- hostile` runs the pass.
 ///
 /// It is sound because the two fixtures buy different things. `shapes.rs`
 /// exists so that every emitted dispatch is **compiled**, and rustc delivers

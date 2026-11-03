@@ -91,7 +91,10 @@ rust_shared_library(
     }),
     edition = "2021",
     proc_macro_deps = ["//macros:frustrate_macros"],
-    visibility = ["//tests:__subpackages__"],
+    visibility = [
+        "//tests:__subpackages__",
+        "//tools:__pkg__",
+    ],
     deps = [
         "//runtime/rust:frustrate",
         "@frustrate_crates//:anyhow",

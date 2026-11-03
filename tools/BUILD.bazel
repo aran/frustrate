@@ -1,0 +1,60 @@
+load("@frustrate_custom_std_browser//:staged.bzl", BROWSER_STD_STAGED = "STAGED")
+load("@frustrate_custom_std_threads//:staged.bzl", THREADS_STD_STAGED = "STAGED")
+load("@rules_dart//dart:defs.bzl", "dart_binary")
+load("//bazel:clippy.bzl", "frustrate_clippy")
+
+# Static analysis, over every configuration the repo ships. `bazel test //...`
+# runs all of it, and CI runs that; the one leg that cannot be a Bazel target is
+# `:miri`.
+#
+# Clippy over the host build is an aspect `bazel test` applies to every Rust
+# target (.bazelrc). `-Dwarnings`, from there too, is what makes it stay clean
+# rather than clean once.
+#
+# A lint result is per-target and per-feature. Most of this runtime's hardest
+# code (the threaded-wasm pool, its allocator, the executor's registry lock)
+# lives behind `cfg(all(target_family = "wasm", feature = "wasm-threads"))`
+# and does not exist in a host build, so each wasm configuration is its own
+# target below. Analysing one and calling it analysed is how two of the three
+# spin locks in this crate came to carry an unsoundness under unwinding that no
+# tool could have reported: they compiled on no configuration anyone analysed.
+
+# Single-threaded web, the default browser build. Compiles the wasm exports
+# (`frustrate_alloc`, `frustrate_web_init`) that the host build cfgs away.
+frustrate_clippy(
+    name = "clippy_wasm",
+    crates = ["//runtime/rust:frustrate"],
+    platform = "//bazel:wasm32",
+)
+
+# The facility-std web build, the one platform where the std-facility arms are
+# live.
+frustrate_clippy(
+    name = "clippy_wasm_facilities",
+    crates = [
+        "//runtime/rust:frustrate",
+        "//tests/test_api:test_api_shared",
+    ],
+    platform = "//bazel:wasm32_custom",
+    # On a checkout that has not staged the std this is incompatible, which
+    # `bazel test` reports as SKIPPED; naming the target says why. Stage it
+    # with `bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread`.
+    target_compatible_with = [] if BROWSER_STD_STAGED else ["//bazel:wasm_facility_std_staged"],
+)
+
+# Threaded web. The only build that compiles the worker pool and the
+# `+atomics` arms, against a std built for atomics as threaded web links.
+frustrate_clippy(
+    name = "clippy_wasm_threads",
+    crates = ["//runtime/rust:frustrate"],
+    platform = "//bazel:wasm32_threads",
+    # As above; stage with `bazel run //toolchain/custom_std:build`.
+    target_compatible_with = [] if THREADS_STD_STAGED else ["//bazel:wasm_threads_std_staged"],
+)
+
+# Miri needs `cargo +<pinned nightly> miri`, which no Bazel toolchain here
+# provides.
+dart_binary(
+    name = "miri",
+    main = "miri.dart",
+)
