@@ -7,11 +7,13 @@ fn a_release_build_has_no_patch_loader_and_no_slots() {
         .or_else(|_| std::env::var("TEST_SRCDIR"))
         .expect("runfiles");
     let paths = std::env::var("RELEASE_LIBRARY").expect("RELEASE_LIBRARY");
-    let libraries: Vec<&str> = paths.split_whitespace().filter(|p| p.ends_with(".dylib")).collect();
+    // The library's extension is the platform's: .dylib on Mach-O, .so on ELF.
+    let extension = if cfg!(target_vendor = "apple") { "dylib" } else { "so" };
+    let libraries: Vec<&str> = paths.split_whitespace().filter(|p| p.ends_with(extension)).collect();
     let cases = [
-        ("libhotpatch_fixture.dylib", &["frustrate_hotpatch_fixture_call_sync"][..]),
+        (format!("libhotpatch_fixture.{extension}"), &["frustrate_hotpatch_fixture_call_sync"][..]),
         (
-            "libcomposed.dylib",
+            format!("libcomposed.{extension}"),
             &["frustrate_hotpatch_alpha_call_sync", "frustrate_hotpatch_beta_call_sync"][..],
         ),
     ];
