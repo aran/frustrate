@@ -17,8 +17,9 @@ violation looks like depends on the build:
   call that caused it.
 - **Single-threaded web.** There is no wait instruction at all. Most of std's
   blocking primitives refuse, but `thread::park` returns immediately, so a body
-  that parks in a loop spins the only thread forever. Nothing reports it;
-  `tools/check_no_park.dart` gates frustrate's own module, not a bridge's.
+  that parks in a loop spins the only thread forever, and no build check
+  catches it. A std from `toolchain/custom_std` panics there instead of
+  spinning; see [blocking.md](blocking.md).
 
 Whether shared memory (SharedArrayBuffer) is available depends on cross-origin
 isolation, not on threads. So single-threaded-with-shared-memory is a real

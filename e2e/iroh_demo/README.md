@@ -21,11 +21,11 @@ natively, a Worker-hosted wasm instance on web — and the only one whose object
 is a plain `Box<T>` needing neither `Send` nor `Sync`, so it can own a
 `tokio::Runtime` and a live `Endpoint` outright. A plain `#[bridge] fn` doing
 `RT.block_on(…)` parks a pool thread per call and, on single-threaded web, runs
-*inline on the main thread* — where `thread::park` is not a trap but a no-op
-(`Parker::park` is `{}` there, and nothing can unpark it), so the call spins the
-page's only thread at 100% CPU forever, with no error and no way to recover.
-That silent form is the worse one, and it is why frustrate's
-`tools/check_no_park.dart` exists. A
+*inline on the main thread* — where stock std's `thread::park` is not a trap
+but a no-op (`Parker::park` is `{}` there, and nothing can unpark it), so the
+call spins the page's only thread at 100% CPU forever, with no error and no way
+to recover. That silent form is the worse one; a std from `toolchain/custom_std`
+makes the park panic instead. A
 `#[bridge] async fn` is not automatically better: frustrate's cooperative
 executor has no reactor of its own, so an unregistered tokio leaf panics at
 construction ("there is no reactor running"). On native you can lend it one —

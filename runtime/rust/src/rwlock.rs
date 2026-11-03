@@ -318,8 +318,7 @@ impl<T> RwLock<T> {
     /// to acquire is what the contract declares, and a thread that parks on
     /// the browser main thread traps under `+atomics` and spins forever
     /// without it. Compiled off wasm for that reason, so the wasm module holds
-    /// no `std::thread::park` reached from here at all — the same property
-    /// `tools/check_no_park.dart` gates for the whole single-threaded module.
+    /// no `std::thread::park` reached from here at all.
     #[cfg(not(target_family = "wasm"))]
     pub fn blocking_read(&self) -> RwLockReadGuard<'_, T> {
         crate::pool::block_on(self.read())

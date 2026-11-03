@@ -45,9 +45,8 @@
 //!
 //! # Tests
 //!
-//! The unit tests run on every host build, and `cargo miri test -p frustrate
-//! --lib spin` runs them under Miri with leak checking on (`tools/analyze.dart`
-//! runs that pass). The module is compiled on every target, not only where a
+//! The unit tests run on every host build, and `bazel run //tools:miri` runs
+//! them under Miri with leak checking on. The module is compiled on every target, not only where a
 //! `cfg` selects it, so Miri and the host tests reach it.
 //!
 //! # Initialising once without a `Once`

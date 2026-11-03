@@ -2966,8 +2966,7 @@ pub fn ask_dart_blocking(values: Vec<i64>, f: DartFunction<i64, Result<i64, Refu
 // Before the declaration this fn was emitted into the web Dart surface and was
 // callable there; only a comment on external_runtime_test.dart kept it off that
 // path. `native_only` removes it from the web surface, so the mistake is a Dart
-// compile error instead of a frozen tab, and `tools/check_no_park.dart` gates
-// the Rust half — the pollster symbol must leave the single-threaded module.
+// compile error instead of a frozen tab.
 // (pollster itself is wasm-safe; being *compilable* for wasm was never the same
 // question as being *runnable* on it. The real runtimes this pattern targets,
 // tokio and async-std, do not compile to wasm at all.)

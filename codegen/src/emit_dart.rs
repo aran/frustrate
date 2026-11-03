@@ -7572,8 +7572,7 @@ mod tests {
 
     /// The first local a generated body declares and never reads, if any —
     /// Dart's `unused_local_variable`. It is a **warning**, so it makes
-    /// `dart analyze` red, and `dart analyze tests/dart_integration` is a leg of
-    /// `tools/analyze.dart`: a write-only local in emitted Dart fails the
+    /// `dart analyze` red: a write-only local in emitted Dart fails the
     /// consumer's own analysis over code they did not write.
     ///
     /// **What it reasons over, and where it gives up.** The emitted Dart, by

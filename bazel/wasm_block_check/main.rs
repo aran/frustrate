@@ -2205,10 +2205,8 @@ fn report(path: &str, label: &str) -> Result<String, String> {
 
 /// Prove the predicate bites before letting it say "clean".
 ///
-/// `tools/check_no_park.dart` records why this is not optional: four scanners
-/// were written for the parking report and the first passed its own sabotage
-/// test while matching nothing, because a pattern that matches nothing looks
-/// exactly like a codebase with nothing to find. Here the risk is sharper —
+/// This is not optional: a pattern that matches nothing looks exactly like a
+/// codebase with nothing to find. Here the risk is sharper —
 /// `0xFE` is an ordinary byte inside an `i32.const` and inside a memarg offset,
 /// so a scanner that pattern-matched would be red on innocent code and a
 /// decoder that mis-skipped an immediate would be green on guilty code. Both
@@ -2883,7 +2881,7 @@ mod tests {
         assert!(e.contains("Three ways out"), "offers a way out: {e}");
     }
 
-    /// The monomorphisation hash is dropped, as `check_no_park.dart:237` does.
+    /// The monomorphisation hash is dropped.
     #[test]
     fn the_report_strips_the_mangling_hash() {
         assert_eq!(
@@ -2997,11 +2995,6 @@ mod tests {
     /// direction this tool must not fail in. A user function named
     /// `rust_begin_unwind` or `default_alloc_error_hook` is not std's, and a
     /// wait behind it is an ordinary finding.
-    ///
-    /// Mirror image of the bug `tools/check_no_park.dart` records, where
-    /// `6Thread4park` matched the type instead of the free function and the
-    /// scanner reported 111 crossings while missing the only silent one. There
-    /// the miss was a false negative; here it would be a false clean.
     #[test]
     fn a_user_function_that_shares_a_fatal_entrys_name_is_not_one() {
         for lookalike in [

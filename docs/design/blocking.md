@@ -22,19 +22,32 @@ Each mechanism is documented where it lives. These are the gaps it leaves:
   threaded-web main thread. It traps; `explainTrap` names the cause when the
   trap message is Chromium's wording and falls back to a bare report
   otherwise.
-- **A `RwLock` read/write conflict on single-threaded web.** std takes
-  `rtabort!`, which bypasses the panic hook, so nothing can attribute it.
-- **A body that calls `thread::park` on single-threaded web.** `park` returns
-  immediately there, so the caller spins the only thread forever with nothing
-  to observe. `tools/check_no_park.dart` gates frustrate's own module; a
-  bridge crate's module is not checked.
+- **A `RwLock` read/write conflict on single-threaded web.** Stock std takes
+  `rtabort!`, which bypasses the panic hook: a trap with no message. A std from
+  `toolchain/custom_std` without `atomics` makes it a `panic!`, which reaches
+  Dart as a `BridgePanicException` saying `rwlock locked for reading` or
+  `for writing`.
+- **A body that waits on `thread::park` on single-threaded web, with stock
+  std.** Stock std's `park` returns immediately there, so a caller waiting for
+  an `unpark` spins the only thread forever with nothing to observe. No build
+  check catches it. A module linking `park` says little: whether a park can
+  wait for an `unpark` that never comes is a runtime fact, and real graphs
+  link `park` on paths a single thread never takes. `once_cell` and `papaya`
+  park only while another thread is midway through an operation. Async tasks are
+  reached through function pointers, so a call graph either includes every
+  park or misses the ones that matter. A std from `toolchain/custom_std`
+  without `atomics` replaces the hang: `park` consumes a pending `unpark` and
+  otherwise panics with `park on single-threaded wasm: nothing can unpark this
+  thread`, a `BridgePanicException` in Dart.
 - **`thread::sleep` on a worker** under the `thread` facility busy-waits. It
   burns a core; it does not hang.
 - **A registered async-runtime context that blocks** stalls the executor's
   drain, and nothing reports it, when the wrapper only enters the context:
   tokio does not treat `Handle::enter` as a blocking region. `ext/tokio`'s
   wrapper is one, so tokio panics instead.
-- **An actor that blocks on single-threaded web** hangs that actor.
+- **An actor that parks on single-threaded web** is the park case above on
+  the actor's own Worker: with stock std it spins that Worker, and the custom
+  std panics there too.
 - **`send_wrapper::SendWrapper`.** On threaded web, placement relies on
   wasm-bindgen's `JsValue` being neither `Send` nor `Sync`, so safe Rust
   cannot move JS-touching state onto the pool. `SendWrapper<T>` is
