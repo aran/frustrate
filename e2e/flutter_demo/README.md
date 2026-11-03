@@ -17,8 +17,8 @@ in `lib/` and `bridge/lib/` alike.
 The loop compiles your Dart with DDC, to JavaScript — that is what hot reload
 runs on — not with the dart2wasm the shipped bundle uses. There `int` is a
 53-bit JavaScript number and `Vec<i64>` cannot cross, so the collections card
-says it is unavailable. `--wasm` runs the dart2wasm build instead, with restart
-but no reload.
+says it is unavailable. `--wasm` runs the dart2wasm build instead, where `r`
+and `R` both rebuild and reload the page, losing its state.
 
 **On the web, a change under `bridge/src/` needs `R`.** Both keys rebuild
 through Bazel, so the regenerated bindings and the rebuilt module are current on
@@ -60,7 +60,7 @@ a bridged *type* whose shape changed (every member using it keeps its id while
 its encoding moves), a new or changed opaque type (Dart binds its drop to the
 library it loaded), a type whose layout moved under values the running code
 built, a new static, a changed dependency, or a call to code the launch build
-never linked. `R` relaunches on the new library. Work already in flight keeps
+never linked, among others. `R` relaunches on the new library. Work already in flight keeps
 the code it started with — an actor job, an executor task, a closure Rust is
 holding — the same way a Dart closure created before a reload does.
 
@@ -70,7 +70,7 @@ what makes "the loop and the shipped bundle ran the same bytes" true by
 construction rather than by remembering to re-run something.
 
 Other devices work the same way — `-d macos`, `-d ios-simulator` — swapping
-`-t` for that platform's target (`//:app`, `//:app_ios`, `//:app_linux`).
+`-t` for that platform's target (`//:app`, `//:app_ios`, and `//:app_linux` on a Linux host).
 Android is `-t //:app_android -d android --build-arg=--config=android`: the
 android config is what registers the SDK and NDK toolchains (`.bazelrc` says
 why), and `.bazelrc.user` must point `ANDROID_HOME` and `ANDROID_NDK_HOME` at

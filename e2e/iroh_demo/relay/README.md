@@ -51,11 +51,10 @@ bazel run //relay:iroh_relay -- --dev     # plain HTTP on http://localhost:3340
 bazel run //relay:relay_smoke             # defaults to that URL
 ```
 
-**Prefer `relay_dev` to `iroh_relay --dev` for anything automated.** `--dev`
-hardcodes port 3340 *and* a metrics listener on 9090, offers no port-0 option,
-and prints no line a harness can parse for readiness — three ways for two
-concurrent runs to collide. `relay_dev` binds an ephemeral port and announces
-it:
+**Prefer `relay_dev` to `iroh_relay --dev` for anything automated.** Unless a
+config file says otherwise, `--dev` binds port 3340 and a metrics listener on
+9090, so two concurrent runs collide, and it prints no line a harness can parse
+for readiness. `relay_dev` binds an ephemeral port and announces it:
 
 ```
 $ bazel run //relay:relay_dev
@@ -66,17 +65,17 @@ relay: ready
 `iroh_relay --dev` remains the right thing for a human who wants the *real*
 server with its real CLI, and for validating `relay.toml` below.
 
-`--dev` ignores every TLS field in a config file, so it is the only mode that
-needs no certificate. It is also, usefully, an offline way to check that
-`relay.toml` parses:
+`--dev` serves plain HTTP, so it needs no certificate. It is also an offline
+way to check that `relay.toml` parses:
 
 ```
 bazel run //relay:iroh_relay -- --dev --config-path=$PWD/relay/relay.toml
 ```
 
-which loads the whole file and then refuses, because `--dev` is incompatible
-with `cert_mode = "LetsEncrypt"`. That refusal *is* the validation: it happens
-after parsing and before any network call.
+which loads the whole file and then refuses: with QUIC address discovery on,
+as this file sets it, `--dev` cannot use `cert_mode = "LetsEncrypt"`. That
+refusal *is* the validation: it happens after parsing and before any network
+call.
 
 Point the app at a local relay with:
 
@@ -108,8 +107,8 @@ Three things that are easy to get wrong here:
   `IntoIterator<Item = RelayUrl>` and builds the `RelayMap` itself, so nothing
   has to name `RelayMap` and the `From<RelayUrl>` ambiguity never arises.
 - **`http://` is fine.** `RelayUrl`'s `FromStr` is `Url::from_str` and imposes
-  no scheme; `iroh-relay`'s client maps scheme `http` to `ws` and everything
-  else to `wss` (`client.rs:272`), so a `--dev` relay is reachable by a real
+  no scheme; `iroh-relay`'s client maps `http` and `ws` to `ws` and everything
+  else to `wss`, so a `--dev` relay is reachable by a real
   `iroh::Endpoint` with no TLS anywhere. **A browser is the exception** — a page
   served over HTTPS may only open `wss://`, so a browser peer needs a real
   certificate and `--dev` is a native-only convenience.
@@ -121,8 +120,8 @@ host-less URL themselves, before the bind, for that reason.
 
 ## Ports
 
-From `iroh-relay/src/defaults.rs`, which is authoritative. The crate README's
-`7824` for QUIC address discovery is a typo.
+From `iroh-relay`'s `defaults.rs`, and `main.rs` for `--dev`'s port. The crate
+README's `7824` for QUIC address discovery is a typo.
 
 | Port | Protocol | Purpose | Public? |
 | --- | --- | --- | --- |
