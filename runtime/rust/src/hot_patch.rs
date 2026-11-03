@@ -140,6 +140,16 @@ unsafe fn apply(patch_path: *const c_char, anchor: *const c_void) -> Result<(), 
         ));
     }
 
+    // A patch that reads this library's thread-locals asks for the library's
+    // thread-local storage module number, which only the running process knows.
+    let tls_module = unsafe { sys::dlsym(handle, c"frustrate_hot_tls_module".as_ptr()) } as *mut usize;
+    if !tls_module.is_null() {
+        if own.tls_module == 0 {
+            return Err("the patch reads thread-locals, and this library has none".to_string());
+        }
+        unsafe { tls_module.write(own.tls_module) };
+    }
+
     let entries: &[Entry] = if d.count == 0 {
         &[]
     } else {
@@ -212,6 +222,10 @@ mod sys {
     pub struct OwnImage {
         pub handle: *mut c_void,
         pub identity: Vec<u8>,
+        /// The library's thread-local storage module number: what an ELF
+        /// `__tls_get_addr` is given to find its variables. 0 when it has none,
+        /// and always on Mach-O, whose thread-locals are reached by descriptor.
+        pub tls_module: usize,
     }
 
     /// The library `anchor` lives in: a handle to look its slots up by name,
@@ -230,12 +244,12 @@ mod sys {
         if handle.is_null() {
             return Err(format!("could not reopen this library: {}", last_error()));
         }
-        let identity = identity(anchor, info.fname)?;
-        Ok(OwnImage { handle, identity })
+        let (identity, tls_module) = identity(anchor, info.fname)?;
+        Ok(OwnImage { handle, identity, tls_module })
     }
 
     #[cfg(target_vendor = "apple")]
-    fn identity(_anchor: *const c_void, fname: *const c_char) -> Result<Vec<u8>, String> {
+    fn identity(_anchor: *const c_void, fname: *const c_char) -> Result<(Vec<u8>, usize), String> {
         extern "C" {
             fn _dyld_image_count() -> u32;
             fn _dyld_get_image_name(i: u32) -> *const c_char;
@@ -264,7 +278,7 @@ mod sys {
             for _ in 0..unsafe { (*header).ncmds } {
                 let (kind, size) = unsafe { (*(cmd as *const u32), *(cmd.add(4) as *const u32)) };
                 if kind == LC_UUID {
-                    return Ok(unsafe { std::slice::from_raw_parts(cmd.add(8), 16) }.to_vec());
+                    return Ok((unsafe { std::slice::from_raw_parts(cmd.add(8), 16) }.to_vec(), 0));
                 }
                 cmd = unsafe { cmd.add(size as usize) };
             }
@@ -274,13 +288,16 @@ mod sys {
     }
 
     #[cfg(not(target_vendor = "apple"))]
-    fn identity(anchor: *const c_void, _fname: *const c_char) -> Result<Vec<u8>, String> {
+    fn identity(anchor: *const c_void, _fname: *const c_char) -> Result<(Vec<u8>, usize), String> {
         #[repr(C)]
         struct PhdrInfo {
             addr: usize,
             name: *const c_char,
             phdr: *const Phdr,
             phnum: u16,
+            adds: u64,
+            subs: u64,
+            tls_modid: usize,
         }
         #[repr(C)]
         struct Phdr {
@@ -305,11 +322,11 @@ mod sys {
 
         struct Search {
             anchor: usize,
-            found: Option<Vec<u8>>,
+            found: Option<(Vec<u8>, usize)>,
             contained: bool,
         }
 
-        unsafe extern "C" fn visit(info: *const PhdrInfo, _size: usize, data: *mut c_void) -> c_int {
+        unsafe extern "C" fn visit(info: *const PhdrInfo, size: usize, data: *mut c_void) -> c_int {
             let search = unsafe { &mut *(data as *mut Search) };
             let info = unsafe { &*info };
             let phdrs = unsafe { std::slice::from_raw_parts(info.phdr, info.phnum as usize) };
@@ -323,6 +340,9 @@ mod sys {
                 return 0;
             }
             search.contained = true;
+            // A loader too old to report the module number reports no
+            // thread-locals, which `apply` says to a patch that needs them.
+            let tls_module = if size >= std::mem::size_of::<PhdrInfo>() { info.tls_modid } else { 0 };
             for p in phdrs.iter().filter(|p| p.p_type == PT_NOTE) {
                 let mut at = info.addr + p.p_vaddr as usize;
                 let end = at + p.p_memsz as usize;
@@ -339,7 +359,7 @@ mod sys {
                     if kind == NT_GNU_BUILD_ID && namesz == 4 {
                         let owner = unsafe { std::slice::from_raw_parts(name as *const u8, 4) };
                         if owner == b"GNU\0" {
-                            search.found = Some(unsafe { std::slice::from_raw_parts(desc as *const u8, descsz) }.to_vec());
+                            search.found = Some((unsafe { std::slice::from_raw_parts(desc as *const u8, descsz) }.to_vec(), tls_module));
                             return 1;
                         }
                     }

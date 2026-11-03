@@ -51,6 +51,7 @@ use frustrate_hotpatch::link::Toolchain;
 use frustrate_hotpatch::patch::{self, Outcome, Target};
 use frustrate_hotpatch::state::{self, State};
 use serde_json::json;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -410,7 +411,6 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
         modules.push((out_dir.join(format!("{stem}.{i}.ll")), p.ir.clone()));
     }
     let parts: Vec<&patch::Patch> = built.iter().collect();
-    modules.push((out_dir.join(format!("{stem}.support.ll")), patch::support(&parts, &target)));
     for (path, text) in &modules {
         std::fs::write(path, text).map_err(|e| format!("cannot write the patch: {e}"))?;
     }
@@ -423,17 +423,33 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
         &linker.rustc_args,
         linker.env.clone(),
     );
-    let objects: Vec<PathBuf> = modules.iter().map(|(p, _)| p.with_extension("o")).collect();
     let extension = match image.format {
         frustrate_hotpatch::image::Format::MachO => "dylib",
         frustrate_hotpatch::image::Format::Elf => "so",
     };
     let library = out_dir.join(format!("{stem}.{extension}"));
+    // The crates' modules first: what the backend lowers them to can call
+    // functions their IR does not name, and the support module binds those too.
+    let mut objects: Vec<PathBuf> = modules.iter().map(|(p, _)| p.with_extension("o")).collect();
+    let support_module = out_dir.join(format!("{stem}.support.ll"));
+    let support_object = support_module.with_extension("o");
     let compiled = modules
         .iter()
         .zip(&objects)
         .try_for_each(|((module, _), object)| toolchain.compile(module, object))
         .and_then(|_| {
+            let bytes = objects
+                .iter()
+                .map(|o| std::fs::read(o).map_err(|e| format!("cannot read {}: {e}", o.display())))
+                .collect::<Result<Vec<_>, _>>()?;
+            let bound: BTreeSet<&str> = built.iter().flat_map(|p| p.bound.iter().map(String::as_str)).collect();
+            let backend = patch::backend_references(&bytes, &bound, &image)?;
+            let text = patch::support(&parts, &target, &backend);
+            std::fs::write(&support_module, &text).map_err(|e| format!("cannot write the patch: {e}"))?;
+            toolchain.compile(&support_module, &support_object)
+        })
+        .and_then(|_| {
+            objects.push(support_object.clone());
             let objects: Vec<&Path> = objects.iter().map(PathBuf::as_path).collect();
             toolchain.link(image.format, image.arch, &objects, &library)
         });

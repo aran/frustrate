@@ -19,7 +19,8 @@ pub enum Arch {
 pub enum SymKind {
     Text,
     Data,
-    /// A Mach-O thread-local variable descriptor.
+    /// A thread-local: a Mach-O variable descriptor, or an ELF variable's
+    /// offset in its library's TLS block.
     Tls,
 }
 

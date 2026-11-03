@@ -293,12 +293,6 @@ pub fn build(base: &Baseline, new: &Module, target: &Target) -> Outcome {
                             "uses static `{}`, which the running library defines more than once",
                             demangle(r)
                         )),
-                        Some(s) if s.kind == SymKind::Tls && image.format == Format::Elf => {
-                            reasons.push(format!(
-                                "uses thread-local `{}`, which a patch cannot share on ELF",
-                                demangle(r)
-                            ))
-                        }
                         Some(_) => {
                             bound.insert(r);
                         }
@@ -732,17 +726,80 @@ fn split_words(s: &str) -> Vec<&str> {
     out
 }
 
+/// Functions the compiled patch objects call that the patch's IR never names:
+/// the backend adds them while lowering (`_Unwind_Resume` for a `resume`,
+/// outlined atomics, `memcpy`). Each one the running library defines for itself
+/// and no patch object defines is bound to the library's copy, because the
+/// patch cannot get one from the dynamic linker when the library has the
+/// function privately — a statically linked unwinder, say. Names the library
+/// merely imports stay the dynamic linker's to resolve. `objects` are
+/// relocatable object files; `bound` is what the patch already binds.
+pub fn backend_references(objects: &[Vec<u8>], bound: &BTreeSet<&str>, image: &Image) -> Result<BTreeSet<String>, String> {
+    use object::{Object, ObjectSymbol};
+    let mut undefined: BTreeSet<String> = BTreeSet::new();
+    let mut defined: HashSet<String> = HashSet::new();
+    for bytes in objects {
+        let file = object::File::parse(bytes.as_slice()).map_err(|e| format!("not a patch object file: {e}"))?;
+        for sym in file.symbols() {
+            let Ok(raw) = sym.name() else { continue };
+            let name = match image.format {
+                Format::MachO => raw.strip_prefix('_').unwrap_or(raw),
+                Format::Elf => raw,
+            };
+            if name.is_empty() {
+                continue;
+            }
+            if sym.is_undefined() {
+                undefined.insert(name.to_string());
+            } else {
+                defined.insert(name.to_string());
+            }
+        }
+    }
+    Ok(undefined
+        .into_iter()
+        .filter(|n| !defined.contains(n) && !bound.contains(n.as_str()))
+        .filter(|n| image.symbols.get(n).is_some_and(|s| s.kind == SymKind::Text))
+        .collect())
+}
+
+/// What a thread-local read becomes in a patch for an ELF library: the address
+/// of the library's own variable, from the `{module, offset}` pair the
+/// dynamic linker's `__tls_get_addr` takes. The offset is the variable's, which
+/// [`emit_stubs`] writes where the patch's reference to the variable points; the
+/// module is the library's number in this process, which `hot_patch::apply`
+/// writes into `frustrate_hot_tls_module` once the patch is loaded.
+const ELF_TLS_GETTER: &str = r#"
+@frustrate_hot_tls_module = global i64 0
+declare ptr @__tls_get_addr(ptr)
+define ptr @frustrate_hot_tlv_get(ptr %variable) {
+  %index = alloca [2 x i64], align 8
+  %offset_slot = getelementptr inbounds i64, ptr %index, i64 1
+  %module = load i64, ptr @frustrate_hot_tls_module
+  %offset = load i64, ptr %variable
+  store i64 %module, ptr %index
+  store i64 %offset, ptr %offset_slot
+  %address = call ptr @__tls_get_addr(ptr %index)
+  ret ptr %address
+}
+"#;
+
 /// The module every patch links once beside its crates' modules: the thunks
 /// and addresses binding what they do not carry to the running image, and the
 /// descriptor naming the slots they fill. A symbol two crates bind is bound
 /// once.
-pub fn support(patches: &[&Patch], target: &Target) -> String {
+pub fn support(patches: &[&Patch], target: &Target, backend: &BTreeSet<String>) -> String {
     let mut out = String::new();
     for line in patches.first().map(|p| p.target_lines.as_slice()).unwrap_or_default() {
         let _ = writeln!(out, "{line}");
     }
-    let bound: BTreeSet<&str> = patches.iter().flat_map(|p| p.bound.iter().map(String::as_str)).collect();
-    out.push_str(&emit_stubs(&bound, patches.iter().any(|p| p.tls), target));
+    let mut bound: BTreeSet<&str> = patches.iter().flat_map(|p| p.bound.iter().map(String::as_str)).collect();
+    bound.extend(backend.iter().map(String::as_str));
+    let tls = patches.iter().any(|p| p.tls);
+    out.push_str(&emit_stubs(&bound, tls, target));
+    if tls && target.image.format == Format::Elf {
+        out.push_str(ELF_TLS_GETTER);
+    }
     let routed: Vec<&str> = patches.iter().flat_map(|p| p.routed.iter().map(String::as_str)).collect();
     for r in &routed {
         let _ = writeln!(out, "declare void {}()", ir::spell(r));
@@ -846,13 +903,24 @@ fn emit_stubs(bound: &BTreeSet<&str>, tls: bool, target: &Target) -> String {
                     }
                 }
             }
+            // A thread-local has no address: on ELF the patch's reference
+            // points at its offset within the library's TLS block, which
+            // `ELF_TLS_GETTER` turns into an address.
+            SymKind::Tls if image.format == Format::Elf => {
+                let _ = writeln!(asm, ".pushsection .data");
+                let _ = writeln!(asm, ".p2align 3");
+                let _ = writeln!(asm, ".globl {label}");
+                let _ = writeln!(asm, "{label}:");
+                let _ = writeln!(asm, "  .quad {:#x}", sym.address);
+                let _ = writeln!(asm, ".popsection");
+            }
             SymKind::Data | SymKind::Tls => {
                 let _ = writeln!(asm, ".globl {label}");
                 let _ = writeln!(asm, ".set {label}, {address:#x}");
             }
         }
     }
-    if tls {
+    if tls && image.format == Format::MachO {
         let label = mangle("frustrate_hot_tlv_get");
         let _ = writeln!(asm, ".globl {label}");
         let _ = writeln!(asm, ".p2align 2");
@@ -963,6 +1031,26 @@ start:
             ),
             _ => panic!("a function held by a static cannot be redirected"),
         }
+    }
+
+    /// An ELF thread-local has no address to bind to: the patch gets a word
+    /// holding its offset in the library's TLS block, where Mach-O gets the
+    /// address of the variable's descriptor.
+    #[test]
+    fn an_elf_thread_local_is_bound_by_its_offset() {
+        use crate::image::{Format, SymKind, Symbol};
+        let mut image = crate::image::Image::for_test(&["f"], &[], &[]);
+        image.format = Format::Elf;
+        image.symbols.insert(
+            "COUNTER".to_string(),
+            Symbol { address: 0x18, kind: SymKind::Tls, duplicated: false },
+        );
+        let target = Target { image: &image, slide: 0x4000, anchor: 0 };
+        let bound: BTreeSet<&str> = ["COUNTER", "f"].into_iter().collect();
+        let asm = emit_stubs(&bound, true, &target);
+        assert!(asm.contains("\\22COUNTER\\22:") && asm.contains(".quad 0x18"), "{asm}");
+        assert!(!asm.contains(".set"), "no address is bound: {asm}");
+        assert!(!asm.contains("frustrate_hot_tlv_get"), "the getter is IR on ELF: {asm}");
     }
 
     #[test]

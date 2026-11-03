@@ -157,9 +157,10 @@ impl Toolchain {
 }
 
 /// Whether a link argument puts a static archive into the link, or asks for
-/// archives to be loaded whole. A patch links no archive: what it calls and
-/// does not carry is bound to the running image's copy, and a second copy in
-/// the patch would collide with that binding or run with its own state.
+/// archives to be loaded whole (including `--undefined-glob`, which the `llvm`
+/// toolchain adds). A patch links no archive: what it calls and does not carry
+/// is bound to the running image's copy, and a second copy in the patch would
+/// collide with that binding or run with its own state.
 /// rules_rust names a static library both as rustc's `-lstatic=<name>` and as
 /// a `-Clink-arg=-l<name>` (`static_libs` holds those `-l<name>` forms), and an
 /// `alwayslink` one by its path. A `-Wl,` argument may carry several linker
@@ -180,6 +181,9 @@ fn links_an_archive(arg: &str, static_libs: &[String]) -> bool {
             || *a == "-force_load"
             || *a == "--whole-archive"
             || *a == "--no-whole-archive"
+            // Loads every archive member whatever references it, as
+            // `--whole-archive` does, for the archives the link names.
+            || a.starts_with("--undefined-glob=")
     })
 }
 
@@ -251,6 +255,7 @@ mod tests {
             "-Clink-arg=-Wl,--whole-archive,bazel-out/bin/c/libx.a,--no-whole-archive",
             "-Clink-arg=-Wl,--whole-archive,-lfoo,--no-whole-archive",
             "-Clink-arg=-Wl,-rpath,$ORIGIN",
+            "-Clink-arg=-Wl,--undefined-glob=*",
         ]);
         assert_eq!(args, ["-Wl,-rpath,$ORIGIN"]);
     }
