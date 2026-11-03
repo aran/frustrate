@@ -8,8 +8,8 @@ members into that app's bridge would move it off plain
 module(name = "frustrate_wasi_demo")
 
 bazel_dep(name = "frustrate", version = "0.1.0")
-bazel_dep(name = "rules_flutter", version = "0.0.6")
-bazel_dep(name = "rules_dart", version = "0.7.3")
+bazel_dep(name = "rules_flutter", version = "0.0.8")
+bazel_dep(name = "rules_dart", version = "0.8.1")
 bazel_dep(name = "rules_rust", version = "0.75.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")

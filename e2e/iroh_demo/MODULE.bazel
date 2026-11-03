@@ -19,8 +19,8 @@ structurally.
 module(name = "frustrate_iroh_demo")
 
 bazel_dep(name = "frustrate", version = "0.1.0")
-bazel_dep(name = "rules_flutter", version = "0.0.6")
-bazel_dep(name = "rules_dart", version = "0.7.3")
+bazel_dep(name = "rules_flutter", version = "0.0.8")
+bazel_dep(name = "rules_dart", version = "0.8.1")
 # rules_rust releases before 0.70.0 auto-register a fake wasm32 cc_toolchain
 # that resolves ahead of the real one below, so an older rules_rust breaks
 # ring's build script far from the cause.
