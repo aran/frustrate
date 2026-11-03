@@ -8,14 +8,14 @@
 //!
 //! ```ignore
 //! // once, at init — see `register` for the hot-restart contract
-//! frustrate::runtime::register({
-//!     let handle = RT.handle().clone();
-//!     move |poll| {
-//!         let _guard = handle.enter();   // tokio's thread-local context
-//!         poll.run();                    // ...for the duration of one poll
-//!     }
+//! frustrate::runtime::register(|poll| {
+//!     // enter your runtime's thread-local context...
+//!     poll.run();   // ...for the duration of one poll
 //! });
 //! ```
+//!
+//! For tokio, use `ext/tokio` (`frustrate_tokio::register`) rather than
+//! writing the wrapper: see "The tokio way" on [`register`].
 //!
 //! [`register`] is compile-absent on wasm; `enter` is the identity there, so
 //! the executor's drive loop stays one source line on every config.
@@ -83,19 +83,27 @@ mod native {
     ///
     /// ```ignore
     /// // Native only — `register` does not exist on wasm, so a bridge that
-    /// // also builds for web gates both this call and the tokio dependency:
-    /// //   [target.'cfg(not(target_family = "wasm"))'.dependencies]
-    /// //   tokio = { version = "1", features = ["rt-multi-thread", "time"] }
-    /// // (worked example: e2e/iroh_demo/bridge/Cargo.toml)
+    /// // also builds for web gates both this call and the runtime dependency.
     /// #[cfg(not(target_family = "wasm"))]
-    /// frustrate::runtime::register({
-    ///     let handle = RT.handle().clone();
-    ///     move |poll| {
-    ///         let _guard = handle.enter();
-    ///         poll.run();
-    ///     }
+    /// frustrate::runtime::register(|poll| {
+    ///     let _guard = enter_my_runtime();
+    ///     poll.run();
     /// });
     /// ```
+    ///
+    /// # The tokio way
+    ///
+    /// For tokio, call `frustrate_tokio::register(handle)` from `ext/tokio`
+    /// instead of writing this wrapper. `Handle::enter()` sets tokio's context
+    /// but does not mark the thread as inside a runtime, so a `block_on` or
+    /// `blocking_recv` in a bridged `async fn` blocks the executor's drain
+    /// and nothing reports it. `ext/tokio` wraps each poll as
+    /// `handle.block_on(async move { poll.run() })`, which does mark it: those
+    /// calls panic ("Cannot start a runtime from within a runtime", "Cannot
+    /// block the current thread from within a runtime"), attributed to the
+    /// call, and leaf futures work as before. It costs about 18 ns a poll
+    /// against 9 ns for `enter`, and tokio's cooperative budget applies inside
+    /// a poll.
     ///
     /// # The contract you are taking on
     ///
@@ -130,17 +138,16 @@ mod native {
     /// | wrapper never runs the poll | panic naming the wrapper (above) |
     /// | wrapper runs the poll twice | compile error — `PollOnce::run` consumes |
     /// | **undriven `current_thread` runtime** | **silent — the task simply never wakes** |
-    /// | **`block_on` inside a bridged `async fn`** | **silent — the drain thread blocks** (see Scope) |
+    /// | **`block_on` inside a bridged `async fn`** | **with `enter`, silent — the drain thread blocks (see Scope); with `ext/tokio`, panic** |
     ///
-    /// The two bold rows are real gaps against this project's "contracts loud"
-    /// bar, and both are ceilings rather than unfinished edges. For the
-    /// undriven runtime the only signal available is "this task has not been
-    /// woken", which is exactly what a task legitimately awaiting Dart looks
-    /// like, and asking tokio would mean depending on tokio. For `block_on`
-    /// the body is one you wrote and codegen never sees — the same boundary
-    /// as "codegen cannot infer *this body blocks*". Both
-    /// are stated here and pinned by tests, in the same spirit as pool.rs's
-    /// note on what worker replenishment cannot make loud.
+    /// The bold rows are gaps against this project's "contracts loud" bar.
+    /// For the undriven runtime the only signal available is "this task
+    /// has not been woken", which is exactly what a task legitimately awaiting
+    /// Dart looks like, and asking tokio would mean depending on tokio. For
+    /// `block_on`, frustrate cannot see the body, but tokio can: `ext/tokio`
+    /// registers a wrapper that makes tokio refuse it. Both are pinned by
+    /// tests (`tests/tokio_hook`), in the same spirit as pool.rs's note on what worker
+    /// replenishment cannot make loud.
     ///
     /// # Scope
     ///
@@ -151,13 +158,14 @@ mod native {
     /// untouched by a registration.
     ///
     /// The corollary is a trap worth naming: calling your runtime's own
-    /// `block_on` *inside a bridged `async fn`* is not rejected. Measured —
-    /// `Handle::enter()` installs the runtime context but not tokio's
-    /// blocking-region guard, so "Cannot start a runtime from within a
-    /// runtime" does not fire, for either a second runtime or the entered one.
-    /// It simply blocks the drain thread until it finishes, which is the
-    /// parked-thread cost this hook exists to avoid, arrived at silently.
-    /// `.await` the leaf; do not `block_on` it.
+    /// `block_on` *inside a bridged `async fn`* is not rejected by a wrapper
+    /// that only enters the context. Measured — `Handle::enter()` installs the
+    /// runtime context but not tokio's blocking-region guard, so "Cannot start
+    /// a runtime from within a runtime" does not fire, for either a second
+    /// runtime or the entered one. It simply blocks the drain thread until it
+    /// finishes, which is the parked-thread cost this hook exists to avoid,
+    /// arrived at silently. `.await` the leaf; do not `block_on` it. (See "The
+    /// tokio way": `ext/tokio` makes tokio refuse it.)
     ///
     /// # Re-registration
     ///

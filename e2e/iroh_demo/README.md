@@ -29,7 +29,7 @@ That silent form is the worse one, and it is why frustrate's
 `#[bridge] async fn` is not automatically better: frustrate's cooperative
 executor has no reactor of its own, so an unregistered tokio leaf panics at
 construction ("there is no reactor running"). On native you can lend it one —
-`frustrate::runtime::register` — and then
+`frustrate_tokio::register` from `ext/tokio` — and then
 an `async fn` does `.await` tokio leaves without parking a thread; but that is
 native-only, and this app is one binary across five platforms. The actor still
 wins here for the reason above: it *owns* the runtime, on every platform.

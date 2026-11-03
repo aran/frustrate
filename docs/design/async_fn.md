@@ -42,7 +42,8 @@ either: a bridge crate can depend on `web-sys` directly.
 The cooperative executor has no reactor. A tokio or async-std leaf needs that
 runtime's reactor to wake it. You have two options, and both work only on native:
 
-- **Register the runtime's context** with `frustrate::runtime::register`, then
+- **Register the runtime's context**, with `frustrate_tokio::register` for
+  tokio (`ext/tokio`) or `frustrate::runtime::register` otherwise, then
   write a bridged `async fn` that `.await`s the leaf directly. No thread is
   parked, and cancelling the call drops the future
   ([async_runtime_hook.md](async_runtime_hook.md)).

@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+load(":test.bzl", "with_dev_tokio_test")
+
+# The async-runtime hook (`frustrate::runtime::register`) against a real tokio,
+# and `//ext/tokio` on top of it. See src/lib.rs.
+#
+# tokio comes from `@tokio_test_crates`, a dev-only hub (//:MODULE.bazel), and
+# `with_dev_tokio_test` points `//ext/tokio:tokio` at it for the whole test, so the
+# shipped `//ext/tokio:frustrate_tokio` is what runs, with no flag on a
+# command line.
+
+# Cargo.toml/Cargo.lock exist for the crate hub, not for cargo.
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])
+
+# `manual`: built untransitioned, `//ext/tokio:tokio` is unset and fails.
+rust_test(
+    name = "tokio_hook_bin",
+    srcs = ["src/lib.rs"],
+    edition = "2021",
+    tags = ["manual"],
+    deps = [
+        "//ext/tokio:frustrate_tokio",
+        "//runtime/rust:frustrate",
+        "@tokio_test_crates//:async-task",
+        "@tokio_test_crates//:tokio",
+    ],
+)
+
+with_dev_tokio_test(
+    name = "tokio_hook_test",
+    test = ":tokio_hook_bin",
+)

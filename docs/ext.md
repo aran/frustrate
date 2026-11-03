@@ -23,6 +23,13 @@ package, from the consumer's crate hub. Compiling against a different copy is
 at best a duplicate and at worst an ABI mismatch. A consumer who has not
 pointed the flag at their copy gets a rustc error, not wrong behaviour.
 
+**A package the root hub lacks gets a dev-only hub for its tests.** tokio in
+`frustrate_crates` would enter the lockfile of every triple, so `ext/tokio`'s
+`label_flag` has no default that resolves: unset, it points at a target whose
+failure says what to set. The library is `manual` so `//...` does not analyze
+it; `tests/tokio_hook` runs it under a transition that sets the flag to the
+dev hub's tokio.
+
 **Ship a platform, not a transition.** A build flag the glue needs goes on a
 `platform()` in the ext crate that the consumer opts into by name. Setting it
 in `frustrate_wasm_module`'s transition would force it on builds that chose

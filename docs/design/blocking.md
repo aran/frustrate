@@ -31,8 +31,9 @@ Each mechanism is documented where it lives. These are the gaps it leaves:
 - **`thread::sleep` on a worker** under the `thread` facility busy-waits. It
   burns a core; it does not hang.
 - **A registered async-runtime context that blocks** stalls the executor's
-  drain, and nothing reports it: tokio does not treat `Handle::enter` as a
-  blocking region.
+  drain, and nothing reports it, when the wrapper only enters the context:
+  tokio does not treat `Handle::enter` as a blocking region. `ext/tokio`'s
+  wrapper is one, so tokio panics instead.
 - **An actor that blocks on single-threaded web** hangs that actor.
 - **`send_wrapper::SendWrapper`.** On threaded web, placement relies on
   wasm-bindgen's `JsValue` being neither `Send` nor `Sync`, so safe Rust

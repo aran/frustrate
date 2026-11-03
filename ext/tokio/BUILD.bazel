@@ -1,0 +1,43 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load(":unset.bzl", "unset")
+
+# A tokio runtime as frustrate's async-runtime context. See src/lib.rs for what
+# it is for and docs/ext.md for why it is here rather than in the runtime.
+#
+# `manual` here and on `:tokio` and `:unset`: `:tokio` defaults to `:unset`,
+# which fails, so `//...` must not analyze any of them. A consumer that depends
+# on this library has set the flag; //tests/tokio_hook tests it that way.
+rust_library(
+    name = "frustrate_tokio",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2021",
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":tokio",
+        "//runtime/rust:frustrate",
+    ],
+)
+
+# Which `tokio` this crate is compiled against: the consumer's own, so the
+# `Handle` they pass to `register` is the same type as the one in the
+# signature. frustrate's `@frustrate_crates` hub has no tokio (it would join
+# every triple's lockfile), so unlike `//ext/getrandom` there is no default that
+# works. Unset, it points at `:unset`, whose analysis failure says what to set:
+#
+#     common --@frustrate//ext/tokio:tokio=@my_crates//:tokio
+#
+# Private, like its `getrandom` twin; setting a build setting from the command
+# line does not consult visibility.
+label_flag(
+    name = "tokio",
+    build_setting_default = ":unset",
+    tags = ["manual"],
+    visibility = ["//visibility:private"],
+)
+
+unset(
+    name = "unset",
+    tags = ["manual"],
+    visibility = ["//visibility:private"],
+)

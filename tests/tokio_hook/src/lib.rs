@@ -10,10 +10,12 @@
 //! surprising (an undriven `current_thread` runtime, a `block_on` under
 //! `enter`, and the fact that tokio's own leaf drops fine without a context).
 //!
-//! **The recipe** (`mod recipe`) is the same question one layer up: the exact
-//! `register(...)` call [`frustrate::runtime::register`]'s rustdoc hands an
-//! app, driving a real `tokio::time::sleep` on a real
-//! [`frustrate::executor::Executor`].
+//! **The recipe** (`mod recipe`) is the same question one layer up: the
+//! `Handle::enter` wrapper, and `frustrate_tokio::register` (`ext/tokio`),
+//! driving a real `tokio::time::sleep` on a real
+//! [`frustrate::executor::Executor`]. The `ext_*` tests pin what the latter
+//! adds: a `block_on` or `blocking_recv` in a bridged `async fn` panics into
+//! its own call, where the `enter` wrapper lets it block the drain.
 //!
 //! Every assertion here is about a **third party's** behaviour, which is why
 //! they exist at all — none of it is ours to assert from memory, and a tokio
@@ -390,7 +392,7 @@ mod gate {
 #[cfg(test)]
 mod recipe {
     use frustrate::codec::FramedWriter;
-    use frustrate::envelope::{Outcome, STATUS_OK};
+    use frustrate::envelope::{Outcome, STATUS_OK, STATUS_PANIC};
     use frustrate::executor::Executor;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
@@ -405,7 +407,11 @@ mod recipe {
         let sink = log.clone();
         let exec = Executor::new(
             || {},
-            move |id, bytes| sink.lock().unwrap().push((id, bytes)),
+            move |id, reply: FramedWriter| {
+                let (bytes, minted) = reply.into_parts();
+                minted.delivered();
+                sink.lock().unwrap().push((id, bytes))
+            },
         );
         (exec, log)
     }
@@ -420,15 +426,27 @@ mod recipe {
     /// unregisters; the guard is a property of the harness, not of the API.
     #[must_use]
     fn register_tokio(handle: tokio::runtime::Handle) -> Registered {
-        static SERIAL: Mutex<()> = Mutex::new(());
-        let held = SERIAL
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let held = hold_the_slot();
         frustrate::runtime::register(move |poll| {
             let _guard = handle.enter();
             poll.run();
         });
         Registered(held)
+    }
+
+    /// The same, through `frustrate_tokio::register` (ext/tokio).
+    #[must_use]
+    fn register_ext(handle: tokio::runtime::Handle) -> Registered {
+        let held = hold_the_slot();
+        frustrate_tokio::register(handle);
+        Registered(held)
+    }
+
+    fn hold_the_slot() -> std::sync::MutexGuard<'static, ()> {
+        static SERIAL: Mutex<()> = Mutex::new(());
+        SERIAL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     struct Registered(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
@@ -608,5 +626,125 @@ mod recipe {
             started.elapsed()
         );
 
+    }
+
+    /// Spawn `body` as call `id`, drain it, and return the one answer.
+    fn answer_of(
+        id: u64,
+        body: impl std::future::Future<Output = Outcome> + Send + 'static,
+    ) -> (u8, String) {
+        let (exec, log) = recording();
+        exec.spawn(id, body);
+        let started = Instant::now();
+        while log.lock().unwrap().is_empty() {
+            assert!(started.elapsed() < Duration::from_secs(10), "never answered");
+            if !exec.drain_one() {
+                std::thread::yield_now();
+            }
+        }
+        let log = log.lock().unwrap();
+        assert_eq!(log.len(), 1);
+        let bytes = &log[0].1;
+        let message = if bytes[0] == STATUS_OK {
+            String::new()
+        } else {
+            frustrate::codec::ByteReader::new(&bytes[1..]).read_string()
+        };
+        (bytes[0], message)
+    }
+
+    /// `block_on` inside a bridged `async fn` panics under
+    /// `frustrate_tokio::register`, and the panic is the call's answer. Under
+    /// `Handle::enter` the same body blocks and succeeds
+    /// (`gate::block_on_inside_an_entered_context_silently_blocks_the_drain`).
+    #[test]
+    fn ext_nested_block_on_is_a_panic_answered_to_the_call() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let other = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        let handle = rt.handle().clone();
+        let _registration = register_ext(handle.clone());
+
+        let (status, message) = answer_of(21, async move {
+            handle.block_on(async { tokio::time::sleep(Duration::from_millis(1)).await });
+            Outcome::Ok(FramedWriter::status(STATUS_OK))
+        });
+        assert_eq!(status, STATUS_PANIC, "{message}");
+        assert!(
+            message.contains("Cannot start a runtime from within a runtime"),
+            "{message}"
+        );
+
+        // A different runtime's `block_on` is refused the same way.
+        let (status, message) = answer_of(22, async move {
+            other.block_on(async {});
+            Outcome::Ok(FramedWriter::status(STATUS_OK))
+        });
+        assert_eq!(status, STATUS_PANIC, "{message}");
+        assert!(message.contains("from within a runtime"), "{message}");
+    }
+
+    #[test]
+    fn ext_blocking_recv_is_a_panic_answered_to_the_call() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _registration = register_ext(rt.handle().clone());
+
+        let (status, message) = answer_of(23, async {
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<u8>(1);
+            tx.try_send(1).unwrap();
+            let _ = rx.blocking_recv();
+            Outcome::Ok(FramedWriter::status(STATUS_OK))
+        });
+        assert_eq!(status, STATUS_PANIC, "{message}");
+        assert!(
+            message.contains("Cannot block the current thread from within a runtime"),
+            "{message}"
+        );
+    }
+
+    /// What the wrapper must not take away: a leaf still suspends and is woken
+    /// by tokio's reactor, and a spawned task still runs.
+    #[test]
+    fn ext_leaves_and_spawns_still_work() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _registration = register_ext(rt.handle().clone());
+
+        let started = Instant::now();
+        let (status, message) = answer_of(24, async {
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            let spawned = tokio::spawn(async { 7 }).await.unwrap();
+            assert_eq!(spawned, 7);
+            Outcome::Ok(FramedWriter::status(STATUS_OK))
+        });
+        assert_eq!(status, STATUS_OK, "{message}");
+        assert!(started.elapsed() >= Duration::from_millis(70));
+    }
+
+    /// The registered wrapper covers a cancelled call's teardown too, as the
+    /// `enter` recipe does.
+    #[test]
+    fn ext_cancelled_teardown_still_has_the_runtime() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _registration = register_ext(rt.handle().clone());
+        let (exec, _log) = recording();
+
+        static TORN_DOWN: AtomicBool = AtomicBool::new(false);
+        struct SpawnsOnDrop;
+        impl Drop for SpawnsOnDrop {
+            fn drop(&mut self) {
+                tokio::runtime::Handle::current().spawn(async {});
+                TORN_DOWN.store(true, Ordering::SeqCst);
+            }
+        }
+        TORN_DOWN.store(false, Ordering::SeqCst);
+
+        exec.spawn(25, async {
+            let _teardown = SpawnsOnDrop;
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+            Outcome::Ok(FramedWriter::status(STATUS_OK))
+        });
+        assert!(exec.drain_one());
+        assert!(exec.cancel(25));
+        exec.drain_all();
+        assert!(TORN_DOWN.load(Ordering::SeqCst));
     }
 }

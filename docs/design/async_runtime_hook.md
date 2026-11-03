@@ -4,7 +4,19 @@
 runtime the app supplies, such as tokio. The context is entered around every
 poll, so a bridged `async fn` can `.await` a tokio leaf directly. It is
 native-only. How to use it, and what the registrant must uphold, is documented
-on `register` in `runtime/rust/src/runtime.rs`.
+on `register` in `runtime/rust/src/runtime.rs`. For tokio, register through
+`ext/tokio` (`frustrate_tokio::register`), below.
+
+## Registering tokio: `ext/tokio`
+
+`Handle::enter()` sets tokio's context but does not mark the thread as inside
+a runtime, so a `block_on` or `blocking_recv` in a bridged `async fn` would
+block the drain with no report. `frustrate_tokio::register(handle)` wraps each
+poll as `handle.block_on(async move { poll.run() })` instead. A nested
+`block_on` or a `blocking_recv` then panics, attributed to the call, and leaf
+futures like `sleep` work as before. The cost is about 18 ns a poll against
+9 ns, and tokio's cooperative budget applies inside a poll. The crate lives in
+`ext/` so the runtime crate stays free of tokio ([ext.md](../ext.md)).
 
 ## Enter the runtime; do not hand it the future
 

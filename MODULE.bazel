@@ -200,7 +200,25 @@ crate_dev.from_cargo(
         "x86_64-unknown-linux-gnu",
     ],
 )
-use_repo(crate_dev, "bindgen_test_crates", "native_red_crates", "wasm_bindgen_crates")
+# tokio, for the async-runtime hook's tests and `//ext/tokio` (//tests/tokio_hook).
+# A hub of its own: tokio in `frustrate_crates` would reach every triple
+# frustrate builds for.
+crate_dev.from_cargo(
+    name = "tokio_test_crates",
+    cargo_lockfile = "//tests/tokio_hook:Cargo.lock",
+    manifests = ["//tests/tokio_hook:Cargo.toml"],
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(
+    crate_dev,
+    "bindgen_test_crates",
+    "native_red_crates",
+    "tokio_test_crates",
+    "wasm_bindgen_crates",
+)
 
 dart = use_extension("@rules_dart//dart:extensions.bzl", "dart")
 dart.toolchain(dart_version = "3.13.2")
