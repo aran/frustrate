@@ -5,7 +5,6 @@
 /// Served like compose_web_test.dart, by
 /// `bazel run //tests/dart_integration:web_test`.
 @TestOn('browser')
-@Tags(['bazel_fixture'])
 library;
 
 import 'package:frustrate/frustrate.dart';

@@ -102,7 +102,7 @@ use std::sync::OnceLock;
 fn ir() -> &'static Interface {
     static IR: OnceLock<Interface> = OnceLock::new();
     IR.get_or_init(|| {
-        serde_json::from_str(include_str!("frustrate_ir.json")).expect("the IR build.rs wrote")
+        serde_json::from_str(include_str!(concat!(env!("OUT_DIR"), "/frustrate_ir.json"))).expect("the IR build.rs wrote")
     })
 }
 

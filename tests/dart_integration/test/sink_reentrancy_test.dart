@@ -13,7 +13,7 @@
 /// runs on a microtask. This file pins the property on every config, and pins
 /// that legitimate re-entrancy still WORKS — deferred, not refused.
 ///
-/// Web prerequisite: `dart run tool/build_web_fixture.dart`.
+/// Web: `bazel run //tests/dart_integration:web_test`.
 library;
 
 import 'dart:async';

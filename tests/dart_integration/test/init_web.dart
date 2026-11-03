@@ -1,5 +1,5 @@
-/// Web test bootstrap: fetch the wasm module staged by
-/// `dart run tool/build_web_fixture.dart` and instantiate it.
+/// Web test bootstrap: fetch the wasm module `bazel run
+/// //tests/dart_integration:web_test` serves and instantiate it.
 ///
 /// [panicClosesStreams] is `false` here: web compiles with `panic=abort`, so a
 /// producer panic runs no destructor and leaves the bound stream open by design
@@ -23,7 +23,7 @@ const bool isNativeVm = false;
 
 /// Where the staged module is served. Public so `init_contract_web_test.dart`
 /// can name the same module a second time (the repeated-init contract).
-const String bridgeModuleUrl = '../build/test_api.wasm';
+const String bridgeModuleUrl = '../packages/web_test_fixtures/test_api.wasm';
 
 Future<void> initBridge() async {
   await FrustrateWeb.initFromUrl(frustrateBridge, bridgeModuleUrl);

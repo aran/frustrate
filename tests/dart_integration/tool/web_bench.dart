@@ -4,26 +4,23 @@
 ///     bazel run //tests/dart_integration:web_bench                 # single-threaded
 ///     bazel run //tests/dart_integration:web_bench -- --threaded   # threaded wasm
 ///     bazel run //tests/dart_integration:web_bench -- --typing     # typing load
-///     (cd tests/dart_integration && dart run tool/web_bench.dart)
 ///
 /// `--typing` runs the typing-load scenario (`bench/typing_load.dart`, whose
 /// header says what it measures) in the page instead of the cells. It takes
 /// the scenario's own `--typing-*` options, which reach the page through
 /// `provenance.json`.
 ///
-/// **Why this driver runs `dart compile wasm` itself**, rather than depending on
-/// a Bazel-built module: exactly the reason `native_bench.dart` runs `cargo
-/// build --release` itself (see its header, and the `native_bench` comment in
-/// BUILD.bazel). A Bazel target's optimization level silently follows the
-/// invocation's `--compilation_mode`, whose default `fastbuild` is
-/// `-Copt-level=0` on the Rust side — and on the Dart side the pub `test`
-/// runner is worse still, hardcoding `-O0 --enable-asserts` for dart2wasm with
-/// no way to override it (`tool/web_test.dart` documents this; it is why a
-/// release web timing is unobtainable from `bazel run :web_test` under any
-/// flag). Owning both compiler invocations is the only way the reported number
-/// can name its own build. The Rust half is always built `--release` here for
-/// the same reason: a release benchmark against a debug bridge is not a
-/// benchmark of anything.
+/// **Why this driver names its own build configuration.** A Bazel target's
+/// optimization level silently follows the invocation's `--compilation_mode`,
+/// whose default `fastbuild` is `-Copt-level=0` on the Rust side — and on the
+/// Dart side the pub `test` runner is worse still, hardcoding `-O0
+/// --enable-asserts` for dart2wasm with no way to override it
+/// (`tool/web_test.dart` documents this; it is why a release web timing is
+/// unobtainable from `bazel run :web_test` under any flag). So the driver runs
+/// `dart compile wasm -O2` itself, and builds the Rust half with `bazel build
+/// -c opt` whatever the invocation's mode: a release benchmark against a debug
+/// bridge is not a benchmark of anything. The bindings and the runtime resolve
+/// the way the browser suite resolves them (`:web_test_inputs`).
 ///
 /// **It asserts nothing about absolute time**, here or in `bazel test`. Adding
 /// an absolute-timing bar to CI is a separate decision on a separate day; this
@@ -38,10 +35,8 @@
 /// coarsened to 100 us. The page hard-fails if `crossOriginIsolated` is false.
 ///
 /// Provenance is the point. Every artifact is hashed by this driver at build
-/// time, the server serves an in-memory SNAPSHOT of `build/` taken immediately
-/// after the build (so a concurrent `web_test` run staging a debug fixture into
-/// the same directory cannot swap a module out from under the page), and the
-/// page independently verifies that what it loaded matches what was built —
+/// time, the server serves an in-memory SNAPSHOT of the staged files taken
+/// immediately after the build, and the page independently verifies that what it loaded matches what was built —
 /// `asyncIsParallel` against the declared flavour, asserts against the declared
 /// optimization level. Any disagreement is a nonzero exit with no table.
 library;
@@ -51,6 +46,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../bench/typing_config.dart';
+import 'web_inputs.dart';
 
 // -------------------------------------------------------------- constants --
 
@@ -72,7 +68,10 @@ Future<void> main(List<String> args) async {
   final unknown = args
       .where(
         (a) =>
-            a != '--threaded' && a != '--typing' && !a.startsWith('--typing-'),
+            a != '--threaded' &&
+            a != '--typing' &&
+            !a.startsWith('--typing-') &&
+            !a.startsWith('--inputs='),
       )
       .toList();
   if (unknown.isNotEmpty) {
@@ -86,91 +85,77 @@ Future<void> main(List<String> args) async {
   }
 
   // Under `bazel run`, Bazel sets BUILD_WORKSPACE_DIRECTORY to the workspace
-  // root; the fixture build (cargo) and the Dart compile both operate on the
-  // real source tree, not the sandbox. Fall back to the cwd so `dart run
-  // tool/web_bench.dart` from the package still works. Same shape as
-  // tool/web_test.dart.
-  final workspaceEnv = Platform.environment['BUILD_WORKSPACE_DIRECTORY'];
-  final packageDir = workspaceEnv != null
-      ? '$workspaceEnv/tests/dart_integration'
-      : Directory.current.path;
-  final workspace = Directory('$packageDir/../..').absolute
-      .resolveSymbolicLinksSync();
-
-  // Verify the guess, loudly. A wrong root would benchmark some other checkout.
-  final manifest = File('$workspace/Cargo.toml');
-  if (!manifest.existsSync() ||
-      !manifest.readAsStringSync().contains('[workspace]')) {
+  // root; the compile and the browser run operate on the real source tree,
+  // not the sandbox.
+  final workspace = Platform.environment['BUILD_WORKSPACE_DIRECTORY'];
+  final inputs = args
+      .where((a) => a.startsWith('--inputs='))
+      .map((a) => a.substring('--inputs='.length))
+      .firstOrNull;
+  if (workspace == null || inputs == null) {
     stderr.writeln(
-      'web_bench: $workspace is not the frustrate workspace '
-      '(no Cargo.toml with [workspace]).\n'
-      'Run it as `bazel run //tests/dart_integration:web_bench`, or as '
-      '`dart run tool/web_bench.dart` from tests/dart_integration.',
+      'web_bench: run it as `bazel run //tests/dart_integration:web_bench`.',
     );
     exit(2);
   }
+  final packageDir = '$workspace/tests/dart_integration';
 
-  final buildDir = Directory('$packageDir/build');
   final flavour = threaded ? 'threaded' : 'single-threaded';
   stderr.writeln('web_bench: config=$flavour  package=$packageDir');
 
-  // 1. Package resolution. `dart compile wasm` needs .dart_tool/package_config
-  //    and will not create it; and WHICH `frustrate` package resolves here
-  //    decides which runtime_web.dart is under measurement, so the resolved
-  //    root goes into the provenance block.
-  if (await _run('dart', ['pub', 'get'], packageDir, 'pub get') != 0) exit(1);
-  final frustrateRoot = _resolvedPackageRoot(packageDir, 'frustrate');
-
-  // 2. The Rust half. Always --release: see the header. This reuses the single
-  //    source of the build logic rather than duplicating the cargo invocation.
-  //    Its own phase log, because a concurrent cargo in the same workspace
-  //    serializes on the target lock and this can sit for minutes.
+  // Everything this run builds goes here, and is served from here.
+  final stage = Directory.systemTemp.createTempSync('frustrate_web_bench.');
   final fixtureSw = Stopwatch()..start();
-  final built = await _run(
-    'dart',
-    [
-      'run',
-      'tool/build_web_fixture.dart',
-      '--release',
-      if (threaded) '--threaded',
-    ],
-    packageDir,
-    'build_web_fixture (rust, release, $flavour)',
-  );
-  if (built != 0) exit(built);
-  stderr.writeln('web_bench: fixture built in ${fixtureSw.elapsed.inSeconds}s');
 
-  // 3. The Dart half, at -O2. Delete first: a failed compile must not leave a
-  //    servable stale artifact for the page to benchmark.
-  for (final ext in ['wasm', 'mjs', 'support.js', 'wasm.map']) {
-    final f = File('${buildDir.path}/web_bench.$ext');
-    if (f.existsSync()) f.deleteSync();
-  }
+  // 1. The Rust half and the package resolution: the bridge module built
+  //    `-c opt` (always: see the header), and a package config of pub's
+  //    packages plus the Bazel-built bindings. WHICH `frustrate` package
+  //    resolves here decides which runtime_web.dart is under measurement, so
+  //    the resolved root goes into the provenance block.
+  final resolved = await resolveInputs(
+    inputs,
+    stage.path,
+    packageDir,
+    workspace,
+    threaded: threaded,
+    facilities: false,
+    release: true,
+  );
+  if (resolved == null) exit(1);
+  stderr.writeln('web_bench: fixture built in ${fixtureSw.elapsed.inSeconds}s');
+  final packages = '${stage.path}/package_config.json';
+  final frustrateRoot = _resolvedPackageRoot(packages, 'frustrate');
+  final served = Directory('${stage.path}/served')..createSync();
+  final fixture = File('${served.path}/test_api.wasm')
+    ..writeAsBytesSync(
+      File('${stage.path}/fixtures/test_api.wasm').readAsBytesSync(),
+    );
+
+  // 2. The Dart half, at -O2, from the source tree under the merged package
+  //    config.
   final compileArgv = [
     'compile',
     'wasm',
     _optLevel,
     '--strip-wasm',
-    'bench/web_bench_main.dart',
+    '--packages=$packages',
+    '$packageDir/bench/web_bench_main.dart',
     '-o',
-    'build/web_bench.wasm',
+    '${served.path}/web_bench.wasm',
   ];
-  if (await _run('dart', compileArgv, packageDir, 'dart compile wasm') != 0) {
+  if (await run('dart', compileArgv, packageDir) != 0) exit(1);
+  final dartModule = File('${served.path}/web_bench.wasm');
+  if (!dartModule.existsSync()) {
+    stderr.writeln(
+      'web_bench: expected ${dartModule.path} to exist after the build.',
+    );
     exit(1);
   }
-  final dartModule = File('${buildDir.path}/web_bench.wasm');
-  final fixture = File('${buildDir.path}/test_api.wasm');
-  for (final f in [dartModule, fixture]) {
-    if (!f.existsSync()) {
-      stderr.writeln('web_bench: expected ${f.path} to exist after the build.');
-      exit(1);
-    }
-  }
 
-  // 4. Copy the page in, then snapshot build/ into memory. Everything served
-  //    after this point is immutable for the life of the run.
+  // 3. Copy the page in, then snapshot the staged files into memory.
+  //    Everything served after this point is immutable for the life of the run.
   for (final name in ['index.html', 'bootstrap.js']) {
-    File('$packageDir/bench/$name').copySync('${buildDir.path}/$name');
+    File('$packageDir/bench/$name').copySync('${served.path}/$name');
   }
 
   final provenance = <String, Object?>{
@@ -178,7 +163,7 @@ Future<void> main(List<String> args) async {
     if (typing) 'typing_config': TypingLoadConfig.fromArgs(args).toJson(),
     'load_before': _sysctl('vm.loadavg'),
     'fixture_flavour': flavour,
-    'rust_profile': 'release (stock: no lto/codegen-units tuning)',
+    'rust_profile': 'bazel -c opt',
     'fixture_bytes': fixture.lengthSync(),
     'fixture_sha256': _sha256(fixture.path),
     'dart_optimization_level': _optLevel,
@@ -200,25 +185,22 @@ Future<void> main(List<String> args) async {
     'git_revision': _git(workspace, ['rev-parse', 'HEAD']),
     'git_status': _git(workspace, ['status', '--porcelain']),
     'git_dirty': (_git(workspace, ['status', '--porcelain']) ?? '').isNotEmpty,
-    'workspace_resolved_via': workspaceEnv != null
-        ? 'BUILD_WORKSPACE_DIRECTORY'
-        : 'cwd',
     'os': Platform.operatingSystemVersion,
     'cpu': _sysctl('machdep.cpu.brand_string'),
     'cores': Platform.numberOfProcessors,
   };
-  File('${buildDir.path}/provenance.json')
+  File('${served.path}/provenance.json')
       .writeAsStringSync(jsonEncode(provenance));
 
   final snapshot = <String, List<int>>{};
-  for (final e in buildDir.listSync()) {
+  for (final e in served.listSync()) {
     if (e is File) {
       snapshot['/${e.uri.pathSegments.last}'] = e.readAsBytesSync();
     }
   }
   stderr.writeln(
     'web_bench: serving ${snapshot.length} files from an '
-    'in-memory snapshot of build/ '
+    'in-memory snapshot of the staged files '
     '(fixture ${provenance['fixture_bytes']} B sha '
     '${(provenance['fixture_sha256'] as String?)?.substring(0, 12)}, '
     'dart module ${provenance['dart_module_bytes']} B sha '
@@ -295,6 +277,7 @@ Future<void> main(List<String> args) async {
 
   proc.kill();
   await server.close(force: true);
+  stage.deleteSync(recursive: true);
   try {
     profile.deleteSync(recursive: true);
   } on FileSystemException {
@@ -373,35 +356,15 @@ Future<void> _serve(
 
 // ------------------------------------------------------------------ tools --
 
-Future<int> _run(
-  String exe,
-  List<String> args,
-  String cwd,
-  String label,
-) async {
-  stderr.writeln('\$ $exe ${args.join(' ')}  ($label, in $cwd)');
-  final proc = await Process.start(
-    exe,
-    args,
-    workingDirectory: cwd,
-    mode: ProcessStartMode.inheritStdio,
-  );
-  final code = await proc.exitCode;
-  if (code != 0) stderr.writeln('web_bench: $label failed (exit $code).');
-  return code;
-}
-
-/// Where the pub solve actually put a package. Which `frustrate` resolves is
-/// which `runtime_web.dart` is being benchmarked — in a git worktree that is a
-/// real question, so it is recorded rather than assumed.
-String? _resolvedPackageRoot(String packageDir, String name) {
-  final f = File('$packageDir/.dart_tool/package_config.json');
-  if (!f.existsSync()) return null;
-  final cfg = jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
+/// Where package resolution actually put a package. Which `frustrate` resolves
+/// is which `runtime_web.dart` is being benchmarked — in a git worktree that is
+/// a real question, so it is recorded rather than assumed.
+String? _resolvedPackageRoot(String packageConfig, String name) {
+  final cfg = jsonDecode(
+    File(packageConfig).readAsStringSync(),
+  ) as Map<String, Object?>;
   for (final p in (cfg['packages'] as List).cast<Map<String, Object?>>()) {
-    if (p['name'] == name) {
-      return Uri.parse('${f.uri}').resolve(p['rootUri'] as String).toString();
-    }
+    if (p['name'] == name) return p['rootUri'] as String;
   }
   return null;
 }

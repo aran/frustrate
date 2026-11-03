@@ -79,6 +79,16 @@ rust_shared_library(
         "src/shapes.rs",
         ":bridge.rs",
     ],
+    # The std-facility probes (api.rs, "the standard library on web") need to
+    # know whether the std being linked has its stubs replaced, and the target
+    # cannot tell them apart: stock and patched are both wasm32-unknown-unknown.
+    # Deriving the feature from the constraints the toolchain resolves on
+    # means a module built against a facility std always has it, and one built
+    # against the stock or the +atomics std never does.
+    crate_features = select({
+        "//bazel:wasm_facility_std_build": ["wasm-std-facilities"],
+        "//conditions:default": [],
+    }),
     edition = "2021",
     proc_macro_deps = ["//macros:frustrate_macros"],
     visibility = ["//tests:__subpackages__"],
@@ -128,13 +138,34 @@ frustrate_code_asset(
     library = ":test_api_idle",
 )
 
-# The threaded-wasm fixture: same crate, nightly + locally built
-# +atomics std (run `bazel run //toolchain/custom_std:build` first).
-# Tagged manual so wildcard builds stay green without the local artifacts.
+# The browser fixture: same crate, stable Rust, single-threaded wasm.
+# `bazel run //tests/dart_integration:web_test` serves it.
+frustrate_wasm_module(
+    name = "test_api.wasm",
+    crate = ":test_api_shared",
+    visibility = ["//tests:__subpackages__"],
+)
+
+# The threaded-wasm fixture: nightly + locally built +atomics std (run `bazel
+# run //toolchain/custom_std:build` first). Tagged manual so wildcard builds
+# stay green without the local artifacts.
 frustrate_wasm_module(
     name = "test_api_threaded.wasm",
     crate = ":test_api_shared",
     platform = "//bazel:wasm32_threads",
+    tags = ["manual"],
+    visibility = ["//tests:__subpackages__"],
+)
+
+# The facility-std fixture: single-threaded, linked against a std whose stubs
+# ask the host for a clock, entropy, console stdio, available_parallelism and
+# sleep (run `bazel run //toolchain/custom_std:build --
+# --facilities=clock,random,stdio,thread` first). Tagged manual for the same
+# reason as the threaded one.
+frustrate_wasm_module(
+    name = "test_api_facilities.wasm",
+    crate = ":test_api_shared",
+    platform = "//bazel:wasm32_custom",
     tags = ["manual"],
     visibility = ["//tests:__subpackages__"],
 )

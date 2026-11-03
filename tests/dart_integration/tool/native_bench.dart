@@ -3,7 +3,6 @@
 ///
 ///     bazel run //tests/dart_integration:native_bench
 ///     bazel run //tests/dart_integration:native_bench -- --typing
-///     (cd tests/dart_integration && dart run tool/native_bench.dart)  # JIT
 ///
 /// `--typing` runs the typing-load scenario (`bench/typing_load.dart`, whose
 /// header says what it measures) instead of the cells.
@@ -69,8 +68,7 @@ import '../bench/typing_load.dart';
   stderr.writeln(
     'native_bench: could not locate the frustrate workspace '
     '(no Cargo.toml with [workspace] at any candidate root).\n'
-    'Run it as `bazel run //tests/dart_integration:native_bench`, or as '
-    '`dart run tool/native_bench.dart` from tests/dart_integration.',
+    'Run it as `bazel run //tests/dart_integration:native_bench`.',
   );
   exit(2);
 }

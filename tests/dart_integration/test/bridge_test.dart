@@ -1,10 +1,9 @@
 /// Cross-language integration tests: real Dart, real Rust, both platforms.
 ///
-/// Native prerequisite: `cargo build -p test_api` (the build script
-/// regenerates the bindings imported below). Run with `dart test`.
+/// Native: `bazel test //tests/dart_integration:bridge_test`.
 ///
-/// Web prerequisite: `dart run tool/build_web_fixture.dart` (builds and
-/// stages the wasm module). Run with `dart test -p chrome -c dart2wasm`.
+/// Web: `bazel run //tests/dart_integration:web_test` builds and serves the
+/// wasm module.
 /// Platform-divergent semantics are pinned by the testOn-gated tests at the
 /// bottom of the Locked group.
 library;

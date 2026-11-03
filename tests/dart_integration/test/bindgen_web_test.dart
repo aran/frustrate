@@ -5,10 +5,8 @@
 ///
 /// The module, its wasm-bindgen JS and the bindings are built by Bazel and
 /// served by `bazel run //tests/dart_integration:web_test` (the threaded build
-/// under `-- --threaded`); `dart run tool/web_test.dart` leaves this file out
-/// by its tag.
+/// under `-- --threaded`).
 @TestOn('browser')
-@Tags(['bazel_fixture'])
 @Timeout(Duration(minutes: 2))
 library;
 

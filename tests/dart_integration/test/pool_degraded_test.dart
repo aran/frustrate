@@ -52,7 +52,7 @@ void main() {
       // workers are untouched and only the next one to be created is affected.
       globalContext.setProperty(
         r'$frustrateGlueUrl'.toJS,
-        '../build/no-such-glue.js'.toJS,
+        '../packages/web_test_fixtures/no-such-glue.js'.toJS,
       );
 
       // The panic retires one worker; the replenishment it triggers 404s.

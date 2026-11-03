@@ -52,9 +52,12 @@ void main() {
     // identical resolution rule.
     globalContext.setProperty(
       r'$frustrateGlueUrl'.toJS,
-      '../build/frustrate.js'.toJS,
+      '../packages/web_test_fixtures/frustrate.js'.toJS,
     );
-    await FrustrateWeb.initFromUrl(frustrateBridge, '../build/test_api.wasm');
+    await FrustrateWeb.initFromUrl(
+      frustrateBridge,
+      '../packages/web_test_fixtures/test_api.wasm',
+    );
   });
 
   group('served glue (strict-CSP delivery)', () {

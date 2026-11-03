@@ -44,7 +44,7 @@ void main() {
       await expectLater(
         FrustrateWeb.initFromUrl(
           frustrateBridge,
-          '../build/not_the_bridge.wasm',
+          '../packages/web_test_fixtures/not_the_bridge.wasm',
         ),
         throwsA(
           isA<StateError>().having(

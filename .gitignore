@@ -2,13 +2,6 @@ bazel-*
 .bazelrc.user
 target/
 .dart_tool/
-*.frustrate.dart
-*.frustrate.native.dart
-*.frustrate.web.dart
-*.frustrate.models.dart
-frustrate_generated.rs
-frustrate_ir.json
-tests/dart_integration/build/
 node_modules/
 test-results/
 toolchain/custom_std/dist/

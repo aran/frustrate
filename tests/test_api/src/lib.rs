@@ -10,9 +10,14 @@ pub mod cancel_api;
 /// (`bazel run //tools/shape_coverage -- --write-fixture`). Regenerate, never edit.
 pub mod shapes;
 
-// Written by frustrate codegen: build.rs under cargo, a declared action under
-// Bazel. Gitignored in the cargo flow.
+// Written by frustrate codegen: build.rs under cargo (into OUT_DIR, hence the
+// `include!`), a declared action under Bazel (at src/frustrate_generated.rs).
+#[cfg(not(frustrate_cargo))]
 mod frustrate_generated;
+#[cfg(frustrate_cargo)]
+mod frustrate_generated {
+    include!(concat!(env!("OUT_DIR"), "/frustrate_generated.rs"));
+}
 
 /// Hostile requests, derived from the interface and driven at the generated
 /// dispatch under Miri. Test-only, and cargo-only: it reads the IR JSON that

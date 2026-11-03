@@ -20,7 +20,7 @@
 /// comparison, a response written at the wrong offset within the block, and a
 /// request that moved when the slab was put in front of it.
 ///
-/// Web prerequisite: `dart run tool/build_web_fixture.dart`.
+/// Web: `bazel run //tests/dart_integration:web_test`.
 library;
 
 import 'dart:typed_data';

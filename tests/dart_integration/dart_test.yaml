@@ -13,9 +13,3 @@ override_platforms:
   chrome:
     settings:
       arguments: --enable-features=SharedArrayBuffer
-
-# Tests whose fixture only Bazel builds (compose_web_test.dart: two bridges in
-# one module). `bazel run :web_test` serves it; `dart run tool/web_test.dart`
-# excludes these by this tag.
-tags:
-  bazel_fixture:

@@ -2,10 +2,14 @@
 //! (Bazel invokes the frustrate-codegen CLI as an action instead.)
 
 use std::path::PathBuf;
-// OUT_DIR is unused: the generated module must sit next to the sources so the
-// same `mod frustrate_generated;` works under cargo and Bazel.
 
 fn main() {
+    // Everything generated goes to OUT_DIR, never the source tree. The crate
+    // includes the glue from there under this cfg (src/lib.rs); Bazel declares
+    // it at src/frustrate_generated.rs instead and sets no cfg.
+    println!("cargo:rustc-check-cfg=cfg(frustrate_cargo)");
+    println!("cargo:rustc-cfg=frustrate_cargo");
+    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     println!("cargo:rerun-if-changed=src/api.rs");
     println!("cargo:rerun-if-changed=src/cancel_api.rs");
     println!("cargo:rerun-if-changed=src/shapes.rs");
@@ -32,15 +36,15 @@ fn main() {
             },
         ],
         models: vec![],
-        rust_out: manifest.join("src/frustrate_generated.rs"),
-        dart_out: manifest.join("../dart_integration/lib/test_api.frustrate.dart"),
+        rust_out: out.join("frustrate_generated.rs"),
+        dart_out: out.join("test_api.frustrate.dart"),
         // The interface the hostile-request driver reads (`src/hostile.rs`),
         // written by the same run that writes the glue so the two cannot
         // describe different interfaces. `include_str!`, not a file read:
         // the driver runs under Miri, whose isolation refuses `std::fs`, and
         // parsing 120KB of Rust with syn inside the interpreter would cost
         // more than every request it then builds.
-        ir_out: Some(manifest.join("src/frustrate_ir.json")),
+        ir_out: Some(out.join("frustrate_ir.json")),
         claims_out: None,
     })
     .expect("frustrate codegen failed");

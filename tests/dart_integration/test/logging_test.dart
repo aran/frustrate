@@ -19,7 +19,7 @@
 ///     an actor is a separate wasm instance with its own `static`s while
 ///     natively there is one process-global logger. Both are asserted by name.
 ///
-/// Web prerequisite: `dart run tool/build_web_fixture.dart`.
+/// Web: `bazel run //tests/dart_integration:web_test`.
 library;
 
 import 'dart:async';

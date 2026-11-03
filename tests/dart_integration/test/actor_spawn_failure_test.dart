@@ -44,7 +44,7 @@ void main() {
       _instrumentTerminate();
       globalContext.setProperty(
         r'$frustrateGlueUrl'.toJS,
-        '../build/no-such-glue.js'.toJS,
+        '../packages/web_test_fixtures/no-such-glue.js'.toJS,
       );
 
       await expectLater(

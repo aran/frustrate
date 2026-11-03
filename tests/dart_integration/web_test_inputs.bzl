@@ -18,11 +18,13 @@ def _web_test_inputs_impl(ctx):
         }
         files.extend(info.srcs)
     fixtures = {}
+    labels = {}
     for target, path in ctx.attr.fixtures.items():
         outputs = target.files.to_list()
         if len(outputs) != 1:
             fail("%s: fixture %s is %d files, not one" % (ctx.label, target.label, len(outputs)))
         fixtures[path] = outputs[0].short_path
+        labels[path] = str(target.label)
         files.append(outputs[0])
     prefix = ctx.label.package + "/"
     tests = []
@@ -35,7 +37,10 @@ def _web_test_inputs_impl(ctx):
     ctx.actions.write(manifest, json.encode_indent({
         "packages": packages,
         "fixtures": fixtures,
+        "labels": labels,
         "threaded": ctx.attr.threaded,
+        "facilities": ctx.attr.facilities,
+        "release": ctx.attr.release,
         "tests": tests,
     }))
     return [
@@ -57,7 +62,8 @@ web_test_inputs = rule(
           "packages and fixture files they need, all of them in its " +
           "runfiles. Paths are runfiles-relative: `packages` maps a package " +
           "name to its root (the parent of `lib/`), `fixtures` maps the path " +
-          "a test fetches a file by to the file. `tests` lists the test files " +
+          "a test fetches a file by to the file, and `labels` the target each one " +
+          "is built by. `tests` lists the test files " +
           "of `srcs`, relative to this package.",
     attrs = {
         "srcs": attr.label_list(
@@ -83,6 +89,16 @@ web_test_inputs = rule(
                   "is the named target's output instead. Labels, not " +
                   "dependencies: those targets need the locally built " +
                   "+atomics std, so the driver builds them only when asked.",
+        ),
+        "facilities": attr.string_dict(
+            doc = "Like `threaded`, for the driver's `--facilities`: the " +
+                  "targets built against the std whose stubs ask the host, " +
+                  "which needs that std staged locally.",
+        ),
+        "release": attr.string_list(
+            doc = "Fixture paths the driver's `--release` rebuilds with " +
+                  "`-c opt`, from whichever target the other flags chose " +
+                  "for the path. The rest keep the build `bazel run` made.",
         ),
     },
 )

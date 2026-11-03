@@ -5,7 +5,7 @@
 /// fn_ids / decode wrong types into unsafe handle derefs — so it must fail
 /// loudly, not silently corrupt.
 ///
-/// Web prerequisite: `dart run tool/build_web_fixture.dart`.
+/// Web: `bazel run //tests/dart_integration:web_test`.
 library;
 
 import 'package:frustrate/frustrate.dart';

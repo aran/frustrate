@@ -28,25 +28,32 @@ web_test_inputs(
     srcs = glob(["test/**/*.dart"]),
     deps = [
         "//runtime/dart:frustrate",
-        "//tests/test_api:bindings",
         "@pub_deps//:ffi",
         "@pub_deps//:test",
     ],
     fixtures = {
         "//tests/bindgen:bindgen_api.wasm": "bindgen/bindgen_api.wasm",
         "//tests/bindgen:bindgen_api_bg_js": "bindgen/bindgen_api_bg.js",
+        "//runtime/dart:lib/src/js/frustrate.js": "frustrate.js",
         "//tests/compose:composed.wasm": "composed.wasm",
         "//tests/host_imports:host_imports_api.wasm": "host_imports/host_imports_api.wasm",
         "//tests/host_imports:self_supplied.json": "host_imports/self_supplied.json",
         "//tests/host_imports:test_host.js": "host_imports/test_host.js",
+        "//tests/test_api:test_api.wasm": "test_api.wasm",
     },
     packages = [
+        "//tests/test_api:bindings",
         "//tests/bindgen:bindings",
         "//tests/compose/alpha:bindings",
         "//tests/compose/beta:bindings",
         "//tests/host_imports:bindings",
     ],
+    facilities = {
+        "test_api.wasm": "//tests/test_api:test_api_facilities.wasm",
+    },
+    release = ["test_api.wasm"],
     threaded = {
+        "test_api.wasm": "//tests/test_api:test_api_threaded.wasm",
         "bindgen/bindgen_api.wasm": "//tests/bindgen/threaded:bindgen_api.wasm",
         "bindgen/bindgen_api_bg.js": "//tests/bindgen/threaded:bindgen_api_bg_js",
         "host_imports/host_imports_api.wasm": "//tests/host_imports/threaded:host_imports_api.wasm",
@@ -58,6 +65,7 @@ dart_binary(
     args = ["--inputs=$(rootpath :web_test_inputs)"],
     data = [":web_test_inputs"],
     main = "tool/web_test.dart",
+    srcs = ["tool/web_inputs.dart"],
 )
 
 # The native (dylib/FFI) benchmark. A `dart_binary` for the reason that makes
@@ -111,9 +119,9 @@ dart_binary(
 #
 #  - It drives system Chrome, which is not hermetic under Bazel — the same
 #    reason `web_test` above is a `bazel run`.
-#  - It owns both compiler invocations (`dart compile wasm -O2` for the Dart
-#    half, `cargo --release` via build_web_fixture for the Rust half) rather
-#    than depending on Bazel-built artifacts, because a Bazel target's
+#  - It owns the optimization level of both halves (`dart compile wasm -O2` for
+#    the Dart half, `bazel build -c opt` of the bridge module for the Rust
+#    half) rather than taking the invocation's, because a Bazel target's
 #    optimization level silently follows `--compilation_mode` and the default
 #    `fastbuild` is unoptimized. A benchmark that cannot name its own build
 #    config is worse than no benchmark; see the driver's header.
@@ -123,12 +131,26 @@ dart_binary(
 #
 # `dart_binary` is `rule(..., executable = True)` with no `test = True`, so it
 # is not collected by `bazel test //...` and nothing new enters the default
-# suite by adding it. No deps: the driver is dart:io only (its one src is the
-# typing scenario's settings, which import nothing), and the code it measures is compiled from the source tree by the compilers it invokes.
+# suite by adding it. The page it serves, `bench/web_bench_main.dart`, is
+# compiled by the driver; it is a source here so that analysis covers it. The
+# bindings and the runtime resolve as in `web_test`, through
+# `:web_test_inputs`.
 dart_binary(
     name = "web_bench",
+    args = ["--inputs=$(rootpath :web_test_inputs)"],
+    data = [":web_test_inputs"],
     main = "tool/web_bench.dart",
-    srcs = ["bench/typing_config.dart"],
+    srcs = [
+        "bench/typing_config.dart",
+        "bench/typing_load.dart",
+        "bench/web_bench_main.dart",
+        "tool/web_inputs.dart",
+    ],
+    deps = [
+        "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
+        "//tools/bench_harness",
+    ],
 )
 
 dart_test(

@@ -8,7 +8,6 @@
 /// tool/web_test.dart` has no Bazel outputs to serve and leaves this file out
 /// by its tag.
 @TestOn('browser')
-@Tags(['bazel_fixture'])
 library;
 
 import 'dart:async';

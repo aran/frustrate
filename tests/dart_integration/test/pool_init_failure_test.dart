@@ -44,7 +44,7 @@ void main() {
       // async call has been made yet, so the pool has not been created.
       globalContext.setProperty(
         r'$frustrateGlueUrl'.toJS,
-        '../build/no-such-glue.js'.toJS,
+        '../packages/web_test_fixtures/no-such-glue.js'.toJS,
       );
 
       // The first async call creates the pool. All four workers 404, and the
