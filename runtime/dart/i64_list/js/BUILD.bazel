@@ -1,0 +1,9 @@
+load("@rules_dart//dart:defs.bzl", "dart_library")
+
+# The js variant of package `frustrate_i64_list`; see `//runtime/dart:frustrate`.
+dart_library(
+    name = "i64_list",
+    package_name = "frustrate_i64_list",
+    srcs = ["lib/frustrate_i64_list.dart"],
+    visibility = ["//visibility:public"],
+)

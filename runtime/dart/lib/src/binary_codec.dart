@@ -8,6 +8,8 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:frustrate_i64_list/frustrate_i64_list.dart';
+
 import 'js_numbers.dart';
 
 // ---------------------------------------------------------- bulk typed data --
@@ -70,13 +72,11 @@ final bool _kBulkTypedData = bulkTypedDataOk(
 ///
 /// **No backend can reach this guard today, and it is written out anyway** —
 /// it stands exactly where [bulkTypedDataOk]'s `littleEndianHost` stands, and
-/// for the same reason. dart2js cannot construct an `Int64List` at all
-/// (`Int64List(n)` and `Int64List.fromList` both throw `UnsupportedError`), so
+/// for the same reason. dart2js cannot construct an `Int64List` at all, so
 /// [BinaryWriter.writeI64List]'s `is Int64List` test is already false there
-/// and [BinaryReader.readI64List] already throws before either of its arms
-/// runs. Leaving the exclusion to that would rest the codec's loudness on an
-/// SDK's inability; the property the codec depends on has to be the codec's
-/// own.
+/// and [BinaryReader.readI64List] builds a plain `List<int>` instead. Leaving
+/// the exclusion to that would rest the codec's loudness on an SDK's
+/// inability; the property the codec depends on has to be the codec's own.
 bool bulkI64Ok({required bool bulkTypedData, required bool jsNumbers}) =>
     bulkTypedData && !jsNumbers;
 
@@ -1130,27 +1130,23 @@ class BinaryReader {
   /// The bulk arm is [bulkI64Ok]'s — the VM alone; see
   /// [BinaryWriter.writeI64List].
   ///
-  /// **Nothing here runs on dart2js**, and not because of the arms:
-  /// `Int64List(n)` itself throws `UnsupportedError` there. That is exactly the
-  /// cliff the `Int64List.fromList(List.generate(n, (_) => r.readI64()))` this
-  /// replaces already had — unchanged, and described in `docs/ANNOTATIONS.md`
-  /// under "dart2js/DDC development loop".
-  ///
-  /// The element arm carries [readI64]'s whole `kJsNumbers` conditional rather
-  /// than a copy of one half of it, so it *is* that loop by construction
-  /// instead of by argument. The condition is compile-time-constant, so each
-  /// backend keeps exactly one side of it.
-  Int64List readI64List(int n) {
+  /// Returns an [I64List], the type a `Vec<i64>` is declared as: an
+  /// `Int64List` where `int` is 64 bits (the VM, dart2wasm), and a
+  /// fixed-length `List<int>` on dart2js and DDC, which cannot construct an
+  /// `Int64List` ([jsReadI64List]: exact to 2^53 and throwing beyond, the
+  /// scalar `i64` contract). Both are fixed-length, so a `[i64; N]` decodes to
+  /// a fixed-length list everywhere. [kJsNumbers] is compile-time-constant, so
+  /// each backend keeps exactly one side; [toI64List] only types the JS side,
+  /// where it returns its argument.
+  I64List readI64List(int n) {
     final p = _advanceElems(n, 8);
+    if (kJsNumbers) return toI64List(jsReadI64List(_view, p, n));
     final out = Int64List(n);
     if (_kBulkI64) {
       _readBulk(out, p, n * 8);
     } else {
       for (var i = 0; i < n; i++) {
-        final at = p + i * 8;
-        out[i] = kJsNumbers
-            ? jsReadI64(_view, at)
-            : _view.getInt64(at, Endian.little);
+        out[i] = _view.getInt64(p + i * 8, Endian.little);
       }
     }
     return out;

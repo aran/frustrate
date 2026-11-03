@@ -87,17 +87,31 @@ void main() {
       r.assertConsumed();
     });
 
-    test('readI64List cannot run here: dart2js has no Int64List', () {
-      // Not a frustrate refusal — `Int64List(n)` throws on its own, exactly as
-      // the `Int64List.fromList(List.generate(...))` decode did before the bulk
-      // pair existed. This is the `Vec<i64>` cliff docs/ANNOTATIONS.md names,
-      // and it is why `bulkI64Ok` states its exclusion instead of leaning on
-      // this: the codec's loudness must not rest on an SDK's inability.
-      expect(() => Int64List(1), throwsUnsupportedError);
-      expect(
-        () => BinaryReader(Uint8List(16)).readI64List(2),
-        throwsUnsupportedError,
-      );
+    test(
+      'readI64List decodes to a plain List<int>: dart2js has no Int64List',
+      () {
+        // `Int64List(n)` throws on its own here, so the decode builds a
+        // fixed-length plain list through jsReadI64 instead.
+        expect(() => Int64List(1), throwsUnsupportedError);
+        final out = BinaryReader(Uint8List.fromList(want))
+            .readI64List(values.length);
+        expect(out, values);
+        expect(
+          () => out.add(0),
+          throwsUnsupportedError,
+          reason: 'fixed-length',
+        );
+      },
+    );
+
+    test('readI64List refuses an out-of-range element instead of rounding', () {
+      for (final bytes in outOfRangeBytes) {
+        expect(
+          () => BinaryReader(Uint8List.fromList(bytes)).readI64List(1),
+          throwsUnsupportedError,
+          reason: '$bytes must throw',
+        );
+      }
     });
   });
 

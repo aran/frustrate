@@ -177,8 +177,9 @@ pub struct Transform {
     /// the same bulk memcpy, minus the prefix.
     pub matrix: [f32; 16],
     pub ids: [i32; 4],
-    /// `i64` has a typed Dart list but no bulk codec, so this is the mixed
-    /// case: Rust memcpies, Dart loops, and the bytes have to agree.
+    /// `i64` is a Dart `List<int>` that only the VM bulk-copies, so this is
+    /// the mixed case: Rust memcpies, dart2wasm and dart2js loop, and the bytes
+    /// have to agree.
     pub longs: [i64; 2],
     /// Non-numeric elements loop on both sides, in ascending index order.
     pub corners: [String; 3],
@@ -618,11 +619,19 @@ pub fn echo_bytes(data: Vec<u8>) -> Vec<u8> {
 }
 
 /// Echo a Vec<i64>: pins the empty-`Vec<T>` argument for a non-byte element.
-/// Also a typed-list case (`Int64List`): the adversarial `i64::MIN` element
-/// must survive under dart2wasm, where a typed-list surprise would hide.
+/// Also the `i64` typed-list case: the adversarial `i64::MIN` element must
+/// survive under dart2wasm, where a typed-list surprise would hide.
 #[bridge(sync)]
 pub fn echo_i64s(xs: Vec<i64>) -> Vec<i64> {
     xs
+}
+
+/// `[i64::MIN, i64::MAX]`, produced on the Rust side: the only way a test on
+/// a JS-number backend (dart2js/DDC) can receive a `Vec<i64>` element past
+/// 2^53, which its decode must refuse rather than round.
+#[bridge(sync)]
+pub fn i64_list_extremes() -> Vec<i64> {
+    vec![i64::MIN, i64::MAX]
 }
 
 // ------------------------------------------------------- typed lists --

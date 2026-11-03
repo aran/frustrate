@@ -237,9 +237,48 @@ void main() {
       expect(untyped.takeBytes(), want, reason: 'List<int> (element arm)');
 
       final r = BinaryReader(Uint8List.fromList(want));
-      expect(r.readI64List(values.length), values);
+      final typedBack = r.readI64List(values.length);
+      expect(typedBack, values);
+      expect(
+        typedBack,
+        isA<Int64List>(),
+        reason: 'the VM keeps the typed list',
+      );
       r.assertConsumed();
+
+      // The reader a JS-number backend takes in place of `Int64List(n)`:
+      // the same values, in a fixed-length plain list.
+      final plain = jsReadI64List(
+        ByteData.sublistView(Uint8List.fromList(want)),
+        0,
+        values.length,
+      );
+      expect(plain, values);
+      expect(plain, isNot(isA<Int64List>()));
+      expect(
+        () => plain.add(0),
+        throwsUnsupportedError,
+        reason: 'fixed-length',
+      );
     });
+
+    test(
+      'the JS list reader refuses an out-of-range element anywhere in it',
+      () {
+        for (final bytes in outOfRangeBytes) {
+          final payload = Uint8List.fromList([
+            ...i64Goldens.first.$2,
+            ...bytes,
+          ]);
+          expect(
+            () => jsReadI64List(ByteData.sublistView(payload), 0, 2),
+            throwsUnsupportedError,
+            reason: '$bytes in second position must throw',
+          );
+        }
+        expect(jsReadI64List(ByteData(0), 0, 0), isEmpty);
+      },
+    );
 
     test('the out-of-range patterns really are out of range', () {
       // Otherwise the browser half would be asserting that in-range values

@@ -7,12 +7,20 @@ exports_files(["pubspec.lock"])
 # for the no-CSP fallback (pinned by :glue_source_test).
 exports_files(["lib/src/js/frustrate.js"])
 
+# `Vec<i64>` and `[i64; N]` are `Int64List` where `int` is 64 bits and
+# `List<int>` on dart2js and DDC. The type is the one `I64List` that
+# `lib/frustrate.dart` exports from package `frustrate_i64_list`, which has a
+# variant per web compiler; this `select()` is the only place that chooses.
+# The default branch is the VM, and any platform without a web compiler.
 dart_library(
     name = "frustrate",
     srcs = glob(["lib/**/*.dart"]),
     package_name = "frustrate",
     visibility = ["//visibility:public"],
-    deps = ["@pub_deps//:ffi"],
+    deps = ["@pub_deps//:ffi"] + select({
+        "@rules_dart//dart/constraints:js": ["//runtime/dart/i64_list/js:i64_list"],
+        "//conditions:default": ["//runtime/dart/i64_list/typed:i64_list"],
+    }),
 )
 
 dart_test(

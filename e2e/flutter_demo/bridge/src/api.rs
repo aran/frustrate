@@ -190,8 +190,8 @@ pub fn distinct_sorted(xs: Vec<i64>) -> BTreeSet<i64> {
     xs.into_iter().collect()
 }
 
-/// rotate-left into a `VecDeque`: the deque shares the `Int64List` wire with
-/// `Vec`, only the reconstructed Rust container differs.
+/// rotate-left into a `VecDeque`: the deque shares the `Vec` wire, only the
+/// reconstructed Rust container differs.
 #[bridge(sync)]
 pub fn rotate_left(xs: Vec<i64>, by: i64) -> VecDeque<i64> {
     let mut d: VecDeque<i64> = xs.into();

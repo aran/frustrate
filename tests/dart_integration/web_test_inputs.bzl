@@ -3,20 +3,34 @@
 load("@rules_dart//dart:providers.bzl", "DartInfo")
 load("@rules_dart//dart:utils.bzl", "dart_analyzable_info")
 
+def _package_entry(dep):
+    info = dep[DartInfo]
+    language_version = ""
+    for record in info.transitive_packages.to_list():
+        if record.package_name == info.package_name:
+            language_version = record.language_version
+    return info.package_name, {
+        "root": info.lib_root,
+        "languageVersion": language_version,
+    }, info.srcs
+
 def _web_test_inputs_impl(ctx):
     packages = {}
     files = []
     for dep in ctx.attr.packages:
-        info = dep[DartInfo]
-        language_version = ""
-        for record in info.transitive_packages.to_list():
-            if record.package_name == info.package_name:
-                language_version = record.language_version
-        packages[info.package_name] = {
-            "root": info.lib_root,
-            "languageVersion": language_version,
-        }
-        files.extend(info.srcs)
+        name, entry, srcs = _package_entry(dep)
+        packages[name] = entry
+        files.extend(srcs)
+
+    # One package per web compiler, same name each: the driver adds the one
+    # for the compiler it runs, as `dart_js_binary` and `dart_wasm_binary` do
+    # by building for a platform with `@rules_dart//dart/constraints:js` or
+    # `:wasm`.
+    compiler_packages = {}
+    for compiler, dep in ctx.attr.compiler_packages.items():
+        name, entry, srcs = _package_entry(dep)
+        compiler_packages[compiler] = dict(entry, name = name)
+        files.extend(srcs)
     fixtures = {}
     labels = {}
     for target, path in ctx.attr.fixtures.items():
@@ -36,6 +50,7 @@ def _web_test_inputs_impl(ctx):
     manifest = ctx.actions.declare_file(ctx.label.name + ".json")
     ctx.actions.write(manifest, json.encode_indent({
         "packages": packages,
+        "compilerPackages": compiler_packages,
         "fixtures": fixtures,
         "labels": labels,
         "threaded": ctx.attr.threaded,
@@ -79,6 +94,14 @@ web_test_inputs = rule(
             providers = [DartInfo],
             doc = "The other libraries `srcs` import. Pub resolves these for " +
                   "the browser run; here they resolve `srcs` for analysis.",
+        ),
+        "compiler_packages": attr.string_keyed_label_dict(
+            providers = [DartInfo],
+            doc = "Per-compiler variants of a package, keyed by the " +
+                  "compiler: `js` (dart2js) or `wasm` (dart2wasm). The " +
+                  "driver adds the one for the compiler it runs under, in " +
+                  "the place Bazel's binaries get theirs from " +
+                  "their platform's `@rules_dart//dart/constraints:web_compiler`.",
         ),
         "fixtures": attr.label_keyed_string_dict(
             allow_files = True,

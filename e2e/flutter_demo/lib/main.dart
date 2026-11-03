@@ -22,7 +22,8 @@ import 'package:frustrate/frustrate.dart'
         BinaryReader,
         ContentionException,
         Frustrate,
-        FrustrateCancelToken;
+        FrustrateCancelToken,
+        toI64List;
 // The opt-in for a call decorator. Importing it is what makes
 // `FrustrateRuntime` polymorphic in this app — an app that never imports it
 // links one implementation and the compiler devirtualises every crossing — so
@@ -390,12 +391,6 @@ class _CollectionsCard extends StatefulWidget {
   State<_CollectionsCard> createState() => _CollectionsCardState();
 }
 
-/// True under dart2js and DDC — the web dev loop's compiler — where `int` is a
-/// JavaScript number and `Int64List` does not exist, so a `Vec<i64>` cannot
-/// cross at all. dart2wasm has both. The same test frustrate's runtime makes.
-const bool _jsNumbers = bool.fromEnvironment('dart.library.js_interop') &&
-    !bool.fromEnvironment('dart.tool.dart2wasm');
-
 class _CollectionsCardState extends State<_CollectionsCard> {
   final _input = TextEditingController(text: '5, 3, 5, 1, 3, 5');
   Map<int, int> _tally = const {};
@@ -405,11 +400,11 @@ class _CollectionsCardState extends State<_CollectionsCard> {
   @override
   void initState() {
     super.initState();
-    if (!_jsNumbers) _compute(_input.text);
+    _compute(_input.text);
   }
 
   void _compute(String s) {
-    final xs = Int64List.fromList(s
+    final xs = toI64List(s
         .split(',')
         .map((t) => int.tryParse(t.trim()))
         .whereType<int>()
@@ -434,32 +429,26 @@ class _CollectionsCardState extends State<_CollectionsCard> {
       title: 'Collections — ordered map, set, and deque',
       subtitle: 'Same numbers, three standard containers. A BTreeMap and '
           'BTreeSet arrive sorted (a HashMap/HashSet would not); a VecDeque '
-          'shares the Int64List wire with Vec.',
-      child: _jsNumbers
-          ? const Text(
-              'Not on this build: these cross as Int64List, which a '
-              'JavaScript-compiled app does not have. Run it with --wasm or '
-              'natively.',
-              key: Key('collectionsUnavailable'))
-          : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _input,
-                decoration: const InputDecoration(
-                    border: OutlineInputBorder(), labelText: 'comma-separated ints'),
-                onChanged: _recompute,
-              ),
-              const SizedBox(height: 10),
-              Text('BTreeMap value:count — $tally', key: const Key('orderedMap')),
-              const SizedBox(height: 4),
-              Text('BTreeSet distinct — {${_distinct.join(', ')}}',
-                  key: const Key('orderedSet')),
-              const SizedBox(height: 4),
-              Text('VecDeque rotate-left 2 — ${_rotated.join(', ')}',
-                  key: const Key('deque')),
-            ],
+          'shares the Vec wire.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _input,
+            decoration: const InputDecoration(
+                border: OutlineInputBorder(), labelText: 'comma-separated ints'),
+            onChanged: _recompute,
           ),
+          const SizedBox(height: 10),
+          Text('BTreeMap value:count — $tally', key: const Key('orderedMap')),
+          const SizedBox(height: 4),
+          Text('BTreeSet distinct — {${_distinct.join(', ')}}',
+              key: const Key('orderedSet')),
+          const SizedBox(height: 4),
+          Text('VecDeque rotate-left 2 — ${_rotated.join(', ')}',
+              key: const Key('deque')),
+        ],
+      ),
     );
   }
 }

@@ -203,14 +203,21 @@ afterwards but is a tripwire, not a proof — its source says which facilities i
 covers and why `Instant::now` is not one. An uncovered miss aborts at runtime.
 
 **dart2js/DDC development loop** (`-Dfrustrate.allowJsNumbers=true`). Those
-backends make `int` a JS double. The flag lets `i64` and handles cross there
-through a fallback that is exact up to 2^53 and throws beyond it. You assert
-that you have checked your program's numeric behaviour on a real 64-bit backend,
-because nothing can tell you whether your own arithmetic went wrong before
-reaching the bridge (`1 << 62` is `0` there). Two things cannot work at all:
-`Vec<i64>` and `[i64; N]` in either direction, because `Int64List` cannot be
-constructed on those backends, and a `bytes(...)` codec that calls `getInt64`
-itself. `u64` is unaffected; it crosses as `BigInt` everywhere.
+backends make `int` a JS double. The flag lets `i64`, `Vec<i64>`, `[i64; N]`
+and handles cross there through a fallback that is exact up to 2^53 and throws
+beyond it. You assert that you have checked your program's numeric behaviour on
+a real 64-bit backend, because nothing can tell you whether your own arithmetic
+went wrong before reaching the bridge (`1 << 62` is `0` there). `Vec<i64>` and
+`[i64; N]` are `I64List` in Dart, a type the build chooses for the compiler:
+`Int64List` on the VM and dart2wasm, `List<int>` on dart2js and DDC, which cannot
+construct an `Int64List`. Under Bazel the compiler is the target platform's
+`@rules_dart//dart/constraints:web_compiler`, which is `js` or `wasm` on the
+platforms `dart_js_binary` and `dart_wasm_binary` build for. A platform without
+it gets `Int64List`, dart2js included, and a
+`Vec<i64>` then throws there. `toI64List(list)` makes an `I64List` of a
+`List<int>`: the same list if it is one already, a copy if not. A
+`bytes(...)` codec that calls `getInt64` itself cannot work there.
+`u64` is unaffected; it crosses as `BigInt` everywhere.
 
 ## Why the rest are decisions
 

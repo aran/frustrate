@@ -7,10 +7,13 @@
 /// under Bazel. Per the "if it must be a manual run, make it a dart binary
 /// (never a shell script)" rule, the invocation lives here.
 ///
-/// This is the *only* place dart2js is executed in this repo. Everything else
-/// web is dart2wasm. It matters because the arm it covers runs on no backend
-/// the automatic suite exercises, and its failure mode is silently wrong
-/// bytes rather than a crash.
+/// It matters because the arm it covers runs on no backend `bazel test`
+/// exercises, and its failure mode is silently wrong bytes rather than a
+/// crash.
+///
+/// The codec imports `package:frustrate_i64_list`, which pub does not know:
+/// Bazel picks its variant per compiler. The run adds the dart2js variant to
+/// pub's package config, in a temporary file outside the source tree.
 ///
 /// Usage:
 ///   bazel run //runtime/dart:js_arm_web_test
@@ -22,6 +25,7 @@
 /// a byte would be caught there rather than trusted.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -57,17 +61,69 @@ Future<void> main(List<String> args) async {
     return;
   }
 
+  final scratch = Directory.systemTemp.createTempSync('frustrate_js_arm.');
+  final packages = _withJsI64List(packageDir, scratch.path);
   stdout.writeln(
     r'$ dart test -p chrome -c dart2js test/js_numbers_web_test.dart'
-    '  (in $packageDir)',
+    '  (in $packageDir, with the dart2js frustrate_i64_list)',
   );
   final proc = await Process.start(
     'dart',
-    ['test', '-p', 'chrome', '-c', 'dart2js', 'test/js_numbers_web_test.dart'],
+    [
+      '--packages=$packages',
+      _testRunner(packages),
+      '-p',
+      'chrome',
+      '-c',
+      'dart2js',
+      'test/js_numbers_web_test.dart',
+    ],
     workingDirectory: packageDir,
     mode: ProcessStartMode.inheritStdio,
   );
-  exit(await proc.exitCode);
+  final code = await proc.exitCode;
+  scratch.deleteSync(recursive: true);
+  exit(code);
+}
+
+/// Pub's package config for [packageDir] plus `frustrate_i64_list`'s dart2js
+/// variant, written under [scratch]; returns its path.
+String _withJsI64List(String packageDir, String scratch) {
+  final pub = File('$packageDir/.dart_tool/package_config.json');
+  if (!pub.existsSync()) {
+    stderr.writeln('js_arm_web_test: run `dart pub get` in $packageDir first.');
+    exit(2);
+  }
+  final config = jsonDecode(pub.readAsStringSync()) as Map<String, Object?>;
+  final base = pub.parent.uri;
+  final packages = [
+    for (final p in (config['packages'] as List).cast<Map<String, Object?>>())
+      if (p['name'] != 'frustrate_i64_list')
+        {...p, 'rootUri': base.resolve(p['rootUri'] as String).toString()},
+    {
+      'name': 'frustrate_i64_list',
+      'rootUri': Directory('$packageDir/i64_list/js').uri.toString(),
+      'packageUri': 'lib/',
+      'languageVersion': '3.5',
+    },
+  ];
+  final path = '$scratch/package_config.json';
+  File(path).writeAsStringSync(jsonEncode({...config, 'packages': packages}));
+  return path;
+}
+
+/// The pub `test` runner's entry point, from [packageConfig].
+String _testRunner(String packageConfig) {
+  final config = jsonDecode(
+    File(packageConfig).readAsStringSync(),
+  ) as Map<String, Object?>;
+  final test = (config['packages'] as List).cast<Map>().firstWhere(
+    (p) => p['name'] == 'test',
+  );
+  final root = test['rootUri'] as String;
+  return Uri.parse(root.endsWith('/') ? root : '$root/')
+      .resolve('bin/test.dart')
+      .toFilePath();
 }
 
 String _bytes(int v) {

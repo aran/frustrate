@@ -694,7 +694,7 @@ void main() {
       expect(echoVecOpt(xs: <int?>[]), isEmpty);
     });
 
-    test('Option<Vec<i64>> <-> Int64List?', () {
+    test('Option<Vec<i64>> <-> List<int>?', () {
       final out = echoOptVec(x: Int64List.fromList([1, 2, 3]));
       expect(out, isA<Int64List>());
       expect(out, [1, 2, 3]);
@@ -705,7 +705,7 @@ void main() {
       ); // Some(empty) distinct from None
     });
 
-    test('HashMap<String, Vec<i64>> <-> Map<String, Int64List>', () {
+    test('HashMap<String, Vec<i64>> <-> Map<String, List<int>>', () {
       final m = {
         'a': Int64List.fromList([1, 2]),
         'b': Int64List(0),
@@ -717,13 +717,13 @@ void main() {
       expect(echoMapOfVec(m: <String, Int64List>{}), isEmpty);
     });
 
-    test('Vec<Vec<i64>> <-> List<Int64List>, round-trip and transpose', () {
+    test('Vec<Vec<i64>> <-> List<List<int>>, round-trip and transpose', () {
       final grid = [
         Int64List.fromList([1, 2, 3]),
         Int64List.fromList([4, 5, 6]),
       ];
       final out = echoVecOfVec(xss: grid);
-      expect(out, isA<List<Int64List>>());
+      expect(out, isA<List<List<int>>>());
       expect(out[0], isA<Int64List>());
       expect(out, grid);
       expect(echoVecOfVec(xss: <Int64List>[]), isEmpty);
@@ -887,11 +887,11 @@ void main() {
   });
 
   group('typed lists (Vec<numeric> <-> TypedData)', () {
-    // Every fixed-width numeric Vec crosses as the matching Dart typed list,
-    // symmetric in both directions. Each case asserts the returned value is
-    // the EXACT typed class (not just a List) and round-trips. These run on
-    // native AND single-threaded web (dart2wasm) — the one place a typed-list
-    // surprise (esp. Int64List) would hide.
+    // Every fixed-width numeric Vec decodes to the matching Dart typed list.
+    // Each case asserts the returned value is the EXACT typed class (not just
+    // a List) and round-trips. `Vec<i64>` is declared `List<int>`, but on
+    // native and dart2wasm, the backends this file runs on, it still decodes
+    // to an `Int64List`; i64_list_test.dart covers the JS-number backends.
     test('each element type returns its exact typed-list class', () {
       final i8 = echoI8s(xs: Int8List.fromList([-128, 0, 127]));
       expect(i8, isA<Int8List>());

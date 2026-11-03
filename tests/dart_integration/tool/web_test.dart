@@ -76,6 +76,13 @@ Future<void> main(List<String> args) async {
   }
   final packageDir = '$workspace/tests/dart_integration';
 
+  // `-c dart2js` in the passthrough runs the suite on the JS backend, with
+  // that backend's variant of the per-compiler packages.
+  final cFlag = passthrough.indexOf('-c');
+  final testCompiler = cFlag >= 0 && cFlag + 1 < passthrough.length
+      ? passthrough[cFlag + 1]
+      : 'dart2wasm';
+
   // 0. Resolve the Bazel-built fixtures (`:web_test_inputs`) in place: a
   //    package config outside the source tree adds their bindings packages to
   //    pub's, and a temporary directory of links serves their files.
@@ -88,6 +95,7 @@ Future<void> main(List<String> args) async {
     threaded: threaded,
     facilities: facilities,
     release: release,
+    compiler: webCompilerKey(testCompiler),
   );
   if (tests == null) {
     scratch.deleteSync(recursive: true);
@@ -98,7 +106,11 @@ Future<void> main(List<String> args) async {
   //    fixture) live in dart_test.yaml, so this stays a plain invocation. The
   //    runner reads its isolate's package config, for the compiler and to
   //    serve `packages/`, so it runs from source under the merged config.
-  const testArgs = ['-p', 'chrome', '-c', 'dart2wasm'];
+  final testArgs = [
+    '-p',
+    'chrome',
+    if (cFlag < 0) ...['-c', testCompiler],
+  ];
   final tested = await run('dart', [
     '--packages=${scratch.path}/package_config.json',
     _testRunner('${scratch.path}/package_config.json'),

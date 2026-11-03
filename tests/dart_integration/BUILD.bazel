@@ -48,6 +48,12 @@ web_test_inputs(
         "//tests/compose/beta:bindings",
         "//tests/host_imports:bindings",
     ],
+    # The pub run has no Bazel platform to pick by; the driver picks
+    # `frustrate`'s variant of `I64List` by the compiler it was asked for.
+    compiler_packages = {
+        "js": "//runtime/dart/i64_list/js:i64_list",
+        "wasm": "//runtime/dart/i64_list/typed:i64_list",
+    },
     facilities = {
         "test_api.wasm": "//tests/test_api:test_api_facilities.wasm",
     },
@@ -156,6 +162,22 @@ dart_binary(
 dart_test(
     name = "bridge_test",
     main = "test/bridge_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
+# `Vec<i64>` and `[i64; N]` on every backend; the browser runner takes the
+# same file under dart2wasm and, with `-c dart2js`, the JS-number arm.
+dart_test(
+    name = "i64_list_test",
+    main = "test/i64_list_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",

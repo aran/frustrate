@@ -120,6 +120,7 @@ Future<void> main(List<String> args) async {
     threaded: threaded,
     facilities: false,
     release: true,
+    compiler: 'wasm',
   );
   if (resolved == null) exit(1);
   stderr.writeln('web_bench: fixture built in ${fixtureSw.elapsed.inSeconds}s');

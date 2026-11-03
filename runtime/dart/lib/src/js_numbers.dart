@@ -67,12 +67,12 @@ import 'dart:typed_data';
 /// compiler happens to represent numbers rather than anything specified.
 /// `js_numbers_test` pins that the two agree.
 ///
-/// Note this cannot be a conditional import: configurable imports resolve
-/// `dart.library.*` only — `dart.tool.dart2wasm` is visible to
-/// `fromEnvironment` but *not* to an `if (...)` in an import (verified by
-/// compiling both ways; dart2wasm took the default arm). So the arm has to be
-/// a constant branch inside one file, which also means a *signature* can never
-/// differ between the two web backends.
+/// Not a conditional import: configurable imports resolve `dart.library.*`
+/// only, so `dart.tool.dart2wasm` cannot key one. The libraries that do tell
+/// dart2js from dart2wasm in an import (`dart:html`, `dart:js`,
+/// `dart:js_util`, present only on the JS compilers) are deprecated, so the
+/// codec keys its branch on `dart.tool.dart2wasm` through `fromEnvironment`
+/// instead, as a constant branch inside one file.
 const bool kJsNumbers =
     bool.fromEnvironment('dart.library.js_interop') &&
     !bool.fromEnvironment('dart.tool.dart2wasm');
@@ -127,6 +127,18 @@ int jsReadI64(ByteData view, int at) {
     _rangeError('i64 value', 'hi=$hi lo=$lo');
   }
   return hi * _2p32 + lo;
+}
+
+/// Read [n] consecutive little-endian `i64`s from [at] into a fixed-length
+/// `List<int>`: a `Vec<i64>` or `[i64; N]` payload on a backend that cannot
+/// construct an `Int64List`. Each element goes through [jsReadI64], so the
+/// list carries the scalar contract element for element.
+List<int> jsReadI64List(ByteData view, int at, int n) {
+  final out = List<int>.filled(n, 0);
+  for (var i = 0; i < n; i++) {
+    out[i] = jsReadI64(view, at + i * 8);
+  }
+  return out;
 }
 
 /// Write [v] as a little-endian `u64` opaque handle at [at].

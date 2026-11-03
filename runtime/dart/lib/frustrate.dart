@@ -11,6 +11,8 @@
 /// `dart.library.ffi` — dart2wasm partially exposes dart:ffi.
 library;
 
+export 'package:frustrate_i64_list/frustrate_i64_list.dart';
+
 export 'src/binary_codec.dart';
 export 'src/consumed.dart';
 // The two ABI constants, and nothing else from `envelope.dart` — the envelope

@@ -17,6 +17,7 @@ so a bridge crate declared as a bare cdylib had unit tests and nothing else.
 """
 
 load("@rules_dart//dart:providers.bzl", "DartCodeAssetInfo")
+load("@rules_dart//dart:utils.bzl", "web_compiler_reset")
 load("@rules_rust//rust:defs.bzl", "rust_common", "rust_library", "rust_shared_library")
 load(":no_block_check.bzl", _frustrate_no_block_check = "frustrate_no_block_check")
 
@@ -101,8 +102,12 @@ def _frustrate_bridge_impl(ctx):
         ),
     ]
 
+# Every web compiler reaches the one generated set: the codegen has no compiler
+# to vary by (a per-compiler type is a typedef the Dart build picks, see
+# `//runtime/dart:frustrate`), and the Rust glue it writes is the crate's source.
 frustrate_bridge = rule(
     implementation = _frustrate_bridge_impl,
+    cfg = web_compiler_reset,
     doc = "Generate frustrate bridge glue (Rust) and bindings (Dart) from " +
           "declared bridge sources.",
     attrs = {
@@ -140,6 +145,9 @@ frustrate_bridge = rule(
             executable = True,
             cfg = "exec",
         ),
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
     },
 )
 
@@ -168,6 +176,7 @@ def _frustrate_code_asset_impl(ctx):
 
 frustrate_code_asset = rule(
     implementation = _frustrate_code_asset_impl,
+    cfg = web_compiler_reset,
     doc = """A bridge library as the Dart code asset its generated bindings resolve.
 
 The generated `<crate>Bridge` names its exports by the asset id of `bridge`;
@@ -188,6 +197,9 @@ bundler (rules_flutter) ships it per platform.
         "library": attr.label(
             mandatory = True,
             doc = "The shared library built from `bridge`'s crate.",
+        ),
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
     },
     provides = [DartCodeAssetInfo],
@@ -696,6 +708,7 @@ def _frustrate_web_glue_impl(ctx):
 
 frustrate_web_glue = rule(
     implementation = _frustrate_web_glue_impl,
+    cfg = web_compiler_reset,
     doc = "Stage frustrate's web glue (the served asset for strict-CSP " +
           "pages) into the consuming package — " +
           "name the target `frustrate.js` (the URL the app's " +
@@ -707,11 +720,15 @@ frustrate_web_glue = rule(
             default = Label("//runtime/dart:lib/src/js/frustrate.js"),
             allow_single_file = True,
         ),
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
     },
 )
 
 frustrate_wasm_module = rule(
     implementation = _frustrate_wasm_module_impl,
+    cfg = web_compiler_reset,
     doc = "Build a bridge rust_shared_library for a wasm platform and " +
           "expose the module under this target's name — name the target " +
           "`<something>.wasm`, conventionally matching the URL the app's " +
@@ -903,6 +920,7 @@ def _frustrate_wasm_opt_impl(ctx):
 
 frustrate_wasm_opt = rule(
     implementation = _frustrate_wasm_opt_impl,
+    cfg = web_compiler_reset,
     doc = "Run binaryen's `wasm-opt` over an existing wasm module.\n\n" +
           "`frustrate_wasm_module(wasm_opt = ...)` is the integrated spelling " +
           "and the one to reach for first — it optimizes in the right place " +
@@ -935,6 +953,9 @@ frustrate_wasm_opt = rule(
             doc = "The binaryen `wasm-opt` binary. Mandatory here, where the " +
                   "whole rule is the pass — unlike on frustrate_wasm_module, " +
                   "where naming it is what opts in.",
+        ),
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
         "opt_level": attr.string(
             default = "-O",

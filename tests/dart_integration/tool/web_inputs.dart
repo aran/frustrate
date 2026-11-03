@@ -21,8 +21,15 @@ Future<int> run(String exe, List<String> args, String cwd) async {
   return proc.exitCode;
 }
 
+/// The `compilerPackages` key of the web compiler named by `dart test -c`
+/// (`dart2js` or `dart2wasm`; the test runner's default for Chrome is
+/// `dart2js`).
+String webCompilerKey(String testCompiler) =>
+    testCompiler == 'dart2wasm' ? 'wasm' : 'js';
+
 /// Write `<scratch>/package_config.json`, pub's packages plus those of
-/// [inputs], and link each fixture file under `<scratch>/fixtures/`. Returns
+/// [inputs] and its variants for [compiler] (a [webCompilerKey]), and link each
+/// fixture file under `<scratch>/fixtures/`. Returns
 /// the test files [inputs] declares, or null on failure.
 ///
 /// [inputs] is the runfiles path of the manifest `:web_test_inputs` writes;
@@ -37,6 +44,7 @@ Future<List<String>?> resolveInputs(
   String scratch,
   String packageDir,
   String workspace, {
+  required String compiler,
   required bool threaded,
   required bool facilities,
   required bool release,
@@ -113,8 +121,13 @@ Future<List<String>?> resolveInputs(
   final self = (config['packages'] as List).cast<Map>().firstWhere(
     (p) => p['rootUri'] == '../',
   )['name'];
-  for (final MapEntry(key: name, value: package)
-      in (manifest['packages'] as Map<String, Object?>).entries) {
+  final compilerVariant =
+      (manifest['compilerPackages'] as Map<String, Object?>)[compiler]
+          as Map<String, Object?>;
+  for (final MapEntry(key: name, value: package) in [
+    ...(manifest['packages'] as Map<String, Object?>).entries,
+    MapEntry(compilerVariant['name'] as String, compilerVariant),
+  ]) {
     if (name != self && packages.any((p) => p['name'] == name)) {
       stderr.writeln('web_test_inputs: pub already resolves package $name');
       return null;

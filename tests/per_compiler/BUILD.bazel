@@ -1,0 +1,61 @@
+load("@rules_dart//dart:defs.bzl", "dart_js_binary", "dart_test", "dart_wasm_binary")
+load(":tests.bzl", "built_once_test", "variant_test")
+
+# `Vec<i64>` is `I64List`: `Int64List` where `int` is 64 bits and `List<int>`
+# on dart2js and DDC. Each probe states its type in a tear-off no other type
+# satisfies, so building it under the wrong variant fails the build.
+dart_js_binary(
+    name = "js_probe",
+    main = "js_probe.dart",
+    deps = [
+        "//tests/test_api:bindings",
+    ],
+)
+
+dart_wasm_binary(
+    name = "wasm_probe",
+    main = "typed_probe.dart",
+    deps = [
+        "//tests/test_api:bindings",
+    ],
+)
+
+dart_test(
+    name = "vm_probe_test",
+    size = "small",
+    main = "vm_probe_test.dart",
+    deps = [
+        "//tests/test_api:bindings",
+        "@pub_deps//:test",
+    ],
+)
+
+variant_test(
+    name = "js_variant_test",
+    size = "small",
+    not_picked = "runtime/dart/i64_list/typed/lib/frustrate_i64_list.dart",
+    picked = "runtime/dart/i64_list/js/lib/frustrate_i64_list.dart",
+    target_under_test = ":js_probe",
+)
+
+variant_test(
+    name = "wasm_variant_test",
+    size = "small",
+    not_picked = "runtime/dart/i64_list/js/lib/frustrate_i64_list.dart",
+    picked = "runtime/dart/i64_list/typed/lib/frustrate_i64_list.dart",
+    target_under_test = ":wasm_probe",
+)
+
+# What a web binary can reach that is not Dart is built once, not once per
+# compiler: the generated bindings and glue, and the Rust wasm module.
+built_once_test(
+    name = "bridge_built_once_test",
+    size = "small",
+    target = "//tests/test_api:bridge",
+)
+
+built_once_test(
+    name = "wasm_module_built_once_test",
+    size = "small",
+    target = "//tests/test_api:test_api.wasm",
+)

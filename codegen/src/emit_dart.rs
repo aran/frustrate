@@ -1147,8 +1147,8 @@ fn emit_doc_comment_before_generated(out: &mut String, docs: &[String], pad: &st
 /// the mapping is never duplicated.
 ///
 /// **One table and not two agreeing ones**, because the two halves are not
-/// independent: a `Vec<i64>` *declared* as `Int64List` has to decode with
-/// something that produces an `Int64List`. Two tables that happened to agree
+/// independent: a `Vec<f64>` *declared* as `Float64List` has to decode with
+/// something that produces a `Float64List`. Two tables that happened to agree
 /// would let an edit to one of them emit a generic `List` into a slot the other
 /// declared typed — a mismatch nothing here would catch.
 ///
@@ -1161,6 +1161,15 @@ fn emit_doc_comment_before_generated(out: &mut String, docs: &[String], pad: &st
 /// and the length prefix stays where it is: written and read by generated code,
 /// not by the bulk method (see the note on `BinaryWriter.writeF64List` for why
 /// the split exists).
+///
+/// `i64` is the one row whose Dart type is not a typed-list class: it is
+/// `I64List`, a typedef from package `frustrate_i64_list` that is `Int64List`
+/// where `int` is 64 bits and `List<int>` on dart2js and DDC, which cannot
+/// construct an `Int64List`. Codegen cannot see the compiler, so the generated
+/// file is the same under every one and the build picks the typedef's package
+/// (by the platform's `@rules_dart//dart/constraints:web_compiler`, in the `deps` of `//runtime/dart:frustrate`).
+/// `readI64List` returns `I64List` too, so like every other row its reader
+/// returns the declared type.
 ///
 /// Deliberately excluded (stay `List<T>` on the element loop): `u64`/`i128`/
 /// `u128` (→ `BigInt`, no typed list — `dart:typed_data` does have a
@@ -1190,7 +1199,7 @@ fn typed_list_entry(elem: &Type) -> Option<(&'static str, &'static str)> {
         Type::I8 => ("Int8List", "I8"),
         Type::I16 => ("Int16List", "I16"),
         Type::I32 => ("Int32List", "I32"),
-        Type::I64 => ("Int64List", "I64"),
+        Type::I64 => ("I64List", "I64"),
         Type::U8 => ("Uint8List", "U8"),
         Type::U16 => ("Uint16List", "U16"),
         Type::U32 => ("Uint32List", "U32"),
@@ -1212,6 +1221,11 @@ fn typed_list_class(elem: &Type) -> Option<&'static str> {
 /// `List.generate` with no typed-container case to consider.
 fn bulk_codec_stem(elem: &Type) -> Option<&'static str> {
     typed_list_entry(elem).map(|(_, stem)| stem)
+}
+
+/// The bulk read of a typed list of `stem`'s element, `len` elements long.
+fn bulk_read(stem: &str, len: &str) -> String {
+    format!("r.read{stem}List({len})")
 }
 
 pub(crate) fn dart_type(iface: &Interface, ty: &Type) -> String {
@@ -3064,7 +3078,7 @@ fn decode_expr_opt(iface: &Interface, ty: &Type, in_option: bool, side: Side) ->
         // classes already are.
         Type::Array(inner, n) if bulk_codec_stem(inner).is_some() => {
             let stem = bulk_codec_stem(inner).expect("guarded by the arm above");
-            format!("r.read{stem}List({n})")
+            bulk_read(stem, &n.to_string())
         }
         // No typed-container case here: [typed_list_entry] is one table, so an
         // element with a typed list always has a bulk stem and was taken by the
@@ -3080,7 +3094,7 @@ fn decode_expr_opt(iface: &Interface, ty: &Type, in_option: bool, side: Side) ->
         // reads the prefix first exactly as the loop did.
         Type::List(inner, _) if bulk_codec_stem(inner).is_some() => {
             let stem = bulk_codec_stem(inner).expect("guarded by the arm above");
-            format!("r.read{stem}List(r.readLen())")
+            bulk_read(stem, "r.readLen()")
         }
         // Every other element decodes into a generic `List`. There is no
         // typed-container case to fall back to: [typed_list_entry] is one
@@ -5703,7 +5717,7 @@ mod tests {
             ("i8", "Int8List", "readI8List"),
             ("i16", "Int16List", "readI16List"),
             ("i32", "Int32List", "readI32List"),
-            ("i64", "Int64List", "readI64List"),
+            ("i64", "I64List", "readI64List"),
             ("u16", "Uint16List", "readU16List"),
             ("u32", "Uint32List", "readU32List"),
             ("f32", "Float32List", "readF32List"),
@@ -5732,9 +5746,15 @@ mod tests {
         // representation is only knowable at runtime. Codegen that tried to
         // decide it would have to decide it wrongly for that case.
         let code = emit_src("#[bridge(sync)] pub fn f(xs: Vec<i64>) -> Vec<i64> { xs }");
-        assert!(code.contains("Int64List f({required Int64List xs}) {"), "{code}");
+        // `I64List`, not `Int64List`: dart2js and DDC cannot construct an
+        // `Int64List`, and one generated file serves every backend; the build
+        // picks what the typedef names.
+        assert!(code.contains("I64List f({required I64List xs}) {"), "{code}");
+        assert!(!code.contains("Int64List"), "{code}");
         assert!(code.contains("w.writeI64List(xs);"), "{code}");
+        // The reader returns the declared type, so the decode is the bare call.
         assert!(code.contains("r.readI64List(r.readLen())"), "{code}");
+        assert!(!code.contains("toI64List("), "{code}");
         assert!(!code.contains("w.writeI64(it"), "no element loop left: {code}");
         assert!(
             !code.contains("Int64List.fromList(List.generate("),
@@ -5750,6 +5770,36 @@ mod tests {
         assert!(code.contains("w.checkArrayLength(xs.length, 4);"), "{code}");
         assert!(code.contains("w.writeI64List(xs);"), "{code}");
         assert!(code.contains("r.readI64List(4)"), "{code}");
+        assert!(code.contains("I64List f({required I64List xs}) {"), "{code}");
+    }
+
+    #[test]
+    fn every_i64_list_occurrence_is_the_typedef() {
+        // Every place a `Vec<i64>` can sit reads the one table, so none of them
+        // may name a class dart2js cannot construct: nested lists, options,
+        // map values, struct fields, stream items and callback arguments.
+        let code = emit_src(
+            r#"
+            #[bridge(data)] pub struct S { pub xs: Vec<i64>, pub a: [i64; 2] }
+            #[bridge(sync)] pub fn vv(x: Vec<Vec<i64>>) -> Vec<Vec<i64>> { x }
+            #[bridge(sync)] pub fn o(x: Option<Vec<i64>>) -> Option<Vec<i64>> { x }
+            #[bridge(sync)] pub fn m(x: HashMap<String, Vec<i64>>) -> HashMap<String, Vec<i64>> { x }
+            #[bridge(sync)] pub fn s(s: S) -> S { s }
+            #[bridge] pub fn st(s: StreamSink<Vec<i64>>) {}
+            #[bridge] pub fn cb(f: DartCallback<Vec<i64>>) {}
+            "#,
+        );
+        assert!(!code.contains("Int64List"), "{code}");
+        assert!(code.contains("List<I64List> vv({required List<I64List> x}) {"), "{code}");
+        assert!(code.contains("I64List? o({I64List? x}) {"), "{code}");
+        assert!(code.contains("Map<String, I64List> m("), "{code}");
+        assert!(code.contains("final I64List xs;"), "{code}");
+        assert!(code.contains("final I64List a;"), "{code}");
+        assert!(code.contains("StreamController<I64List> s"), "{code}");
+        assert!(code.contains("void Function(I64List)"), "{code}");
+        // Nested, optional and map-valued reads are the bare reader call too.
+        assert!(code.contains("r.readI64List("), "{code}");
+        assert!(!code.contains("toI64List("), "{code}");
     }
 
     #[test]
@@ -5822,10 +5872,8 @@ mod tests {
     #[test]
     fn async_function_returns_future() {
         let code = emit_src("#[bridge] pub fn fetch_all(ids: Vec<i64>) -> Vec<String> { vec![] }");
-        // `Vec<i64>` param is now the typed `Int64List` (symmetric typed
-        // lists); the `Vec<String>` return stays a generic `List<String>`.
         assert!(
-            code.contains("Future<List<String>> fetchAll({required Int64List ids}) async {"),
+            code.contains("Future<List<String>> fetchAll({required I64List ids}) async {"),
             "{code}"
         );
         assert!(code.contains("await Frustrate.of(_frustrateBridge).callAsync(#, 8 + ids.length * 8, (w) {"), "{code}");
@@ -7855,8 +7903,8 @@ mod tests {
         );
         assert!(code.contains("Map<String, int> m"), "{code}");
         assert!(code.contains("Set<int> s"), "{code}");
-        // VecDeque<i64> rides the Int64List typed-list mapping like Vec<i64>.
-        assert!(code.contains("Int64List d"), "{code}");
+        // VecDeque<i64> rides the `Vec<i64>` mapping.
+        assert!(code.contains("I64List d"), "{code}");
     }
 
     #[test]
