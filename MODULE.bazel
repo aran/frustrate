@@ -153,6 +153,28 @@ crate.from_cargo(
 )
 use_repo(crate, "frustrate_crates")
 
+# The native check's memchr fixture (//tests/bazel_rules/native_red/memchr):
+# its crate in a hub of its own and dev-only, so it neither reaches a module
+# that depends on frustrate nor grows `frustrate_crates`' resolution.
+crate_dev = use_extension(
+    "@rules_rust//crate_universe:extensions.bzl",
+    "crate",
+    dev_dependency = True,
+)
+crate_dev.from_cargo(
+    name = "native_red_crates",
+    cargo_lockfile = "//tests/bazel_rules/native_red/memchr:Cargo.lock",
+    manifests = ["//tests/bazel_rules/native_red/memchr:Cargo.toml"],
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-linux-android",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-linux-android",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate_dev, "native_red_crates")
+
 dart = use_extension("@rules_dart//dart:extensions.bzl", "dart")
 dart.toolchain(dart_version = "3.13.2")
 use_repo(dart, "dart_toolchains")

@@ -568,8 +568,7 @@ def frustrate_no_block_check(
         and the panic report are such writes. //bazel/wasm_block_check/io.rs
         has the maps and what each covers.
       allow: For the native analyses: silences for every claim the target
-        checks. A name is what a "cannot verify" finding says to silence it
-        as. Silence one member's finding instead with
+        checks. A name is what a finding says to silence it as. Silence one member's finding instead with
         `no_block(allow(<name>))` in its `#[bridge(...)]`, its impl's, or its
         file's `bridge_file!`. The check lists every silence it applied, and
         fails on one that silences nothing.

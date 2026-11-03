@@ -49,20 +49,21 @@
 //! Not followed: edges into the fatal entries ([`super::FATAL_ENTRIES`]),
 //! the panic handler among them.
 //!
-//! **Silences.** A "cannot verify" finding is silenced by naming what it
-//! names: `--allow <name>` (the check target's `allow`)
+//! **Silences.** Any finding is silenced by naming what it names: `--allow <name>` (the check target's `allow`)
 //! for every claim, or a census `allow` row (`no_block(allow(...))` in
 //! source) for one member. Each applied silence is listed in the verdict, and one that
 //! silences nothing is an error, so a silence cannot outlive what it was for.
-//! A wait is never silenced.
 //!
 //! # What green does not cover
 //!
-//! - **Indirect calls through a value the closure did not produce.** An
-//!   address-take is attributed to the function or constant that makes it, so
-//!   a `dyn` call whose target the closure itself put in a vtable is followed.
-//!   A function pointer installed elsewhere and read back from a static (a
-//!   logger, a hook, a pointer from `dlsym` or the Dart API table) is not.
+//! - **A call through a value from a heap object the member was handed**
+//!   (a handle's object, say), unless the value came from a static or an
+//!   external function. A call through a value loaded from a mutable static,
+//!   or returned by an external function, is "cannot verify"
+//!   ([`super::provenance`]), unless the static is one frustrate knows
+//!   ([`KNOWN_SLOTS`]); one through a value the member produced is followed,
+//!   and so is one through a static that holds only the program's own
+//!   functions, into each of them.
 //! - **The panic path**, cut at the fatal entries: a panicking member runs
 //!   std's hook, any installed hook, and the unwinder on its own thread.
 //! - **Termination**: a section's or a body's own loops.
@@ -78,6 +79,27 @@ use super::{match_census, own_path, readable, Claims, Sinks, FATAL_ENTRIES, ROOT
 /// The export name `runtime/rust/src/bounded.rs` gives the bounded lock's
 /// acquire in the check build.
 pub(crate) const ACQUIRE: &str = "frustrate_bounded_lock_acquire";
+
+/// Statics a call may be made through without a finding: what is in them
+/// is installed by code frustrate knows, and why it cannot stall the caller.
+pub(crate) const KNOWN_SLOTS: &[(&str, &str)] = &[
+    (
+        "core::io::error::os_functions::OS_FUNCTIONS",
+        "std's own table of OS error functions, installed by std at startup; \
+         they decode and describe an error code",
+    ),
+    (
+        "std::sys::thread_local::destructors::list::DTORS",
+        "std's list of this thread's thread-local destructors, which std runs \
+         when the thread exits, never within a call",
+    ),
+    (
+        "frustrate::post::native::dl::API",
+        "the Dart VM's API table, filled at the isolate handshake; posting a \
+         message takes only the VM's port and queue locks, for a map lookup \
+         and an enqueue",
+    ),
+];
 
 /// std functions whose externals frustrate vouches for: each with the
 /// externals that are not a finding when the function is the only way a
@@ -484,6 +506,7 @@ pub(crate) fn run_ir(
     claims: Option<&Claims>,
     sinks: &Sinks,
 ) -> Result<String, String> {
+    super::budget::set(path, label);
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
     let mut ir = parse(&text).map_err(|e| format!("wasm_block_check: {label}: {e}"))?;
 
@@ -528,45 +551,8 @@ pub(crate) fn run_ir(
     }
     match_census(&root_names, claims, label)?;
 
-    let unresolved: BTreeMap<u32, String> = BTreeMap::new();
-    let site_of: BTreeMap<u32, String> = BTreeMap::new();
 
     let paths: Vec<Vec<String>> = ir.names.iter().map(|n| own_path(n)).collect();
-
-    let mut kinds = sink_kinds(&ir, libc, &paths, sinks);
-    let known = known_paths(&ir, &paths);
-    for (s, why) in &unresolved {
-        kinds.insert(*s, (Verdict::CannotVerify, format!("its callee may be {why}")));
-    }
-    // What a silence names: an external function by its symbol, an indirect
-    // call by the path of the function that makes it.
-    let key_of: BTreeMap<u32, String> = kinds
-        .iter()
-        .filter(|(_, (v, _))| *v == Verdict::CannotVerify)
-        .map(|(s, _)| {
-            let key = match site_of.get(s) {
-                Some(func) => own_path(func).join("::"),
-                None => ir.names[*s as usize].clone(),
-            };
-            (*s, key)
-        })
-        .collect();
-    for (s, key) in &key_of {
-        if let Some(k) = kinds.get_mut(s) {
-            k.1.push_str(&format!(" (silence it as `{key}`)"));
-        }
-    }
-    // The check target's silences apply everywhere, sections included.
-    let mut used_target: BTreeSet<String> = BTreeSet::new();
-    let target_silenced: BTreeSet<u32> = key_of
-        .iter()
-        .filter(|(_, k)| sinks.allowed.iter().any(|w| w == *k))
-        .map(|(s, _)| *s)
-        .collect();
-    let all_kinds = kinds.clone();
-    for s in &target_silenced {
-        kinds.remove(s);
-    }
 
     let fatal: BTreeSet<u32> = (0..ir.names.len() as u32)
         .filter(|f| FATAL_ENTRIES.iter().any(|e| e.matches(&ir.names[*f as usize])))
@@ -633,6 +619,85 @@ pub(crate) fn run_ir(
             }
         }
         unreached = unreached_found.into_iter().collect();
+    }
+
+    // Calls through a value the member did not produce: each is a sink of
+    // its own, named by the function that makes it.
+    let mut unresolved: BTreeMap<u32, String> = BTreeMap::new();
+    let mut site_of: BTreeMap<u32, String> = BTreeMap::new();
+    {
+        let mut analysed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for r in &roots {
+            for f in reach(*r, &ir.refs, &BTreeSet::new()) {
+                if ir.defined[f as usize] {
+                    analysed.insert(ir.names[f as usize].clone());
+                }
+            }
+        }
+        let known = |p: &str| KNOWN_SLOTS.iter().any(|(k, _)| *k == p);
+        let calls = super::provenance::foreign_calls(&text, &analysed, &known);
+        // A call through what is loaded from a dispatch table calls one of
+        // the functions stored in it.
+        for (table, stored) in &calls.tables {
+            let t = ir.id(table);
+            for f in stored {
+                let f = ir.id(f);
+                ir.refs[t as usize].insert(f);
+            }
+        }
+        for site in calls.sites {
+            let f = ir.id(&site.at);
+            let name = format!("an indirect call in {}", readable(&site.func));
+            let s = ir.id(&name);
+            ir.defined[s as usize] = true;
+            ir.calls[f as usize].insert(s);
+            ir.refs[f as usize].insert(s);
+            site_of.insert(s, site.func.clone());
+            let entry = unresolved.entry(s).or_default();
+            for src in site.sources {
+                if !entry.split("; ").any(|e| e == src) {
+                    if !entry.is_empty() {
+                        entry.push_str("; ");
+                    }
+                    entry.push_str(&src);
+                }
+            }
+        }
+    }
+    let paths: Vec<Vec<String>> = ir.names.iter().map(|n| own_path(n)).collect();
+    let mut kinds = sink_kinds(&ir, libc, &paths, sinks);
+    let known = known_paths(&ir, &paths);
+    for (s, why) in &unresolved {
+        kinds.insert(*s, (Verdict::CannotVerify, format!("its callee may be {why}")));
+    }
+    // What a silence names: an external function by its symbol, an indirect
+    // call by the path of the function that makes it.
+    let key_of: BTreeMap<u32, String> = kinds
+        .keys()
+        .map(|s| {
+            let key = match site_of.get(s) {
+                Some(func) => own_path(func).join("::"),
+                None if ir.defined[*s as usize] => own_path(&ir.names[*s as usize]).join("::"),
+                None => ir.names[*s as usize].clone(),
+            };
+            (*s, key)
+        })
+        .collect();
+    for (s, key) in &key_of {
+        if let Some(k) = kinds.get_mut(s) {
+            k.1.push_str(&format!(" (silence it as `{key}`)"));
+        }
+    }
+    // The check target's silences apply everywhere, sections included.
+    let mut used_target: BTreeSet<String> = BTreeSet::new();
+    let target_silenced: BTreeSet<u32> = key_of
+        .iter()
+        .filter(|(_, k)| sinks.allowed.iter().any(|w| w == *k))
+        .map(|(s, _)| *s)
+        .collect();
+    let all_kinds = kinds.clone();
+    for s in &target_silenced {
+        kinds.remove(s);
     }
 
     let display = |sym: &str| -> String {
@@ -888,7 +953,7 @@ pub(crate) fn run_ir(
          so it is dispatched off the caller, or\ndrop the claim. \"Cannot verify\" \
          names what the check cannot see into: a function outside the\nRust \
          program not known not to wait, or an indirect call whose target may \
-         come from outside it.\nIf it cannot stall the caller, silence it: `no_block(allow(<name>))` on the\nmember, its impl or its file \
+         come from outside it.\nIf a finding cannot stall the caller in practice, silence it: `no_block(allow(<name>))` on the\nmember, its impl or its file \
          (`bridge_file!`), or `allow` in the check target for every claim.\n\
          \nNot followed, and not counted above:\n",
     );
@@ -999,7 +1064,7 @@ mod tests {
         assert!(ok.contains("`sqlite3_step` in every claim (the check target's `allow`)"), "{ok}");
     }
 
-    /// A spin loop's yield is a wait, and the target's `allow` cannot silence it.
+    /// A spin loop's yield is a wait, which the target's `allow` silences like any finding.
     #[test]
     fn sched_yield_is_a_wait() {
         let body = format!(
@@ -1008,7 +1073,8 @@ mod tests {
         );
         let e = check(&body, &[], &[]).unwrap_err();
         assert!(e.contains("reaches sched_yield — waits"), "{e}");
-        assert!(run_text(&format!("{HEAD}{body}"), None, &sinks(&[], &[], &["sched_yield"])).is_err());
+        let ok = run_text(&format!("{HEAD}{body}"), None, &sinks(&[], &[], &["sched_yield"])).unwrap();
+        assert!(ok.contains("`sched_yield` in every claim (the check target's `allow`)"), "{ok}");
     }
 
     #[test]
@@ -1238,6 +1304,133 @@ mod tests {
         assert!(e.contains("  b\n      cannot verify: reaches sqlite3_step"), "{e}");
     }
 
+
+    /// A call through a value loaded from a static: someone else installed
+    /// it, so the check cannot say what it is.
+    #[test]
+    fn a_call_through_a_value_loaded_from_a_static_cannot_be_verified() {
+        let text = format!(
+            "{HEAD}@SLOT = internal global ptr null\n\
+             define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_7example6render()\n  ret void\n}}\n\
+             define internal void @_RNvCs1_7example6render() {{\n  %f = load ptr, ptr @SLOT\n  call void %f()\n  ret void\n}}\n"
+        );
+        let e = run_text(&text, None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("cannot verify: reaches an indirect call in example::render"), "{e}");
+        assert!(e.contains("loaded from `SLOT`"), "{e}");
+        assert!(e.contains("silence it as `example::render`"), "{e}");
+        let ok = run_text(&text, None, &sinks_allowing(&["example::render"])).unwrap();
+        assert!(ok.contains("`example::render` in every claim"), "{ok}");
+    }
+
+    /// A thread-local kept in a pthread key (Android's) is a static's contents,
+    /// as a native thread-local is: a call through what is loaded from it
+    /// cannot be verified, and says where it came from.
+    #[test]
+    fn a_call_through_a_thread_local_kept_in_a_pthread_key_cannot_be_verified() {
+        let text = "target triple = \"aarch64-unknown-linux-android\"\n\
+             define void @frustrate_check_block_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n\
+             define internal void @_RNvCs1_7example6render() {\n  %b = call ptr @pthread_getspecific(i32 %k)\n  %f = load ptr, ptr %b\n  call void %f()\n  ret void\n}\n\
+             declare ptr @pthread_getspecific(i32)\n";
+        let e = run_text(text, None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("cannot verify: reaches an indirect call in example::render"), "{e}");
+        assert!(e.contains("loaded from `thread-locals kept in pthread keys`"), "{e}");
+    }
+
+    /// A pointer that may be any of more stack slots than the analysis names
+    /// one by one is anywhere in the frame: what is stored through it is
+    /// seen by a load from each slot, so the finding stands.
+    #[test]
+    fn a_store_through_a_pointer_to_many_slots_reaches_every_load() {
+        let n = 40;
+        let allocas: String = (0..n).map(|i| format!("  %a{i} = alloca [8 x i8], align 8\n")).collect();
+        let phi: Vec<String> = (0..n).map(|i| format!("[ %a{i}, %start ]")).collect();
+        let text = format!(
+            "{HEAD}@SLOT = internal global ptr null\n\
+             define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_7example6render()\n  ret void\n}}\n\
+             define internal void @_RNvCs1_7example6render() {{\nstart:\n{allocas}  br label %l\nl:\n  \
+             %p = phi ptr {}\n  %v = load ptr, ptr @SLOT\n  store ptr %v, ptr %p, align 8\n  \
+             %f = load ptr, ptr %a7, align 8\n  call void %f()\n  ret void\n}}\n",
+            phi.join(", ")
+        );
+        let e = run_text(&text, None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("an indirect call in example::render"), "{e}");
+        assert!(e.contains("loaded from `SLOT`"), "{e}");
+    }
+
+    /// A value that may come from more statics than the analysis names one by
+    /// one is still a finding, worded as such.
+    #[test]
+    fn a_value_from_many_statics_cannot_be_verified() {
+        let n = 20;
+        let statics: String = (0..n).map(|i| format!("@S{i} = internal global ptr null\n")).collect();
+        let loads: String = (0..n).map(|i| format!("  %v{i} = load ptr, ptr @S{i}\n")).collect();
+        let vs: Vec<String> = (0..n).map(|i| format!("ptr %v{i}")).collect();
+        let text = format!(
+            "{HEAD}{statics}\
+             define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_7example6render()\n  ret void\n}}\n\
+             define internal void @_RNvCs1_7example6render() {{\n{loads}  %f = phi ptr {}\n  call void %f()\n  ret void\n}}\n",
+            vs.iter().map(|v| format!("[ {}, %x ]", &v[4..])).collect::<Vec<_>>().join(", ")
+        );
+        let e = run_text(&text, None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("an indirect call in example::render"), "{e}");
+        assert!(e.contains("more than 16 statics and external functions"), "{e}");
+    }
+
+    /// A function pointer the member keeps in a local of its own is one it
+    /// produced.
+    #[test]
+    fn a_call_through_a_pointer_the_member_stored_itself_is_followed() {
+        let text = format!(
+            "{HEAD}define void @frustrate_check_block_1_render() {{\n  %slot = alloca [8 x i8], align 8\n  store ptr @_RNvCs1_7example4work, ptr %slot, align 8\n  %f = load ptr, ptr %slot, align 8\n  call void %f()\n  ret void\n}}\n\
+             define internal void @_RNvCs1_7example4work() {{\n  ret void\n}}\n"
+        );
+        let ok = run_text(&text, None, &Sinks::default()).unwrap();
+        assert!(ok.contains("clean"), "{ok}");
+    }
+
+    /// An accessor that returns what a static holds (`log::logger()`'s shape)
+    /// carries where it came from to the call in its caller.
+    #[test]
+    fn a_value_returned_from_a_static_by_an_accessor_keeps_where_it_came_from() {
+        let text = format!(
+            "{HEAD}@LOGGER = internal global ptr null\n\
+             define internal ptr @_RNvCs1_3log6logger() {{\n  %l = load ptr, ptr @LOGGER\n  ret ptr %l\n}}\n\
+             define void @frustrate_check_block_1_render() {{\n  %l = call ptr @_RNvCs1_3log6logger()\n  %f = load ptr, ptr %l\n  call void %f()\n  ret void\n}}\n"
+        );
+        let e = run_text(&text, None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("loaded from `LOGGER`"), "{e}");
+    }
+
+    /// A helper that calls whatever it is handed is reported only where a
+    /// caller hands it a value from a static, and the finding names the
+    /// helper's call.
+    #[test]
+    fn a_helper_is_reported_in_the_context_that_hands_it_a_slots_value() {
+        let helper = "define internal void @_RNvCs1_7example6invoke(ptr %f) {\n  call void %f()\n  ret void\n}\n";
+        let own = format!(
+            "{HEAD}{helper}define void @frustrate_check_block_1_render() {{\n  call void @_RNvCs1_7example6invoke(ptr @_RNvCs1_7example4work)\n  ret void\n}}\n\
+             define internal void @_RNvCs1_7example4work() {{\n  ret void\n}}\n"
+        );
+        assert!(run_text(&own, None, &Sinks::default()).is_ok());
+        let slot = format!(
+            "{HEAD}@SLOT = internal global ptr null\n{helper}\
+             define void @frustrate_check_block_1_render() {{\n  %f = load ptr, ptr @SLOT\n  call void @_RNvCs1_7example6invoke(ptr %f)\n  ret void\n}}\n"
+        );
+        let e = run_text(&slot, None, &Sinks::default()).unwrap_err();
+        assert!(e.contains("an indirect call in example::invoke"), "{e}");
+        assert!(e.contains("loaded from `SLOT`"), "{e}");
+    }
+
+    /// A slot frustrate vouches for is not a finding.
+    #[test]
+    fn a_known_slot_is_not_a_finding() {
+        let text = format!(
+            "{HEAD}@_RNvNtNtNtCs1_4core2io5error12os_functions12OS_FUNCTIONS = internal global ptr null\n\
+             define void @frustrate_check_block_1_render() {{\n  %f = load ptr, ptr @_RNvNtNtNtCs1_4core2io5error12os_functions12OS_FUNCTIONS\n  call void %f()\n  ret void\n}}\n"
+        );
+        assert!(run_text(&text, None, &Sinks::default()).is_ok());
+    }
+
     /// A Linux module whose member makes `syscall`s: what each is read as.
     fn linux(triple: &str, calls: &str) -> String {
         format!(
@@ -1261,6 +1454,12 @@ mod tests {
             );
             let e = run_text(&linux(triple, &format!("{wake}{wait}")), None, &Sinks::default()).unwrap_err();
             assert!(e.contains("reaches syscall::SYS_futex::FUTEX_WAIT_BITSET — waits"), "{triple}: {e}");
+            let ok = run_text(
+                &linux(triple, &wait),
+                None,
+                &sinks(&[], &[], &["syscall::SYS_futex::FUTEX_WAIT_BITSET"]),
+            );
+            assert!(ok.is_ok(), "{triple}: the finding is silenced by the name it gives");
         }
     }
 
@@ -1359,5 +1558,63 @@ mod tests {
         )
         .unwrap_err();
         assert!(e.contains("reaches nanosleep — waits"), "{e}");
+    }
+
+    /// A static holding one of a known set of functions, as memchr's runtime
+    /// CPU dispatch keeps one: the calls through it are its functions'.
+    fn dispatch(global: &str, extra: &str) -> String {
+        format!(
+            "{HEAD}{ROOT}{global}\n\
+             define internal void @_RNvCs1_7example6render() {{\n  %f = load atomic ptr, ptr @FN monotonic, align 8\n  call void %f()\n  ret void\n}}\n\
+             define internal void @detect() {{\n  %slot = alloca [8 x i8], align 8\n  \
+               %c = call i1 @has_wide()\n  br i1 %c, label %a, label %b\n\
+             a:\n  store ptr @wide, ptr %slot, align 8\n  br label %d\n\
+             b:\n  store ptr @narrow, ptr %slot, align 8\n  br label %d\n\
+             d:\n  %fun = load ptr, ptr %slot, align 8\n  call void @store_fn(ptr align 8 @FN, ptr %fun)\n  \
+               call void %fun()\n  ret void\n}}\n\
+             define internal void @store_fn(ptr %0, ptr %1) {{\n  store atomic ptr %1, ptr %0 monotonic, align 8\n  ret void\n}}\n\
+             define internal i1 @has_wide() {{\n  ret i1 true\n}}\n\
+             define internal void @wide() {{\n  ret void\n}}\n\
+             define internal void @narrow() {{\n  call i32 @pthread_mutex_lock(ptr null)\n  ret void\n}}\n\
+             declare i32 @pthread_mutex_lock(ptr)\n{extra}"
+        )
+    }
+
+    #[test]
+    fn a_call_through_a_dispatch_table_follows_each_function_stored_in_it() {
+        let e = run_text(&dispatch("@FN = internal global ptr @detect, align 8", ""), None, &Sinks::default())
+            .unwrap_err();
+        // Not "cannot verify": the stored functions are followed, so the one
+        // that locks is the finding.
+        assert!(!e.contains("cannot verify:"), "{e}");
+        assert!(e.contains("reaches pthread_mutex_lock — waits"), "{e}");
+        assert!(e.contains("narrow"), "{e}");
+    }
+
+    #[test]
+    fn a_dispatch_table_this_cannot_read_whole_stays_unverified() {
+        for (why, global, extra) in [
+            ("external linkage", "@FN = global ptr @detect, align 8", ""),
+            (
+                "a store of a value that is not a function",
+                "@FN = internal global ptr @detect, align 8",
+                "define void @set(ptr %h) {\n  %v = load ptr, ptr %h\n  store ptr %v, ptr @FN\n  ret void\n}\n",
+            ),
+            (
+                "its address handed to an external",
+                "@FN = internal global ptr @detect, align 8",
+                "declare void @install(ptr)\ndefine void @set() {\n  call void @install(ptr @FN)\n  ret void\n}\n",
+            ),
+            (
+                "its address in another initialiser",
+                "@FN = internal global ptr @detect, align 8\n@WHERE = internal constant ptr @FN",
+                "",
+            ),
+        ] {
+            let text = dispatch(global, extra).replace("  call i32 @pthread_mutex_lock(ptr null)\n", "");
+            let e = run_text(&text, None, &Sinks::default()).unwrap_err();
+            assert!(e.contains("cannot verify: reaches an indirect call in example::render"), "{why}: {e}");
+            assert!(e.contains("loaded from `FN`"), "{why}: {e}");
+        }
     }
 }

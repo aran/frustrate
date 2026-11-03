@@ -1,0 +1,17 @@
+# The memchr fixture's third-party crate, for a crate hub of its own
+# (//:MODULE.bazel, a dev dependency), so frustrate's published crate
+# resolution is not touched by a crate only this test calls. Resolution-only:
+# Bazel builds the crate (BUILD.bazel), with frustrate from this repo.
+[package]
+name = "native_red_memchr"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+memchr = "2"
+
+[workspace]

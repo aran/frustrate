@@ -108,9 +108,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
 
+mod budget;
 mod io;
+mod provenance;
 mod ir;
 mod libc;
+
+#[global_allocator]
+static ALLOC: budget::Budgeted = budget::Budgeted;
 
 /// Every function export of a check artifact must start with this.
 ///
@@ -262,6 +267,22 @@ const FATAL_ENTRIES: &[FatalEntry] = &[
         segments: &[],
         exact: &[],
         path: &["std", "panicking", "resume_unwind"],
+    },
+    FatalEntry {
+        what: "std::alloc::rust_oom",
+        why: "the allocator has already failed; it calls the allocation-error \
+              hook, then aborts",
+        segments: &[],
+        exact: &[],
+        path: &["std", "alloc", "rust_oom"],
+    },
+    FatalEntry {
+        what: "frustrate's panic report (frustrate::panic::observed)",
+        why: "it runs only with a caught panic in hand, and the panic path is \
+              outside the check",
+        segments: &[],
+        exact: &[],
+        path: &["frustrate", "panic", "observed"],
     },
 ];
 
@@ -1506,6 +1527,7 @@ fn run_with(
     claims: Option<&Claims>,
     sinks: &Sinks,
 ) -> Result<String, String> {
+    budget::set(path, label);
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     let m = parse(&bytes)?;
 

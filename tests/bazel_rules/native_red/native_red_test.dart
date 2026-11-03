@@ -89,6 +89,18 @@ void main() {
     });
   }
 
+  for (final p in _glibc) {
+    test('$p: a thread-local with a destructor registers it under glibc\'s '
+        'loader lock', () {
+      final (code, err) = check('tests/bazel_rules/thread_local_fixture', p);
+      expect(code, isNot(0), reason: err);
+      expect(
+        err,
+        contains('seen\n      reaches __cxa_thread_atexit_impl — waits'),
+      );
+    });
+  }
+
   for (final p in [..._bionic, ..._glibc]) {
     test('$p: std\'s HashMap keys pass, IO `files` declared or not', () {
       for (final args in [
@@ -98,6 +110,13 @@ void main() {
         final (code, out) = red('hashmap', p, args);
         expect(code, 0, reason: out);
       }
+    });
+  }
+
+  for (final p in [..._bionic, ..._glibc]) {
+    test('$p: a call through memchr\'s chosen routine is followed', () {
+      final (code, out) = red('memchr', p);
+      expect(code, 0, reason: out);
     });
   }
 
@@ -119,4 +138,27 @@ void main() {
     expect(err, contains('silence(s) silence nothing'));
     expect(err, contains('`sqlite3_step` on plain'));
   });
+
+  test('a member that logs through an installed logger cannot be verified', () {
+    final (code, err) = red('logger', mac);
+    expect(code, isNot(0), reason: err);
+    expect(
+      err,
+      contains('work\n      cannot verify: reaches an indirect call in'),
+    );
+    expect(err, contains('loaded from `log::LOGGER`'));
+  });
+
+  test(
+    'a member that calls a Box<dyn Fn> behind a static cannot be verified',
+    () {
+      final (code, err) = red('callback', mac);
+      expect(code, isNot(0), reason: err);
+      expect(
+        err,
+        contains('call\n      cannot verify: reaches an indirect call in'),
+      );
+      expect(err, contains('loaded from `native_red_callback::api::CALLBACK`'));
+    },
+  );
 }

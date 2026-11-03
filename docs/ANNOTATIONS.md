@@ -52,20 +52,23 @@ from any host, and fails a member that reaches any C or OS function its C
 library is not known to return from without waiting as "cannot verify". On
 threaded web it scans the wasm module for `memory.atomic.wait`; on wasip1, for
 `poll_oneoff`. Red can be a false alarm.
-Green does not cover a call through a function pointer installed outside the
-member's reach (a logger, a hook), nor the panic path. To hold every sync member of a bridge to
-this, put `bridge_file!(no_block)` in each of its files. Each analysis sees
-only its own target's `#[cfg]` arm. [design/blocking.md](design/blocking.md)
-has the full argument.
+A call through a value loaded from a static (a logger installed with
+`log::set_logger`, a `Box<dyn Fn>` behind a static) or returned by a C function
+is "cannot verify", naming the function that makes it, unless the static is one
+only the program can name and holds only the program's own functions (a
+runtime CPU dispatch, as memchr's), whose calls are then followed. The panic
+path is not checked. To hold every sync member of a bridge to this, put
+`bridge_file!(no_block)` in each of its files. Each analysis sees only its own
+target's `#[cfg]` arm. [design/blocking.md](design/blocking.md) has the full
+argument.
 
-**Silencing "cannot verify":** `no_block(allow(name, ...))` is part of the
+**Silencing a finding:** `no_block(allow(name, ...))` is part of the
 claim — on the member, its impl block, or `bridge_file!(no_block(allow(...)))`
 — and silences a finding that names `name` for the claims in that scope; the
 check target's `allow` does the same for every claim it checks, for what a
 dependency or the build decides. `name` is
-what the finding says to silence it as. A wait is never silenced, the check
-lists every silence it applied, and a silence that matches nothing is an
-error.
+what the finding says to silence it as. The check lists every silence it
+applied, and a silence that matches nothing is an error.
 
 ## `native_only`
 

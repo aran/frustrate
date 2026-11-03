@@ -10,29 +10,42 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 # - optimized: the member locks a Mutex at opt-level 2   -> red, named by
 #              each C library's wait
 # - dirty:     another section of the bounded lock sleeps -> cannot verify
+# - thread_local_fixture, on glibc: the member's first use of a thread-local
+#              registers its destructor under the loader's lock -> red
 # - silenced:  two members call a C function, one silenced -> the other only
 # - stale:     a member's silence silences nothing         -> an error
+# - logger:    the member logs through `log::set_logger`'s   -> cannot verify
+# - callback:  the member calls a `Box<dyn Fn>` in a static  -> cannot verify
 # - hashmap:   the member builds a `HashMap`, whose keys std draws through
 #              a fallback the check vouches for                -> passes
+# - memchr:    the member calls memchr, which on x86_64 calls through a
+#              static holding the routine it chose             -> passes
 #
 # optimized and dirty are built for every native analysis's platform, so each
 # C library's lists and the bounded lock's acquire are proven red on real IR;
 # external for the platforms with a C toolchain registered here (it compiles
-# C); hashmap, which is about Linux's std, for the Linux and Android
-# platforms; the rest, whose findings do not depend on the C library, for
-# macOS. macOS hosts only: external's macOS build compiles its C with Xcode.
+# C); hashmap and memchr, which are about Linux's std and x86_64, for the
+# Linux and Android platforms; the rest, whose findings do not depend on the
+# C library, for macOS.
+# macOS hosts only: external's macOS build compiles its C with Xcode.
 dart_test(
     name = "native_red_test",
     data = [
         "//bazel/wasm_block_check",
+        "//tests/bazel_rules/native_red/callback:artifacts",
         "//tests/bazel_rules/native_red/dirty:artifacts",
         "//tests/bazel_rules/native_red/external:artifacts",
         "//tests/bazel_rules/native_red/hashmap:artifacts",
+        "//tests/bazel_rules/native_red/logger:artifacts",
+        "//tests/bazel_rules/native_red/memchr:artifacts",
         "//tests/bazel_rules/native_red/optimized:artifacts",
         "//tests/bazel_rules/native_red/silenced:artifacts",
         "//tests/bazel_rules/native_red/stale:artifacts",
+        "//tests/bazel_rules/thread_local_fixture:artifacts",
     ],
     main = "native_red_test.dart",
+    # Each test scans a whole program's IR.
+    timeout = "long",
     target_compatible_with = select({
         "@platforms//os:macos": [],
         "//conditions:default": ["@platforms//:incompatible"],

@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs")
+load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
+
+# A claimed member that calls a `Box<dyn Fn>` another member put behind a
+# static. See ../BUILD.bazel.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "native_red_callback",
+    package_name = "native_red_callback",
+    module_paths = ["crate::api"],
+)
+
+rust_shared_library(
+    name = "callback_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "native_red_callback",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    deps = [
+        "//runtime/rust:frustrate",
+    ],
+)
+
+no_block_check_artifacts(
+    name = "artifacts",
+    bridge = ":bridge",
+    crate = ":callback_shared",
+    platforms = ["//bazel:macos_aarch64"],
+    visibility = ["//tests/bazel_rules/native_red:__pkg__"],
+)

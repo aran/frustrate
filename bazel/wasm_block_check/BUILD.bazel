@@ -31,7 +31,7 @@ rust_test(
 # identical binary.
 rust_binary(
     name = "wasm_block_check",
-    srcs = ["io.rs", "ir.rs", "libc.rs", "main.rs"],
+    srcs = ["budget.rs", "io.rs", "ir.rs", "libc.rs", "main.rs", "provenance.rs"],
     edition = "2021",
     rustc_flags = ["-Dwarnings"],
     visibility = ["//visibility:public"],

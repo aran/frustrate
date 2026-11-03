@@ -1,0 +1,57 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
+
+# A `#[bridge(no_block)]` claim that reaches a lazily initialised thread-local,
+# whose first use can drop an `io::Error`: a call through a `Box<dyn Error>`'s
+# vtable that the native check must trace to the member's own values, not to
+# pointers the C library hands back to its own plain data (`__error`'s errno,
+# `opendir`'s directory stream). A crate of its own for the reason
+# locked_fixture/src/api.rs gives.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "thread_local_claim_fixture",
+    package_name = "thread_local_claim_fixture",
+    module_paths = ["crate::api"],
+)
+
+rust_shared_library(
+    name = "thread_local_fixture_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "thread_local_claim_fixture",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    deps = ["//runtime/rust:frustrate"],
+)
+
+# Not Linux: there std registers a thread-local's destructor with glibc's
+# `__cxa_thread_atexit_impl`, which takes the loader's lock, so this claim is
+# red. :artifacts carries that build to the red fence
+# (//tests/bazel_rules/native_red).
+frustrate_no_block_check(
+    name = "thread_local_block_check",
+    bridge = ":bridge",
+    crate = ":thread_local_fixture_shared",
+    targets = [
+        "android",
+        "ios",
+        "macos",
+    ],
+)
+
+no_block_check_artifacts(
+    name = "artifacts",
+    bridge = ":bridge",
+    crate = ":thread_local_fixture_shared",
+    platforms = [
+        "//bazel:linux_aarch64",
+        "//bazel:linux_x86_64",
+    ],
+    visibility = ["//tests/bazel_rules/native_red:__pkg__"],
+)

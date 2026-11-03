@@ -36,12 +36,18 @@ frustrate_no_block_check(
     name = "test_api_block_check",
     bridge = ":bridge",
     crate = ":test_api_shared",
-    # Not Linux: there a stream's drop reaches `frustrate::panic`'s
-    # thread-local, whose first use on a thread registers its destructor with
-    # glibc's `__cxa_thread_atexit_impl`, under the loader's lock.
+    # A probe logs through the logger the logging fixture installs, and a
+    # callback probe drops a waker an awaiting task left in the invocation
+    # registry: both callbacks installed elsewhere, and this fixture's to
+    # accept.
+    allow = [
+        "core::task::wake::Waker::ops::drop::Drop::drop::frustrate",
+        "log::__private_api::GlobalLogger::Log::log",
+    ],
     targets = [
         "android",
         "ios",
+        "linux",
         "macos",
         "web",
     ],

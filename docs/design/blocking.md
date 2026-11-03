@@ -122,9 +122,11 @@ prove something there:
   frustrate's registries share one lock type, `bounded::Lock`, whose wait is
   exempt only because the scanner checks every critical section of it in the
   program and finds none that waits or takes it again
-  (`bazel/wasm_block_check/ir.rs` has the procedure and what green does not
-  cover: an indirect call through a function pointer installed outside the
-  member's reach, and the panic path).
+  A call through a value loaded from a static, or returned by a C function,
+  is "cannot verify": someone else installed it (`bazel/wasm_block_check/ir.rs`
+  and `provenance.rs` have the procedure). A static only the program can name,
+  into which it stores only its own functions (memchr's CPU dispatch), is not
+  that: the call is followed into each of them. The panic path is not checked.
 - **threaded web**: the only analysis of the code a browser's main thread runs
   where a wait traps, including the arms only a wasm build compiles.
 - **wasip1**: for a bridge that ships there.
