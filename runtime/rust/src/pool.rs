@@ -305,6 +305,10 @@ pub fn spawn_call(
 /// construction ("there is no reactor running") rather than hanging. To get
 /// cancellation and an unparked thread, bridge an `async fn` and `.await` the
 /// leaf.
+///
+/// Not on single-threaded web: there a `Pending` future would park the only
+/// thread, which std's `park` turns into a spin that never ends.
+#[cfg(any(not(target_family = "wasm"), feature = "wasm-threads"))]
 pub fn block_on<F: std::future::Future>(future: F) -> F::Output {
     use std::sync::Arc;
     use std::task::{Context, Poll, Wake, Waker};
