@@ -77,6 +77,12 @@ non-terminal errors, Dart → Rust callbacks that can be stored and can fail wit
 typed error, trait objects across the boundary, and `Result<T, E>` as typed Dart
 exceptions.
 
+**Static analysis to avoid blocking the main thread.** Mark your Rust code with
+the opt-in `#[bridge(no_block)]` and add a `frustrate_no_block_check` Bazel
+target. Then frustrate's static analysis ensures it's safe to call on the main
+thread. [Checking main-thread calls](#checking-main-thread-calls) has the
+details.
+
 **Rust `async fn` on every target**, including single-threaded stable wasm, where
 concurrent calls multiplex cooperatively on one thread. Calls in flight can be
 cancelled.
@@ -96,10 +102,14 @@ For more detail on how this works, consult the test suite
 [`tests/dart_integration/test/`](tests/dart_integration/test/) for what it
 guarantees) and the [e2e examples](e2e/).
 
-## Depending on frustrate from git
+## Getting started
 
-To use a commit of frustrate that is not a registry release, add a
-`git_override` to your root `MODULE.bazel`, next to the `bazel_dep`:
+### 1. Depend on frustrate
+
+Your `MODULE.bazel` needs a `bazel_dep` on `frustrate`, `rules_flutter`,
+`rules_dart` and `rules_rust`; [`e2e/wasi_demo/MODULE.bazel`](e2e/wasi_demo/MODULE.bazel)
+has versions known to work together. frustrate is not on BCR yet, so add a
+`git_override` next to its `bazel_dep`:
 
 ```starlark
 bazel_dep(name = "frustrate", version = "0.1.0")
@@ -116,18 +126,86 @@ yours. To build against a local clone instead, pass
 `--override_module=frustrate=/path/to/clone`, in a `.bazelrc.user` if it should
 reach nested `bazel` invocations.
 
-## Getting started
+If your bridge crate has Cargo dependencies:
 
-Start with [`e2e/wasi_demo`](e2e/wasi_demo/), the smallest complete app, in this
-order:
+```starlark
+# Your bridge crate's own cargo dependencies. frustrate's hub resolves
+# frustrate's manifests only, so a bridge crate with dependencies needs one of
+# its own.
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "my_crates",
+    cargo_lockfile = "//bridge:Cargo.lock",
+    manifests = ["//bridge:Cargo.toml"],
+)
+use_repo(crate, "my_crates")
+```
 
-| File | What it shows |
-|---|---|
-| [`bridge/src/api.rs`](e2e/wasi_demo/bridge/src/api.rs) | the Rust you annotate with `#[bridge]` |
-| [`bridge/BUILD.bazel`](e2e/wasi_demo/bridge/BUILD.bazel) | `frustrate_bridge_outputs` + a `frustrate_bridge_library` over its output |
-| [`lib/main.dart`](e2e/wasi_demo/lib/main.dart) | calling the generated bindings from Flutter |
-| [`BUILD.bazel`](e2e/wasi_demo/BUILD.bazel) | wiring the bridge into a Flutter app |
-| [`MODULE.bazel`](e2e/wasi_demo/MODULE.bazel) | a working `bazel_dep`/toolchain pin set to copy versions from |
+### 2. Annotate your Rust
+
+```rust
+use frustrate::bridge;
+
+#[derive(Clone)]
+#[bridge(data)]
+pub struct Entry {
+    pub label: String,
+}
+
+#[bridge(confined)]
+pub struct EventLog {
+    entries: Vec<Entry>,
+}
+
+#[bridge]
+impl EventLog {
+    #[bridge(sync)]
+    pub fn new() -> Self {
+        EventLog { entries: Vec::new() }
+    }
+
+    #[bridge(sync)]
+    pub fn append(&mut self, label: String) -> Entry {
+        let entry = Entry { label };
+        self.entries.push(entry.clone());
+        entry
+    }
+}
+```
+
+The crate root declares your module and the generated glue's:
+
+```rust
+pub mod api;
+
+mod frustrate_generated;
+```
+
+[ANNOTATIONS.md](docs/ANNOTATIONS.md) lists every annotation.
+
+### 3. Declare the bridge in Bazel
+
+`frustrate_bridge_outputs` runs codegen over your sources, and
+`frustrate_bridge_library` builds the crate with the generated glue:
+
+```starlark
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_code_asset")
+
+frustrate_bridge_outputs(
+    name = "codegen",
+    srcs = ["src/api.rs"],
+    crate_name = "my_bridge",
+    module_paths = ["crate::api"],
+    package_name = "my_app",
+)
+
+frustrate_bridge_library(
+    name = "my_bridge",
+    srcs = ["src/api.rs", "src/lib.rs", ":codegen.rs"],
+    proc_macro_deps = ["@frustrate//macros:frustrate_macros"],
+    deps = ["@frustrate//runtime/rust:frustrate"],
+)
+```
 
 **Bridge sources are a list.** `srcs` and `module_paths` are parallel: each pair
 is a file to parse and the Rust path its items are reachable by from the bridge
@@ -154,11 +232,38 @@ dart_library(
 )
 ```
 
+### 4. Call it from Dart
+
+`FrustrateNative.init(myBridgeBridge)` once, then call the bindings:
+
+```dart
+FrustrateNative.init(myBridgeBridge);
+final log = EventLog.new_();
+log.append('hello');
+```
+
 A `dart_test` or `dart_binary` depending on `:bindings` gets the library built
 for the host it runs on, and an app bundler (rules_flutter) ships it per
-platform. In Dart, `FrustrateNative.init(myBridgeBridge)` once, then call the
-bindings. `BridgeLibrary.dynamic(DynamicLibrary.open(path), name: path,
-bridge: frustrateBridge)` is the way to load a library you built yourself.
+platform. On the web, `FrustrateWeb.initFromUrl(frustrateBridge,
+'my_bridge.wasm')` serves the bridge from a `frustrate_wasm_module`; [Choosing a
+web platform](#choosing-a-web-platform) says which one to build.
+`BridgeLibrary.dynamic(DynamicLibrary.open(path), name: path, bridge:
+frustrateBridge)` loads a library you built yourself.
+
+### A complete example
+
+[`e2e/wasi_demo`](e2e/wasi_demo/) is the smallest complete app. Read it in this
+order:
+
+| File | What it shows |
+|---|---|
+| [`bridge/src/api.rs`](e2e/wasi_demo/bridge/src/api.rs) | the Rust you annotate with `#[bridge]` |
+| [`bridge/BUILD.bazel`](e2e/wasi_demo/bridge/BUILD.bazel) | `frustrate_bridge_outputs` + a `frustrate_bridge_library` over its output |
+| [`lib/main.dart`](e2e/wasi_demo/lib/main.dart) | calling the generated bindings from Flutter |
+| [`BUILD.bazel`](e2e/wasi_demo/BUILD.bazel) | wiring the bridge into a Flutter app |
+| [`MODULE.bazel`](e2e/wasi_demo/MODULE.bazel) | a working `bazel_dep`/toolchain pin set to copy versions from |
+
+### Several bridges in one app
 
 **Several bridges, one library.** An isolate (a page, on web) runs one Rust
 runtime, so bridges an app uses together are linked into one library.
@@ -235,23 +340,7 @@ Rust items or have different shapes, and refuses a shared type that reaches a
 handle, since a handle belongs to the bridge that minted it. Members of a shared
 type stay on its home bridge.
 
-Your `MODULE.bazel` needs a `bazel_dep` on `frustrate`, `rules_flutter`,
-`rules_dart` and `rules_rust` (see the demo module above for versions known to
-work together). Until frustrate is on BCR, you'll need to use a git or local
-path override as well.
-
-```starlark
-# Your bridge crate's own cargo dependencies. frustrate's hub resolves
-# frustrate's manifests only, so a bridge crate with dependencies needs one of
-# its own.
-crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
-crate.from_cargo(
-    name = "my_crates",
-    cargo_lockfile = "//bridge:Cargo.lock",
-    manifests = ["//bridge:Cargo.toml"],
-)
-use_repo(crate, "my_crates")
-```
+### Build settings some setups need
 
 If your bridge forwards Rust `log` records to Dart, also point frustrate's `log`
 at your hub, so its runtime compiles against the same one your dependencies
@@ -280,12 +369,12 @@ cc_import(
 common --@frustrate//runtime/rust:unwinder=//my/cc:libunwind
 ```
 
-### Hot reload and hot restart for Rust
+## Hot reload and hot restart for Rust
 
-Flutter has two moves to support a rapid inner development loop: hot reload
-(`r`) swaps edited Dart code into the running app and keeps its state, and hot
-restart (`R`) starts the app over.
-Under `flutter_bazel run`, Rust edits get the same two moves.
+Hot reload swaps edited code into the running app and keeps its state; hot
+restart starts the app over. frustrate supports both for Rust edits, under
+rules_flutter's [dev tool](https://github.com/aran/rules_flutter), which is
+also where to find how to trigger them.
 
 **Hot reload** compiles the edited Rust into a small patch library and redirects
 the running library's bridged entry points into it. Rust state survives: a
@@ -296,7 +385,8 @@ flight finish on the code they started with, as a Dart closure created before a
 reload does.
 
 Some edits cannot be patched into a running process. The reload refuses them,
-names the reason, and you press `R` instead:
+names the reason, and holds back the Dart half of the edit too, so the app keeps
+running what it had; a hot restart picks the edit up. Among them:
 
 - a bridged data type whose shape changed
 - a new or changed opaque type
@@ -306,24 +396,6 @@ names the reason, and you press `R` instead:
 
 **Hot restart** relaunches the app on the rebuilt library, so Rust state starts
 fresh along with Dart's.
-
-**From an agent or script.** A tool driving `flutter_bazel run --machine` — a
-coding agent, an IDE, a test harness — sends `app.hotReload` and `app.restart`
-instead of pressing keys, over the JSON-RPC stream or the HTTP control channel.
-Machine mode does not reload on save, so an agent can finish an edit across
-several files and then reload once. The `app.hotReload` reply says whether the
-Rust edit is live, so the tool needn't guess from the screen:
-
-- Patched: `succeeded` is true, and `nativePatched` names each library and the
-  functions the patch replaced.
-- Not patchable: `succeeded` is false, `nativePatchRestart` carries the reasons
-  per library, and `runningCode` is `unchanged` — the Dart half of the edit was
-  held back too, so the app is still running what it had. Send `app.restart`.
-- A patch that fails to build or load also comes back with `succeeded` false and
-  the Dart half unsent.
-
-The protocol, and how to set an agent up to use it, is in rules_flutter's
-[dev tool docs](https://github.com/aran/rules_flutter#driving-the-app-from-a-script).
 
 Hot reload needs a native target and a `-c dbg` build. Opt in by wrapping the
 bridge library, binding the code asset to the wrapper, and wrapping the asset
@@ -493,3 +565,44 @@ is available.
 wasm-bindgen's generated JS is a host module too. Its post-pass names the one
 namespace it supplies `./<stem>_bg.js`; `bindgenGlueUrl` names the JS for that
 namespace, and its attach step is wasm-bindgen's own start-up handshake.
+
+## Checking main-thread calls
+
+A sync call into Rust runs on the Dart thread that made it, and in a Flutter
+app that is usually the main thread. A wait there freezes the UI, and in a
+browser it fails outright. `#[bridge(no_block)]` on a member, on its `impl` block, or
+on a whole file with `bridge_file!(no_block)`, promises that a main-thread call
+to it cannot be stalled: what the call runs on the caller's thread reaches no
+wait, no function you name as slow, and no IO you name.
+
+A `frustrate_no_block_check` target checks every promise in a bridge, for each
+target the bridge ships on:
+
+```starlark
+load("@frustrate//bazel:defs.bzl", "frustrate_no_block_check")
+
+frustrate_no_block_check(
+    name = "block_check",
+    bridge = ":codegen",
+    crate = ":my_bridge",
+    targets = ["android", "ios", "web_threads"],
+    slow = ["my_core::index::rebuild"],
+    io = ["files", "network"],
+)
+```
+
+`bazel test :block_check` runs one analysis per target and CPU, from any
+host: natively over the whole linked program, on the web over the wasm
+module. Members whose bodies
+run off the calling thread, such as an actor's methods, pass without their
+bodies being read. What runs on the caller is checked: a `#[bridge(sync)]` body, a
+member's argument decoding, and the drop of a handle it returns. A call the
+analysis cannot follow, into a C function it does not know or through a
+function pointer installed at run time, fails as "cannot verify", naming it.
+A promise no check target covers is not checked.
+
+A finding you have judged safe is silenced by name, with `no_block(allow(...))`
+on the promise or the check target's `allow`; `#[frustrate::no_block(allow)]`
+on one of your own functions vouches for everything under it. A silence that
+matches nothing fails the check. [ANNOTATIONS.md](docs/ANNOTATIONS.md#no_block-and-bridge_fileno_block)
+has the rules, and [design/blocking.md](docs/design/blocking.md) the argument.
