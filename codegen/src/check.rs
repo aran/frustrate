@@ -5274,7 +5274,7 @@ fn check_function(
             message: format!(
                 "{ctx}: synchronous access to a locked type requires an explicit \
                  contention contract. Add `on_contention = \"error\"` (try-lock; a \
-                 contended call throws ContentionError naming this method) or \
+                 contended call throws ContentionException naming this method) or \
                  `on_contention = \"block\"` (blocking lock; native targets only), \
                  or make the call async (the default), which awaits the lock safely \
                  on every platform"
@@ -8118,7 +8118,7 @@ mod tests {
         .unwrap();
         assert_eq!(ds[0].code, "FR0007");
         assert!(ds[0].message.contains("on_contention"), "{}", ds[0].message);
-        assert!(ds[0].message.contains("ContentionError"), "{}", ds[0].message);
+        assert!(ds[0].message.contains("ContentionException"), "{}", ds[0].message);
     }
 
     #[test]

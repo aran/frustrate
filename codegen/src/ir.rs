@@ -552,7 +552,7 @@ pub enum Exec {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OnContention {
-    /// try-lock; throws ContentionError naming the object and method.
+    /// try-lock; throws ContentionException naming the object and method.
     Error,
     /// Blocking lock. Only legal where the target allows blocking (native).
     Block,
