@@ -41,5 +41,7 @@ void main() {
     expect(stdHashSeed(), -1, reason: 'entropy');
     expect(stdParallelism(), -1, reason: 'available_parallelism');
     expect(stdSleepMillis(millis: 1), -1, reason: 'sleep');
+    expect(stdParkAfterUnpark(), -1, reason: 'park');
+    expect(stdParkTimeout(), -1, reason: 'park_timeout');
   });
 }

@@ -405,6 +405,73 @@ pub fn std_sleep_millis(millis: i64) -> i64 {
     }
 }
 
+/// Whether the std under this fixture is a `toolchain/custom_std` build
+/// without threads, which is the only std whose `thread::park` and `RwLock`
+/// conflicts panic. Everywhere else the probes below return -1 without
+/// touching std: natively a `park` here would hang the test process, and on a
+/// stock std it would hang the page.
+const SINGLE_THREADED_STD: bool = cfg!(all(
+    target_family = "wasm",
+    not(target_os = "wasi"),
+    feature = "wasm-std-facilities",
+    not(target_feature = "atomics")
+));
+
+/// `thread::park` on a thread nothing can unpark, or after its own `unpark`
+/// when `unparked_first`. Returns 1 when `park` returned, -1 when this std is
+/// not the single-threaded custom one. With no token it panics, and the panic
+/// crosses back as a `BridgePanicException`.
+fn park_probe(unparked_first: bool) -> i64 {
+    if !SINGLE_THREADED_STD {
+        return -1;
+    }
+    if unparked_first {
+        std::thread::current().unpark();
+    }
+    std::thread::park();
+    1
+}
+
+/// A write lock requested while a read guard on the same lock is live, which
+/// no other thread can ever release. Returns -1 when this std is not the
+/// single-threaded custom one; otherwise the write acquire panics.
+fn rwlock_conflict_probe() -> i64 {
+    if !SINGLE_THREADED_STD {
+        return -1;
+    }
+    let lock = std::sync::RwLock::new(0i64);
+    let _read = lock.read().unwrap();
+    let write = lock.write().unwrap();
+    *write
+}
+
+#[bridge(sync)]
+pub fn std_park() -> i64 {
+    park_probe(false)
+}
+
+/// The control for [`std_park`]: the token an `unpark` left makes the next
+/// `park` return.
+#[bridge(sync)]
+pub fn std_park_after_unpark() -> i64 {
+    park_probe(true)
+}
+
+/// `park_timeout` with no token returns instead of waiting out the duration.
+#[bridge(sync)]
+pub fn std_park_timeout() -> i64 {
+    if !SINGLE_THREADED_STD {
+        return -1;
+    }
+    std::thread::park_timeout(std::time::Duration::from_secs(3600));
+    1
+}
+
+#[bridge(sync)]
+pub fn std_rwlock_conflict() -> i64 {
+    rwlock_conflict_probe()
+}
+
 #[bridge]
 pub fn sum_squares(n: i64) -> i64 {
     (1..=n).map(|i| i * i).sum()
@@ -3035,6 +3102,19 @@ impl Miner {
             let _ = millis;
             -1
         }
+    }
+
+    /// [`std_park`] on this actor, whose executor is a Worker with its own
+    /// module instance and its own single thread.
+    pub fn park_on_executor(&mut self) -> i64 {
+        self.calls += 1;
+        park_probe(false)
+    }
+
+    /// [`std_rwlock_conflict`] on this actor's executor.
+    pub fn rwlock_conflict_on_executor(&mut self) -> i64 {
+        self.calls += 1;
+        rwlock_conflict_probe()
     }
 
     /// Waits without holding the instance — the whole point of `Deferred`.

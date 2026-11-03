@@ -78,6 +78,34 @@ cfg_select! {
     }
 }
 ''');
+  write('std/src/sys/sync/thread_parking/mod.rs', '''
+cfg_select! {
+    all(target_family = "wasm", target_feature = "atomics") => {
+        mod futex;
+        pub use futex::Parker;
+    }
+    _ => {
+        mod unsupported;
+        pub use unsupported::Parker;
+    }
+}
+''');
+  write('std/src/sys/sync/rwlock/no_threads.rs', '''
+impl RwLock {
+    pub fn read(&self) {
+        if self.mode.get() >= 0 {
+        } else {
+            rtabort!("rwlock locked for writing");
+        }
+    }
+    pub fn write(&self) {
+        if self.mode.get() == 0 {
+        } else {
+            rtabort!("rwlock locked for reading");
+        }
+    }
+}
+''');
   return root;
 }
 
@@ -92,6 +120,7 @@ void main() {
     File('${pal.path}/random.rs').writeAsStringSync('// entropy impl\n');
     File('${pal.path}/stdio.rs').writeAsStringSync('// stdio impl\n');
     File('${pal.path}/thread.rs').writeAsStringSync('// thread impl\n');
+    File('${pal.path}/parker.rs').writeAsStringSync('// parker impl\n');
   });
 
   tearDown(() {
@@ -239,6 +268,84 @@ void main() {
         ),
       ),
     );
+  });
+
+  group('the patches every single-threaded std carries', () {
+    String read(String rel) => File('${src.path}/$rel').readAsStringSync();
+
+    test('are applied without atomics, whatever facilities were chosen', () {
+      final names = patchesFor([
+        facilityByName('clock'),
+      ], atomics: false).map((f) => f.name).toList();
+      expect(names, containsAll(['clock', 'parker', 'rwlock']));
+    });
+
+    test('are not applied with atomics, where std has real threads', () {
+      final names = patchesFor([
+        facilityByName('clock'),
+      ], atomics: true).map((f) => f.name).toList();
+      expect(names, ['clock']);
+      expect(patchesFor([], atomics: true), isEmpty);
+    });
+
+    test('the parker is installed ahead of the unsupported fallback', () {
+      applyFacilities(src, pal, singleThreadedPatches);
+      expect(
+        File('${src.path}/std/src/sys/sync/thread_parking/frustrate.rs')
+            .existsSync(),
+        isTrue,
+      );
+      final mod = read('std/src/sys/sync/thread_parking/mod.rs');
+      expect(mod, contains('pub use frustrate::Parker;'));
+      expect(
+        mod.indexOf('mod frustrate;'),
+        lessThan(mod.indexOf('mod unsupported;')),
+        reason:
+            'cfg_select takes the first match, so the fallback must be last',
+      );
+      expect(
+        mod,
+        contains('pub use futex::Parker;'),
+        reason: 'the atomics arm keeps its futex parker',
+      );
+    });
+
+    test('the rwlock aborts become panics and nothing else changes', () {
+      applyFacilities(src, pal, singleThreadedPatches);
+      final body = read('std/src/sys/sync/rwlock/no_threads.rs');
+      expect(body, contains('panic!("rwlock locked for writing");'));
+      expect(body, contains('panic!("rwlock locked for reading");'));
+      expect(body, isNot(contains('rtabort!')));
+    });
+
+    for (final name in ['parker', 'rwlock']) {
+      test('$name fails loudly when its anchor has drifted', () {
+        final patch = singleThreadedPatches.firstWhere((f) => f.name == name);
+        final file = File('${src.path}/${patch.anchors.first.file}');
+        file.writeAsStringSync('// upstream restructured this file\n');
+        expect(
+          () => applyFacilities(src, pal, [patch]),
+          throwsA(
+            isA<PatchError>()
+                .having((e) => e.toString(), 'message', contains(name))
+                .having(
+                  (e) => e.toString(),
+                  'message',
+                  contains(patch.anchors.first.file),
+                ),
+          ),
+        );
+      });
+
+      test('$name twice fails rather than silently double-patching', () {
+        final patch = singleThreadedPatches.firstWhere((f) => f.name == name);
+        applyFacilities(src, pal, [patch]);
+        expect(
+          () => applyFacilities(src, pal, [patch]),
+          throwsA(isA<PatchError>()),
+        );
+      });
+    }
   });
 
   group('flavourKey', () {

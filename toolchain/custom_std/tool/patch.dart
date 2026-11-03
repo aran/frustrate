@@ -46,11 +46,11 @@ class Facility {
   const Facility({
     required this.name,
     required this.summary,
-    required this.palSource,
-    required this.installAs,
+    this.palSource,
+    this.installAs,
     required this.anchors,
     this.imports = const [],
-  });
+  }) : assert((palSource == null) == (installAs == null));
 
   /// Selector name, as passed to `build.dart --facilities=`.
   final String name;
@@ -58,11 +58,13 @@ class Facility {
   /// One line, shown by `--list` and written into the dist manifest.
   final String summary;
 
-  /// File under `toolchain/custom_std/pal/`.
-  final String palSource;
+  /// File under `toolchain/custom_std/pal/`; null for a patch that only edits
+  /// std's own files in place.
+  final String? palSource;
 
-  /// Where it lands, relative to the rust-src `library/` directory.
-  final String installAs;
+  /// Where it lands, relative to the rust-src `library/` directory; null with
+  /// [palSource].
+  final String? installAs;
 
   final List<Anchor> anchors;
 
@@ -216,9 +218,77 @@ const _thread = Facility(
   ],
 );
 
+/// Thread parking, for a std with no threads.
+///
+/// std's parker for this configuration is empty, so `thread::park` returns at
+/// once and a body waiting for an `unpark` spins the only thread, silently.
+/// The replacement holds a wake token: `park` consumes it or panics, because
+/// with one thread nothing can ever set it. See `pal/parker.rs`.
+const _parker = Facility(
+  name: 'parker',
+  summary: 'thread::park consumes a wake token or panics',
+  palSource: 'parker.rs',
+  installAs: 'std/src/sys/sync/thread_parking/frustrate.rs',
+  anchors: [
+    Anchor(
+      file: 'std/src/sys/sync/thread_parking/mod.rs',
+      find: '''    _ => {
+        mod unsupported;
+        pub use unsupported::Parker;
+    }''',
+      replace: '''    all(target_family = "wasm", target_os = "unknown") => {
+        mod frustrate;
+        pub use frustrate::Parker;
+    }
+    _ => {
+        mod unsupported;
+        pub use unsupported::Parker;
+    }''',
+    ),
+  ],
+);
+
+/// `RwLock` on a std with no threads.
+///
+/// A read taken while a write is held, or a write taken while any lock is held,
+/// can never be released by anyone else. std answers with `rtabort!`, which
+/// aborts without going through the panic hook, so the trap names nothing. A
+/// `panic!` reaches the hook and carries the message. Both failing paths leave
+/// the lock unchanged, so unwinding out of them is sound.
+const _rwlock = Facility(
+  name: 'rwlock',
+  summary: 'a conflicting RwLock acquire panics instead of aborting',
+  anchors: [
+    Anchor(
+      file: 'std/src/sys/sync/rwlock/no_threads.rs',
+      find: 'rtabort!("rwlock locked for writing");',
+      replace: 'panic!("rwlock locked for writing");',
+    ),
+    Anchor(
+      file: 'std/src/sys/sync/rwlock/no_threads.rs',
+      find: 'rtabort!("rwlock locked for reading");',
+      replace: 'panic!("rwlock locked for reading");',
+    ),
+  ],
+);
+
 /// Every facility this builder knows how to install, in the order a
 /// `--facilities` list is applied.
 const allFacilities = <Facility>[_clock, _random, _stdio, _thread];
+
+/// Patches every std without threads carries, whatever `--facilities` says.
+///
+/// A facility is chosen: it gives a stub a browser-backed answer. These are not
+/// choices. Without threads, `thread::park` and a conflicting `RwLock` acquire
+/// can only ever hang or abort unattributed, and the replacement is a panic
+/// that names the cause, so no flavour should keep std's behaviour. Callers
+/// get them through [patchesFor].
+const singleThreadedPatches = <Facility>[_parker, _rwlock];
+
+/// What to apply for a build: the chosen [facilities], plus
+/// [singleThreadedPatches] unless the build has `atomics`.
+List<Facility> patchesFor(List<Facility> facilities, {required bool atomics}) =>
+    [...facilities, if (!atomics) ...singleThreadedPatches];
 
 /// The staging directory name for a facility set: the names, sorted, joined by
 /// `-`. `atomics` counts like any other.
@@ -260,9 +330,10 @@ void applyFacilities(
   List<Facility> facilities,
 ) {
   for (final f in facilities) {
-    final source = File('${palDir.path}/${f.palSource}');
-    if (!source.existsSync()) {
-      throw PatchError(f.name, f.palSource, 'no such file under pal/');
+    final palSource = f.palSource;
+    final source = palSource == null ? null : File('${palDir.path}/$palSource');
+    if (source != null && !source.existsSync()) {
+      throw PatchError(f.name, palSource!, 'no such file under pal/');
     }
 
     for (final a in f.anchors) {
@@ -301,8 +372,10 @@ void applyFacilities(
       target.writeAsStringSync(body.replaceFirst(a.find, a.replace));
     }
 
-    final dest = File('${libraryRoot.path}/${f.installAs}');
-    dest.parent.createSync(recursive: true);
-    source.copySync(dest.path);
+    if (source != null) {
+      final dest = File('${libraryRoot.path}/${f.installAs}');
+      dest.parent.createSync(recursive: true);
+      source.copySync(dest.path);
+    }
   }
 }

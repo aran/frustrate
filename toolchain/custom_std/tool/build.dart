@@ -24,8 +24,9 @@
 ///
 /// What it does:
 ///   1. installs the pinned nightly (nightly-pin.txt) with rust-src,
-///   2. for source facilities, copies rust-src into work/src and patches the
-///      copy — never the toolchain's own tree,
+///   2. for source facilities, and for every build without atomics (which
+///      carries `parker` and `rwlock` whatever was asked for), copies rust-src
+///      into work/src and patches the copy — never the toolchain's own tree,
 ///   3. builds an empty stub crate with `-Zbuild-std=std,panic_abort`,
 ///   4. stages the resulting std rlibs into
 ///      dist/lib/rustlib/wasm32-unknown-unknown/lib/ (the sysroot layout
@@ -67,12 +68,17 @@ void main(List<String> args) {
     for (final f in allFacilities) {
       stdout.writeln('  ${f.name.padRight(12)} ${f.summary}');
     }
+    stdout.writeln('applied to every build without atomics:');
+    for (final f in singleThreadedPatches) {
+      stdout.writeln('  ${f.name.padRight(12)} ${f.summary}');
+    }
     return;
   }
 
   final selected = _parseFacilities(args);
   final atomics = selected.remove('atomics');
   final source = selected.map(facilityByName).toList();
+  final patches = patchesFor(source, atomics: atomics);
 
   // Everything below is keyed by flavour, including the cargo target dir.
   // Sharing one target dir across flavours is not a cache win, it is a
@@ -147,7 +153,7 @@ void main(List<String> args) {
   // without notice, which is why the failure it produces has to stay loud and
   // why this line says so out loud rather than hiding in a flag list.
   String? srcRoot;
-  if (source.isNotEmpty) {
+  if (patches.isNotEmpty) {
     final sysroot = _capture('rustup', [
       'run',
       pin,
@@ -167,11 +173,10 @@ void main(List<String> args) {
     _run('cp', ['-R', upstream.path, srcDir.path]);
 
     stdout.writeln(
-      'patching ${source.length} '
-      'facilit${source.length == 1 ? 'y' : 'ies'} into the copy',
+      'patching ${patches.map((f) => f.name).join(', ')} into the copy',
     );
     try {
-      applyFacilities(srcDir, Directory('$dir/pal'), source);
+      applyFacilities(srcDir, Directory('$dir/pal'), patches);
     } on PatchError catch (e) {
       stderr.writeln(e);
       exit(1);
@@ -286,6 +291,11 @@ void main(List<String> args) {
       // without atomics can no longer be handed to a toolchain that adds them.
       'rustflags': rustflags,
       'facilities': facilities..sort(),
+      // Applied without being asked for: every build without atomics.
+      'always_applied': [
+        for (final f in patches)
+          if (singleThreadedPatches.contains(f)) f.name,
+      ],
       // What a module built against this std will import from the host. The
       // glue has to serve every one of these or instantiation fails.
       'requires_imports': imports,
