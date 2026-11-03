@@ -273,7 +273,7 @@ void main() {
       );
     }, testOn: 'browser');
 
-    // §1 claims the time mappings compose into every container. Neither is on
+    // The time mappings compose into every container. Neither is on
     // the bulk numeric fast path, so `Vec<SystemTime>`/`Vec<Duration>` take
     // the generic per-element codec and `Option<SystemTime>` takes the
     // null-flag arm — three arms nothing had ever crossed the boundary to
@@ -887,12 +887,11 @@ void main() {
   });
 
   group('typed lists (Vec<numeric> <-> TypedData)', () {
-    // INTEROP_CAPABILITY §1: every fixed-width numeric Vec crosses as the
-    // matching Dart typed list, symmetric in both directions. Each case
-    // asserts the returned value is the EXACT typed class (not just a List)
-    // and round-trips. These run on native AND single-threaded web
-    // (dart2wasm) — the one place a typed-list surprise (esp. Int64List)
-    // would hide.
+    // Every fixed-width numeric Vec crosses as the matching Dart typed list,
+    // symmetric in both directions. Each case asserts the returned value is
+    // the EXACT typed class (not just a List) and round-trips. These run on
+    // native AND single-threaded web (dart2wasm) — the one place a typed-list
+    // surprise (esp. Int64List) would hide.
     test('each element type returns its exact typed-list class', () {
       final i8 = echoI8s(xs: Int8List.fromList([-128, 0, 127]));
       expect(i8, isA<Int8List>());

@@ -1165,7 +1165,7 @@ fn emit_doc_comment_before_generated(out: &mut String, docs: &[String], pad: &st
 /// Deliberately excluded (stay `List<T>` on the element loop): `u64`/`i128`/
 /// `u128` (→ `BigInt`, no typed list — `dart:typed_data` does have a
 /// `Uint64List`, unnamed here because `u64` does not cross as an `int`);
-/// `usize`/`isize` (not fixed-width in Rust semantics — not in the §1 matrix);
+/// `usize`/`isize` (not fixed-width in Rust semantics);
 /// `bool`, `char`/`String`, `Duration`/`SystemTime`, and any
 /// struct/enum/opaque/extern element. The **Rust** seam's table
 /// (`bulk_rust_prim`, emit_rust.rs) is wider by `u64` for that reason; the
@@ -5688,7 +5688,7 @@ mod tests {
 
     #[test]
     fn every_typed_list_element_maps() {
-        // The full §1 matrix, in one place.
+        // Every element type with a typed list, in one place.
         // `Vec<u8>` is NOT here: it parses to `Type::Bytes` (the memcpy fast
         // path, `Uint8List` via `readBytes`), covered by `bytes and arrays`.
         // `typed_list_class(U8)` still returns `Uint8List` for completeness,

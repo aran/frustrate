@@ -241,7 +241,7 @@ pub fn advance_time(t: std::time::SystemTime, by: std::time::Duration) -> std::t
     t + by
 }
 
-/// A time type nested in the containers §1 claims it composes into. Neither
+/// A time type nested in the containers it composes into. Neither
 /// `Duration` nor `SystemTime` is on the bulk numeric fast path (they are not
 /// in `bulk_codec_stem`/`bulk_rust_prim`), so these take the generic
 /// per-element codec — which is what the claim rests on and what nothing had
@@ -625,7 +625,7 @@ pub fn echo_i64s(xs: Vec<i64>) -> Vec<i64> {
     xs
 }
 
-// ---------------------------------------------- typed lists (§1) --
+// ------------------------------------------------------- typed lists --
 //
 // `Vec<numeric>` maps to a Dart typed list (`Int32List`, `Float64List`, …),
 // symmetric in both directions. One echo per element
@@ -2473,8 +2473,9 @@ static ASYNC_CALL_STATE: AtomicI64 = AtomicI64::new(0);
 /// Same lock discipline as `call_parked`, for a sharper reason: a `MutexGuard`
 /// held across an `.await` would be captured by the generated future, wedging
 /// every other fixture here for as long as this task is suspended (which, for
-/// the state §1 describes, is the rest of the session). The clone is taken and
-/// the guard dropped at the end of the statement, before the suspension point.
+/// state 1, suspended inside the awaited call, is the rest of the session).
+/// The clone is taken and the guard dropped at the end of the statement,
+/// before the suspension point.
 ///
 /// NOT `requires_native` — an `async fn` is portable by derivation
 /// (codegen/src/check.rs), so this compiles onto the web surface as well. It is
