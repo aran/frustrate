@@ -981,17 +981,11 @@ mod tests {
     #[test]
     fn sink_impl_backpressures_and_reports_closed() {
         use futures_sink::Sink;
-        use std::sync::Arc as StdArc;
-        use std::task::Wake;
 
         let _serial = crate::post::test_lock();
         crate::post::init(record);
 
-        struct Noop;
-        impl Wake for Noop {
-            fn wake(self: StdArc<Self>) {}
-        }
-        let waker = Waker::from(StdArc::new(Noop));
+        let waker = Waker::noop().clone();
         let mut cx = Context::from_waker(&waker);
 
         let mut s = sink::<i64>(9201, enc_i64);

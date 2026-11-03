@@ -312,7 +312,7 @@ mod tests {
             &c,
             &[],
             &[
-                applied("//p:c.native", &[mark.clone()], &[]),
+                applied("//p:c.native", std::slice::from_ref(&mark), &[]),
                 applied("//p:c.wasi", &[], &["example::wrap"]),
             ],
         )

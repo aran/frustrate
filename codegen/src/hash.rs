@@ -277,9 +277,9 @@ mod tests {
         for i in 0..2000 {
             let a = types[i % types.len()];
             let b = types[(i / types.len()) % types.len()];
-            let _ = write!(
+            let _ = writeln!(
                 src,
-                "#[bridge(sync)] pub fn m{i}(x: {a}, y: {b}) -> {a} {{ todo!() }}\n"
+                "#[bridge(sync)] pub fn m{i}(x: {a}, y: {b}) -> {a} {{ todo!() }}"
             );
         }
         let iface = check(parse_source(&src, "crate::api").unwrap()).unwrap();

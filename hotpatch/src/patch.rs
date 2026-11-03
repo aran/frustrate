@@ -535,16 +535,15 @@ fn strip_debug(text: &str, roots: &mut Vec<String>) -> String {
                     Some(start) if line_out[start..].contains("!dbg") => {
                         line_out.truncate(start);
                     }
-                    Some(start) => {
-                        // A non-debug attachment such as `!noundef !7`. Loop
-                        // metadata names source locations, so it goes too.
-                        if line_out[start..].contains("!llvm.loop") {
-                            line_out.truncate(start);
-                        } else {
-                            line_out.push('!');
-                            line_out.push_str(d);
-                            roots.push(d.to_string());
-                        }
+                    // A non-debug attachment such as `!noundef !7`: loop metadata
+                    // names source locations, so it goes too.
+                    Some(start) if line_out[start..].contains("!llvm.loop") => {
+                        line_out.truncate(start);
+                    }
+                    Some(_) => {
+                        line_out.push('!');
+                        line_out.push_str(d);
+                        roots.push(d.to_string());
                     }
                     None => {
                         line_out.push('!');

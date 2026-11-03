@@ -70,6 +70,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 )]
 pub(crate) struct SpinLock<T> {
     locked: AtomicBool,
+    // Read only by `with`, which only tests call: the runtime's one lock
+    // guards `()` and takes its guard.
+    #[cfg_attr(not(test), allow(dead_code))]
     value: UnsafeCell<T>,
 }
 
@@ -95,6 +98,7 @@ impl<T> SpinLock<T> {
     /// Keep `f` bounded by a container this runtime owns, with no wake, no
     /// poll, no user code and no destructor-bearing drop inside it — see the
     /// module docs on why that bound is what makes spinning legal.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn with<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
         let _held = self.acquire();
         f(unsafe { &mut *self.value.get() })

@@ -286,7 +286,7 @@ fn known_asm(arch: &str, name: &str) -> bool {
     KNOWN_ASM
         .iter()
         .filter(|(a, _, _)| *a == arch)
-        .any(|(_, seqs, _)| seqs.iter().any(|seq| *seq == insts.as_slice()))
+        .any(|(_, seqs, _)| seqs.contains(&insts.as_slice()))
 }
 
 /// The template of the inline asm a body line calls, as the IR spells it,
@@ -422,6 +422,8 @@ enum Verdict {
 /// What each function is as a sink, if anything.
 fn sink_kinds(ir: &Ir, libc: &Libc, paths: &[Vec<String>], sinks: &Sinks) -> BTreeMap<u32, (Verdict, String)> {
     let mut kinds = BTreeMap::new();
+    // `f` indexes the IR's parallel tables, not just `paths`.
+    #[allow(clippy::needless_range_loop)]
     for f in 0..ir.names.len() {
         let n = &ir.names[f];
         let mut red: Vec<String> = Vec::new();

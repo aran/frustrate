@@ -1089,6 +1089,8 @@ mod tests {
         // Safety: as above.
         unsafe impl Send for DropsIntoLock {}
         unsafe impl Sync for DropsIntoLock {}
+        // Not a no-op waker: dropping the last reference is the point.
+        #[allow(clippy::manual_noop_waker)]
         impl Wake for DropsIntoLock {
             fn wake(self: Arc<Self>) {}
             fn wake_by_ref(self: &Arc<Self>) {}
