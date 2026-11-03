@@ -11,24 +11,25 @@ bazel run @rules_flutter//tools/dev_tool:flutter_bazel -- run -t //:app_web -d c
 ```
 
 That is the whole thing. It builds `//:app_web`, serves it, launches Chrome and
-attaches DWDS, so hot reload (`r`) and hot restart (`R`) cover every Dart edit
-in `lib/` and `bridge/lib/` alike.
+attaches DWDS, so hot reload and hot restart cover every Dart edit in `lib/`
+and `bridge/lib/` alike. [rules_flutter](https://github.com/aran/rules_flutter)
+documents how to drive them.
 
 The loop compiles your Dart with DDC, to JavaScript — that is what hot reload
 runs on — not with the dart2wasm the shipped bundle uses. There `int` is a
 53-bit JavaScript number and `Vec<i64>` cannot cross, so the collections card
-says it is unavailable. `--wasm` runs the dart2wasm build instead, where `r`
-and `R` both rebuild and reload the page, losing its state.
+says it is unavailable. `--wasm` runs the dart2wasm build instead, where a
+reload and a restart both rebuild and reload the page, losing its state.
 
-**On the web, a change under `bridge/src/` needs `R`.** Both keys rebuild
+**On the web, a change under `bridge/src/` needs a hot restart.** Both rebuild
 through Bazel, so the regenerated bindings and the rebuilt module are current on
 disk either way — but only a restart reaches the page. Hot reload never re-runs
 `main()`, so the page keeps the wasm instance it already has. If the edit
 changed the bindings, injecting them over that instance would call a module that
-cannot serve them, so `r` refuses, naming the module and the contract it was
-generated from, and compiles and sends nothing. If it changed only a function
-body, `r` reloads your Dart and says the rebuilt module is not running yet.
-Either way, press `R`, which resets Dart's statics so `initBridge()` runs as a
+cannot serve them, so the reload refuses, naming the module and the contract it
+was generated from, and compiles and sends nothing. If it changed only a
+function body, the reload applies your Dart and says the rebuilt module is not
+running yet. Either way, restart, which resets Dart's statics so `initBridge()` runs as a
 first init and loads the rebuilt module.
 
 Both answers are what `native_modules` buys. Each web bundle names its module
@@ -36,9 +37,10 @@ through a `flutter_native_library` wrapper carrying `//bridge:codegen.ir` as the
 `binding_contract`, which is the only way the dev tool can tell a module apart
 from Flutter's own `main.dart.wasm` (which moves on every Dart edit). A module
 listed in `web_assets` instead is served identically and watched not at all, so
-`r` would report success over an instance that cannot serve what it injected.
+a reload would report success over an instance that cannot serve what it
+injected.
 
-**On a native device `r` delivers a Rust edit into the running app.** A process
+**On a native device a hot reload delivers a Rust edit into the running app.** A process
 cannot replace a library it has `dlopen`ed, so instead the edit is compiled into
 a patch — a second library holding the functions that changed — and the running
 library's entry points are redirected into it. State is kept: a `Counter` handle
@@ -60,7 +62,7 @@ a bridged *type* whose shape changed (every member using it keeps its id while
 its encoding moves), a new or changed opaque type (Dart binds its drop to the
 library it loaded), a type whose layout moved under values the running code
 built, a new static, a changed dependency, or a call to code the launch build
-never linked, among others. `R` relaunches on the new library. Work already in flight keeps
+never linked, among others. A restart relaunches on the new library. Work already in flight keeps
 the code it started with — an actor job, an executor task, a closure Rust is
 holding — the same way a Dart closure created before a reload does.
 
