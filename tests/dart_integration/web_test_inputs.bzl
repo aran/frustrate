@@ -3,23 +3,25 @@
 load("@rules_dart//dart:providers.bzl", "DartInfo")
 load("@rules_dart//dart:utils.bzl", "dart_analyzable_info")
 
-def _package_entry(dep):
+def _package_entries(dep):
+    """Each Dart package `dep` contributes: name, package_config entry."""
     info = dep[DartInfo]
-    language_version = ""
-    for record in info.transitive_packages.to_list():
-        if record.package_name == info.package_name:
-            language_version = record.language_version
-    return info.package_name, {
-        "root": info.lib_root,
-        "languageVersion": language_version,
-    }, info.srcs
+    versions = {r.package_name: r.language_version for r in info.transitive_packages.to_list()}
+    return [
+        (pkg.package_name, {
+            "root": pkg.lib_root,
+            "languageVersion": versions.get(pkg.package_name, ""),
+        })
+        for pkg in info.packages
+    ], info.srcs
 
 def _web_test_inputs_impl(ctx):
     packages = {}
     files = []
     for dep in ctx.attr.packages:
-        name, entry, srcs = _package_entry(dep)
-        packages[name] = entry
+        entries, srcs = _package_entries(dep)
+        for name, entry in entries:
+            packages[name] = entry
         files.extend(srcs)
 
     # One package per web compiler, same name each: the driver adds the one
@@ -28,7 +30,10 @@ def _web_test_inputs_impl(ctx):
     # `:wasm`.
     compiler_packages = {}
     for compiler, dep in ctx.attr.compiler_packages.items():
-        name, entry, srcs = _package_entry(dep)
+        entries, srcs = _package_entries(dep)
+        if len(entries) != 1:
+            fail("%s: compiler_packages[%s] is %d packages, not one" % (ctx.label, compiler, len(entries)))
+        name, entry = entries[0]
         compiler_packages[compiler] = dict(entry, name = name)
         files.extend(srcs)
     fixtures = {}
