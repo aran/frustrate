@@ -43,3 +43,6 @@ test --output_groups=+dart_analyze
 common --@rules_dart//dart:analysis_config=//:analysis_config
 
 try-import %workspace%/.bazelrc.user
+
+# Maven Central rate-limits (429); fetches from it go to Google's mirror.
+common --downloader_config=downloader.cfg

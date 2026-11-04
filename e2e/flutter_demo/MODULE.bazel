@@ -189,6 +189,8 @@ maven.install(
         "com.google.protobuf:protobuf-java-util:4.34.0",
     ],
     repositories = [
+        # Google's mirror of Maven Central first: repo1 rate-limits (429).
+        "https://maven-central.storage-download.googleapis.com/maven2",
         "https://maven.google.com",
         "https://repo1.maven.org/maven2",
     ],
@@ -256,6 +258,8 @@ maven.install(
         "org.mockito:mockito-core:5.4.0",
     ],
     repositories = [
+        # Google's mirror of Maven Central first: repo1 rate-limits (429).
+        "https://maven-central.storage-download.googleapis.com/maven2",
         "https://maven.google.com",
         "https://repo1.maven.org/maven2",
     ],
