@@ -86,7 +86,7 @@ jobs:
           repository-cache: true
       - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
         with:
-          sdk: 3.13.2
+          sdk: 3.13.7
       - name: smoke_test in Chrome
         run: bazel run //tests/dart_integration:web_test -- test/smoke_test.dart -c ${{ matrix.compiler }}
 
