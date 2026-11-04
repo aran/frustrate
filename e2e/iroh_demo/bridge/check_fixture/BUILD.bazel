@@ -46,7 +46,9 @@ rust_shared_library(
 # It needs the locally built +atomics std, so a machine that has never run
 # `bazel run //toolchain/custom_std:build` reports it SKIPPED. It also needs the getrandom annotation
 # in //:MODULE.bazel, without which the graph fails to build under `+atomics`
-# with an E0433 naming neither frustrate nor this package.
+# with an E0433 naming neither frustrate nor this package. The ext platform
+# `@frustrate//ext/getrandom:wasm32_threads` (`web_threads_platform`) does not
+# replace it for this graph: //:MODULE.bazel says why.
 #
 # The red direction cannot be a Bazel target — Bazel has no way to assert that
 # an action fails — so it is run by hand, and iroh supplies it. Give the claimed

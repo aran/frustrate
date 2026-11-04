@@ -500,6 +500,10 @@ atomics and a shared memory. It needs a nightly toolchain and a locally built
 std. If you want parallelism, you can have it, but it's slightly more work and
 risk.
 
+A threaded graph with getrandom 0.4.3 fails with `E0433` on `js_sys`. Build on
+`@frustrate//ext/getrandom:wasm32_threads`, or add a crate annotation;
+[ext.md](docs/ext.md#extgetrandom-on-threaded-web) has both.
+
 ### Calling your own JavaScript from Rust
 
 A bridge module reaches JavaScript through import namespaces. The runtime
@@ -590,6 +594,10 @@ frustrate_no_block_check(
     io = ["files", "network"],
 )
 ```
+
+`web_threads` builds under `@frustrate//bazel:wasm32_threads`. An app that ships on
+another threaded platform, such as `@frustrate//ext/getrandom:wasm32_threads`,
+names it with `web_threads_platform`, so the check scans what the app ships.
 
 When the target is a `frustrate_library` that links several bridges, `bridge` takes a
 list, one `frustrate_bridge` per linked bridge.

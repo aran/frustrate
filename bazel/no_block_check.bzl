@@ -76,6 +76,15 @@ def _wasm_check_transition_impl(settings, attr):
         # from outside it. This is the only knob that reaches every crate in the
         # target configuration.
         #
+        # The repeatable `extra_rustc_flag`, not the list `extra_rustc_flags`:
+        # the platform named above applies its own `flags` over what this
+        # transition returns, and a platform that carries a rustc flag of its
+        # own (`//ext/getrandom:wasm32_threads` sets `extra_rustc_flags`)
+        # replaces that list wholesale, dropping the cfg below. The platform
+        # leaves this setting alone, so the check keeps the flags the platform
+        # exists to carry and adds its own to them. Appended, so it lands after
+        # the platform's flags and the project's own, and stays last.
+        #
         # `-Adead_code`: with the exports gated out, whole regions of the
         # runtime and of the generated glue are legitimately unreachable in this
         # configuration only. It lands *after* any target's own `rustc_flags`
@@ -83,20 +92,20 @@ def _wasm_check_transition_impl(settings, attr):
         # with `-Dwarnings` — deliberately, since a diagnostic artifact should
         # not be able to fail for a lint about code it exists to delete.
         #
+        # `-Copt-level=0` is last, so a project's `-Copt-level` (a `.bazelrc`
+        # line, say) cannot beat the debug build pinned above.
+        #
         # The export filter, which cuts dependency rlibs' `#[wasm_bindgen]`
         # exports off the link line, is not here: frustrate's custom-std
         # toolchains, which carry it in their sysroot, add its `-Clinker=`
         # under //bazel:block_check themselves (custom_std.bzl). A stock
         # toolchain links with rust-lld, and the scanner refuses any export
         # that is not a check root.
-        _EXTRA_RUSTC_FLAGS: [
+        _EXTRA_RUSTC_FLAG: settings[_EXTRA_RUSTC_FLAG] + [
             "--cfg=frustrate_block_check",
             "-Adead_code",
+            "-Copt-level=0",
         ],
-        # The repeatable flag reaches rustc after the list above, so a
-        # project's `-Copt-level` there (a `.bazelrc` line, say) would beat
-        # the debug build pinned above. Appended, so it stays last.
-        _EXTRA_RUSTC_FLAG: settings[_EXTRA_RUSTC_FLAG] + ["-Copt-level=0"],
         # Turns //runtime/rust's `wasm-threads` feature off while the threaded
         # platform keeps the +atomics std on. //bazel:BUILD.bazel has the full
         # argument; the short version is that this is what saves the design a
@@ -111,7 +120,6 @@ _wasm_check_transition = transition(
         "//command_line_option:platforms",
         "//command_line_option:compilation_mode",
         _EXTRA_RUSTC_FLAG,
-        _EXTRA_RUSTC_FLAGS,
         _BLOCK_CHECK_FLAG,
     ],
 )
@@ -510,6 +518,7 @@ def frustrate_no_block_check(
         slow = [],
         io = [],
         allow = [],
+        web_threads_platform = None,
         **kwargs):
     """Settle every `#[bridge(no_block)]` claim in a bridge, for the targets it ships on.
 
@@ -576,22 +585,48 @@ def frustrate_no_block_check(
     function as "cannot verify". The analyses append `-Copt-level=0` to
     `--@rules_rust//rust/settings:extra_rustc_flag` for readable witness
     paths; a crate's own `rustc_flags` reach rustc after it. The
-    configurations also replace `extra_rustc_flags` (a list, so a transition
-    can only replace it) with `--cfg=frustrate_block_check -Adead_code`.
+    configurations also set `--cfg=frustrate_block_check -Adead_code`; on
+    `web_threads` they are appended to the platform's own flags, and on the
+    native analyses they replace `extra_rustc_flags`.
 
     For `web_threads`, the whole graph must build `+atomics`, and
     crate_universe resolves deps per triple, before RUSTFLAGS exist, so it
     drops any dependency declared under `cfg(target_feature = ...)`.
     getrandom 0.4.3 loses `js-sys` that way, with an `E0433` inside
-    getrandom. The fix is one annotation, scoped so it reaches nothing else:
+    getrandom. Two ways out, and the graph decides which one fits (see
+    docs/ext.md); the check builds under whichever your app does.
 
-        crate.annotation_select(
-            crate = "getrandom",
-            version = "0.4.3",
-            deps = ["@your_crates//:js-sys"],
-            repositories = ["your_crates"],
-            triples = ["wasm32-unknown-unknown"],
-        )
+    1. The ext platform, when nothing in the graph enables getrandom 0.4's
+       `wasm_js` feature. Depend on
+       `@frustrate//ext/getrandom:frustrate_getrandom`, write
+       `use frustrate_getrandom as _;` in the crate, build the app on
+       `@frustrate//ext/getrandom:wasm32_threads`, and name that platform to
+       the check:
+
+           frustrate_no_block_check(
+               ...
+               web_threads_platform = "@frustrate//ext/getrandom:wasm32_threads",
+           )
+
+       getrandom then takes its `custom` backend and never compiles the
+       `wasm_js` module that names `js-sys`, and no version appears in your
+       build files. Entropy comes through frustrate's host import instead of
+       getrandom's own `wasm_js`; both are `crypto.getRandomValues`. With that
+       feature on, 0.4.3 fails with `E0599` on `Error::WEB_CRYPTO`.
+    2. A crate annotation in your root MODULE.bazel, which keeps `wasm_js`;
+       the route when the feature is on:
+
+           crate.annotation_select(
+               crate = "getrandom",
+               version = "0.4.3",
+               deps = ["@your_crates//:js-sys"],
+               repositories = ["your_crates"],
+               triples = ["wasm32-unknown-unknown"],
+           )
+
+       It names getrandom's version. When the lockfile moves getrandom to
+       another version it stops matching, without an error, and the
+       `E0433` comes back.
 
     The `web_threads` module links through `frustrate-link-filter`, which
     the custom-std toolchains carry, so a graph containing wasm-bindgen still
@@ -631,6 +666,12 @@ def frustrate_no_block_check(
         Writes to an open descriptor are in no class, because stdout, stderr
         and the panic report are such writes. //bazel/wasm_block_check/io.rs
         has the maps and what each covers.
+      web_threads_platform: The platform `web_threads` builds under, when the
+        app ships on one other than the default `//bazel:wasm32_threads`: a
+        `platform()` that `parents` it, such as
+        `@frustrate//ext/getrandom:wasm32_threads`. It must be a threaded
+        platform, or the check finds no wait instruction. Its `flags` reach
+        the check's build, so what the app compiles is what is scanned.
       allow: Silences for every claim the target checks, for code you cannot
         annotate. A name is what a finding says to silence it as, and each
         analysis names its findings its own way (natively a wait is the C
@@ -667,6 +708,9 @@ def frustrate_no_block_check(
              "which has no wait instruction, so no analysis proves anything " +
              "there. Add a native target to check `slow` over its portable " +
              "code, or drop `crate` if every claim is placed.")
+    if web_threads_platform and "web_threads" not in analyses:
+        fail("frustrate_no_block_check: %s names `web_threads_platform` but " % name +
+             "`targets` has no `web_threads`, so nothing would build under it.")
     if io and not [t for t in analyses if t in _NATIVE or t == "wasi"]:
         fail("frustrate_no_block_check: %s names `io`, but only the native " % name +
              "targets and `wasi` check IO: a web build has none that blocks.")
@@ -700,7 +744,7 @@ def frustrate_no_block_check(
             crate = crate,
             slow = slow,
             allow = allow,
-            platform = Label("//bazel:wasm32_threads"),
+            platform = web_threads_platform or Label("//bazel:wasm32_threads"),
             tags = tags,
             target_compatible_with = compatible + (
                 [] if _THREADS_STD_STAGED else [Label("//bazel:wasm_threads_std_staged")]

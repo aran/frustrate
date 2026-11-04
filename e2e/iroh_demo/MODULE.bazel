@@ -160,6 +160,13 @@ crate.from_cargo(
 # because 0.2.17 is in the same hub and already has it. `repositories` because
 # one extension instance feeds all three hubs in this file.
 #
+# `@frustrate//ext/getrandom:wasm32_threads` is not an alternative here. It
+# avoids `wasm_js` by selecting getrandom's `custom` backend, but this hub turns
+# getrandom's `wasm_js` feature on for wasm32 (iroh asks for it), and 0.4.3's
+# `error.rs` names `Error::WEB_CRYPTO` under that feature alone, a constant only
+# the `wasm_js` module defines: with `custom` selected the crate fails with
+# E0599 on `WEB_CRYPTO`. 0.3.x gates that line on the backend too.
+#
 # The single-threaded wasm build shares this triple and therefore gets the dep
 # too, and that costs it nothing. Its arm of `fill_inner` hands the slice
 # straight to `crypto.getRandomValues` and never names `js_sys`, so the rlib

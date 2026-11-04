@@ -1,0 +1,42 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+
+# `frustrate_no_block_check(web_threads_platform = ...)` builds the check under
+# the platform the app ships with. This crate can only be built where
+# getrandom has a backend: on plain //bazel:wasm32_threads it fails with
+# getrandom's own "no backend" error, so the check goes green only if the
+# platform's `getrandom_backend = "custom"` reaches getrandom through the
+# check's configuration.
+
+frustrate_bridge_outputs(
+    name = "bridge",
+    srcs = ["src/api.rs"],
+    crate_name = "getrandom_check_fixture",
+    package_name = "getrandom_check_fixture",
+    module_paths = ["crate::api"],
+)
+
+rust_shared_library(
+    name = "getrandom_check_fixture_shared",
+    srcs = [
+        "src/api.rs",
+        "src/lib.rs",
+        ":bridge.rs",
+    ],
+    crate_name = "getrandom_check_fixture",
+    edition = "2021",
+    proc_macro_deps = ["//macros:frustrate_macros"],
+    deps = [
+        "//ext/getrandom:frustrate_getrandom",
+        "//runtime/rust:frustrate",
+        "@frustrate_crates//:getrandom",
+    ],
+)
+
+frustrate_no_block_check(
+    name = "getrandom_block_check",
+    bridge = ":bridge",
+    crate = ":getrandom_check_fixture_shared",
+    targets = ["web_threads"],
+    web_threads_platform = "//ext/getrandom:wasm32_threads",
+)
