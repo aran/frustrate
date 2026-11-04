@@ -121,6 +121,19 @@ bazel test  //...          # includes the analyze + build tests
 These are the same targets the loop above builds; running one directly just
 skips the serve-and-attach half.
 
+### Checking that the bridge answers on a device
+
+```sh
+bazel run //:smoke -- -t //:app_ios -d ios-simulator
+bazel run //:smoke -- -t //:app_android --build-arg=--config=android -d android
+```
+
+`//:smoke` runs the gallery on the device and waits until the results of a
+sync and an async Rust call are on screen. CI runs it on an iOS simulator and an
+Android emulator; the same browser and native checks without a device are
+`bazel run //tests/dart_integration:web_test -- test/smoke_test.dart` (and
+`bazel test //tests/dart_integration:smoke_test`) in the root module.
+
 ### The two other web builds
 
 Same `lib/main.dart`, same bridge crate — only the wasm module differs. Both

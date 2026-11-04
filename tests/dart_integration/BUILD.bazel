@@ -159,6 +159,23 @@ dart_binary(
     ],
 )
 
+# A bridge loads and answers a few real calls (sync, async, data, error, panic):
+# the smoke check CI runs on every platform. The browser runner takes the same
+# file under dart2wasm and, with `-c dart2js`, dart2js.
+dart_test(
+    name = "smoke_test",
+    main = "test/smoke_test.dart",
+    srcs = [
+        "test/init_native.dart",
+        "test/init_web.dart",
+    ],
+    deps = [
+        "//tests/test_api:bindings",
+        "//runtime/dart:frustrate",
+        "@pub_deps//:test",
+    ],
+)
+
 dart_test(
     name = "bridge_test",
     main = "test/bridge_test.dart",

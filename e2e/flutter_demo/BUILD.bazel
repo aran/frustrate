@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@frustrate//bazel:defs.bzl", "frustrate_wasm_module", "frustrate_web_glue")
-load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options")
+load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options", "dart_binary")
 load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
 load("@rules_flutter//flutter:defs.bzl", "flutter_application", "flutter_native_library")
 load("@rules_flutter//flutter:ios.bzl", "flutter_ios_app", "flutter_ios_simulator_build_test")
@@ -270,3 +270,13 @@ build_test(
     ],
 )
 
+
+# Runs the gallery on one device and checks that the Rust bridge answered (see
+# tool/smoke.dart for what it asks):
+#   bazel run //:smoke -- -t //:app_ios -d ios-simulator
+dart_binary(
+    name = "smoke",
+    args = ["--tool=$(rootpath @rules_flutter//tools/dev_tool:flutter_bazel)"],
+    data = ["@rules_flutter//tools/dev_tool:flutter_bazel"],
+    main = "tool/smoke.dart",
+)

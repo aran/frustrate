@@ -1,6 +1,7 @@
 # `bazel test //...` in the root workspace and in bazel_frb, which is its own
-# module (it is in .bazelignore). The demos under e2e/ build whole Flutter apps
-# per platform and are not run here.
+# module (it is in .bazelignore). The smoke jobs below make a few real bridge
+# calls on each platform the project supports; macOS and Linux are already
+# covered by `bazel test //...`, which runs //tests/dart_integration natively.
 name: CI
 on:
   push:
@@ -45,3 +46,109 @@ jobs:
       - name: bazel test //...
         working-directory: ${{ matrix.folder }}
         run: bazel test //... --test_output=errors --test_summary=terse
+
+  # Docs-only changes skip the smoke jobs.
+  changes:
+    name: changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!docs/**'
+              - '!**/*.md'
+              - '!LICENSE'
+
+  # Web: //tests/dart_integration:smoke_test in Chrome, on each compiler of a
+  # Flutter web build. The driver runs the pub test runner, so it needs a Dart
+  # SDK on PATH (the version the Bazel toolchain pins) and the runner's Chrome.
+  smoke-web:
+    name: smoke (web, ${{ matrix.compiler }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [dart2wasm, dart2js]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: smoke-web
+          repository-cache: true
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+        with:
+          sdk: 3.13.2
+      - name: smoke_test in Chrome
+        run: bazel run //tests/dart_integration:web_test -- test/smoke_test.dart -c ${{ matrix.compiler }}
+
+  # iOS: the demo gallery in a simulator, driven by e2e/flutter_demo's `smoke`,
+  # which waits for the Rust calls' results on screen. The demo is its own
+  # Bazel module that takes rules_flutter from its MODULE.bazel pin.
+  smoke-ios:
+    name: smoke (iOS simulator)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: e2e/flutter_demo
+    steps:
+      - uses: actions/checkout@v7
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: smoke-ios
+          repository-cache: true
+      - name: Boot a simulator
+        run: |
+          udid=$(xcrun simctl list devices available --json | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
+          xcrun simctl bootstatus "$udid" -b
+          echo "SIMULATOR=$udid" >> "$GITHUB_ENV"
+      - name: The gallery answers
+        run: bazel run //:smoke -- -t //:app_ios -d "ios-simulator:$SIMULATOR"
+
+  # Android: the demo gallery on an x86_64 emulator (KVM), the same driver.
+  smoke-android:
+    name: smoke (Android emulator)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e/flutter_demo
+    steps:
+      - uses: actions/checkout@v7
+      - name: Enable KVM
+        working-directory: .
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # The runner has an Android SDK and NDK; --config=android registers their
+      # toolchains. The tool builds the ABI of the device it runs on.
+      - name: Point Bazel at the SDK
+        run: |
+          echo 'common --repo_env=ANDROID_HOME' >> .bazelrc.user
+          echo 'common --repo_env=ANDROID_NDK_HOME' >> .bazelrc.user
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: smoke-android
+          repository-cache: true
+      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          working-directory: e2e/flutter_demo
+          script: bazel run //:smoke -- -t //:app_android --build-arg=--config=android -d android
