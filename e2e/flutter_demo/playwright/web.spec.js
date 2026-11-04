@@ -24,7 +24,9 @@ const {
 } = require('../../_playwright/flutter_helpers');
 const { expectStrictCspEnforced } = require('../../_playwright/csp_helpers');
 
-const WEB_DIR = path.resolve(__dirname, '../bazel-bin/app_web_web');
+const WEB_DIR = process.env.WEB_DIR
+  ? path.resolve(process.env.WEB_DIR)
+  : path.resolve(__dirname, '../bazel-bin/app_web_web');
 let server;
 let serverUrl;
 

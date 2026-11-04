@@ -203,6 +203,34 @@ flutter_web_bundle(
     ],
 )
 
+# The same app with Chrome left out of the WebAssembly allow-list, so Chrome
+# runs the dart2js build that every browser without WasmGC gets: `Vec<i64>` is
+# `List<int>` there. frustrate refuses a release build on dart2js unless the
+# app owns its 53-bit `int`, which `defines` does for this build only.
+# `WEB_DIR=../bazel-bin/app_web_js_fallback_web npx
+# playwright test web.spec.js` runs the gallery against it.
+flutter_web_bundle(
+    name = "app_web_js_fallback",
+    package_name = "frustrate_demo",
+    defines = ["frustrate.allowJsNumbers=true"],
+    index_html = ":index_html",
+    main = "lib/main.dart",
+    manifest_json = ":manifest_json",
+    native_modules = [":demo_rust_wasm_module"],
+    use_local_canvaskit = True,
+    wasm_browsers = [
+        "gecko",
+        "webkit",
+    ],
+    web_assets = [":frustrate.js"],
+    deps = [
+        "//bridge:demo_bridge",
+        "@frustrate//runtime/dart:frustrate",
+        "@deps//:flutter",
+        "@rules_flutter//flutter:material_icons",
+    ],
+)
+
 build_test(
     name = "macos_app_build_test",
     target_compatible_with = ["@platforms//os:macos"],
@@ -235,6 +263,9 @@ build_test(
 # (e2e/flutter_demo) after any frustrate codegen change.
 build_test(
     name = "web_app_build_test",
-    targets = [":app_web"],
+    targets = [
+        ":app_web",
+        ":app_web_js_fallback",
+    ],
 )
 
