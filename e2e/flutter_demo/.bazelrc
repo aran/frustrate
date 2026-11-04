@@ -31,6 +31,12 @@ build:android --java_runtime_version=remotejdk_25
 build:android --tool_java_language_version=25
 build:android --tool_java_runtime_version=remotejdk_25
 
+# The ABIs of an Android APK are the platforms of this flag. arm64-v8a matches
+# an Apple-Silicon emulator or a device; for an x86_64 emulator pass
+# --@rules_android//flags:android_platforms=@rules_android//:x86_64 (several
+# platforms, comma-separated, make a fat APK).
+common --@rules_android//flags:android_platforms=@rules_android//:arm64-v8a
+
 # `dart analyze` runs as an aspect over every Dart target a `bazel test` names.
 test --aspects=@rules_dart//dart:analyze.bzl%dart_analyze
 test --output_groups=+dart_analyze

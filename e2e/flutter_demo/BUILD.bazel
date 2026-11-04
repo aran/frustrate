@@ -93,8 +93,10 @@ flutter_ios_app(
 )
 
 # Android: the same app_flutter + the Rust bridge, which the demo_bridge
-# package's code asset carries as a per-ABI shared library. arm64-v8a to match
-# an Apple-Silicon emulator or a device; add an x64 sibling for x86 emulators.
+# package's code asset carries as a per-ABI shared library. The ABI is the
+# platform of --@rules_android//flags:android_platforms, arm64-v8a in .bazelrc
+# (an Apple-Silicon emulator or a device); pass the flag with
+# @rules_android//:x86_64 for an x86 emulator.
 #
 # --config=android is not optional: it is what registers the SDK and NDK
 # toolchains (.bazelrc says why). `flutter_android_app` defaults to
@@ -104,7 +106,6 @@ flutter_ios_app(
 flutter_android_app(
     name = "app_android",
     app_name = "Frustrate Demo",
-    android_abi = "arm64",
     application = ":app_flutter",
     package_name = "dev.frustrate.demo",
 )

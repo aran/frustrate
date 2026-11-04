@@ -59,7 +59,6 @@ flutter_application(
 flutter_android_app(
     name = "app_android",
     app_name = "Frustrate Compose",
-    android_abi = "arm64",
     application = ":app_flutter",
     package_name = "dev.frustrate.compose",
 )
