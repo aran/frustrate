@@ -46,8 +46,10 @@ variant_test(
     target_under_test = ":wasm_probe",
 )
 
-# What a web binary can reach that is not Dart is built once, not once per
-# compiler: the generated bindings and glue, and the Rust wasm module.
+# What a Dart program can reach that is not Dart is built once, not once per
+# web compiler or again for a test that tracks creation locations (as
+# `flutter_test` does): the generated bindings and glue, and the Rust wasm
+# module.
 built_once_test(
     name = "bridge_built_once_test",
     size = "small",

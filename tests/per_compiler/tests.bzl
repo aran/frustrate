@@ -29,22 +29,31 @@ variant_test = analysistest.make(
     },
 )
 
+_TRACKING = "@rules_dart//dart:track_creation_locations"
+
 _Roots = provider(
-    doc = "Output root of each file of a target, per web compiler.",
+    doc = "Output root of each file of a target, per Dart build configuration.",
     fields = ["by_compiler"],
 )
 
 def _compilers_impl(settings, _attr):
-    return {
-        "none": {s: settings[s] for s in WEB_PLATFORM_SETTINGS},
+    plain = {s: settings[s] for s in WEB_PLATFORM_SETTINGS}
+    branches = {
+        "none": plain,
         "js": web_platform_settings(settings, Label("@rules_dart//dart/platforms:js")),
         "wasm": web_platform_settings(settings, Label("@rules_dart//dart/platforms:wasm")),
+        # What `flutter_test` turns on.
+        "tracking": plain,
+    }
+    return {
+        name: dict(branch, **{_TRACKING: name == "tracking"})
+        for name, branch in branches.items()
     }
 
 _compilers = transition(
     implementation = _compilers_impl,
     inputs = WEB_PLATFORM_SETTINGS,
-    outputs = WEB_PLATFORM_SETTINGS,
+    outputs = WEB_PLATFORM_SETTINGS + [_TRACKING],
 )
 
 def _roots_impl(ctx):
@@ -53,8 +62,8 @@ def _roots_impl(ctx):
         for compiler, target in ctx.split_attr.target.items()
     })]
 
-# `target` reached once under each web compiler, to compare where its files
-# are built.
+# `target` reached once under each web compiler and once tracking creation
+# locations, to compare where its files are built.
 _roots = rule(
     implementation = _roots_impl,
     attrs = {"target": attr.label(cfg = _compilers, mandatory = True)},
@@ -76,6 +85,6 @@ def _built_once_test_impl(ctx):
 _built_once_analysis_test = analysistest.make(_built_once_test_impl)
 
 def built_once_test(name, target, **kwargs):
-    """Fails if `target`'s files are built in a different configuration under a web compiler."""
+    """Fails if `target`'s files are built in another configuration by a web compiler or by tracking."""
     _roots(name = name + "_roots", target = target, tags = ["manual"])
     _built_once_analysis_test(name = name, target_under_test = ":" + name + "_roots", **kwargs)

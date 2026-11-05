@@ -17,7 +17,7 @@ so a bridge crate declared as a bare cdylib had unit tests and nothing else.
 """
 
 load("@rules_dart//dart:providers.bzl", "DartCodeAssetInfo")
-load("@rules_dart//dart:utils.bzl", "web_compiler_reset")
+load("@rules_dart//dart:utils.bzl", "dart_compile_reset")
 load("@rules_rust//rust:defs.bzl", "rust_common", "rust_library", "rust_shared_library")
 load(":no_block_check.bzl", _frustrate_no_block_check = "frustrate_no_block_check")
 
@@ -102,12 +102,12 @@ def _frustrate_bridge_impl(ctx):
         ),
     ]
 
-# Every web compiler reaches the one generated set: the codegen has no compiler
-# to vary by (a per-compiler type is a typedef the Dart build picks, see
+# Every Dart build, for any web compiler and with or without creation-location
+# tracking, reaches the one generated set: the codegen has no compiler to vary by (a per-compiler type is a typedef the Dart build picks, see
 # `//runtime/dart:frustrate`), and the Rust glue it writes is the crate's source.
 frustrate_bridge = rule(
     implementation = _frustrate_bridge_impl,
-    cfg = web_compiler_reset,
+    cfg = dart_compile_reset,
     doc = "Generate frustrate bridge glue (Rust) and bindings (Dart) from " +
           "declared bridge sources.",
     attrs = {
@@ -176,7 +176,7 @@ def _frustrate_code_asset_impl(ctx):
 
 frustrate_code_asset = rule(
     implementation = _frustrate_code_asset_impl,
-    cfg = web_compiler_reset,
+    cfg = dart_compile_reset,
     doc = """A bridge library as the Dart code asset its generated bindings resolve.
 
 The generated `<crate>Bridge` names its exports by the asset id of `bridge`;
@@ -708,7 +708,7 @@ def _frustrate_web_glue_impl(ctx):
 
 frustrate_web_glue = rule(
     implementation = _frustrate_web_glue_impl,
-    cfg = web_compiler_reset,
+    cfg = dart_compile_reset,
     doc = "Stage frustrate's web glue (the served asset for strict-CSP " +
           "pages) into the consuming package — " +
           "name the target `frustrate.js` (the URL the app's " +
@@ -728,7 +728,7 @@ frustrate_web_glue = rule(
 
 frustrate_wasm_module = rule(
     implementation = _frustrate_wasm_module_impl,
-    cfg = web_compiler_reset,
+    cfg = dart_compile_reset,
     doc = "Build a bridge rust_shared_library for a wasm platform and " +
           "expose the module under this target's name — name the target " +
           "`<something>.wasm`, conventionally matching the URL the app's " +
@@ -920,7 +920,7 @@ def _frustrate_wasm_opt_impl(ctx):
 
 frustrate_wasm_opt = rule(
     implementation = _frustrate_wasm_opt_impl,
-    cfg = web_compiler_reset,
+    cfg = dart_compile_reset,
     doc = "Run binaryen's `wasm-opt` over an existing wasm module.\n\n" +
           "`frustrate_wasm_module(wasm_opt = ...)` is the integrated spelling " +
           "and the one to reach for first — it optimizes in the right place " +
