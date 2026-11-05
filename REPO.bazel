@@ -1,0 +1,10 @@
+"""Metadata applying to every package of the module."""
+
+# Not packages of this module, in a consumer's copy of a checkout either (where
+# `.bazelignore` would not apply): Bazel's convenience symlinks, and the
+# commit hooks' tools (`.pre-commit-config.yaml`), which link into an output
+# base.
+ignore_directories([
+    "bazel-*",
+    ".bazel_env",
+])

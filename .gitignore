@@ -1,5 +1,6 @@
 bazel-*
 .bazelrc.user
+.bazel_env
 target/
 .dart_tool/
 node_modules/

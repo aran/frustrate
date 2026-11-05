@@ -1,0 +1,26 @@
+# See https://github.com/crate-ci/typos?tab=readme-ov-file#false-positives how to ignore
+
+[files]
+# Interface Builder files: generated object IDs, and Apple's own spelling of
+# `customObjectInstantitationMethod`.
+extend-exclude = ["*.xib", "*.storyboard"]
+
+[default.extend-words]
+# A device identifier, as `simctl` and provisioning profiles spell it.
+udid = "udid"
+# The `allo_isolate` crate.
+allo = "allo"
+# Words inside identifiers: possessives (a fatal entry's name, a half's
+# name, a library's archives), opt-in, and a call that has not stalled.
+entrys = "entrys"
+halfs = "halfs"
+librarys = "librarys"
+optin = "optin"
+unstalled = "unstalled"
+mis = "mis"
+unparseable = "unparseable"
+# Test text: a deliberately mistyped word, and a prefix of "hello".
+wser = "wser"
+hel = "hel"
+# Part of a mangled Rust symbol's hash.
+iof = "iof"

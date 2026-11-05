@@ -22,16 +22,15 @@ bazel_dep(name = "bazel_skylib", version = "1.9.2")
 # the resolved graph, declared direct for the same reason as bazel_skylib.
 bazel_dep(name = "rules_cc", version = "0.2.26")
 
-# git-cliff, which renders the changelog: `bazel run //tools/changelog`.
-bazel_dep(name = "rules_multitool", version = "1.11.1", dev_dependency = True)
-
-multitool = use_extension(
-    "@rules_multitool//multitool:extension.bzl",
-    "multitool",
-    dev_dependency = True,
+# The dev tooling shared with rules_dart: the commit check, the changelog, the
+# lint hooks and the release steps. It lives in rules_dart at `overhead/`.
+bazel_dep(name = "overhead", version = "0.0.0", dev_dependency = True)
+git_override(
+    module_name = "overhead",
+    remote = "https://github.com/aran/rules_dart.git",
+    commit = "e46da5b40a704d1f8f3aa466cc61d7d0b24f4d6d",
+    strip_prefix = "overhead",
 )
-multitool.hub(lockfile = "//:multitool.lock.json")
-use_repo(multitool, "multitool")
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(

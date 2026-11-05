@@ -20,15 +20,18 @@ permissions:
   contents: write
 jobs:
   release:
-    uses: bazel-contrib/.github/.github/workflows/release_ruleset.yaml@v7.7.0
+    uses: aran/rules_dart/.github/workflows/overhead-release.yaml@e46da5b40a704d1f8f3aa466cc61d7d0b24f4d6d
     with:
       release_files: frustrate-*.tar.gz
-      prerelease: false
       tag_name: ${{ inputs.tag_name || github.ref_name }}
   publish:
     needs: release
-    uses: ./.github/workflows/publish.yaml
+    uses: aran/rules_dart/.github/workflows/overhead-publish.yaml@e46da5b40a704d1f8f3aa466cc61d7d0b24f4d6d
     with:
       tag_name: ${{ inputs.tag_name || github.ref_name }}
     secrets:
       publish_token: ${{ secrets.publish_token || secrets.BCR_PUBLISH_TOKEN }}
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
