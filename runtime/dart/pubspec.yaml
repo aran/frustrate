@@ -16,8 +16,11 @@ dependencies:
 dev_dependencies:
   analyzer: 10.2.0
   test: 1.31.1
-  runfiles:
-    path: ../../../rules_dart/dart/runfiles
+  # The version of rules_dart that MODULE.bazel depends on. Under Bazel,
+  # rules_dart's own `//dart/runfiles` serves it (`resolve` in MODULE.bazel).
+  # To use a local rules_dart's with `dart pub get`, override it in an untracked
+  # `pubspec_overrides.yaml`.
+  runfiles: 0.8.1
 
 # Force shared transitive packages to the exact versions in rules_dart's
 # internal ext lock (the pub extension rejects cross-lock version skew).
