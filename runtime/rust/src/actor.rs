@@ -249,9 +249,10 @@ impl Host {
         // This frame may answer the call itself (a stopped host, below), after
         // the message holding the call's own share has been dropped.
         let _answering = crate::idle::Pending::begin();
+        let mut captured = crate::carry::Captured::here();
         let msg = Msg::Call {
             call_id,
-            job: Box::new(job),
+            job: Box::new(move || captured.run(job)),
             pending: crate::idle::Pending::begin(),
         };
         if let Err(msg) = self.post(msg) {

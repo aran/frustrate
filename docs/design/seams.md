@@ -34,6 +34,21 @@ disagree, since `anyhow`'s `bail!` is how Rust says "something unexpected
 happened". That call is the author's, and Dart is where they make it: an `Err`
 nobody catches is an uncaught failure and is reported as one.
 
+## Carrying a value into a call's work
+
+An embedder value that is current on the thread making a call, such as the
+cause a write is attributed to, is not current where the call's body runs: a
+pool worker, or a later poll of its task. `frustrate::carry::register(current,
+swap)` names the value by two functions over the embedder's per-thread state.
+frustrate captures `current()` where it queues the work, then swaps that value
+in around every run, wherever it happens, and the thread's own value back
+after. That covers each poll of an `async fn` task, a pool job, an actor call
+or posted closure, and a `runtime::spawn` task, which captures the value of the
+work that spawned it. The value must be per-thread on the embedder's side. A
+process-wide one cannot hold two calls' values at once. On web, a call into an
+actor's own wasm instance captures that instance's value, since the two share
+no memory.
+
 ## What is refused
 
 **No user code injected into generated output.** No startup hook running a

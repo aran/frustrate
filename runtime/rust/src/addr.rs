@@ -140,13 +140,16 @@ impl<A: 'static> Addr<A> {
     /// [`post`](Self::post), naming the [`Call`] waiting on the closure, if
     /// any, so a web trap in it can still answer that call.
     fn post_waited(&self, f: impl FnOnce(&mut A) + Send + 'static, waiter: Option<Waiter>) {
-        let job: Posted = Box::new(move || match crate::objects::root::<A>() {
-            // Safety: this closure runs as its own message on the executor
-            // that owns the root, so no other borrow of it is live (the
-            // argument `handle::actor_mut` rests on), and the borrow ends
-            // when `f` returns.
-            Some(root) => f(unsafe { &mut *root }),
-            None => drop(f),
+        let mut captured = crate::carry::Captured::here();
+        let job: Posted = Box::new(move || {
+            captured.run(|| match crate::objects::root::<A>() {
+                // Safety: this closure runs as its own message on the executor
+                // that owns the root, so no other borrow of it is live (the
+                // argument `handle::actor_mut` rests on), and the borrow ends
+                // when `f` returns.
+                Some(root) => f(unsafe { &mut *root }),
+                None => drop(f),
+            })
         });
         self.send(job, waiter);
     }

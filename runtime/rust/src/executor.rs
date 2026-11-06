@@ -238,7 +238,8 @@ impl Executor {
         // effect, not a value we join on (which would need a second future to
         // drive). A panic before this point is caught in `drain_one`.
         let for_complete = self.shared.clone();
-        let future = async move {
+        // Captured here, on the thread that made the call (carry.rs).
+        let future = crate::carry::Carried::new(async move {
             let outcome = body.await;
             // The answer-once gate. Every path that answers this call —
             // this completion, `drain_one`'s panic attribution, and
@@ -267,7 +268,7 @@ impl Executor {
                 // the entry already claimed) and leaves the thread alive.
                 outcome.reclaim();
             }
-        };
+        });
         let for_schedule = self.shared.clone();
         let owner = crate::uncaught::of_call(call_id);
         let schedule = move |runnable: Runnable| {
@@ -358,7 +359,7 @@ impl Executor {
                 .with(|inner| inner.ready.push_back((DETACHED, owner, runnable)));
             (for_schedule.schedule)();
         };
-        let (runnable, task) = async_task::spawn(body, schedule);
+        let (runnable, task) = async_task::spawn(crate::carry::Carried::new(body), schedule);
         // Enqueue first, then detach.
         //
         // `detach` is not `drop`. Dropping a `Task` *cancels*, and cancelling a

@@ -96,6 +96,9 @@ mod objects;
 /// `log::info!` in the crate graph becomes an item on it.
 pub mod logging;
 pub mod callback;
+/// An embedder's value, carried from where bridge work is queued to where it
+/// runs.
+pub mod carry;
 /// The panic listener: one process-global callback told about every Rust panic
 /// this runtime observes, so crash reporting can live on the Rust side.
 pub mod panic;
