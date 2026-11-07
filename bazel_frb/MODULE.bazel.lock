@@ -273,7 +273,7 @@
         "usagesDigest": "s6lZVWwoyg0GykvYYNM7fJOfBiNq3R9IVtymnVhyc5I=",
         "recordedInputs": [
           "REPO_MAPPING:rules_dart+,yaml.bzl yaml.bzl+",
-          "FILE:@@//pubspec.lock e7c58cde785f6611632e0cc792938398ba8bd94bfad7f61c609d0f8c868652ed",
+          "FILE:@@//pubspec.lock fe67061a7b122a49bafe8a22cf2e09cfe2b58ad6c2d473a78590cbf1c468f6db",
           "FILE:@@rules_dart+//dart/ext/pubspec.lock ae866f3a1d4ebad9a74f9b9efab33c74dfbf904ae0d69dfe94192029d4955188"
         ],
         "generatedRepoSpecs": {
@@ -1371,8 +1371,8 @@
             "repoRuleId": "@@rules_dart+//dart/pub:pub_lock_package.bzl%pub_lock_package",
             "attributes": {
               "package_name": "crypto",
-              "version": "3.0.7",
-              "sha256": "c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf",
+              "version": "3.0.8",
+              "sha256": "e3626ae6270383c9e3a549f34c9e4cd26c09ae6a9adaab2bf4737a00340efdc4",
               "base_url": "https://pub.dev",
               "hub_name": "dart_pub",
               "lock_packages": [
@@ -10952,7 +10952,7 @@
     },
     "@@rules_rust+//crate_universe:extensions.bzl%crate": {
       "general": {
-        "bzlTransitiveDigest": "nYC0qHLf7DBMpdoHMuuyaWfVuf83hJq1vvQ6l5ZREoE=",
+        "bzlTransitiveDigest": "7ntn+lQG+4kK2bWqsuG7SPgPQnEl5Iht5cIDNfnTYkQ=",
         "usagesDigest": "FxVMeNg+YRI3wRAZ/9Q8YPDkA5MKdFVIqGCr0Zf1pDU=",
         "recordedInputs": [
           "ENV:CARGO_BAZEL_DEBUG \\0",
@@ -12066,7 +12066,7 @@
     },
     "@@rules_rust+//crate_universe/private:internal_extensions.bzl%cu_nr": {
       "general": {
-        "bzlTransitiveDigest": "UYulFR+A2PZClwPeUKqWqUMiGiD6mH0aChum/GuNDmg=",
+        "bzlTransitiveDigest": "u1QIkDJh7OoACTpYmRbxsQFrIJYdjG/IP9dd64ZXNIM=",
         "usagesDigest": "/bGmDj4Nr856OGWTjcSOPnxG0gSTFtYse380wG1a98A=",
         "recordedInputs": [
           "REPO_MAPPING:apple_support+,bazel_skylib bazel_skylib+",
