@@ -13,19 +13,19 @@ bazel_dep(name = "rules_dart", version = "0.8.1")
 bazel_dep(name = "rules_rust", version = "0.75.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
-bazel_dep(name = "apple_support", version = "2.9.1")
-bazel_dep(name = "rules_apple", version = "5.2.0")
-bazel_dep(name = "rules_cc", version = "0.2.26")
-bazel_dep(name = "rules_swift", version = "4.1.2")
+bazel_dep(name = "apple_support", version = "2.12.0")
+bazel_dep(name = "rules_apple", version = "5.4.0")
+bazel_dep(name = "rules_cc", version = "0.2.28")
+bazel_dep(name = "rules_swift", version = "4.2.2")
 
 # Android bundling (rules_flutter's flutter_android_app + the NDK cc toolchain
 # that cross-compiles the Rust bridge to android_arm64).
-bazel_dep(name = "rules_android", version = "0.8.0")
+bazel_dep(name = "rules_android", version = "0.8.1")
 bazel_dep(name = "rules_android_ndk", version = "0.1.5")
-bazel_dep(name = "rules_kotlin", version = "2.4.20")
+bazel_dep(name = "rules_kotlin", version = "2.4.21")
 bazel_dep(name = "rules_java", version = "9.9.0")
 bazel_dep(name = "rules_go", version = "0.64.2")
-bazel_dep(name = "rules_jvm_external", version = "7.1")
+bazel_dep(name = "rules_jvm_external", version = "7.2")
 
 # Pinned to a commit, not a release: 0.1.5 hardcodes
 # `-Wl,-z,max-page-size=4096` in its toolchain, so every Android .so links
@@ -219,7 +219,7 @@ maven.install(
         "com.android.tools:desugar_jdk_libs_nio:2.1.5",
         "com.android.tools:desugar_jdk_libs_configuration_nio:2.1.5",
         "com.android.tools:desugar_jdk_libs_configuration:2.1.5",
-        "com.android.tools:r8:8.9.35",
+        "com.android.tools:r8:9.3.16",
         "org.bouncycastle:bcprov-jdk18on:1.77",
         "org.hamcrest:hamcrest-core:2.2",
         "org.robolectric:robolectric:4.14.1",
