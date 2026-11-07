@@ -88,19 +88,13 @@ without it is not broken — just simulator-only.
 matter here are `--web-header NAME=VALUE` and `--cross-origin-isolation`, which
 are how you reach the threaded build's COOP/COEP requirement from the loop.
 
-## Do not run `flutter pub get` by hand here
+## Changing dependencies
 
-`pubspec.lock` is **Bazel's** pin, not pub's scratch space: `MODULE.bazel` reads
-it with `flutter.pub(lock = "//:pubspec.lock")` to decide which hosted packages
-`@deps` is built from. The two path dependencies in `pubspec.yaml`
-(`demo_bridge`, `frustrate`) mean a bare `flutter pub get` would add three
-entries to that file — the two path deps and `ffi`.
-
-If you do dirty the lock, restore it (`git checkout -- pubspec.lock`). To change
-the app's *hosted* dependencies, edit `pubspec.yaml` and regenerate the lock
-with the SDK Bazel pins — `bazel run @rules_flutter//flutter:pub -- get` — then
-drop the path and `ffi` entries pub adds, since Bazel takes those from
-`BUILD.bazel` instead.
+`pubspec.lock` is Bazel's pin: `MODULE.bazel` reads it with
+`flutter_pub.from_lock`, mapping the path packages (`demo_bridge`, `frustrate`)
+to the targets that build them with `resolve`. After editing `pubspec.yaml`,
+regenerate the lock against the SDK Bazel pins with
+`bazel run @rules_flutter//flutter/pub -- get`.
 
 That same target is also how you get a `.dart_tool/package_config.json` for the
 **editor**: the Dart analyzer resolves `package:demo_bridge/…` from the source

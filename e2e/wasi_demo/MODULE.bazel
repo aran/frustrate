@@ -59,10 +59,13 @@ use_repo(crate, "wasi_crates")
 
 flutter = use_extension("@rules_flutter//flutter:extensions.bzl", "flutter")
 flutter.toolchain(flutter_version = "3.47.8")
-flutter.pub(
+use_repo(flutter, "flutter_toolchains", "flutter_web_sdk")
+
+flutter_pub = use_extension("@rules_flutter//flutter/pub:extensions.bzl", "pub")
+flutter_pub.from_lock(
     name = "deps",
     lock = "//:pubspec.lock",
 )
-use_repo(flutter, "deps", "dev_tool_deps", "flutter_toolchains", "flutter_web_sdk")
+use_repo(flutter_pub, "deps", "dev_tool_deps")
 
 register_toolchains("@flutter_toolchains//:all")

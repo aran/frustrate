@@ -1,4 +1,4 @@
-# Written by `bazel run @rules_flutter//flutter:pub -- get`, which regenerates
+# Written by `bazel run @rules_flutter//flutter/pub -- get`, which regenerates
 # each platform's ephemeral tooling as a side effect. That target exists to give
 # the *editor* a package_config.json; the Bazel build templates its own runners
 # and reads none of this. (ios/.gitignore already covers the iOS equivalent;
