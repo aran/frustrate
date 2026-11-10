@@ -51,6 +51,7 @@ builder), so running the builder is picked up by the next build with no
 # private API, so a rules_rust bump can move it again without a deprecation
 # cycle. If it disappears, the replacement is to build the toolchain repo the
 # way `rust/extensions.bzl` does.
+# buildifier: disable=bzl-visibility
 load("@rules_rust//rust/private:repositories.bzl", "rust_toolchain_tools_repository")
 
 _WASM_TRIPLE = "wasm32-unknown-unknown"

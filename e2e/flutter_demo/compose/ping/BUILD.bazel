@@ -3,10 +3,10 @@ load("@rules_flutter//flutter:defs.bzl", "flutter_plugin")
 
 frustrate_bridge_outputs(
     name = "codegen",
+    package_name = "compose_ping",
     srcs = ["src/api.rs"],
     crate_name = "compose_ping",
     module_paths = ["crate::api"],
-    package_name = "compose_ping",
     visibility = ["//compose:__pkg__"],
 )
 
@@ -30,7 +30,11 @@ flutter_plugin(
     name = "bindings",
     package_name = "compose_ping",
     srcs = [":codegen.dart"],
-    platforms = ["macos", "ios", "android"],
+    platforms = [
+        "macos",
+        "ios",
+        "android",
+    ],
     visibility = ["//compose:__pkg__"],
     deps = ["@frustrate//runtime/dart:frustrate"],
 )

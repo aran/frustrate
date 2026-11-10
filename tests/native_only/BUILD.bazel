@@ -25,9 +25,9 @@ load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_wasm_module")
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "native_only_fixture",
     srcs = ["src/api.rs"],
     crate_name = "native_only_fixture",
-    package_name = "native_only_fixture",
     module_paths = ["crate::api"],
 )
 

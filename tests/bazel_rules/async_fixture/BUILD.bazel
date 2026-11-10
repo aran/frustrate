@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_no_block_check", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
 
 # The dispatched half of frustrate_no_block_check's contract: two
 # `#[bridge(no_block)]` `async fn`s whose bodies are settled by *placement*, one
@@ -11,9 +11,9 @@ load("//bazel:defs.bzl", "frustrate_no_block_check", "frustrate_bridge_outputs")
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "async_claim_fixture",
     srcs = ["src/api.rs"],
     crate_name = "async_claim_fixture",
-    package_name = "async_claim_fixture",
     module_paths = ["crate::api"],
 )
 

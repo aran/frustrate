@@ -7,9 +7,9 @@ load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "native_red_optimized",
     srcs = ["src/api.rs"],
     crate_name = "native_red_optimized",
-    package_name = "native_red_optimized",
     module_paths = ["crate::api"],
 )
 

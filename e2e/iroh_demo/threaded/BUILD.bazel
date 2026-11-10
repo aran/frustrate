@@ -37,12 +37,12 @@ frustrate_wasm_module(
     bindgen = "@wasm_bindgen_crates//:wasm-bindgen-cli__wasm-bindgen",
     crate = "//bridge:iroh_rust",
     platform = "@frustrate//bazel:wasm32_threads",
-    tags = ["manual"],
     # The same waiver //:iroh_rust.wasm carries, for the same four unreachable
     # call sites; read the long note there rather than duplicating it. Threads
     # change nothing about it — it is a symbol-level fact about noq's default
     # `TimeSource`, not about which thread runs.
     std_check_allow = ["std::time::SystemTime::now"],
+    tags = ["manual"],
 )
 
 filegroup(
@@ -65,7 +65,6 @@ frustrate_web_glue(
 flutter_web_app(
     name = "app_web_threaded",
     package_name = "iroh_demo",
-    main = "//:lib/main.dart",
     defines = [
         "PRESET=minimal",
         "RELAY_URL=http://127.0.0.1:3342",
@@ -75,14 +74,15 @@ flutter_web_app(
         ":iroh_rust_bg_js",
         ":frustrate.js",
     ],
+    main = "//:lib/main.dart",
     tags = ["manual"],
     use_local_canvaskit = True,
     web_defines = csp_web_defines(),
     deps = [
         "//bridge:iroh_bridge",
-        "@frustrate//runtime/dart:frustrate",
         "@deps//:flutter",
         "@deps//:qr",
+        "@frustrate//runtime/dart:frustrate",
         "@rules_flutter//flutter:material_icons",
     ],
 )

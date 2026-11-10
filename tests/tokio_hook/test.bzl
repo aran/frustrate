@@ -3,7 +3,7 @@
 _FLAG = str(Label("//ext/tokio:tokio"))
 _TOKIO = str(Label("@tokio_test_crates//:tokio"))
 
-def _set_tokio_impl(settings, attr):
+def _set_tokio_impl(_settings, _attr):
     return {_FLAG: _TOKIO}
 
 _set_tokio = transition(

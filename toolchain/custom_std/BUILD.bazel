@@ -5,8 +5,8 @@ load("@rules_dart//dart:defs.bzl", "dart_binary", "dart_test")
 # dist/. It runs only when asked, never as part of a build.
 dart_binary(
     name = "build",
-    main = "tool/build.dart",
     srcs = ["tool/patch.dart"],
+    main = "tool/build.dart",
 )
 
 exports_files([
@@ -25,7 +25,7 @@ exports_files([
 dart_test(
     name = "patch_test",
     size = "small",
-    main = "tool/patch_test.dart",
     srcs = ["tool/patch.dart"],
+    main = "tool/patch_test.dart",
     deps = ["@pub_deps//:test"],
 )

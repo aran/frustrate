@@ -107,7 +107,10 @@ HotPatchIrInfo = provider(
     },
 )
 
-_SourcesInfo = provider(fields = ["sources"])
+_SourcesInfo = provider(
+    doc = "The source files in the main repository that a crate's Rust compilations read.",
+    fields = ["sources"],
+)
 
 def _main_repo_sources(action):
     return [f for f in action.inputs.to_list() if f.is_source and f.owner and f.owner.workspace_name == ""]

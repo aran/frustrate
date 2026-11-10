@@ -9,13 +9,19 @@ load("@frustrate_custom_std_threads//:staged.bzl", _THREADS_STD_STAGED = "STAGED
 load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_rust//rust:defs.bzl", "rust_common")
+
+# buildifier: disable=bzl-visibility
 load("@rules_rust//rust/private:rust.bzl", "RUSTC_ATTRS")
+
+# buildifier: disable=bzl-visibility
 load(
     "@rules_rust//rust/private:rustc.bzl",
     "collect_deps",
     "collect_inputs",
     "construct_arguments",
 )
+
+# buildifier: disable=bzl-visibility
 load(
     "@rules_rust//rust/private:utils.bzl",
     "determine_output_hash",

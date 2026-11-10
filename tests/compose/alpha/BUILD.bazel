@@ -3,10 +3,10 @@ load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "compose_alpha",
     srcs = ["src/api.rs"],
     crate_name = "compose_alpha",
     module_paths = ["crate::api"],
-    package_name = "compose_alpha",
     visibility = ["//tests:__subpackages__"],
 )
 
@@ -29,8 +29,8 @@ frustrate_bridge_library(
 
 dart_library(
     name = "bindings",
-    srcs = [":bridge.dart"],
     package_name = "compose_alpha",
+    srcs = [":bridge.dart"],
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",

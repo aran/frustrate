@@ -26,11 +26,15 @@ exports_files(["lib/fake_plan.dart"])
 web_test_inputs(
     name = "web_test_inputs",
     srcs = glob(["test/**/*.dart"]),
-    deps = [
-        "//runtime/dart:frustrate",
-        "@pub_deps//:ffi",
-        "@pub_deps//:test",
-    ],
+    # The pub run has no Bazel platform to pick by; the driver picks
+    # `frustrate`'s variant of `I64List` by the compiler it was asked for.
+    compiler_packages = {
+        "js": "//runtime/dart/i64_list/js:i64_list",
+        "wasm": "//runtime/dart/i64_list/typed:i64_list",
+    },
+    facilities = {
+        "test_api.wasm": "//tests/test_api:test_api_facilities.wasm",
+    },
     fixtures = {
         "//tests/bindgen:bindgen_api.wasm": "bindgen/bindgen_api.wasm",
         "//tests/bindgen:bindgen_api_bg_js": "bindgen/bindgen_api_bg.js",
@@ -42,21 +46,12 @@ web_test_inputs(
         "//tests/test_api:test_api.wasm": "test_api.wasm",
     },
     packages = [
-        "//tests/test_api:bindings",
         "//tests/bindgen:bindings",
         "//tests/compose/alpha:bindings",
         "//tests/compose/beta:bindings",
         "//tests/host_imports:bindings",
+        "//tests/test_api:bindings",
     ],
-    # The pub run has no Bazel platform to pick by; the driver picks
-    # `frustrate`'s variant of `I64List` by the compiler it was asked for.
-    compiler_packages = {
-        "js": "//runtime/dart/i64_list/js:i64_list",
-        "wasm": "//runtime/dart/i64_list/typed:i64_list",
-    },
-    facilities = {
-        "test_api.wasm": "//tests/test_api:test_api_facilities.wasm",
-    },
     release = ["test_api.wasm"],
     threaded = {
         "test_api.wasm": "//tests/test_api:test_api_threaded.wasm",
@@ -64,14 +59,19 @@ web_test_inputs(
         "bindgen/bindgen_api_bg.js": "//tests/bindgen/threaded:bindgen_api_bg_js",
         "host_imports/host_imports_api.wasm": "//tests/host_imports/threaded:host_imports_api.wasm",
     },
+    deps = [
+        "//runtime/dart:frustrate",
+        "@pub_deps//:ffi",
+        "@pub_deps//:test",
+    ],
 )
 
 dart_binary(
     name = "web_test",
+    srcs = ["tool/web_inputs.dart"],
     args = ["--inputs=$(rootpath :web_test_inputs)"],
     data = [":web_test_inputs"],
     main = "tool/web_test.dart",
-    srcs = ["tool/web_inputs.dart"],
 )
 
 # The native (dylib/FFI) benchmark. A `dart_binary` for the reason that makes
@@ -95,12 +95,12 @@ dart_binary(
 # numbers this produces.
 dart_binary(
     name = "native_bench",
-    main = "tool/native_bench.dart",
     # `--typing`: the typing-load scenario, shared with the web page.
     srcs = [
         "bench/typing_config.dart",
         "bench/typing_load.dart",
     ],
+    main = "tool/native_bench.dart",
     # The harness (Cell, the calibrate/warmup/measure loop, the table renderer)
     # is //tools/bench_harness, shared verbatim with the in-page web bench.
     # A dep rather than a `srcs` entry, because a `srcs` entry cannot cross a
@@ -140,15 +140,15 @@ dart_binary(
 # `:web_test_inputs`.
 dart_binary(
     name = "web_bench",
-    args = ["--inputs=$(rootpath :web_test_inputs)"],
-    data = [":web_test_inputs"],
-    main = "tool/web_bench.dart",
     srcs = [
         "bench/typing_config.dart",
         "bench/typing_load.dart",
         "bench/web_bench_main.dart",
         "tool/web_inputs.dart",
     ],
+    args = ["--inputs=$(rootpath :web_test_inputs)"],
+    data = [":web_test_inputs"],
+    main = "tool/web_bench.dart",
     deps = [
         "//runtime/dart:frustrate",
         "//tests/test_api:bindings",
@@ -161,28 +161,28 @@ dart_binary(
 # file under dart2wasm and, with `-c dart2js`, dart2js.
 dart_test(
     name = "smoke_test",
-    main = "test/smoke_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/smoke_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
 
 dart_test(
     name = "bridge_test",
-    main = "test/bridge_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/bridge_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -191,14 +191,14 @@ dart_test(
 # same file under dart2wasm and, with `-c dart2js`, the JS-number arm.
 dart_test(
     name = "i64_list_test",
-    main = "test/i64_list_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/i64_list_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -212,11 +212,11 @@ dart_test(
 # (`bazel run :web_test`) for the reason stated there.
 dart_test(
     name = "init_contract_test",
-    main = "test/init_contract_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/init_contract_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -229,14 +229,14 @@ dart_test(
 # would be asserting the check against a number this test made up.
 dart_test(
     name = "schema_hash_test",
-    main = "test/schema_hash_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/schema_hash_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -249,14 +249,14 @@ dart_test(
 # a native-passes/web-failed divergence, so the native run is the control.
 dart_test(
     name = "sink_reentrancy_test",
-    main = "test/sink_reentrancy_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/sink_reentrancy_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -266,14 +266,14 @@ dart_test(
 # caller cannot tell the difference, on every fixture.
 dart_test(
     name = "actor_shutdown_drain_test",
-    main = "test/actor_shutdown_drain_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/actor_shutdown_drain_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -290,14 +290,14 @@ dart_test(
 # turn — browser-only coverage of the pump's microtask drain.
 dart_test(
     name = "deferred_test",
-    main = "test/deferred_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/deferred_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -308,14 +308,14 @@ dart_test(
 # pending. Runs on web via web_test.
 dart_test(
     name = "addr_test",
-    main = "test/addr_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/addr_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -326,14 +326,14 @@ dart_test(
 # and leaked the task would pass the second and fail the first.
 dart_test(
     name = "cancel_async_test",
-    main = "test/cancel_async_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/cancel_async_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -344,28 +344,28 @@ dart_test(
 # web the future lives in that actor's own worker instance.
 dart_test(
     name = "cancel_deferred_test",
-    main = "test/cancel_deferred_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/cancel_deferred_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
 
 dart_test(
     name = "actor_pool_test",
-    main = "test/actor_pool_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/actor_pool_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -378,8 +378,8 @@ dart_test(
     name = "request_block_lifetime_test",
     main = "test/request_block_lifetime_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:ffi",
         "@pub_deps//:test",
     ],
@@ -391,8 +391,8 @@ dart_test(
     name = "request_no_staging_copy_test",
     main = "test/request_no_staging_copy_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:ffi",
         "@pub_deps//:test",
     ],
@@ -404,11 +404,11 @@ dart_test(
 # through the JS glue and has no Dart-visible pointer at all.
 dart_test(
     name = "request_pointer_identity_test",
-    main = "test/request_pointer_identity_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/request_pointer_identity_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:ffi",
         "@pub_deps//:test",
     ],
@@ -421,14 +421,14 @@ dart_test(
 # rather than fail an expectation.
 dart_test(
     name = "locked_sync_test",
-    main = "test/locked_sync_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/locked_sync_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -437,11 +437,11 @@ dart_test(
 # surface omits by construction.
 dart_test(
     name = "native_blocking_test",
-    main = "test/native_blocking_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/native_blocking_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -453,11 +453,11 @@ dart_test(
 # thread), so there is no web arm.
 dart_test(
     name = "external_runtime_test",
-    main = "test/external_runtime_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/external_runtime_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -470,11 +470,11 @@ dart_test(
 # (web has no isolates and no threads to migrate between).
 dart_test(
     name = "resident_test",
-    main = "test/resident_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/resident_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -485,11 +485,11 @@ dart_test(
 # aborts the whole runner and must not be able to mask sibling suites.
 dart_test(
     name = "isolate_death_test",
-    main = "test/isolate_death_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/isolate_death_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -506,11 +506,11 @@ dart_test(
 dart_test(
     name = "callback_liveness_test",
     timeout = "short",
-    main = "test/callback_liveness_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/callback_liveness_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -533,11 +533,11 @@ dart_test(
 dart_test(
     name = "callback_async_liveness_test",
     timeout = "short",
-    main = "test/callback_async_liveness_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/callback_async_liveness_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -552,8 +552,8 @@ dart_test(
     name = "stream_shutdown_test",
     main = "test/stream_shutdown_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -564,11 +564,11 @@ dart_test(
 # notice — so it is pinned separately from gc_finalizer_test.
 dart_test(
     name = "failed_call_channels_test",
-    main = "test/failed_call_channels_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/failed_call_channels_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -582,11 +582,11 @@ dart_test(
 # in this suite and must not destabilize suites that are deterministic.
 dart_test(
     name = "gc_finalizer_test",
-    main = "test/gc_finalizer_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/gc_finalizer_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -602,25 +602,25 @@ dart_test(
 # natively — is the thing most worth pinning on each.
 dart_test(
     name = "logging_test",
-    main = "test/logging_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/logging_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
 
 dart_test(
     name = "actor_reaper_test",
-    main = "test/actor_reaper_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/actor_reaper_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -632,8 +632,8 @@ dart_test(
     name = "multi_isolate_test",
     main = "test/multi_isolate_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -651,28 +651,28 @@ dart_test(
 # web_test; the round-trip half initializes the bridge.
 dart_test(
     name = "utf8_equivalence_test",
-    main = "test/utf8_equivalence_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/utf8_equivalence_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
 
 dart_test(
     name = "string_encoder_hook_test",
-    main = "test/string_encoder_hook_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/string_encoder_hook_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -701,8 +701,8 @@ dart_test(
     name = "corrupt_decode_test",
     main = "test/corrupt_decode_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -715,14 +715,14 @@ dart_test(
 # traded away for speed needs a test that says so.
 dart_test(
     name = "trap_attribution_test",
-    main = "test/trap_attribution_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/trap_attribution_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -734,14 +734,14 @@ dart_test(
 # //runtime/rust:declared_pool_width_test, which gets its own process.
 dart_test(
     name = "pool_width_test",
-    main = "test/pool_width_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/pool_width_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -756,14 +756,14 @@ dart_test(
 # (test/call_entry_count_test.dart), which is browser-only.
 dart_test(
     name = "response_slab_test",
-    main = "test/response_slab_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/response_slab_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -775,14 +775,14 @@ dart_test(
 # enumeration is //runtime/dart:handle_bridge_identity_test.
 dart_test(
     name = "reset_outstanding_handles_test",
-    main = "test/reset_outstanding_handles_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/reset_outstanding_handles_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -834,8 +834,8 @@ dart_test(
     name = "fake_harness_test",
     main = "test/fake_harness_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -847,28 +847,28 @@ dart_test(
 # async failure arrives with zero frames.
 dart_test(
     name = "uncaught_error_test",
-    main = "test/uncaught_error_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/uncaught_error_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
 
 dart_test(
     name = "intercept_every_kind_test",
-    main = "test/intercept_every_kind_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/intercept_every_kind_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -880,28 +880,28 @@ dart_test(
 # has no web counterpart and lives in isolate_death_test.
 dart_test(
     name = "channel_handle_test",
-    main = "test/channel_handle_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/channel_handle_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
 
 dart_test(
     name = "consume_test",
-    main = "test/consume_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/consume_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -911,14 +911,14 @@ dart_test(
 # nothing may be asserted after it in the same page.
 dart_test(
     name = "locked_container_alias_test",
-    main = "test/locked_container_alias_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/locked_container_alias_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -927,14 +927,14 @@ dart_test(
 # borrows beside them, and the refusals that name an element.
 dart_test(
     name = "nested_borrow_test",
-    main = "test/nested_borrow_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/nested_borrow_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -944,14 +944,14 @@ dart_test(
 # consume shape that reaches Rust's refusal rather than Dart's.
 dart_test(
     name = "consume_contention_test",
-    main = "test/consume_contention_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/consume_contention_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -969,29 +969,29 @@ dart_test(
 # to. Also rides the browser runner (`bazel run :web_test`).
 dart_test(
     name = "uncaught_panic_test",
-    main = "test/uncaught_panic_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
         "test/zone_heard.dart",
     ],
+    main = "test/uncaught_panic_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
 
 dart_test(
     name = "spawn_detached_test",
-    main = "test/spawn_detached_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/spawn_detached_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -1003,14 +1003,14 @@ dart_test(
 # clock, so a sleep that blocked would freeze the page rather than fail.
 dart_test(
     name = "timer_test",
-    main = "test/timer_test.dart",
     srcs = [
         "test/init_native.dart",
         "test/init_web.dart",
     ],
+    main = "test/timer_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -1020,22 +1020,22 @@ dart_test(
 # ordinary build and checks that a drain is refused there.
 dart_test(
     name = "manual_scheduler_test",
-    main = "test/manual_scheduler_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/manual_scheduler_test.dart",
     deps = [
-        "//tests/test_api:bindings_manual",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings_manual",
         "@pub_deps//:test",
     ],
 )
 
 dart_test(
     name = "manual_scheduler_absent_test",
-    main = "test/manual_scheduler_absent_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/manual_scheduler_absent_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -1045,22 +1045,22 @@ dart_test(
 # build and checks that the barrier is refused there.
 dart_test(
     name = "idle_barrier_test",
-    main = "test/idle_barrier_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/idle_barrier_test.dart",
     deps = [
-        "//tests/test_api:bindings_idle",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings_idle",
         "@pub_deps//:test",
     ],
 )
 
 dart_test(
     name = "idle_barrier_absent_test",
-    main = "test/idle_barrier_absent_test.dart",
     srcs = ["test/init_native.dart"],
+    main = "test/idle_barrier_absent_test.dart",
     deps = [
-        "//tests/test_api:bindings",
         "//runtime/dart:frustrate",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )

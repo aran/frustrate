@@ -29,7 +29,16 @@ rust_test(
 # once, in the exec configuration.
 rust_binary(
     name = "wasm_block_check",
-    srcs = ["budget.rs", "io.rs", "ir.rs", "libc.rs", "main.rs", "provenance.rs", "silences.rs", "symbol.rs"],
+    srcs = [
+        "budget.rs",
+        "io.rs",
+        "ir.rs",
+        "libc.rs",
+        "main.rs",
+        "provenance.rs",
+        "silences.rs",
+        "symbol.rs",
+    ],
     edition = "2021",
     rustc_flags = ["-Dwarnings"],
     visibility = ["//visibility:public"],

@@ -10,17 +10,17 @@ load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs",
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "host_imports_api",
     srcs = ["src/api.rs"],
     crate_name = "host_imports_api",
     module_paths = ["crate::api"],
-    package_name = "host_imports_api",
     visibility = ["//tests:__subpackages__"],
 )
 
 dart_library(
     name = "bindings",
-    srcs = [":bridge.dart"],
     package_name = "host_imports_api",
+    srcs = [":bridge.dart"],
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",
@@ -64,7 +64,7 @@ run_binary(
     outs = ["self_supplied.json"],
     args = [
         "--print-self-supplied",
-        "$(location self_supplied.json)",
+        "$(execpath self_supplied.json)",
     ],
     tool = "//bazel/wasm_import_check",
     visibility = ["//tests:__subpackages__"],

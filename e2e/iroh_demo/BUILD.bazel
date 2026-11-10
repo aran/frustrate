@@ -128,9 +128,9 @@ flutter_ios_app(
 # in every compilation mode. That is what gives this app INTERNET in `-c opt`.
 flutter_android_app(
     name = "app_android",
+    package_name = "dev.frustrate.irohdemo",
     app_name = "Tin Can",
     application = ":app_flutter",
-    package_name = "dev.frustrate.irohdemo",
 )
 
 # Linux (GTK). `flutter_linux_app` templates the runner, so there is no
@@ -169,12 +169,6 @@ frustrate_wasm_module(
     # version is a property of *this* crate graph, not of frustrate.
     bindgen = "@wasm_bindgen_crates//:wasm-bindgen-cli__wasm-bindgen",
     crate = "//bridge:iroh_rust",
-    # The wasm-opt pass, over the post-passed module. This is the one artifact
-    # in the repo that crosses a network to reach a user, so it is the one that
-    # earns the fetch — and it is also the only place the post-pass and the
-    # optimizer meet, which is the pairing frustrate's own fixtures cannot
-    # cover (they have no wasm-bindgen in their graph).
-    wasm_opt = "@binaryen//:wasm-opt",
     # Waived after reading every call site, not to quiet the build. QUIC's
     # `ServerConfig` defaults its `TimeSource` to `noq::StdSystemTime`
     # (noq-proto config/mod.rs:258, :679), whose `now()` is
@@ -210,6 +204,12 @@ frustrate_wasm_module(
     # Not `std_check = "off"`: println! and eprintln! stay guarded, and those
     # are the ones this app could reach in its own code.
     std_check_allow = ["std::time::SystemTime::now"],
+    # The wasm-opt pass, over the post-passed module. This is the one artifact
+    # in the repo that crosses a network to reach a user, so it is the one that
+    # earns the fetch — and it is also the only place the post-pass and the
+    # optimizer meet, which is the pairing frustrate's own fixtures cannot
+    # cover (they have no wasm-bindgen in their graph).
+    wasm_opt = "@binaryen//:wasm-opt",
 )
 
 # wasm-bindgen's generated JS: the ~131 shims that satisfy the one import
@@ -248,7 +248,7 @@ genrule(
     srcs = [":iroh_rust_bg_js"],
     outs = ["bindgen_handshake.ok"],
     cmd = "grep -Eq '^export (function |const |let |var )?__wbg_set_wasm' " +
-          "$(location :iroh_rust_bg_js) || { " +
+          "$(execpath :iroh_rust_bg_js) || { " +
           "echo 'this wasm-bindgen no longer exports __wbg_set_wasm from its " +
           "--target bundler output; frustrate.js bindgenNamespace and " +
           "runtime_web.dart _start both name it' >&2; exit 1; }; " +
@@ -280,22 +280,22 @@ frustrate_web_glue(
 flutter_web_app(
     name = "app_web",
     package_name = "iroh_demo",
-    main = "lib/main.dart",
     defines = ["PRESET=n0"],
     extra_web_assets = [
         ":iroh_rust.wasm",
         ":iroh_rust_bg_js",
         ":frustrate.js",
     ],
+    main = "lib/main.dart",
     # The index.html CSP allows scripts from 'self' only: the renderer must
     # load from the bundled canvaskit/, not the gstatic CDN.
     use_local_canvaskit = True,
     web_defines = csp_web_defines(),
     deps = [
         "//bridge:iroh_bridge",
-        "@frustrate//runtime/dart:frustrate",
         "@deps//:flutter",
         "@deps//:qr",
+        "@frustrate//runtime/dart:frustrate",
         "@rules_flutter//flutter:material_icons",
     ],
 )
@@ -321,7 +321,6 @@ flutter_web_app(
 flutter_web_app(
     name = "app_web_hermetic",
     package_name = "iroh_demo",
-    main = "lib/main.dart",
     defines = [
         "PRESET=minimal",
         "RELAY_URL=http://127.0.0.1:3341",
@@ -331,13 +330,14 @@ flutter_web_app(
         ":iroh_rust_bg_js",
         ":frustrate.js",
     ],
+    main = "lib/main.dart",
     use_local_canvaskit = True,
     web_defines = csp_web_defines(),
     deps = [
         "//bridge:iroh_bridge",
-        "@frustrate//runtime/dart:frustrate",
         "@deps//:flutter",
         "@deps//:qr",
+        "@frustrate//runtime/dart:frustrate",
         "@rules_flutter//flutter:material_icons",
     ],
 )

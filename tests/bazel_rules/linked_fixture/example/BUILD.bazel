@@ -2,10 +2,10 @@ load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "linked_example",
     srcs = ["src/api.rs"],
     crate_name = "linked_example",
     module_paths = ["crate::api"],
-    package_name = "linked_example",
     visibility = ["//tests/bazel_rules:__subpackages__"],
 )
 

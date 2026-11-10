@@ -14,8 +14,8 @@ exports_files(["lib/src/js/frustrate.js"])
 # The default branch is the VM, and any platform without a web compiler.
 dart_library(
     name = "frustrate",
-    srcs = glob(["lib/**/*.dart"]),
     package_name = "frustrate",
+    srcs = glob(["lib/**/*.dart"]),
     language_version = "3.13",
     visibility = ["//visibility:public"],
     deps = ["@pub_deps//:ffi"] + select({

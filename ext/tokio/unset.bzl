@@ -1,6 +1,6 @@
 """What `//ext/tokio:tokio` resolves to until a consumer sets it."""
 
-def _unset_impl(ctx):
+def _unset_impl(_ctx):
     fail(
         "@frustrate//ext/tokio:frustrate_tokio is compiled against your own tokio, and " +
         "--@frustrate//ext/tokio:tokio is not set.\n" +

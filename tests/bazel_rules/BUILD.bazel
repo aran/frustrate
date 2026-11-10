@@ -32,9 +32,9 @@ load(":mispaired_bridge_test.bzl", "mispaired_bridge_test")
 # filegroups.
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "rule_test_fixture",
     srcs = ["src/api.rs"],
     crate_name = "rule_test_fixture",
-    package_name = "rule_test_fixture",
     module_paths = ["crate::api"],
 )
 
@@ -142,8 +142,8 @@ genrule(
     ],
     outs = ["wasm_opt_shrinks_the_module.txt"],
     cmd = """
-raw=$$(wc -c < $(location :fixture.wasm))
-opt=$$(wc -c < $(location :fixture_opt.wasm))
+raw=$$(wc -c < $(execpath :fixture.wasm))
+opt=$$(wc -c < $(execpath :fixture_opt.wasm))
 if [ "$$opt" -ge "$$raw" ] || [ $$(( (raw - opt) * 100 / raw )) -lt 5 ]; then
   echo "wasm-opt did not shrink the module: $$raw B raw, $$opt B optimized." >&2
   echo "Either the pass stopped running (check the wasm_opt attribute on" >&2
@@ -162,7 +162,6 @@ build_test(
         ":wasm_opt_shrinks_the_module",
     ],
 )
-
 
 # frustrate_bridge_outputs contract: the FrustrateCodegen action runs over
 # the bridge source and its declared Rust-glue, Dart-bindings and interface-IR
@@ -520,51 +519,51 @@ build_test(
 
 rust_library(
     name = "flag_probe_dep_present",
-    # Reached only through the wasm module below: built bare by a
-    # `bazel test //...` wildcard, the fence would be judging a
-    # configuration it says nothing about.
-    tags = ["manual"],
     srcs = ["probe/platform_flag_probe.rs"],
     crate_name = "platform_flag_probe",
     crate_root = "probe/platform_flag_probe.rs",
     edition = "2021",
     rustc_flags = ["--cfg=expect_flag"],
-)
-
-rust_library(
-    name = "flag_probe_dep_absent",
     # Reached only through the wasm module below: built bare by a
     # `bazel test //...` wildcard, the fence would be judging a
     # configuration it says nothing about.
     tags = ["manual"],
+)
+
+rust_library(
+    name = "flag_probe_dep_absent",
     srcs = ["probe/platform_flag_probe.rs"],
     crate_name = "platform_flag_probe",
     crate_root = "probe/platform_flag_probe.rs",
     edition = "2021",
     rustc_flags = ["--cfg=expect_no_flag"],
-)
-
-rust_shared_library(
-    name = "flag_probe_present_shared",
     # Reached only through the wasm module below: built bare by a
     # `bazel test //...` wildcard, the fence would be judging a
     # configuration it says nothing about.
     tags = ["manual"],
+)
+
+rust_shared_library(
+    name = "flag_probe_present_shared",
     srcs = ["probe/platform_flag_root.rs"],
     crate_root = "probe/platform_flag_root.rs",
     edition = "2021",
+    # Reached only through the wasm module below: built bare by a
+    # `bazel test //...` wildcard, the fence would be judging a
+    # configuration it says nothing about.
+    tags = ["manual"],
     deps = [":flag_probe_dep_present"],
 )
 
 rust_shared_library(
     name = "flag_probe_absent_shared",
+    srcs = ["probe/platform_flag_root.rs"],
+    crate_root = "probe/platform_flag_root.rs",
+    edition = "2021",
     # Reached only through the wasm module below: built bare by a
     # `bazel test //...` wildcard, the fence would be judging a
     # configuration it says nothing about.
     tags = ["manual"],
-    srcs = ["probe/platform_flag_root.rs"],
-    crate_root = "probe/platform_flag_root.rs",
-    edition = "2021",
     deps = [":flag_probe_dep_absent"],
 )
 

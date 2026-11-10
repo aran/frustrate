@@ -5,9 +5,9 @@ load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "silences_stale",
     srcs = ["src/api.rs"],
     crate_name = "silences_stale",
-    package_name = "silences_stale",
     module_paths = ["crate::api"],
 )
 
@@ -46,11 +46,11 @@ filegroup(
 
 filegroup(
     name = "applied",
+    testonly = True,
     srcs = [
         ":stale_check.macos_aarch64",
         ":stale_check.wasi",
     ],
     output_group = "silences",
-    testonly = True,
     visibility = ["//tests/bazel_rules/silences:__pkg__"],
 )

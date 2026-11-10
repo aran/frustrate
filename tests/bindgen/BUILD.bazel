@@ -18,17 +18,17 @@ exports_files([
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "bindgen_api",
     srcs = ["src/api.rs"],
     crate_name = "bindgen_api",
     module_paths = ["crate::api"],
-    package_name = "bindgen_api",
     visibility = ["//tests:__subpackages__"],
 )
 
 dart_library(
     name = "bindings",
-    srcs = [":bridge.dart"],
     package_name = "bindgen_api",
+    srcs = [":bridge.dart"],
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",

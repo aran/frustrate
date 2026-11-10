@@ -7,9 +7,9 @@ rust_binary(
     name = "wasm_import_check",
     srcs = ["main.rs"],
     edition = "2021",
-    deps = ["@frustrate_crates//:wasmparser"],
     rustc_flags = ["-Dwarnings"],
     visibility = ["//visibility:public"],
+    deps = ["@frustrate_crates//:wasmparser"],
 )
 
 rust_test(

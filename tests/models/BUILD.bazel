@@ -9,8 +9,8 @@ load("//bazel:defs.bzl", "frustrate_library")
 dart_test(
     name = "shared_through_fake_test",
     size = "small",
-    main = "test/shared_through_fake_test.dart",
     code_assets = ["//tests/models/a:asset"],
+    main = "test/shared_through_fake_test.dart",
     deps = [
         "//runtime/dart:frustrate",
         "//tests/models/a:bindings",
@@ -23,8 +23,8 @@ dart_test(
 dart_test(
     name = "shared_into_b_test",
     size = "small",
-    main = "test/shared_into_b_test.dart",
     code_assets = ["//tests/models/b:asset"],
+    main = "test/shared_into_b_test.dart",
     deps = [
         "//runtime/dart:frustrate",
         "//tests/models/a:bindings",
@@ -46,11 +46,11 @@ frustrate_library(
 dart_test(
     name = "shared_composed_test",
     size = "small",
-    main = "test/shared_composed_test.dart",
     code_assets = [
         ":composed.models_a_lib",
         ":composed.models_b_lib",
     ],
+    main = "test/shared_composed_test.dart",
     deps = [
         "//runtime/dart:frustrate",
         "//tests/models/a:bindings",

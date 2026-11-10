@@ -61,6 +61,16 @@ rust_library(
         "//conditions:default": [],
     }),
     edition = "2021",
+    link_deps = select({
+        "//bazel:hot_patch_apple": [":hot_patch_link_macho"],
+        "//bazel:hot_patch_ios": [":hot_patch_link_macho"],
+        "//bazel:hot_patch_android": [":hot_patch_link_elf"],
+        "//bazel:hot_patch_linux": [":hot_patch_link_elf_rust_lld"],
+        "//conditions:default": [],
+    }) + select({
+        "@platforms//os:linux": [":unwinder"],
+        "//conditions:default": [],
+    }),
     proc_macro_deps = ["//macros:frustrate_macros"],
     # Enqueue-only Scheduler for a host that drives its own drains
     # (//bazel:manual_scheduler, defaults off). On the crate's own rustc_flags
@@ -81,16 +91,6 @@ rust_library(
         "@frustrate_crates//:futures-sink",
         "@frustrate_crates//:once_cell",
     ],
-    link_deps = select({
-        "//bazel:hot_patch_apple": [":hot_patch_link_macho"],
-        "//bazel:hot_patch_ios": [":hot_patch_link_macho"],
-        "//bazel:hot_patch_android": [":hot_patch_link_elf"],
-        "//bazel:hot_patch_linux": [":hot_patch_link_elf_rust_lld"],
-        "//conditions:default": [],
-    }) + select({
-        "@platforms//os:linux": [":unwinder"],
-        "//conditions:default": [],
-    }),
 )
 
 # The unwinder a Linux link takes — a build setting, like `log` below, because

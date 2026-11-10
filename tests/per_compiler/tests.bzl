@@ -31,7 +31,7 @@ variant_test = analysistest.make(
 
 _TRACKING = "@rules_dart//dart:track_creation_locations"
 
-_Roots = provider(
+_RootsInfo = provider(
     doc = "Output root of each file of a target, per Dart build configuration.",
     fields = ["by_compiler"],
 )
@@ -57,7 +57,7 @@ _compilers = transition(
 )
 
 def _roots_impl(ctx):
-    return [_Roots(by_compiler = {
+    return [_RootsInfo(by_compiler = {
         compiler: {f.short_path: f.root.path for f in target[DefaultInfo].files.to_list()}
         for compiler, target in ctx.split_attr.target.items()
     })]
@@ -71,7 +71,7 @@ _roots = rule(
 
 def _built_once_test_impl(ctx):
     env = analysistest.begin(ctx)
-    by_compiler = analysistest.target_under_test(env)[_Roots].by_compiler
+    by_compiler = analysistest.target_under_test(env)[_RootsInfo].by_compiler
     asserts.true(env, by_compiler["none"], "the target has no files")
     for compiler, roots in by_compiler.items():
         asserts.equals(

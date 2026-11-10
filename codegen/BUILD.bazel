@@ -7,6 +7,7 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     edition = "2021",
+    visibility = ["//visibility:public"],
     deps = [
         "@frustrate_crates//:anyhow",
         "@frustrate_crates//:heck",
@@ -15,18 +16,17 @@ rust_library(
         "@frustrate_crates//:serde_json",
         "@frustrate_crates//:syn",
     ],
-    visibility = ["//visibility:public"],
 )
 
 rust_binary(
     name = "frustrate_codegen_bin",
     srcs = ["src/main.rs"],
     edition = "2021",
+    visibility = ["//visibility:public"],
     deps = [
         ":frustrate_codegen",
         "@frustrate_crates//:anyhow",
     ],
-    visibility = ["//visibility:public"],
 )
 
 rust_test(

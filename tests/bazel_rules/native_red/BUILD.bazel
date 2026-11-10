@@ -33,8 +33,11 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 # macOS hosts only: external's macOS build compiles its C with Xcode.
 dart_test(
     name = "native_red_test",
+    # Each test scans a whole program's IR.
+    timeout = "long",
     data = [
         "//bazel/wasm_block_check",
+        "//tests/bazel_rules/linked_fixture:artifacts",
         "//tests/bazel_rules/native_red/asm:artifacts",
         "//tests/bazel_rules/native_red/callback:artifacts",
         "//tests/bazel_rules/native_red/dirty:artifacts",
@@ -44,13 +47,10 @@ dart_test(
         "//tests/bazel_rules/native_red/marked:artifacts",
         "//tests/bazel_rules/native_red/memchr:artifacts",
         "//tests/bazel_rules/native_red/optimized:artifacts",
-        "//tests/bazel_rules/linked_fixture:artifacts",
         "//tests/bazel_rules/native_red/silenced:artifacts",
         "//tests/bazel_rules/thread_local_fixture:artifacts",
     ],
     main = "native_red_test.dart",
-    # Each test scans a whole program's IR.
-    timeout = "long",
     target_compatible_with = select({
         "@platforms//os:macos": [],
         "//conditions:default": ["@platforms//:incompatible"],

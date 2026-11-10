@@ -3,9 +3,9 @@ load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "silences_applied",
     srcs = ["src/api.rs"],
     crate_name = "silences_applied",
-    package_name = "silences_applied",
     module_paths = ["crate::api"],
 )
 

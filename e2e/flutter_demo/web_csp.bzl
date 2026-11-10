@@ -46,8 +46,7 @@ FRUSTRATE_CSP_MARKER = "<!-- $FRUSTRATE_CSP -->"
 FRUSTRATE_STRICT_CSP = "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:;"
 
 def strict_csp_index_html(name, src = "web/index.html", base_href = "/", **kwargs):
-    """Produces the bundled index.html: the source page with the CSP injected,
-    except in a `-c dbg` build.
+    """Produces the bundled index.html with the CSP injected, except in a `-c dbg` build.
 
     Also substitutes `$FLUTTER_BASE_HREF`, which `flutter_web_app` would have
     done via flutter_web_index_html_subst — composing flutter_web_bundle by

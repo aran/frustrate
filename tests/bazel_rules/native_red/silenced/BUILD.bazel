@@ -8,9 +8,9 @@ load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "native_red_silenced",
     srcs = ["src/api.rs"],
     crate_name = "native_red_silenced",
-    package_name = "native_red_silenced",
     module_paths = ["crate::api"],
 )
 
@@ -28,8 +28,8 @@ rust_shared_library(
     ],
     crate_name = "native_red_silenced",
     edition = "2021",
-    proc_macro_deps = ["//macros:frustrate_macros"],
     link_deps = [":step"],
+    proc_macro_deps = ["//macros:frustrate_macros"],
     deps = ["//runtime/rust:frustrate"],
 )
 

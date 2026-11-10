@@ -11,9 +11,9 @@ load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "thread_local_claim_fixture",
     srcs = ["src/api.rs"],
     crate_name = "thread_local_claim_fixture",
-    package_name = "thread_local_claim_fixture",
     module_paths = ["crate::api"],
 )
 

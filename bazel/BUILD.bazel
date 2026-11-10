@@ -356,7 +356,11 @@ platform(
         ("android", "x86_64", []),
         # rules_rust tells an iOS device's toolchain from a simulator's by
         # this constraint.
-        ("ios", "aarch64", ["@apple_support//constraints:device"]),
+        (
+            "ios",
+            "aarch64",
+            ["@apple_support//constraints:device"],
+        ),
         ("linux", "aarch64", []),
         ("linux", "x86_64", []),
         ("macos", "aarch64", []),

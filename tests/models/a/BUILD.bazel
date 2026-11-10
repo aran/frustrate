@@ -3,7 +3,10 @@ load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs",
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "models_a",
+    # Pairs with `module_paths`, by position.
     srcs = [
+        # do not sort
         "//tests/models/shared:src/model.rs",
         "src/api.rs",
     ],
@@ -12,7 +15,6 @@ frustrate_bridge_outputs(
         "models_shared::model",
         "crate::api",
     ],
-    package_name = "models_a",
     visibility = ["//tests/models:__subpackages__"],
 )
 
@@ -41,8 +43,8 @@ frustrate_code_asset(
 
 dart_library(
     name = "bindings",
-    srcs = [":bridge.dart"],
     package_name = "models_a",
+    srcs = [":bridge.dart"],
     visibility = ["//tests/models:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",

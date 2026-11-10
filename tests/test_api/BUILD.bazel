@@ -15,6 +15,7 @@ exports_files([
 
 frustrate_bridge_outputs(
     name = "bridge",
+    package_name = "frustrate_integration",
     srcs = [
         "src/api.rs",
         "src/cancel_api.rs",
@@ -26,7 +27,6 @@ frustrate_bridge_outputs(
         "crate::cancel_api",
         "crate::shapes",
     ],
-    package_name = "frustrate_integration",
     visibility = ["//tests:__subpackages__"],
 )
 
@@ -34,8 +34,6 @@ frustrate_bridge_outputs(
 # and its web build is single-threaded.
 frustrate_no_block_check(
     name = "test_api_block_check",
-    bridge = ":bridge",
-    crate = ":test_api_shared",
     # A probe logs through the logger the logging fixture installs, and a
     # callback probe drops a waker an awaiting task left in the invocation
     # registry: both callbacks installed elsewhere, and this fixture's to
@@ -44,6 +42,8 @@ frustrate_no_block_check(
         "core::task::wake::Waker::drop",
         "log::__private_api::GlobalLogger::log",
     ],
+    bridge = ":bridge",
+    crate = ":test_api_shared",
     targets = [
         "android",
         "ios",
@@ -187,12 +187,12 @@ genrule(
 # names the package frustrate_integration), so one import works in both.
 dart_library(
     name = "bindings",
+    package_name = "frustrate_integration",
     srcs = [
         ":bridge.dart",
         ":fake_plan_dart",
     ],
     code_assets = [":test_api_asset"],
-    package_name = "frustrate_integration",
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",
@@ -203,12 +203,12 @@ dart_library(
 # `bindings` with the idle-barrier library as the bridge's code asset.
 dart_library(
     name = "bindings_idle",
+    package_name = "frustrate_integration",
     srcs = [
         ":bridge.dart",
         ":fake_plan_dart",
     ],
     code_assets = [":test_api_idle_asset"],
-    package_name = "frustrate_integration",
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",
@@ -219,12 +219,12 @@ dart_library(
 # `bindings` with the manual-scheduler library as the bridge's code asset.
 dart_library(
     name = "bindings_manual",
+    package_name = "frustrate_integration",
     srcs = [
         ":bridge.dart",
         ":fake_plan_dart",
     ],
     code_assets = [":test_api_manual_asset"],
-    package_name = "frustrate_integration",
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",

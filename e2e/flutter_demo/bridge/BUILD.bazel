@@ -7,10 +7,10 @@ load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 # facts and emits both Dart surfaces behind one conditional-export URI.
 frustrate_bridge_outputs(
     name = "codegen",
+    package_name = "demo_bridge",
     srcs = ["src/api.rs"],
     crate_name = "demo_rust",
     module_paths = ["crate::api"],
-    package_name = "demo_bridge",
     # `codegen.ir` is each web bundle's `binding_contract` as well as this
     # package's: the three wasm modules must each be named demo_rust.wasm, so
     # they live one per package and their flutter_native_library wrappers do
@@ -26,11 +26,6 @@ frustrate_bridge_outputs(
 # platform transition.
 rust_shared_library(
     name = "demo_rust",
-    visibility = [
-        "//:__pkg__",
-        "//custom_std:__pkg__",
-        "//threaded:__pkg__",
-    ],
     srcs = [
         "src/api.rs",
         "src/lib.rs",
@@ -50,6 +45,11 @@ rust_shared_library(
     }),
     edition = "2021",
     proc_macro_deps = ["@frustrate//macros:frustrate_macros"],
+    visibility = [
+        "//:__pkg__",
+        "//custom_std:__pkg__",
+        "//threaded:__pkg__",
+    ],
     deps = [
         "@demo_crates//:log",
         "@frustrate//runtime/rust:frustrate",

@@ -6,10 +6,10 @@ load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 
 frustrate_bridge_outputs(
     name = "codegen",
+    package_name = "iroh_check_fixture",
     srcs = ["src/api.rs"],
     crate_name = "iroh_check_fixture",
     module_paths = ["crate::api"],
-    package_name = "iroh_check_fixture",
 )
 
 # The wasm dependency set `//bridge` uses on web. That is what this fixture is

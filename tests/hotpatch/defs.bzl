@@ -4,6 +4,8 @@ load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
 load("//bazel:hot_patch.bzl", "HotPatchIrInfo", "hot_patch_ir_aspect", "hot_patch_transition", "rust_sources_aspect")
 
+# One edition per package, with fixed target names.
+# buildifier: disable=unnamed-macro
 def hot_patch_fixture():
     """One edition of the fixture bridge crate, declared in its own package.
 

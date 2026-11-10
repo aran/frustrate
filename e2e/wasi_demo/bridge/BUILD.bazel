@@ -8,10 +8,10 @@ exports_files([
 
 frustrate_bridge_outputs(
     name = "codegen",
+    package_name = "wasi_bridge",
     srcs = ["src/api.rs"],
     crate_name = "wasi_rust",
     module_paths = ["crate::api"],
-    package_name = "wasi_bridge",
 )
 
 # The cdylib on macOS; the same target builds the wasm module under the
@@ -20,7 +20,6 @@ frustrate_bridge_outputs(
 # builds for macOS at all.
 frustrate_bridge_library(
     name = "wasi_rust",
-    visibility = ["//:__pkg__"],
     srcs = [
         "src/api.rs",
         "src/lib.rs",
@@ -28,6 +27,7 @@ frustrate_bridge_library(
     ],
     edition = "2021",
     proc_macro_deps = ["@frustrate//macros:frustrate_macros"],
+    visibility = ["//:__pkg__"],
     deps = [
         "@frustrate//runtime/rust:frustrate",
         "@wasi_crates//:uuid",

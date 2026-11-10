@@ -36,11 +36,13 @@ FrustrateBridgeInfo = provider(
 def _frustrate_bridge_impl(ctx):
     if len(ctx.attr.srcs) != len(ctx.attr.module_paths):
         fail("srcs and module_paths must have the same length")
+
     # Declared at exactly src/frustrate_generated.rs (no target-name prefix):
     # rules_rust unifies generated and checked-in sources by path, so this
     # lines up with the crate's src/lib.rs `mod frustrate_generated;`. One
     # frustrate_bridge per package, by construction.
     rust_out = ctx.actions.declare_file("src/frustrate_generated.rs")
+
     # Likewise lib/<crate>.frustrate.dart: dart_library resolves package files
     # by lib_root (= this package) prefix, so the bindings dart_library must
     # live in this same package and the file must sit directly under lib/.
@@ -217,6 +219,12 @@ def frustrate_bridge_outputs(name, visibility = None, **kwargs):
 
     `.ir` rather than `.json`, which would name the encoding rather than the
     content and would collide with any second JSON output.
+
+    Args:
+        name: Name of the bridge target; the filegroups are `<name>.rs`,
+            `<name>.dart` and `<name>.ir`.
+        visibility: Visibility of every target declared.
+        **kwargs: Passed to `frustrate_bridge`.
     """
     frustrate_bridge(name = name, visibility = visibility, **kwargs)
     native.filegroup(
@@ -444,7 +452,7 @@ def frustrate_library(name, bridges, crate_name = None, visibility = None, **kwa
             **common
         )
 
-def _wasm_platform_transition_impl(settings, attr):
+def _wasm_platform_transition_impl(_settings, attr):
     # The whole transition. Everything a target platform needs beyond its
     # constraints — the rules_rust channel for the threaded build, a C
     # toolchain selection, anything else — rides on that platform's own
@@ -618,6 +626,7 @@ def _frustrate_wasm_module_impl(ctx):
         )
         module = processed
         bindgen_js = [js]
+
         # The namespace the post-pass writes into the module's imports.
         bindgen_namespace = "./" + js.basename
     else:
@@ -685,7 +694,6 @@ def _frustrate_wasm_module_impl(ctx):
         progress_message = "checking the imports of %{label}",
     )
     validations.append(check_marker)
-
 
     out = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.symlink(output = out, target_file = module)

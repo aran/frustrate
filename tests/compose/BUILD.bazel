@@ -34,12 +34,12 @@ code_asset_as(
 dart_test(
     name = "compose_test",
     size = "small",
-    main = "test/compose_test.dart",
     code_assets = [
         ":alpha_alone",
         ":composed.alpha_lib",
         ":composed.beta_lib",
     ],
+    main = "test/compose_test.dart",
     deps = [
         "//runtime/dart:frustrate",
         "//tests/compose/alpha:bindings",
