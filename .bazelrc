@@ -1,3 +1,8 @@
+# Every MODULE.bazel.lock is complete and committed: a build that would change
+# one fails instead. This setting does not affect modules that depend on this
+# one.
+common --lockfile_mode=error
+
 # `dart analyze` and the `dart format` check run as an aspect over every Dart
 # target a `bazel test` names. The config line is `common` because
 # `bazel run` of `dart_fix`/`dart_format` reads it too.
@@ -5,6 +10,11 @@ test --aspects=@rules_dart//dart:analyze.bzl%dart_analyze
 test --output_groups=+dart_analyze
 test --output_groups=+dart_format
 common --@rules_dart//dart:analysis_config=//:analysis_config
+
+# Tests tagged `deep` take minutes and are left out by default.
+# `--config=deep` runs them too: before a merge.
+test --test_tag_filters=-deep
+test:deep --test_tag_filters=
 
 # Clippy runs as an aspect over every Rust target a `bazel test` names, so a new
 # crate is analysed without anyone listing it. Findings are errors: `-Dwarnings`
