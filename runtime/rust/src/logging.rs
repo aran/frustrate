@@ -56,8 +56,7 @@
 //! keeps its first sink, which now points at a dead isolate, and every record
 //! after the restart vanishes. The correct version needs a *replaceable* slot
 //! behind a non-parking lock, with the displaced sink dropped outside the
-//! critical section — which is [`Hook`], and which `hook.rs` documents as the
-//! thing that had already drifted three times when it was hand-copied.
+//! critical section, which is [`Hook`].
 //!
 //! # Nothing here can deadlock or re-enter the bridge
 //!
@@ -292,6 +291,14 @@ fn claim(installed: &AtomicBool, set: impl FnOnce() -> bool) -> Result<(), Forei
 /// workers, actor threads — on native, and covers only the page instance on
 /// web. An actor whose code logs needs its own install, reached through a
 /// method on the actor.
+///
+/// The same source therefore behaves differently. Natively, installing from an
+/// actor replaces the process logger and closes the previous stream, and
+/// disposing the actor leaves its stream open until [`uninstall`]. On web the
+/// installs are independent, and disposing the actor fails its stream with a
+/// `StateError`. A portable app feeds every logging stream into one handler,
+/// treats `onDone` as benign, and cancels an actor's subscription before
+/// disposing it.
 ///
 /// A registration holds its sink, so on native it pins the isolate the way every
 /// open stream does — for an app that is the point, and for anything with an

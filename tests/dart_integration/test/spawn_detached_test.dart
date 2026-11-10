@@ -80,7 +80,7 @@ void main() {
   });
 
   test('a detached task keeps its stream open after the call is answered', () async {
-    // The refcount claim from docs/design/streams.md: the call that opened the
+    // A sink a detached task holds owns its stream: the call that opened the
     // sink is long gone, and the stream is still live because the detached
     // producer holds it. It closes when the task ends and the sink drops —
     // nothing else closes it, so a `done` that never completes is the failure.

@@ -84,6 +84,12 @@ final class StreamRouter {
   ///
   /// Native keeps everything synchronous: delivery already arrives on a later
   /// turn, and a blocking `DartFunction::call` has a worker parked, waiting.
+  ///
+  /// Nothing enforces this beyond every path out of [deliver] deferring. A new
+  /// path from a Rust-initiated post to user Dart goes through [deliver] or
+  /// argues why it cannot re-enter. Generated Dart must not add its own
+  /// `scheduleMicrotask` around a user closure either: the user's code would
+  /// leave this router's try/catch, and the void-throw policy with it.
   final bool _deferDelivery;
 
   /// Cancel the Rust producer for [id] — supplied by the transport, which

@@ -4,7 +4,7 @@
 //! import that waits there.
 //!
 //! `no_block` is the author's claim that main-thread Dart calling a member
-//! cannot be stalled (docs/design/blocking.md). Codegen cannot see through a
+//! cannot be stalled. Codegen cannot see through a
 //! call into a dependency, so the claim is settled at *artifact* time: a throwaway
 //! module is built with `--cfg frustrate_block_check`, where the **only**
 //! exports are one root per claimed member. lld's GC deletes everything those

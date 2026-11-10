@@ -4241,7 +4241,10 @@ fn emit_trait(out: &mut String, iface: &Interface, o: &OpaqueDecl, web: bool) {
     out.push_str("}\n\n");
     emit_consumed_extension(out, iface, o, web);
     // The impl tag: tag 0 = dyn handle, i+1 = the i-th bridged
-    // implementor — the same order the generated Rust matches on.
+    // implementor — the same order the generated Rust matches on. Both sides
+    // come from one codegen run, so the numbering has no cross-version
+    // contract, and generated opaque classes are `final` with private
+    // constructors, so the runtime class is always one listed here.
     let _ = write!(out, "int _implTag{n}({cls} v) {{\n  if (v is _Dyn{n}) return 0;\n");
     for (i, c) in iface.trait_implementors(n).iter().enumerate() {
         let _ = write!(out, "  if (v is {}) return {};\n", c.name, i + 1);

@@ -101,9 +101,8 @@ mod native {
     /// `handle.block_on(async move { poll.run() })`, which does mark it: those
     /// calls panic ("Cannot start a runtime from within a runtime", "Cannot
     /// block the current thread from within a runtime"), attributed to the
-    /// call, and leaf futures work as before. It costs about 18 ns a poll
-    /// against 9 ns for `enter`, and tokio's cooperative budget applies inside
-    /// a poll.
+    /// call, and leaf futures work as before. A poll costs more than under
+    /// `enter`, and tokio's cooperative budget applies inside a poll.
     ///
     /// # The contract you are taking on
     ///
@@ -127,8 +126,8 @@ mod native {
     ///   Register a multi-thread runtime, or a current-thread one that a
     ///   thread of yours is driving.
     ///
-    /// Only the first is frustrate's to enforce, and the rest of the picture
-    /// is measured rather than assumed (`tests/tokio_hook`). Of the ways to
+    /// Only the first is frustrate's to enforce; `tests/tokio_hook` pins the
+    /// rest. Of the ways to
     /// get the context wrong, **tokio makes most of them loud**:
     ///
     /// | mistake | what happens |
@@ -159,7 +158,7 @@ mod native {
     ///
     /// The corollary is a trap worth naming: calling your runtime's own
     /// `block_on` *inside a bridged `async fn`* is not rejected by a wrapper
-    /// that only enters the context. Measured — `Handle::enter()` installs the
+    /// that only enters the context. `Handle::enter()` installs the
     /// runtime context but not tokio's blocking-region guard, so "Cannot start
     /// a runtime from within a runtime" does not fire, for either a second
     /// runtime or the entered one. It simply blocks the drain thread until it
@@ -169,11 +168,9 @@ mod native {
     ///
     /// # Re-registration
     ///
-    /// Last registration wins, and the alternatives are worse for a specific,
-    /// measured reason. Flutter hot restart re-runs Dart `main()` in this same
-    /// native process while Rust statics persist (actor.rs records the
-    /// consequence: "tokio workers 16 → 64" from runtimes rebuilt per
-    /// restart), so `register` *will* be called again in a live process. And a
+    /// Last registration wins. Flutter hot restart re-runs Dart `main()` in
+    /// this same native process while Rust statics persist, so `register`
+    /// *will* be called again in a live process. And a
     /// handle to the dropped previous `Runtime` does not go quiet — it panics
     /// "A Tokio 1.x context was found, but it is being shutdown" on every
     /// poll. So:
@@ -478,7 +475,7 @@ pub fn uninstall_timer() {
 /// and a stock wasm32 module has none at all.
 ///
 /// Two one-way trips, because a `DartFunction` cannot do this: the Dart closure
-/// behind one answers *synchronously* (`R Function(T)`, callbacks.md), so it
+/// behind one answers *synchronously* (`R Function(T)`), so it
 /// can compute but it cannot wait. `call_async` makes the **Rust** side await a
 /// round trip; it does not let the Dart side delay one. A timer therefore goes
 /// out on a fire-and-forget channel and comes back through a second entry
@@ -510,8 +507,7 @@ pub fn uninstall_timer() {
 /// wakes.
 ///
 /// **This pins the isolate**, and for an app that is the point: the callback
-/// holds a `StreamSink`, an open stream keeps its isolate alive
-/// (docs/design/streams.md), and a process that can still be asked to sleep
+/// holds a `StreamSink`, an open stream keeps its isolate alive, and a process that can still be asked to sleep
 /// should not be exiting. Anything with an end — a test suite, a worker
 /// isolate you mean to retire — calls [`uninstall_timer`] when it is done, or
 /// it runs to completion and then does not exit.
@@ -627,8 +623,7 @@ impl Drop for TimerFuture {
 /// targets, and a *future* rather than a parked thread — so a thousand of them
 /// cost a thousand heap allocations and no threads, on the browser main thread
 /// included. Contrast `std::thread::sleep`, which blocks its thread even inside
-/// an `async fn` and is illegal on the main thread anyway
-/// ([blocking.md](../../../docs/design/blocking.md)).
+/// an `async fn` and is illegal on the main thread anyway.
 ///
 /// ```ignore
 /// let mut backoff = Duration::from_millis(50);

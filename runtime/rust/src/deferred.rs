@@ -58,6 +58,20 @@
 //! construction moves inside the future and happens on the first poll, under
 //! the context. The example above is the safe shape for this reason and not
 //! only for the borrow checker's.
+//!
+//! # What the caller can rely on
+//!
+//! - **Order.** Every method starts in arrival order, and a non-deferred method
+//!   finishes before the next one starts. A deferred completion can finish at
+//!   any time after its method returns, so two Dart `await`s may resolve out of
+//!   call order.
+//! - **On web it frees the actor only while the future waits.** Natively the
+//!   future runs on the pool, beside the actor's thread. On web it runs on the
+//!   actor's own worker between messages, so a future that computes for a long
+//!   time still blocks the actor.
+//! - **`dispose()` cancels outstanding completions** rather than waiting for
+//!   them. Each fails in Dart with a `StateError` naming the actor; a call that
+//!   already answered keeps its answer.
 
 use crate::envelope::Outcome;
 use std::future::Future;

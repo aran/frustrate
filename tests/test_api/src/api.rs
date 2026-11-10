@@ -2768,7 +2768,7 @@ pub async fn transform(x: i64, f: DartFunction<i64, i64>) -> i64 {
 ///      inside the drain that started it. On single-threaded web the call has
 ///      already returned to Dart by then;
 ///   2. **outlives its spawning call**, and keeps the stream open while it does
-///      — the detached-producer refcount (streams.md);
+///      — the detached-producer refcount;
 ///   3. **is driven by whatever this platform's Scheduler is** — pool workers
 ///      on native and threaded web, the microtask drain on single-threaded web.
 ///
@@ -2793,7 +2793,7 @@ pub async fn spawn_detached_echo(x: i64, f: DartFunction<i64, i64>, sink: Stream
 /// The timer install an app writes: a fire-and-forget request channel out, and
 /// `fire_timer` back in. Two one-way trips and not a `DartFunction`, because
 /// the Dart closure behind one answers synchronously — it can compute, it
-/// cannot wait (docs/design/callbacks.md).
+/// cannot wait.
 #[bridge(sync)]
 pub fn install_timer(requests: DartCallback<(i64, i64)>) {
     frustrate::runtime::install_dart_timer(requests);
@@ -2808,7 +2808,7 @@ pub fn fire_timer(id: i64) {
 /// Drop the timer registration, and with it the request channel.
 ///
 /// Not ceremony: the installed callback holds a `StreamSink`, and an open
-/// stream pins the isolate (docs/design/streams.md). An app wants that for its
+/// stream pins the isolate. An app wants that for its
 /// whole life; a test suite that never released it would leave a process that
 /// runs every test, passes, and does not exit.
 #[bridge(sync)]

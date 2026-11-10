@@ -37,7 +37,7 @@ void main() {
   });
 
   // The installed callback holds a StreamSink, and an open stream pins the
-  // isolate (docs/design/streams.md) — an app wants exactly that for its whole
+  // isolate — an app wants exactly that for its whole
   // life, and a suite that never released it would pass every test and then
   // hang instead of exiting. `dart test` force-exits and hides this; the Bazel
   // runner waits, and is how it was found.

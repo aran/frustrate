@@ -41,8 +41,8 @@ label_flag(
 )
 
 # The platforms that carry the `cfg`, one per wasm column where `getrandom` has
-# no backend of its own (docs/design/wasm_platforms.md, "What each target
-# supports"). Deliberately *not* the wasi or wasm-bindgen columns: there
+# no backend of its own (README.md, "What each web platform supports").
+# Deliberately *not* the wasi or wasm-bindgen columns: there
 # getrandom has a working backend already, and `getrandom_backend = "custom"` is
 # the first arm of its `cfg_if`, so setting it would silently displace the
 # backend a build on those columns chose on purpose.

@@ -61,8 +61,7 @@ only the program can name and holds only the program's own functions (a
 runtime CPU dispatch, as memchr's), whose calls are then followed. The panic
 path is not checked. To hold every sync member of a bridge to this, put
 `bridge_file!(no_block)` in each of its files. Each analysis sees only its own
-target's `#[cfg]` arm. [design/blocking.md](design/blocking.md) has the full
-argument.
+target's `#[cfg]` arm.
 
 **Silencing a finding:** `no_block(allow(name, ...))` is part of the
 claim — on the member, its impl block, or `bridge_file!(no_block(allow(...)))`

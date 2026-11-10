@@ -245,6 +245,14 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
   // into wasm — means the transform's own 2 MiB default. Only the pool pump
   // passes one; every other caller is a first thread.
   //
+  // Two waits are reachable from `__wbindgen_start` on the main thread: the
+  // transform's temporary-stack lock and lld's passive-data-init barrier.
+  // Neither can contend, because the main thread's `__wbindgen_start` finishes
+  // before any other thread exists on its memory: pool workers are spawned
+  // only from inside a bridge call, and each actor is thread 0 of a memory it
+  // created. Keep it that way, and never call `__wbindgen_thread_destroy` from
+  // the main thread.
+  //
   // `memory` is the memory THIS caller means the module to run on, supplied in
   // place of the module's own export of that name. On a threaded build the
   // thread transform moves the memory import out of `env` and into this

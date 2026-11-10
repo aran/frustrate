@@ -369,6 +369,122 @@ cc_import(
 common --@frustrate//runtime/rust:unwinder=//my/cc:libunwind
 ```
 
+## What the bridged surface promises
+
+### Actors
+
+An actor's object lives on its own executor: a dedicated OS thread natively, a
+Worker running its own instance of the module on web. Every call is `async` on
+the Dart side and the actor handles one message at a time, in arrival order, so
+methods get `&mut self` without a lock. Each constructed actor is a new
+executor; for more parallelism, create more actors. `ActorPool`
+(`package:frustrate/workers.dart`) leases one instance to each job for the
+whole job, so the calls of one job never interleave with another's.
+
+Only values cross: no handle in an actor method's parameters, and none in its
+return except the constructor's. A large structure crosses as bytes, since
+each web instance has its own memory.
+
+Put shared mutable state in an actor rather than a `static` behind a lock. On
+web each executor has its own copy of a `static`, and on threaded web a lock the
+main thread can reach traps there when contended. If two actors need the same
+state, one owns it and the others message it.
+
+A method body that awaits slow work holds the actor until it finishes. A
+`Deferred<T>` return hands the slow part off and frees the actor
+(`runtime/rust/src/deferred.rs`); an `Addr<Self>` parameter lets a long job run
+in slices that later calls interleave with (`runtime/rust/src/addr.rs`).
+
+### Streams and callbacks
+
+A `StreamSink<T>` parameter is a Dart `StreamController<T>` argument; Rust
+pushes items, errors and the end. `DartCallback<T>` and `DartFunction<T, R>`
+are Dart closures Rust can call. The `dart::` mirrors
+(`runtime/rust/src/dart.rs`) say which Dart type each takes and what each can
+do. All of them are argument-only: Rust cannot mint a Dart object.
+
+- **`dispose()` a Rust handle that stores a sink or callback.** Natively, an
+  open stream or stored callback keeps its isolate alive, as a Dart producer
+  would. A test that leaks one passes and never exits, which Bazel reports as a
+  TIMEOUT with an empty log. Assert `openChannelCount == 0` in teardown;
+  `openChannelLabels` names what is open.
+- **Delivery never runs inside the Rust call that posts it**, on any platform,
+  so a Dart callback may call back into the bridge.
+- **A void Dart method that throws ends its channel**: Rust's next send returns
+  `false`, and the error goes to the zone frustrate was installed in.
+- **A `DartFunction` answers synchronously** (its Dart side is
+  `R Function(T)`). Anything Dart must wait for is a request out on a
+  `DartCallback` and a separate bridged call back in. `call_async` works on
+  every platform inside an `async fn`; the blocking `call` is native-only, and
+  so are returning callbacks on actors.
+- **`DartFunction<T, Result<R, E>>`** turns a Dart throw of the bridged type `E`
+  into `Err`; any other throw, or an isolate that died owing an answer, panics
+  the enclosing call.
+- **Cancellation**: once the Dart subscription is cancelled no further event
+  reaches it, and Rust sees `add` return `false` at its next send. A producer
+  on a web actor sees that only when the actor's executor is idle, so give each
+  long-lived producer its own actor.
+- **Backpressure**: `add` never blocks and buffers in the controller while it
+  is paused; `send(item).await` waits for resume, and `is_paused()` serves sync
+  producers. It does not apply on the single-threaded web main instance, where
+  the producer runs inline, or on web actors. A broadcast controller is
+  refused, since it never pauses.
+- **A panic in the producer** is reported on the call. Natively the stream
+  closes; on web it stays open.
+
+`frustrate::testing::stream::<T>()` gives a real `StreamSink<T>` that records
+instead of posting, and a probe that plays the consumer.
+
+### Trait objects
+
+```rust
+#[bridge(confined)]
+pub trait Store: Send {
+    fn get(&self, key: String) -> Option<String>;
+}
+
+#[bridge] pub fn open_store(kind: String) -> anyhow::Result<Box<dyn Store>> { … }
+#[bridge(sync)] pub fn store_report(store: &dyn Store) -> String { … }
+```
+
+The trait declaration is the bridged surface; implementations need not be in a
+bridge file. The trait names its model's thread bound as a supertrait, every
+implementor shares the trait's model, and actors cannot take part. A
+`#[bridge] impl Store for Sqlite` also bridges the concrete class, which then
+passes wherever the trait is expected. A Dart class of your own implementing the
+trait's interface cannot cross.
+
+### Rust `async fn` and tokio
+
+frustrate's executor has no reactor, so a tokio leaf (`sleep`, a socket)
+panics unless the executor is lent tokio's context. Two ways, both native-only:
+
+- Register the runtime with `frustrate_tokio::register(handle)` (`ext/tokio`),
+  or `frustrate::runtime::register` for another runtime, and `.await` the leaf
+  in a bridged `async fn`. Cancelling the call drops the future.
+- Call your runtime's `block_on` inside a plain `#[bridge]` fn, which Dart
+  still sees as a `Future`. Each call in flight parks a pool thread, and
+  cancelling from Dart does not get it back.
+
+Mark such members `#[bridge(native_only)]` yourself. Most of tokio compiles for
+`wasm32`, so nothing at build time keeps them out of the web build, and they
+fail there at run time.
+
+### Reporting failures
+
+A Rust panic's location and backtrace reach only a Rust-side listener,
+`frustrate::panic::register`. Anything Dart did not catch goes to the zone that
+issued the call (or, for a panic no call waits on, the zone its actor was built
+in or frustrate was installed in), which is what `runZonedGuarded` and
+Flutter's `PlatformDispatcher.onError` see. A returned `Err` is a declared
+outcome, not a failure to report. Generated bindings rethrow with their own
+stack; a `DelegatingRuntime` (`package:frustrate/intercept.dart`) that captures
+the stack when a call is issued gives reports the app's call site.
+
+`frustrate::carry::register` carries a per-thread value of yours (the cause a
+write is attributed to, say) from the thread that queues bridge work to every
+thread that runs it (`runtime/rust/src/carry.rs`).
+
 ## Hot reload and hot restart for Rust
 
 Hot reload swaps edited code into the running app and keeps its state; hot
@@ -570,6 +686,113 @@ wasm-bindgen's generated JS is a host module too. Its post-pass names the one
 namespace it supplies `./<stem>_bg.js`; `bindgenGlueUrl` names the JS for that
 namespace, and its attach step is wasm-bindgen's own start-up handshake.
 
+### What each web platform supports
+
+With a stock std:
+
+|  | `wasm32` | `wasm32` + `bindgen` | `wasm32_wasi` | `wasm32_threads` |
+|---|---|---|---|---|
+| triple | `wasm32-unknown-unknown` | same | `wasm32-wasip1` | `wasm32-unknown-unknown` |
+| Rust channel | stable | stable | stable | nightly + local std |
+| `SystemTime::now` | build error | build error | works | build error |
+| `Instant::now` | aborts at run time | via `js-sys` | works | aborts at run time |
+| `getrandom` crate | compile error | via `wasm_js` | works | compile error |
+| `println!` | build error | build error | to the console | build error |
+| `web-sys` / `js-sys` | — | yes | panics per call | — |
+| real threads | no | no | no | yes |
+
+The build errors come from frustrate's std-facility check
+(`bazel/wasm_std_check`), which does not cover `Instant::now`.
+`wasm32_custom` makes the clock, `println!` and abort cells work on the plain
+target. getrandom never asks std, so on either `wasm32` column it needs
+`ext/getrandom` ([ext.md](docs/ext.md)).
+
+On wasip1, getrandom refusing its browser backend is the first error you meet
+(`` `wasm_js` backend can be enabled only for OS-less WASM targets! ``), and
+wasm-bindgen does not refuse at all: every generated body panics when called.
+wasip1 has no sockets and no component model (wasip2 builds components, which
+no browser instantiates).
+
+Never satisfy a wasm-bindgen import with a hand-written stub: the module
+instantiates and returns wrong answers (a stubbed `getRandomValues` returns
+zeros). Use the `bindgen` attribute, which runs the real post-pass.
+
+A wasm triple goes in two lists in your `MODULE.bazel`, and each replaces its
+default rather than extending it:
+
+```python
+rust.toolchain(extra_target_triples = ["wasm32-wasip1", ...])
+crate.from_cargo(supported_platform_triples = ["wasm32-wasip1", ...])
+```
+
+Missing from the first, analysis fails with "No matching toolchains found".
+Missing from the second, the crate resolves to `//:incompatible` and shows up
+as a skipped target. A per-platform `build_test` of every artifact you ship
+catches both.
+
+Build modules with `-c opt`; `fastbuild` barely optimizes, and wasm-opt does
+not make up the difference.
+
+### A custom std
+
+`toolchain/custom_std/` builds a std whose `wasm32-unknown-unknown` stubs
+(clock, entropy, stdio, `available_parallelism`, `sleep`) call the host
+instead, for dependencies you cannot change. Build the facilities
+`//bazel:wasm32_custom` declares, then select that platform:
+
+```sh
+bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread
+```
+
+The std is tied to the nightly that built it, so rebuild after the nightly pin
+moves. When it is missing or stale, the first error names the command that
+fixes it; the "not declared in package 'impl'" and missing-toolchain errors
+after it are the same cause.
+
+- `Instant` resolution is whatever the page gives `performance.now()`, which
+  browsers coarsen unless the page is cross-origin isolated.
+- `thread::sleep` busy-waits on a worker and throws on the main thread.
+- `available_parallelism` reports the machine; `thread::spawn` still fails on a
+  single-threaded build.
+
+### Threaded wasm
+
+`wasm32_threads` gives the module shared-memory threads. Async calls on web
+leave the main thread, `Locked` contention is real, and `Frozen` values are
+read in parallel. It needs nightly Rust, the `atomics` custom std, and COOP/COEP
+headers on the page. frustrate creates the pool's Workers itself, so in bridged
+code:
+
+- `thread::spawn` panics, at run time, including inside a dependency;
+- `yield_now` does nothing, so a spin-then-yield loop only spins;
+- `available_parallelism` is `Err`;
+- the main thread may never wait, so anything it reaches must not contend.
+
+A panic traps without running `Drop`. The pool replaces the worker, but what
+the job held stays held: a `locked` object whose holder trapped never releases,
+and later async calls on it wait forever.
+
+The usable heap is the shared memory's `maximum − initial`, because Rust's
+allocator only grows memory; `maximum == initial` leaves none.
+
+### A strict Content-Security-Policy
+
+By default the runtime injects its JS glue as an inline `<script>` and starts
+workers from `blob:` URLs. Under a strict CSP, serve the glue as a file instead:
+
+```python
+frustrate_web_glue(name = "frustrate.js")   # in the app's own package
+```
+
+List it in `flutter_web_app`'s `extra_web_assets` and load it from
+`index.html` with a plain `<script src="frustrate.js"></script>` (no `async` or
+`defer`) before init. Workers are created from the script's URL; if a bundler
+renames it, set `globalThis.$frustrateGlueUrl`.
+[`e2e/flutter_demo/web_csp.bzl`](e2e/flutter_demo/web_csp.bzl) has the
+strictest policy frustrate supports. Hosts your Rust connects to need
+`connect-src`, and missing them fails silently. A policy that forbids `blob:`
+workers breaks Flutter's skwasm render worker, not frustrate.
+
 ## Checking main-thread calls
 
 A sync call into Rust runs on the Dart thread that made it, and in a Flutter
@@ -616,4 +839,23 @@ A finding you have judged safe is silenced by name, with `no_block(allow(...))`
 on the promise or the check target's `allow`; `#[frustrate::no_block(allow)]`
 on one of your own functions vouches for everything under it. A silence that
 matches nothing fails the check. [ANNOTATIONS.md](docs/ANNOTATIONS.md#no_block-and-bridge_fileno_block)
-has the rules, and [design/blocking.md](docs/design/blocking.md) the argument.
+has the rules.
+
+Single-threaded web has no other thread, so a dispatched body runs on the main
+thread there, slow or not; the remedy is the threaded build. Outside what the
+check covers, these stalls are not caught:
+
+- **A lock codegen cannot see** (a `static Mutex`) contended on the
+  threaded-web main thread traps; `explainTrap` names the cause when it
+  recognises the browser's message.
+- **A `RwLock` read/write conflict on single-threaded web** traps with no
+  message under stock std, and panics with `rwlock locked for reading` (or
+  `writing`) under a custom std without `atomics`.
+- **`thread::park` waiting for an `unpark` on single-threaded web**, an actor's
+  Worker included, spins forever under stock std, and panics under a custom std
+  without `atomics`.
+- **A registered async-runtime context that blocks** stalls the executor
+  silently when the registration only enters the context; `ext/tokio`'s makes
+  tokio panic instead.
+- **`send_wrapper::SendWrapper`** in a dependency turns the compile error that
+  keeps JS state off the threaded-web pool into a run-time panic.

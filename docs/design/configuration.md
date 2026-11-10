@@ -51,3 +51,26 @@ value, with no marker to forget.
   what Dart's `DateTime` and `Duration` hold. Time zones are not configurable:
   the wire carries an instant, and local time is converted for display on the
   Dart side, where every platform has a real time-zone database.
+
+## Refused
+
+What frustrate declines to offer, so that it is not re-proposed without a new
+reason:
+
+- **User code injected into generated output**: no startup hook, no Dart spliced
+  into a generated class, no file preambles. What a generated member does is a
+  property of its source. To run something at startup, call it.
+- **One handler object for every seam.** Each seam is named for its concern and
+  states its own contract.
+- **A Rust-side listener for returned `Err`s.** They are declared outcomes and
+  reach Dart intact.
+- **A replaceable async executor.** Lending it a runtime context is supported;
+  replacing it would let an embedder retract portability to single-threaded
+  stable wasm.
+- **Rust-owned UI state as a codegen feature.** It would put `package:flutter`
+  in the runtime's dependencies; a stream and a `ValueListenable` express it.
+- **A member returning `Stream<T>`, or an `impl Stream` return.** A sink
+  parameter is the one shape: the caller owns the controller, and frustrate
+  owns no background poller.
+- **An owned upcast** of a concrete handle to a long-lived `Box<dyn Trait>`
+  handle while the concrete one keeps working.

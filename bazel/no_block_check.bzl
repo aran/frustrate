@@ -527,7 +527,7 @@ def frustrate_no_block_check(
     `slow`, and no IO in an `io` class. Codegen settles what placement
     settles (an actor member's body, a dispatched member's body) and writes a
     claim census; the rest is settled here, over a throwaway build of `crate`
-    with one root per claim (docs/design/blocking.md). Nothing this builds
+    with one root per claim. Nothing this builds
     ships.
 
     `targets` says where the bridge ships, and each analysis runs only where
