@@ -1,3 +1,5 @@
+* text=auto eol=lf
+
 # Exclude development-only files from release archives (`git archive`).
 #
 # Every pattern is anchored with a leading `/`. Without one, `git archive`
