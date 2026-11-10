@@ -6,6 +6,7 @@
 # overrides.
 module(
     name = "frustrate",
+    bazel_compatibility = [">=9.3.0"],
 )
 
 bazel_dep(name = "rules_rust", version = "0.75.0")
