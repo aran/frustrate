@@ -2,7 +2,7 @@
 /// dart2js and DDC, which cannot construct an `Int64List`.
 ///
 /// This is the `js` variant of package `frustrate_i64_list`; the `typed` one
-/// is beside it. `@rules_dart//dart/constraints:web_compiler` picks between them in the
+/// is beside it. `@rules_dart//dart/constraints:runtime` picks between them in the
 /// `deps` of `//runtime/dart:frustrate`, and `package:frustrate/frustrate.dart`
 /// exports the result, so nothing imports this package by name.
 library;

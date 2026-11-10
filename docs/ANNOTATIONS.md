@@ -210,9 +210,9 @@ went wrong before reaching the bridge (`1 << 62` is `0` there). `Vec<i64>` and
 `[i64; N]` are `I64List` in Dart, a type the build chooses for the compiler:
 `Int64List` on the VM and dart2wasm, `List<int>` on dart2js and DDC, which cannot
 construct an `Int64List`. Under Bazel the compiler is the target platform's
-`@rules_dart//dart/constraints:web_compiler`, which is `js` or `wasm` on the
-platforms `dart_js_binary` and `dart_wasm_binary` build for. A platform without
-it gets `Int64List`, dart2js included, and a
+`@rules_dart//dart/constraints:runtime`, which is `js` or `wasm` on the
+platforms `dart_js_binary` and `dart_wasm_binary` build for and `vm` by
+default. A platform left at `vm` gets `Int64List`, dart2js included, and a
 `Vec<i64>` then throws there. `toI64List(list)` makes an `I64List` of a
 `List<int>`: the same list if it is one already, a copy if not. A
 `bytes(...)` codec that calls `getInt64` itself cannot work there.

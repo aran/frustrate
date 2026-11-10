@@ -16,7 +16,7 @@ Before pushing `main`:
   this way: until then they need rules_dart's unreleased `pub.from_lock`
   `resolve`, so no lock of theirs can resolve against published pins.
 - Move the `rules_dart` pin to a release that has
-  `@rules_dart//dart/constraints:web_compiler`: `Vec<i64>` and `[i64; N]` choose
+  `@rules_dart//dart/constraints:runtime`: `Vec<i64>` and `[i64; N]` choose
   their Dart type by it.
   `runtime/dart`'s `runfiles` dev dependency moves to the same version.
 - Move the `rules_flutter` pin to a release that builds its web builds for a

@@ -1168,7 +1168,7 @@ fn emit_doc_comment_before_generated(out: &mut String, docs: &[String], pad: &st
 /// where `int` is 64 bits and `List<int>` on dart2js and DDC, which cannot
 /// construct an `Int64List`. Codegen cannot see the compiler, so the generated
 /// file is the same under every one and the build picks the typedef's package
-/// (by the platform's `@rules_dart//dart/constraints:web_compiler`, in the `deps` of `//runtime/dart:frustrate`).
+/// (by the platform's `@rules_dart//dart/constraints:runtime`, in the `deps` of `//runtime/dart:frustrate`).
 /// `readI64List` returns `I64List` too, so like every other row its reader
 /// returns the declared type.
 ///

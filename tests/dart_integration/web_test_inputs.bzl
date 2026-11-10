@@ -106,7 +106,7 @@ web_test_inputs = rule(
                   "compiler: `js` (dart2js) or `wasm` (dart2wasm). The " +
                   "driver adds the one for the compiler it runs under, in " +
                   "the place Bazel's binaries get theirs from " +
-                  "their platform's `@rules_dart//dart/constraints:web_compiler`.",
+                  "their platform's `@rules_dart//dart/constraints:runtime`.",
         ),
         "fixtures": attr.label_keyed_string_dict(
             allow_files = True,

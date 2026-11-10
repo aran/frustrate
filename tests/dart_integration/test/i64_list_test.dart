@@ -2,7 +2,7 @@
 ///
 /// The Dart type is `I64List`: `Int64List` where `int` is 64 bits (the VM,
 /// dart2wasm) and `List<int>` on dart2js and DDC, which cannot construct an
-/// `Int64List`. The build picks it (`@rules_dart//dart/constraints:web_compiler`; the
+/// `Int64List`. The build picks it (`@rules_dart//dart/constraints:runtime`; the
 /// browser driver does the same for `-c`), so one file compiles against either
 /// and builds its arguments with `toI64List`. On a JS-number backend the
 /// scalar `i64` contract holds: exact to 2^53, a throw beyond, in both
