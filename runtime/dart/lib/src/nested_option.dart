@@ -6,22 +6,22 @@
 /// `Option`, the generated bindings use this wrapper instead of `?`, which
 /// distinguishes the two absences exactly.
 ///
-/// Named `Fr…` to avoid clashing with any `Option`/`Some`/`None` a project
-/// (or another package) may already define.
+/// Named `Nested…` for the case it exists for, which also keeps it clear of
+/// any `Option`/`Some`/`None` a project (or another package) may define.
 library;
 
-/// A bridged nested option: either [FrSome] carrying a value, or [FrNone].
-sealed class FrOption<T> {
-  const FrOption();
+/// A bridged nested option: either [NestedSome] carrying a value, or [NestedNone].
+sealed class NestedOption<T> {
+  const NestedOption();
 }
 
-/// The present case of an [FrOption], carrying its [value].
-final class FrSome<T> extends FrOption<T> {
+/// The present case of an [NestedOption], carrying its [value].
+final class NestedSome<T> extends NestedOption<T> {
   final T value;
-  const FrSome(this.value);
+  const NestedSome(this.value);
 }
 
-/// The absent case of an [FrOption].
-final class FrNone<T> extends FrOption<T> {
-  const FrNone();
+/// The absent case of an [NestedOption].
+final class NestedNone<T> extends NestedOption<T> {
+  const NestedNone();
 }

@@ -669,22 +669,28 @@ void main() {
     });
 
     test('nested Option<Option<T>> keeps all three shapes distinct', () {
-      // outer None -> null; Some(None) -> FrNone; Some(Some(v)) -> FrSome(v).
+      // outer None -> null; Some(None) -> NestedNone; Some(Some(v)) -> NestedSome(v).
       // The three must not collapse into one another (the footgun a plain
       // `int??` would create).
       expect(nestOpt(x: null), isNull);
 
-      final someNone = nestOpt(x: const FrNone<int>());
-      expect(someNone, isA<FrNone<int>>());
+      final someNone = nestOpt(x: const NestedNone<int>());
+      expect(someNone, isA<NestedNone<int>>());
 
-      final someSome = nestOpt(x: const FrSome<int>(7));
-      expect(someSome, isA<FrSome<int>>());
-      expect((someSome as FrSome<int>).value, 7);
+      final someSome = nestOpt(x: const NestedSome<int>(7));
+      expect(someSome, isA<NestedSome<int>>());
+      expect((someSome as NestedSome<int>).value, 7);
 
       // A negative and a zero payload round-trip too (guards the presence
       // byte vs value ordering).
-      expect((nestOpt(x: const FrSome<int>(0)) as FrSome<int>).value, 0);
-      expect((nestOpt(x: const FrSome<int>(-9)) as FrSome<int>).value, -9);
+      expect(
+        (nestOpt(x: const NestedSome<int>(0)) as NestedSome<int>).value,
+        0,
+      );
+      expect(
+        (nestOpt(x: const NestedSome<int>(-9)) as NestedSome<int>).value,
+        -9,
+      );
     });
   });
 
@@ -744,16 +750,16 @@ void main() {
       expect(echoVecOfMap(ms: ms), ms);
     });
 
-    test('Vec<Option<Option<T>>>: FrOption composes inside a collection', () {
-      // Element type List<FrOption<int>?>: outer None -> null,
-      // Some(None) -> FrNone, Some(Some(v)) -> FrSome(v), all distinct.
+    test('Vec<Option<Option<T>>>: NestedOption composes inside a collection', () {
+      // Element type List<NestedOption<int>?>: outer None -> null,
+      // Some(None) -> NestedNone, Some(Some(v)) -> NestedSome(v), all distinct.
       final out = echoVecNestedOpt(
-        xs: [null, const FrNone<int>(), const FrSome<int>(5), null],
+        xs: [null, const NestedNone<int>(), const NestedSome<int>(5), null],
       );
       expect(out, hasLength(4));
       expect(out[0], isNull);
-      expect(out[1], isA<FrNone<int>>());
-      expect((out[2] as FrSome<int>).value, 5);
+      expect(out[1], isA<NestedNone<int>>());
+      expect((out[2] as NestedSome<int>).value, 5);
       expect(out[3], isNull);
     });
 

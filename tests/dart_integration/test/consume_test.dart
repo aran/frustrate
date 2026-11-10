@@ -119,7 +119,7 @@ void main() {
       expect(ledgerTotalNested(ls: null), -1);
     });
 
-    /// An `Option` inside an `Option` is `FrOption`, not a second nullable —
+    /// An `Option` inside an `Option` is `NestedOption`, not a second nullable —
     /// `T??` is not Dart, and `Some(None)` has to stay distinct from `None`.
     /// The consume walk has to agree with the ordinary encoder about that or
     /// the generated Dart does not compile; running this is the check.
@@ -138,9 +138,9 @@ void main() {
 
     test('an Option inside an Option keeps all three states', () {
       final a = slipOf([6]);
-      expect(slipTotalNestedOpt(l: FrSome(a.take())), 6);
+      expect(slipTotalNestedOpt(l: NestedSome(a.take())), 6);
       expect(a.isDisposed, isTrue);
-      expect(slipTotalNestedOpt(l: const FrNone()), -1);
+      expect(slipTotalNestedOpt(l: const NestedNone()), -1);
       expect(slipTotalNestedOpt(l: null), -1);
     });
 

@@ -182,7 +182,7 @@ pub(crate) fn fake_type_opt(iface: &Interface, ty: &Type, in_option: bool) -> St
         Type::Option(t) => {
             let inner = fake_type_opt(iface, t, true);
             if in_option {
-                format!("FrOption<{inner}>")
+                format!("NestedOption<{inner}>")
             } else {
                 format!("{inner}?")
             }

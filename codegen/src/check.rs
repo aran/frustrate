@@ -2562,7 +2562,7 @@ impl Expansion {
     /// `Option<T>` is `T?`. Dart collapses `T?` where `T` is itself nullable
     /// into one `T?`, while the wire keeps `Some(None)` and `None` apart and
     /// the codec for the substituted type therefore uses the faithful
-    /// `FrOption` form (`emit_dart::dart_type_opt`). One class cannot declare
+    /// `NestedOption` form (`emit_dart::dart_type_opt`). One class cannot declare
     /// both, so an `Option` argument bound to a parameter that sits under an
     /// `Option` is refused rather than silently collapsed.
     ///

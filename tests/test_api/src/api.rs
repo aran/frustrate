@@ -77,7 +77,7 @@ pub fn bump_u64(x: Option<u64>) -> Option<u64> {
 }
 
 /// Nested option: the inner `Option` crosses
-/// as a faithful `FrOption<int>`, so outer-None, Some(None), and Some(Some)
+/// as a faithful `NestedOption<int>`, so outer-None, Some(None), and Some(Some)
 /// stay distinct instead of all collapsing to Dart `null`.
 #[bridge(sync)]
 pub fn nest_opt(x: Option<Option<i64>>) -> Option<Option<i64>> {
@@ -741,10 +741,10 @@ pub fn echo_vec_of_map(ms: Vec<HashMap<String, i64>>) -> Vec<HashMap<String, i64
     ms
 }
 
-/// A `Vec` whose element is a *nested* `Option` — exercises the `FrOption`
-/// wrapper composing inside a collection (element type `List<FrOption<int>?>`
-/// on the Dart side): outer None → null, Some(None) → FrNone, Some(Some) →
-/// FrSome, all distinct.
+/// A `Vec` whose element is a *nested* `Option` — exercises the `NestedOption`
+/// wrapper composing inside a collection (element type `List<NestedOption<int>?>`
+/// on the Dart side): outer None → null, Some(None) → NestedNone, Some(Some) →
+/// NestedSome, all distinct.
 #[bridge(sync)]
 pub fn echo_vec_nested_opt(xs: Vec<Option<Option<i64>>>) -> Vec<Option<Option<i64>>> {
     xs
@@ -4963,7 +4963,7 @@ pub async fn tape_count_async(t: Tape) -> i64 {
 }
 
 /// Two nestings that only the emitters can get wrong, so they exist to be
-/// *compiled*: an `Option` inside an `Option` (whose Dart form is `FrOption`,
+/// *compiled*: an `Option` inside an `Option` (whose Dart form is `NestedOption`,
 /// not a second nullable) and a tuple mixing two models (whose duplicate-check
 /// entries must be built per handle, because only a `Box`-held object may
 /// forgive a zero-sized type).

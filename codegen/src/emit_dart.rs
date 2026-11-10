@@ -1236,7 +1236,7 @@ pub(crate) fn dart_type(iface: &Interface, ty: &Type) -> String {
 /// `in_option` is true when this type's immediate parent in the type tree is
 /// an `Option` — the one place representation differs: a top-level
 /// `Option<T>` maps to `T?`, but an `Option`
-/// nested inside another `Option` maps to the faithful `FrOption<T>`, because
+/// nested inside another `Option` maps to the faithful `NestedOption<T>`, because
 /// `T??` is invalid Dart and `Some(None)`/`None` must stay distinct.
 pub(crate) fn dart_type_opt(iface: &Interface, ty: &Type, in_option: bool) -> String {
     match ty {
@@ -1350,7 +1350,7 @@ pub(crate) fn dart_type_opt(iface: &Interface, ty: &Type, in_option: bool) -> St
         Type::Option(t) => {
             let inner = dart_type_opt(iface, t, true);
             if in_option {
-                format!("FrOption<{inner}>")
+                format!("NestedOption<{inner}>")
             } else {
                 format!("{inner}?")
             }
@@ -1482,7 +1482,7 @@ pub(crate) fn dart_type_consumed(iface: &Interface, ty: &Type, in_option: bool) 
         Type::Option(t) => {
             let inner = dart_type_consumed(iface, t, true);
             if in_option {
-                format!("FrOption<{inner}>")
+                format!("NestedOption<{inner}>")
             } else {
                 format!("{inner}?")
             }
@@ -1701,7 +1701,7 @@ fn walk_handles(
             };
             let _ = write!(
                 out,
-                "{pad}{{\n{pad}final o{depth} = {expr};\n{pad}if (o{depth} is FrSome<{it}>) {{\n"
+                "{pad}{{\n{pad}final o{depth} = {expr};\n{pad}if (o{depth} is NestedSome<{it}>) {{\n"
             );
             walk_handles(
                 out,
@@ -2127,7 +2127,7 @@ pub(crate) fn encode_stmts_consumed(
 }
 
 /// `in_option` mirrors [encode_stmts_opt]'s: an `Option` nested inside another
-/// is the faithful `FrOption<T>`, not a nullable, because `T??` is not Dart
+/// is the faithful `NestedOption<T>`, not a nullable, because `T??` is not Dart
 /// and `Some(None)` must stay distinct from `None`. The consume walk has to
 /// agree with it exactly — the two write the same wire and read the same Dart
 /// value, so a divergence here is generated code that does not compile.
@@ -2200,7 +2200,7 @@ fn encode_stmts_consumed_opt(
             let it = dart_type_consumed(iface, inner, true);
             let _ = write!(
                 out,
-                "{pad}{{\n{pad}final opt{depth} = {expr};\n{pad}if (opt{depth} is FrNone) {{\n{pad}  w.writeU8(0);\n{pad}}} else {{\n{pad}  w.writeU8(1);\n{pad}  final some{depth} = (opt{depth} as FrSome<{it}>).value;\n"
+                "{pad}{{\n{pad}final opt{depth} = {expr};\n{pad}if (opt{depth} is NestedNone) {{\n{pad}  w.writeU8(0);\n{pad}}} else {{\n{pad}  w.writeU8(1);\n{pad}  final some{depth} = (opt{depth} as NestedSome<{it}>).value;\n"
             );
             encode_stmts_consumed_opt(
                 out,
@@ -2291,7 +2291,7 @@ pub(crate) fn encode_stmts_fake(
 }
 
 /// `in_option` mirrors [dart_type_opt]: when true, an `Option` here is the
-/// faithful `FrOption<T>` (nested), otherwise the nullable `T?` (top level).
+/// faithful `NestedOption<T>` (nested), otherwise the nullable `T?` (top level).
 #[allow(clippy::too_many_arguments)]
 fn encode_stmts_opt(
     out: &mut String,
@@ -2432,13 +2432,13 @@ fn encode_stmts_opt(
         }
         // Invisible: encode what the `Box` points at, in whatever shape it
         // already sits in. `in_option` passes through so a nested
-        // `Option<Box<T>>` still takes the faithful `FrOption` form.
+        // `Option<Box<T>>` still takes the faithful `NestedOption` form.
         Type::Boxed(inner) => {
             encode_stmts_opt(out, iface, inner, expr, depth, in_option, port, side)
         }
         // The wire is identical either way — a presence byte then the value.
         // Only the Dart shape differs: a nullable `T?` (top level) vs a
-        // faithful `FrOption<T>` (nested), the representation that keeps
+        // faithful `NestedOption<T>` (nested), the representation that keeps
         // `Some(None)` distinct from `None`.
         // Emitted inside a bare block, for the reason the handle arm above is:
         // the local is named by *depth*, so two `Option`s at one depth — two
@@ -2453,7 +2453,7 @@ fn encode_stmts_opt(
             };
             let _ = write!(
                 out,
-                "{pad}{{\n{pad}final opt{depth} = {expr};\n{pad}if (opt{depth} is FrNone) {{\n{pad}  w.writeU8(0);\n{pad}}} else {{\n{pad}  w.writeU8(1);\n{pad}  final some{depth} = (opt{depth} as FrSome<{it}>).value;\n"
+                "{pad}{{\n{pad}final opt{depth} = {expr};\n{pad}if (opt{depth} is NestedNone) {{\n{pad}  w.writeU8(0);\n{pad}}} else {{\n{pad}  w.writeU8(1);\n{pad}  final some{depth} = (opt{depth} as NestedSome<{it}>).value;\n"
             );
             encode_stmts_opt(out, iface, inner, &format!("some{depth}"), depth + 1, true, port, side);
             let _ = write!(out, "{pad}}}\n{pad}}}\n");
@@ -2918,7 +2918,7 @@ pub(crate) fn decode_expr_fake_consumed(iface: &Interface, ty: &Type) -> String 
 }
 
 /// `in_option` as in [decode_expr_opt]: a nested `Option` decodes to the
-/// faithful `FrOption<T>`, not a nullable.
+/// faithful `NestedOption<T>`, not a nullable.
 fn decode_expr_fake_consumed_opt(iface: &Interface, ty: &Type, in_option: bool) -> String {
     match ty {
         // A trait-typed position is `[impl tag][handle]`, so the tag is
@@ -2962,7 +2962,7 @@ fn decode_expr_fake_consumed_opt(iface: &Interface, ty: &Type, in_option: bool) 
         Type::Option(inner) if in_option => {
             let it = crate::emit_dart_fake::fake_type_opt(iface, inner, true);
             format!(
-                "r.readBool() ? FrSome<{it}>({}) : FrNone<{it}>()",
+                "r.readBool() ? NestedSome<{it}>({}) : NestedNone<{it}>()",
                 decode_expr_fake_consumed_opt(iface, inner, true)
             )
         }
@@ -2979,7 +2979,7 @@ pub(crate) fn decode_expr_fake(iface: &Interface, ty: &Type) -> String {
 }
 
 /// `in_option` mirrors [dart_type_opt]: a nested `Option` decodes into the
-/// faithful `FrSome`/`FrNone`, a top-level one into a value-or-`null`.
+/// faithful `NestedSome`/`NestedNone`, a top-level one into a value-or-`null`.
 fn decode_expr_opt(iface: &Interface, ty: &Type, in_option: bool, side: Side) -> String {
     // The three arms the side changes are first; everything below is one
     // implementation for both. See [Side].
@@ -3130,7 +3130,7 @@ fn decode_expr_opt(iface: &Interface, ty: &Type, in_option: bool, side: Side) ->
         // The presence tag is a bool on the wire; route it through the
         // validating `readBool` (rejects any byte >1 with a loud codec error)
         // rather than `readU8() == 1`, which would silently coerce a corrupt
-        // tag of 2+ to `None`/`FrNone` — a silent wrong value the charter
+        // tag of 2+ to `None`/`NestedNone` — a silent wrong value the charter
         // forbids.
         Type::Option(inner) if in_option => {
             let it = match side {
@@ -3140,7 +3140,7 @@ fn decode_expr_opt(iface: &Interface, ty: &Type, in_option: bool, side: Side) ->
                 Side::Fake => crate::emit_dart_fake::fake_type_opt(iface, inner, true),
             };
             format!(
-                "r.readBool() ? FrSome<{it}>({}) : FrNone<{it}>()",
+                "r.readBool() ? NestedSome<{it}>({}) : NestedNone<{it}>()",
                 decode_expr_opt(iface, inner, true, side)
             )
         }
@@ -3207,8 +3207,8 @@ fn emit_value_members(
 ///
 /// The nullable trap: a plain `T? field` parameter can't tell "omitted" from
 /// "explicitly null". Every parameter is instead typed `Object?` and defaults
-/// to the shared `frUnset` sentinel; the body keeps the old value when the
-/// argument is `identical(field, frUnset)` and otherwise casts the passed value
+/// to the shared `copyWithUnset` sentinel; the body keeps the old value when the
+/// argument is `identical(field, copyWithUnset)` and otherwise casts the passed value
 /// (`null` included) to the field type. So `copyWith(f: null)` nulls a nullable
 /// `f` while `copyWith()` preserves it. One idiom for every field; skipped for
 /// fieldless types (nothing to copy).
@@ -3225,14 +3225,14 @@ fn emit_copy_with(
     }
     let params: Vec<String> = fields
         .iter()
-        .map(|f| format!("Object? {} = frUnset", field_name(f)))
+        .map(|f| format!("Object? {} = copyWithUnset", field_name(f)))
         .collect();
     let args: Vec<String> = fields
         .iter()
         .map(|f| {
             let n = field_name(f);
             let ty = data_field_type(iface, &f.ty, inbound);
-            let val = format!("identical({n}, frUnset) ? this.{n} : {n} as {ty}");
+            let val = format!("identical({n}, copyWithUnset) ? this.{n} : {n} as {ty}");
             if tuple {
                 val
             } else {
@@ -5968,7 +5968,7 @@ mod tests {
 
     #[test]
     fn struct_has_copy_with_using_the_unset_sentinel() {
-        // Item 2: every field is an `Object?` parameter defaulting to `frUnset`;
+        // Item 2: every field is an `Object?` parameter defaulting to `copyWithUnset`;
         // the body keeps the old value on the sentinel and otherwise casts the
         // passed value to the field type. One idiom, no per-field helper.
         let code = emit_src(
@@ -5978,17 +5978,17 @@ mod tests {
             "#,
         );
         assert!(
-            code.contains("Point copyWith({Object? x = frUnset, Object? label = frUnset}) =>"),
+            code.contains("Point copyWith({Object? x = copyWithUnset, Object? label = copyWithUnset}) =>"),
             "{code}"
         );
         assert!(
-            code.contains("x: identical(x, frUnset) ? this.x : x as double"),
+            code.contains("x: identical(x, copyWithUnset) ? this.x : x as double"),
             "{code}"
         );
         // The nullable field casts to the *nullable* type, so `copyWith(label:
         // null)` actually nulls it (null is not identical to the sentinel).
         assert!(
-            code.contains("label: identical(label, frUnset) ? this.label : label as String?"),
+            code.contains("label: identical(label, copyWithUnset) ? this.label : label as String?"),
             "{code}"
         );
     }
@@ -6014,20 +6014,20 @@ mod tests {
             "#,
         );
         assert!(
-            code.contains("PatchInsert copyWith({Object? field0 = frUnset, Object? field1 = frUnset}) =>"),
+            code.contains("PatchInsert copyWith({Object? field0 = copyWithUnset, Object? field1 = copyWithUnset}) =>"),
             "{code}"
         );
         // Tuple variant: positional constructor call, no field names.
         assert!(
-            code.contains("PatchInsert(identical(field0, frUnset) ? this.field0 : field0 as int, identical(field1, frUnset) ? this.field1 : field1 as String)"),
+            code.contains("PatchInsert(identical(field0, copyWithUnset) ? this.field0 : field0 as int, identical(field1, copyWithUnset) ? this.field1 : field1 as String)"),
             "{code}"
         );
         assert!(
-            code.contains("PatchSet copyWith({Object? at = frUnset}) =>"),
+            code.contains("PatchSet copyWith({Object? at = copyWithUnset}) =>"),
             "{code}"
         );
         assert!(
-            code.contains("at: identical(at, frUnset) ? this.at : at as int"),
+            code.contains("at: identical(at, copyWithUnset) ? this.at : at as int"),
             "{code}"
         );
     }
@@ -6730,27 +6730,27 @@ mod tests {
         let code = emit_src(
             "#[bridge(sync)] pub fn nest(x: Option<Option<i64>>) -> Option<Option<i64>> { x }",
         );
-        // Top-level Option stays nullable; the inner Option becomes FrOption
+        // Top-level Option stays nullable; the inner Option becomes NestedOption
         // (never the invalid `int??`).
-        assert!(code.contains("FrOption<int>? nest({FrOption<int>? x}) {"), "{code}");
+        assert!(code.contains("NestedOption<int>? nest({NestedOption<int>? x}) {"), "{code}");
         assert!(!code.contains("int??"), "{code}");
-        // Encode: outer null-check, inner FrNone/FrSome discrimination.
+        // Encode: outer null-check, inner NestedNone/NestedSome discrimination.
         assert!(code.contains("if (opt2 == null) {"), "{code}");
-        assert!(code.contains("if (opt3 is FrNone) {"), "{code}");
-        assert!(code.contains("final some3 = (opt3 as FrSome<int>).value;"), "{code}");
-        // Decode: outer value-or-null, inner FrSome/FrNone.
+        assert!(code.contains("if (opt3 is NestedNone) {"), "{code}");
+        assert!(code.contains("final some3 = (opt3 as NestedSome<int>).value;"), "{code}");
+        // Decode: outer value-or-null, inner NestedSome/NestedNone.
         assert!(
-            code.contains("r.readBool() ? FrSome<int>(r.readI64()) : FrNone<int>()"),
+            code.contains("r.readBool() ? NestedSome<int>(r.readI64()) : NestedNone<int>()"),
             "{code}"
         );
     }
 
     #[test]
     fn single_option_stays_nullable() {
-        // The one-level default is unchanged: `T?`, no FrOption.
+        // The one-level default is unchanged: `T?`, no NestedOption.
         let code = emit_src("#[bridge(sync)] pub fn f(x: Option<i64>) -> Option<String> { None }");
         assert!(code.contains("String? f({int? x}) {"), "{code}");
-        assert!(!code.contains("FrOption"), "{code}");
+        assert!(!code.contains("NestedOption"), "{code}");
         assert!(code.contains("r.readBool() ? r.readString() : null"), "{code}");
     }
 
@@ -7858,22 +7858,22 @@ mod tests {
         assert!(!solo.contains("final _acq ="), "{solo}");
     }
 
-    /// An `Option` nested inside another is `FrOption`, not a second nullable
+    /// An `Option` nested inside another is `NestedOption`, not a second nullable
     /// — `T??` is not Dart and `Some(None)` must stay distinct from `None`.
     /// The consume walk has to agree with the ordinary encoder about that;
-    /// when it did not, the generated Dart called `peekFor` on an `FrOption`.
+    /// when it did not, the generated Dart called `peekFor` on an `NestedOption`.
     #[test]
     fn a_nested_optional_consume_uses_the_faithful_option() {
         let code = emit_src(
             "#[bridge(confined)] pub struct D { n: i64 }\n\
              #[bridge(sync)] pub fn eat(d: Option<Option<D>>) {}",
         );
-        assert!(code.contains("void eat({FrOption<Consumed<D>>? d})"), "{code}");
+        assert!(code.contains("void eat({NestedOption<Consumed<D>>? d})"), "{code}");
         let body = &code[code.find("void eat(").expect("member")..];
-        assert!(body.contains("as FrSome<Consumed<D>>).value"), "{body}");
+        assert!(body.contains("as NestedSome<Consumed<D>>).value"), "{body}");
         // The fake decodes the same shape, or the harness and the client
         // disagree about a wire they both write.
-        assert!(code.contains("FrSome<FakeD>(_fakeTake<FakeD>("), "{code}");
+        assert!(code.contains("NestedSome<FakeD>(_fakeTake<FakeD>("), "{code}");
     }
 
     #[test]
