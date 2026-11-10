@@ -1,7 +1,7 @@
 """The Bazel-built inputs of the browser suite, named for its driver."""
 
 load("@rules_dart//dart:providers.bzl", "DartInfo")
-load("@rules_dart//dart:utils.bzl", "dart_analyzable_info")
+load("@rules_dart//dart:utils.bzl", "dart_analyzable_info_no_package")
 
 def _package_entries(dep):
     """Each Dart package `dep` contributes: name, package_config entry."""
@@ -68,11 +68,11 @@ def _web_test_inputs_impl(ctx):
             files = depset([manifest]),
             runfiles = ctx.runfiles(files = [manifest] + files + ctx.files.srcs),
         ),
-        # The `dart_analyze` aspect checks `srcs` against `packages` and
+        # The `dart_analyze` aspect checks `entry_srcs` against `packages` and
         # `deps`, the closure the browser run resolves them in.
-        dart_analyzable_info(
+        dart_analyzable_info_no_package(
             deps = ctx.attr.packages + ctx.attr.deps,
-            srcs = ctx.files.srcs,
+            entry_srcs = ctx.files.srcs,
         ),
     ]
 
