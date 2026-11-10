@@ -1,10 +1,15 @@
-load("@rules_dart//dart:defs.bzl", "dart_library")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
+
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "frustrate_i64_list",
+    language_version = "3.13",
+)
 
 # The typed variant of package `frustrate_i64_list`; see `//runtime/dart:frustrate`.
 dart_library(
     name = "i64_list",
-    package_name = "frustrate_i64_list",
     srcs = ["lib/frustrate_i64_list.dart"],
-    language_version = "3.13",
+    package = ":pubspec-metadata",
     visibility = ["//visibility:public"],
 )

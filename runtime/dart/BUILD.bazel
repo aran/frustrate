@@ -1,4 +1,4 @@
-load("@rules_dart//dart:defs.bzl", "dart_binary", "dart_library", "dart_test")
+load("@rules_dart//dart:defs.bzl", "dart_binary", "dart_library", "dart_package_metadata", "dart_test")
 
 exports_files(["pubspec.lock"])
 
@@ -7,6 +7,12 @@ exports_files(["pubspec.lock"])
 # for the no-CSP fallback (pinned by :glue_source_test).
 exports_files(["lib/src/js/frustrate.js"])
 
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "frustrate",
+    language_version = "3.13",
+)
+
 # `Vec<i64>` and `[i64; N]` are `Int64List` where `int` is 64 bits and
 # `List<int>` on dart2js and DDC. The type is the one `I64List` that
 # `lib/frustrate.dart` exports from package `frustrate_i64_list`, which has a
@@ -14,9 +20,8 @@ exports_files(["lib/src/js/frustrate.js"])
 # The default branch is the VM, and any platform without a web compiler.
 dart_library(
     name = "frustrate",
-    package_name = "frustrate",
     srcs = glob(["lib/**/*.dart"]),
-    language_version = "3.13",
+    package = ":pubspec-metadata",
     visibility = ["//visibility:public"],
     deps = ["@pub_deps//:ffi"] + select({
         "@rules_dart//dart/constraints:js": ["//runtime/dart/i64_list/js:i64_list"],
@@ -31,6 +36,7 @@ dart_test(
         "lib/src/runtime_web.dart",
     ],
     main = "test/glue_source_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -50,6 +56,7 @@ dart_test(
         "lib/src/runtime_web.dart",
     ],
     main = "test/no_per_byte_crossing_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -60,6 +67,7 @@ dart_test(
 dart_test(
     name = "segment_snapshot_test",
     main = "test/segment_snapshot_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -72,6 +80,7 @@ dart_test(
 dart_test(
     name = "stream_router_test",
     main = "test/stream_router_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -87,6 +96,7 @@ dart_test(
 dart_test(
     name = "init_contract_test",
     main = "test/init_contract_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -99,6 +109,7 @@ dart_test(
 dart_test(
     name = "pending_calls_test",
     main = "test/pending_calls_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -113,6 +124,7 @@ dart_test(
 dart_test(
     name = "pool_workers_test",
     main = "test/pool_workers_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -126,6 +138,7 @@ dart_test(
 dart_test(
     name = "trap_explain_test",
     main = "test/trap_explain_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -140,6 +153,7 @@ dart_test(
     name = "js_numbers_test",
     srcs = ["test/js_numbers_goldens.dart"],
     main = "test/js_numbers_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -156,6 +170,7 @@ dart_test(
 dart_binary(
     name = "js_arm_web_test",
     main = "tool/js_arm_web_test.dart",
+    package = ":pubspec-metadata",
 )
 
 # Pins the BinaryWriter size-hint contract: the hint generated encoders pass is
@@ -166,6 +181,7 @@ dart_binary(
 dart_test(
     name = "binary_writer_hint_test",
     main = "test/binary_writer_hint_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -180,6 +196,7 @@ dart_test(
 dart_test(
     name = "binary_writer_external_test",
     main = "test/binary_writer_external_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -196,6 +213,7 @@ dart_test(
 dart_test(
     name = "binary_codec_bulk_test",
     main = "test/binary_codec_bulk_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -210,6 +228,7 @@ dart_test(
 dart_test(
     name = "activate_reset_test",
     main = "test/activate_reset_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -224,6 +243,7 @@ dart_test(
 dart_test(
     name = "handle_bridge_identity_test",
     main = "test/handle_bridge_identity_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -237,6 +257,7 @@ dart_test(
 dart_test(
     name = "delegating_runtime_test",
     main = "test/delegating_runtime_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -251,6 +272,7 @@ dart_test(
 dart_test(
     name = "fake_runtime_test",
     main = "test/fake_runtime_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",
@@ -264,6 +286,7 @@ dart_test(
 dart_test(
     name = "fake_handle_alias_test",
     main = "test/fake_handle_alias_test.dart",
+    package = ":pubspec-metadata",
     deps = [
         ":frustrate",
         "@pub_deps//:test",

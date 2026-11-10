@@ -1,4 +1,4 @@
-load("@rules_dart//dart:defs.bzl", "dart_library", "dart_test")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata", "dart_test")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_no_block_check", "frustrate_wasm_module")
 load("//bazel:idle_barrier.bzl", "frustrate_idle_barrier_library")
@@ -116,7 +116,7 @@ frustrate_code_asset(
 )
 
 # The same library built with the manual scheduler, bound to the same asset id
-# as `test_api_asset`: a target takes `bindings` or `bindings_manual`, never both.
+# as `test_api_asset`: a test takes it with `code_assets`, which replaces that one.
 frustrate_manual_scheduler_library(
     name = "test_api_manual",
     library = ":test_api_shared",
@@ -126,10 +126,11 @@ frustrate_code_asset(
     name = "test_api_manual_asset",
     bridge = ":bridge",
     library = ":test_api_manual",
+    visibility = ["//tests/dart_integration:__pkg__"],
 )
 
 # The same library built with the idle barrier, bound to the same asset id as
-# `test_api_asset`: a target takes one of the bindings, never two.
+# `test_api_asset`, taken the same way.
 frustrate_idle_barrier_library(
     name = "test_api_idle",
     library = ":test_api_shared",
@@ -139,6 +140,7 @@ frustrate_code_asset(
     name = "test_api_idle_asset",
     bridge = ":bridge",
     library = ":test_api_idle",
+    visibility = ["//tests/dart_integration:__pkg__"],
 )
 
 # The browser fixture: same crate, stable Rust, single-threaded wasm.
@@ -185,46 +187,19 @@ genrule(
 
 # Same package URI as the cargo flow (tests/dart_integration/pubspec.yaml
 # names the package frustrate_integration), so one import works in both.
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "frustrate_integration",
+    code_assets = [":test_api_asset"],
+)
+
 dart_library(
     name = "bindings",
-    package_name = "frustrate_integration",
     srcs = [
         ":bridge.dart",
         ":fake_plan_dart",
     ],
-    code_assets = [":test_api_asset"],
-    visibility = ["//tests:__subpackages__"],
-    deps = [
-        "//runtime/dart:frustrate",
-        "@pub_deps//:ffi",
-    ],
-)
-
-# `bindings` with the idle-barrier library as the bridge's code asset.
-dart_library(
-    name = "bindings_idle",
-    package_name = "frustrate_integration",
-    srcs = [
-        ":bridge.dart",
-        ":fake_plan_dart",
-    ],
-    code_assets = [":test_api_idle_asset"],
-    visibility = ["//tests:__subpackages__"],
-    deps = [
-        "//runtime/dart:frustrate",
-        "@pub_deps//:ffi",
-    ],
-)
-
-# `bindings` with the manual-scheduler library as the bridge's code asset.
-dart_library(
-    name = "bindings_manual",
-    package_name = "frustrate_integration",
-    srcs = [
-        ":bridge.dart",
-        ":fake_plan_dart",
-    ],
-    code_assets = [":test_api_manual_asset"],
+    package = ":pubspec-metadata",
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",

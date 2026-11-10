@@ -1016,15 +1016,16 @@ dart_test(
 )
 
 # The manual scheduler's Dart drain. The first test resolves the bridge to the
-# test API built with the scheduler on (`bindings_manual`); the second uses the
+# test API built with the scheduler on; the second uses the
 # ordinary build and checks that a drain is refused there.
 dart_test(
     name = "manual_scheduler_test",
     srcs = ["test/init_native.dart"],
+    code_assets = ["//tests/test_api:test_api_manual_asset"],
     main = "test/manual_scheduler_test.dart",
     deps = [
         "//runtime/dart:frustrate",
-        "//tests/test_api:bindings_manual",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )
@@ -1041,15 +1042,16 @@ dart_test(
 )
 
 # The idle barrier's Dart side. The first test resolves the bridge to the test
-# API built with the barrier (`bindings_idle`); the second uses the ordinary
+# API built with the barrier; the second uses the ordinary
 # build and checks that the barrier is refused there.
 dart_test(
     name = "idle_barrier_test",
     srcs = ["test/init_native.dart"],
+    code_assets = ["//tests/test_api:test_api_idle_asset"],
     main = "test/idle_barrier_test.dart",
     deps = [
         "//runtime/dart:frustrate",
-        "//tests/test_api:bindings_idle",
+        "//tests/test_api:bindings",
         "@pub_deps//:test",
     ],
 )

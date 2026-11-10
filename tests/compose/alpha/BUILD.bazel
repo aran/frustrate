@@ -1,4 +1,4 @@
-load("@rules_dart//dart:defs.bzl", "dart_library")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
 load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
 
 frustrate_bridge_outputs(
@@ -27,10 +27,15 @@ frustrate_bridge_library(
     ],
 )
 
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "compose_alpha",
+)
+
 dart_library(
     name = "bindings",
-    package_name = "compose_alpha",
     srcs = [":bridge.dart"],
+    package = ":pubspec-metadata",
     visibility = ["//tests:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",

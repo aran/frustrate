@@ -1,4 +1,9 @@
-load("@rules_dart//dart:defs.bzl", "dart_library")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
+
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "bench_harness",
+)
 
 # The measurement harness, shared by //tests/dart_integration's native and web
 # benches.
@@ -16,7 +21,7 @@ load("@rules_dart//dart:defs.bzl", "dart_library")
 # page under dart2wasm.
 dart_library(
     name = "bench_harness",
-    package_name = "bench_harness",
     srcs = glob(["lib/**/*.dart"]),
+    package = ":pubspec-metadata",
     visibility = ["//visibility:public"],
 )
