@@ -273,9 +273,6 @@ pub = use_extension("@rules_dart//dart/pub:extensions.bzl", "pub")
 pub.from_lock(
     name = "pub_deps",
     lock = "//runtime/dart:pubspec.lock",
-    # rules_dart's own lock files share packages with ours; accept the
-    # higher version when locks disagree.
-    on_version_conflict = "upgrade",
     # The runfiles library of the rules_dart this module builds with, which an
     # override of rules_dart replaces too.
     resolve = {"runfiles": "@rules_dart//dart/runfiles"},

@@ -12,14 +12,6 @@ environment:
 dependencies:
   flutter_rust_bridge: 2.13.0-beta.6
 
-# Pinned to match rules_dart's internal ext lock, exactly as
-# runtime/dart/pubspec.yaml is and for the same reason: the pub extension
-# rejects version skew of shared transitive packages across lock files.
-# Nothing to do with FRB.
 dev_dependencies:
   analyzer: 10.2.0
   test: 1.31.1
-
-dependency_overrides:
-  coverage: 1.15.0
-  meta: 1.18.2
