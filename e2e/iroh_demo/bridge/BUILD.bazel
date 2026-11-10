@@ -1,6 +1,6 @@
 load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_no_block_check")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
-load("@rules_dart//dart:defs.bzl", "dart_library", "dart_test")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata", "dart_test")
 load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library", "rust_test")
 
@@ -156,13 +156,12 @@ frustrate_code_asset(
 # The same package name and the same generated source as :iroh_bridge, minus
 # the `lib/init.dart` seam. Not a `flutter_plugin` because nothing here is
 # Flutter: `dart_test` runs the plain VM, which is the whole reason this is
-# cheap enough to be an ordinary `bazel test` target. The test loads the
-# asset built for the host that runs it.
+# cheap enough to be an ordinary `bazel test` target. The test replaces the
+# package's hot-patchable native library with the asset built for the host.
 dart_library(
     name = "bindings",
-    package_name = "iroh_bridge",
     srcs = [":codegen.dart"],
-    code_assets = [":iroh_rust_asset"],
+    package = ":pubspec-metadata",
     deps = ["@frustrate//runtime/dart:frustrate"],
 )
 
@@ -176,6 +175,7 @@ dart_library(
 dart_test(
     name = "dependency_logging_test",
     size = "small",
+    code_assets = [":iroh_rust_asset"],
     main = "test/dependency_logging_test.dart",
     target_compatible_with = select({
         "@platforms//os:macos": [],
@@ -214,19 +214,23 @@ flutter_native_library(
 
 # The bindings package: generated Dart plus the init seam. App code imports
 # package:iroh_bridge/... and never touches a platform transport directly.
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "iroh_bridge",
+    # Web has no code asset: `flutter_web_app` stages the module as an
+    # `extra_web_asset` (//:app_web) and the runtime fetches it by URL.
+    code_assets = [":iroh_rust_native"],
+)
 
 flutter_plugin(
     name = "iroh_bridge",
-    package_name = "iroh_bridge",
     srcs = [
         "lib/init.dart",
         "lib/src/init_native.dart",
         "lib/src/init_web.dart",
         ":codegen.dart",
     ],
-    # Web has no code asset: `flutter_web_app` stages the module as an
-    # `extra_web_asset` (//:app_web) and the runtime fetches it by URL.
-    code_assets = [":iroh_rust_native"],
+    package = ":pubspec-metadata",
     platforms = [
         "macos",
         "ios",

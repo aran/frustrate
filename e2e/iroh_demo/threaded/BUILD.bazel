@@ -64,7 +64,6 @@ frustrate_web_glue(
 # number, and a mismatch fails loudly as an unreachable relay.
 flutter_web_app(
     name = "app_web_threaded",
-    package_name = "iroh_demo",
     defines = [
         "PRESET=minimal",
         "RELAY_URL=http://127.0.0.1:3342",
@@ -75,6 +74,7 @@ flutter_web_app(
         ":frustrate.js",
     ],
     main = "//:lib/main.dart",
+    package = "//:pubspec-metadata",
     tags = ["manual"],
     use_local_canvaskit = True,
     web_defines = csp_web_defines(),

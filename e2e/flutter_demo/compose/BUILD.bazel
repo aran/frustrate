@@ -9,6 +9,7 @@
 
 load("@frustrate//bazel:defs.bzl", "frustrate_library")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
+load("@rules_dart//dart:defs.bzl", "dart_package_metadata")
 load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
 load("@rules_flutter//flutter:defs.bzl", "flutter_application", "flutter_native_library")
 
@@ -37,14 +38,19 @@ frustrate_hot_patchable(
     library = ":compose_rust_hot.%s_lib" % bridge,
 ) for bridge in ("ping", "pong")]
 
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "compose_demo",
+)
+
 flutter_application(
     name = "app_flutter",
-    package_name = "compose_demo",
     code_assets = [
         ":compose_rust_native.ping",
         ":compose_rust_native.pong",
     ],
     main = "lib/main.dart",
+    package = ":pubspec-metadata",
     visibility = ["//:__pkg__"],
     deps = [
         "//compose/ping:bindings",

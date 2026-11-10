@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@frustrate//bazel:defs.bzl", "frustrate_wasm_module", "frustrate_web_glue")
-load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options")
+load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options", "dart_package_metadata")
 load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
 load("@rules_flutter//flutter:defs.bzl", "flutter_application")
 load("@rules_flutter//flutter:ios.bzl", "flutter_ios_app", "flutter_ios_simulator_build_test")
@@ -23,10 +23,15 @@ APP_DEPS = [
     "@rules_flutter//flutter:material_icons",
 ]
 
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "iroh_demo",
+)
+
 flutter_application(
     name = "app_flutter",
-    package_name = "iroh_demo",
     main = "lib/main.dart",
+    package = ":pubspec-metadata",
     deps = APP_DEPS,
 )
 
@@ -279,7 +284,6 @@ frustrate_web_glue(
 # below, which is `minimal` plus a relay the harness starts.
 flutter_web_app(
     name = "app_web",
-    package_name = "iroh_demo",
     defines = ["PRESET=n0"],
     extra_web_assets = [
         ":iroh_rust.wasm",
@@ -287,6 +291,7 @@ flutter_web_app(
         ":frustrate.js",
     ],
     main = "lib/main.dart",
+    package = ":pubspec-metadata",
     # The index.html CSP allows scripts from 'self' only: the renderer must
     # load from the bundled canvaskit/, not the gstatic CDN.
     use_local_canvaskit = True,
@@ -320,7 +325,6 @@ flutter_web_app(
 # anything.
 flutter_web_app(
     name = "app_web_hermetic",
-    package_name = "iroh_demo",
     defines = [
         "PRESET=minimal",
         "RELAY_URL=http://127.0.0.1:3341",
@@ -331,6 +335,7 @@ flutter_web_app(
         ":frustrate.js",
     ],
     main = "lib/main.dart",
+    package = ":pubspec-metadata",
     use_local_canvaskit = True,
     web_defines = csp_web_defines(),
     deps = [

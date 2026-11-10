@@ -1,5 +1,6 @@
 load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
+load("@rules_dart//dart:defs.bzl", "dart_package_metadata")
 load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 
@@ -96,12 +97,17 @@ flutter_native_library(
     library = ":demo_rust_asset",
 )
 
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "demo_bridge",
+    code_assets = [":demo_rust_native"],
+)
+
 # The bindings package: generated Dart plus the platform-neutral init seam.
 # App code imports package:demo_bridge/... and never touches a platform
 # transport directly.
 flutter_plugin(
     name = "demo_bridge",
-    package_name = "demo_bridge",
     srcs = [
         "lib/fake_plan.dart",
         "lib/init.dart",
@@ -112,7 +118,7 @@ flutter_plugin(
         "lib/src/native_features_web.dart",
         ":codegen.dart",
     ],
-    code_assets = [":demo_rust_native"],
+    package = ":pubspec-metadata",
     platforms = [
         "macos",
         "ios",
