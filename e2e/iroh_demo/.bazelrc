@@ -1,6 +1,6 @@
 # Builds from the checked-in MODULE.bazel.lock and fail when it is stale.
 # Refresh it from the repository root with
-# `bazel run --lockfile_mode=off @overhead//locks -- --refresh <workspace>`.
+# `bazel run --lockfile_mode=off @overhead//locks:refresh -- <workspace>`.
 common --lockfile_mode=error
 
 # The bridge crate's `log` calls expand against @iroh_crates//:log, so

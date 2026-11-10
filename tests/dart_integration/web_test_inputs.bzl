@@ -9,7 +9,7 @@ def _package_entries(dep):
     versions = {r.package_name: r.language_version for r in info.transitive_packages.to_list()}
     return [
         (pkg.package_name, {
-            "root": pkg.lib_root,
+            "root": pkg.package_root,
             "languageVersion": versions.get(pkg.package_name, ""),
         })
         for pkg in info.packages

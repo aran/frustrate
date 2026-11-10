@@ -17,7 +17,7 @@ so a bridge crate declared as a bare cdylib had unit tests and nothing else.
 """
 
 load("@rules_dart//dart:providers.bzl", "DartCodeAssetInfo")
-load("@rules_dart//dart:utils.bzl", "dart_compile_reset")
+load("@rules_dart//dart:utils.bzl", "non_dart_transition")
 load("@rules_rust//rust:defs.bzl", "rust_common", "rust_library", "rust_shared_library")
 load(":no_block_check.bzl", _frustrate_no_block_check = "frustrate_no_block_check")
 
@@ -44,7 +44,7 @@ def _frustrate_bridge_impl(ctx):
     rust_out = ctx.actions.declare_file("src/frustrate_generated.rs")
 
     # Likewise lib/<crate>.frustrate.dart: dart_library resolves package files
-    # by lib_root (= this package) prefix, so the bindings dart_library must
+    # by package_root (= this package) prefix, so the bindings dart_library must
     # live in this same package and the file must sit directly under lib/.
     # The entry is a conditional export of the per-platform surfaces under
     # lib/src/ (web omits native-only members). Beside it, the models library
@@ -109,7 +109,7 @@ def _frustrate_bridge_impl(ctx):
 # `//runtime/dart:frustrate`), and the Rust glue it writes is the crate's source.
 frustrate_bridge = rule(
     implementation = _frustrate_bridge_impl,
-    cfg = dart_compile_reset,
+    cfg = non_dart_transition,
     doc = "Generate frustrate bridge glue (Rust) and bindings (Dart) from " +
           "declared bridge sources.",
     attrs = {
@@ -178,7 +178,7 @@ def _frustrate_code_asset_impl(ctx):
 
 frustrate_code_asset = rule(
     implementation = _frustrate_code_asset_impl,
-    cfg = dart_compile_reset,
+    cfg = non_dart_transition,
     doc = """A bridge library as the Dart code asset its generated bindings resolve.
 
 The generated `<crate>Bridge` names its exports by the asset id of `bridge`;
@@ -716,7 +716,7 @@ def _frustrate_web_glue_impl(ctx):
 
 frustrate_web_glue = rule(
     implementation = _frustrate_web_glue_impl,
-    cfg = dart_compile_reset,
+    cfg = non_dart_transition,
     doc = "Stage frustrate's web glue (the served asset for strict-CSP " +
           "pages) into the consuming package — " +
           "name the target `frustrate.js` (the URL the app's " +
@@ -736,7 +736,7 @@ frustrate_web_glue = rule(
 
 frustrate_wasm_module = rule(
     implementation = _frustrate_wasm_module_impl,
-    cfg = dart_compile_reset,
+    cfg = non_dart_transition,
     doc = "Build a bridge rust_shared_library for a wasm platform and " +
           "expose the module under this target's name — name the target " +
           "`<something>.wasm`, conventionally matching the URL the app's " +
@@ -928,7 +928,7 @@ def _frustrate_wasm_opt_impl(ctx):
 
 frustrate_wasm_opt = rule(
     implementation = _frustrate_wasm_opt_impl,
-    cfg = dart_compile_reset,
+    cfg = non_dart_transition,
     doc = "Run binaryen's `wasm-opt` over an existing wasm module.\n\n" +
           "`frustrate_wasm_module(wasm_opt = ...)` is the integrated spelling " +
           "and the one to reach for first — it optimizes in the right place " +
