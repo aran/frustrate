@@ -788,7 +788,7 @@ mod tests {
         // drains after it.
         let (tx, rx) = channel::<()>();
         host.submit(0, move || {
-            crate::handle::actor_new(Counted(&DROPS), "Counted");
+            crate::__private::handle::actor_new(Counted(&DROPS), "Counted");
             crate::objects::insert(Grenade, "Grenade");
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
             tx.send(()).unwrap();
@@ -823,7 +823,7 @@ mod tests {
 
         let (tx, rx) = channel::<()>();
         host.submit(0, move || {
-            crate::handle::actor_new(Counted(&DROPS), "Counted");
+            crate::__private::handle::actor_new(Counted(&DROPS), "Counted");
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
             tx.send(()).unwrap();
             Some(FramedWriter::from_bytes(vec![]))
@@ -929,7 +929,7 @@ mod tests {
 
         let (tx, rx) = channel::<u64>();
         host.submit(0, move || {
-            tx.send(crate::handle::actor_new(Counted(&DROPS), "Counted")).unwrap();
+            tx.send(crate::__private::handle::actor_new(Counted(&DROPS), "Counted")).unwrap();
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
             Some(FramedWriter::from_bytes(vec![]))
         });
@@ -938,7 +938,7 @@ mod tests {
         let before = host_count();
         // What the generated dispatched drop does.
         host.submit(1, move || {
-            crate::handle::actor_drop::<Counted>(slot);
+            crate::__private::handle::actor_drop::<Counted>(slot);
             Some(FramedWriter::from_bytes(vec![]))
         });
         host.request_stop();

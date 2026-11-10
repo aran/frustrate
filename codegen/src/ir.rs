@@ -793,7 +793,7 @@ pub struct Function {
     pub web_runtime_fail: bool,
     /// True when the user wrote a Rust `async fn`: the body evaluates to a
     /// `Future`, which the generated glue hands to the cooperative executor
-    /// (`frustrate::executor::spawn`). That
+    /// (`frustrate::__private::executor::spawn`). That
     /// executor runs on every config, so an async-bodied fn is portable and
     /// never `requires_native`. Never `#[bridge(sync)]`: a sync member runs on
     /// the caller and returns a plain value, so it cannot await. Orthogonal to

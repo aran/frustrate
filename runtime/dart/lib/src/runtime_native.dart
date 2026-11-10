@@ -35,7 +35,7 @@ typedef _ExitPortDart = Object Function();
 // (fn_id, request, request length, response buffer, its capacity) -> the
 // response length, or -1 if it did not fit and was leased instead (the
 // (ptr, len, cap) triple then sits at the front of the response buffer).
-// See frustrate::envelope::respond_out.
+// See frustrate::__private::envelope::respond_out.
 // The last argument is the isolate's own owner id (its tag): what the body
 // spawns belongs to the zone frustrate was initialised in (uncaught.rs).
 typedef _CallSyncC = Int32 Function(

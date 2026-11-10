@@ -214,6 +214,20 @@ impl<T: Send + 'static> StreamProbe<T> {
     }
 }
 
+/// Number of live native actor hosts. 0 on wasm, where the actor executor
+/// is a Worker owned by the Dart side and this crate hosts nothing. Test
+/// support for executor-leak pins; portable so bridge fixtures need no cfg.
+pub fn actor_host_count() -> usize {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        crate::actor::host_count()
+    }
+    #[cfg(target_family = "wasm")]
+    {
+        0
+    }
+}
+
 #[cfg(all(test, not(target_family = "wasm")))]
 mod tests {
     use super::*;

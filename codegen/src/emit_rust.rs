@@ -47,11 +47,11 @@ pub fn emit(iface: &Interface) -> String {
          #[allow(unused_imports)]\n\
          use frustrate::codec::{{ByteReader, ByteWriter, FramedWriter}};\n\
          #[allow(unused_imports)]\n\
-         use frustrate::envelope::{{self, Outcome}};\n\
+         use frustrate::__private::envelope::{{self, Outcome}};\n\
          #[allow(unused_imports)]\n\
          use frustrate::error::{{Contention, ContentionError}};\n\
          #[allow(unused_imports)]\n\
-         use frustrate::handle;\n\n",
+         use frustrate::__private::handle;\n\n",
         iface.crate_name
     );
 
@@ -1905,7 +1905,7 @@ fn emit_trait_owner(
     out.push_str(ALLOW);
     let _ = write!(
         out,
-        "impl __FrOwn_{t} {{\n    fn take_dyn(self) -> Result<Box<dyn {p}>, frustrate::handle::StillInUse> {{\n        match self {{\n"
+        "impl __FrOwn_{t} {{\n    fn take_dyn(self) -> Result<Box<dyn {p}>, frustrate::__private::handle::StillInUse> {{\n        match self {{\n"
     );
     for (v, _) in variants {
         // Tag 0 already holds the trait object; every other tag holds a
@@ -1917,13 +1917,13 @@ fn emit_trait_owner(
             (Model::Confined | Model::Resident | Model::Actor, false) => {
                 format!("{{ let b: Box<dyn {p}> = a; Ok(b) }}")
             }
-            (Model::Frozen, true) => "frustrate::handle::frozen_take(a)".to_string(),
+            (Model::Frozen, true) => "frustrate::__private::handle::frozen_take(a)".to_string(),
             (Model::Frozen, false) => format!(
-                "frustrate::handle::frozen_take(a).map(|v| {{ let b: Box<dyn {p}> = Box::new(v); b }})"
+                "frustrate::__private::handle::frozen_take(a).map(|v| {{ let b: Box<dyn {p}> = Box::new(v); b }})"
             ),
-            (Model::Locked, true) => "frustrate::handle::locked_take(a)".to_string(),
+            (Model::Locked, true) => "frustrate::__private::handle::locked_take(a)".to_string(),
             (Model::Locked, false) => format!(
-                "frustrate::handle::locked_take(a).map(|v| {{ let b: Box<dyn {p}> = Box::new(v); b }})"
+                "frustrate::__private::handle::locked_take(a).map(|v| {{ let b: Box<dyn {p}> = Box::new(v); b }})"
             ),
         };
         let _ = write!(out, "            Self::{v}(a) => {arm},\n");
@@ -2096,7 +2096,7 @@ struct AliasEntry {
 }
 
 /// What the generated glue does with a handle it acquires — the emitter's
-/// mirror of `frustrate::handle::Use`, plus the one distinction the runtime
+/// mirror of `frustrate::__private::handle::Use`, plus the one distinction the runtime
 /// does not need: which of the two consuming receivers the author wrote.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Acquire {
@@ -2111,12 +2111,12 @@ enum Acquire {
 }
 
 impl Acquire {
-    /// The `frustrate::handle::Use` this is, as generated code spells it.
+    /// The `frustrate::__private::handle::Use` this is, as generated code spells it.
     fn runtime_use(self) -> &'static str {
         match self {
-            Acquire::Shared => "frustrate::handle::Use::Shared",
-            Acquire::Mut => "frustrate::handle::Use::Mut",
-            Acquire::Consume | Acquire::ConsumeBox => "frustrate::handle::Use::Consume",
+            Acquire::Shared => "frustrate::__private::handle::Use::Shared",
+            Acquire::Mut => "frustrate::__private::handle::Use::Mut",
+            Acquire::Consume | Acquire::ConsumeBox => "frustrate::__private::handle::Use::Consume",
         }
     }
 
@@ -2726,7 +2726,7 @@ fn emit_alias_check(f: &Function, parts: &mut CallParts) {
     if any_many {
         parts
             .prelude
-            .push_str("    let mut alias: Vec<(Option<u64>, frustrate::handle::Use)> = Vec::new();\n    let mut alias_at: Vec<(u32, u32)> = Vec::new();\n");
+            .push_str("    let mut alias: Vec<(Option<u64>, frustrate::__private::handle::Use)> = Vec::new();\n    let mut alias_at: Vec<(u32, u32)> = Vec::new();\n");
         for (i, a) in parts.aliases.iter().enumerate() {
             match &a.entry_expr {
                 Some(e) => {
@@ -2749,7 +2749,7 @@ fn emit_alias_check(f: &Function, parts: &mut CallParts) {
         }
         let _ = write!(
             parts.prelude,
-            "    if let Err(dup) = frustrate::handle::alias_check(&alias) {{\n\
+            "    if let Err(dup) = frustrate::__private::handle::alias_check(&alias) {{\n\
              \x20       const NAMES: [&str; {n}] = [{}];\n\
              \x20       let at = |k: u32| {{\n\
              \x20           let (pos, idx) = alias_at[k as usize];\n\
@@ -2768,7 +2768,7 @@ fn emit_alias_check(f: &Function, parts: &mut CallParts) {
         let _ = write!(
             parts.prelude,
             "    let alias = [{}];\n\
-             \x20   if let Err(dup) = frustrate::handle::alias_check(&alias) {{\n\
+             \x20   if let Err(dup) = frustrate::__private::handle::alias_check(&alias) {{\n\
              \x20       const NAMES: [&str; {n}] = [{}];\n\
              \x20       panic!(\"frustrate: `{method}` {{}}, as `{{}}` and `{{}}`\", dup.why, NAMES[dup.a as usize], NAMES[dup.b as usize]);\n\
              \x20   }}\n",
@@ -2875,7 +2875,7 @@ fn emit_lock_plan(f: &Function, for_pool: bool, parts: &mut CallParts) {
         }
         let _ = write!(
             parts.prelude,
-            "    if let Err((i, j)) = frustrate::handle::lock_plan(&mut plan[..]) {{\n\
+            "    if let Err((i, j)) = frustrate::__private::handle::lock_plan(&mut plan[..]) {{\n\
              \x20       const NAMES: [&str; {n}] = [{}];\n\
              \x20       let at = |k: u32| {{\n\
              \x20           let (pos, idx) = plan_at[k as usize];\n\
@@ -2895,7 +2895,7 @@ fn emit_lock_plan(f: &Function, for_pool: bool, parts: &mut CallParts) {
         let _ = write!(
             parts.prelude,
             "    let mut plan = [{}];\n\
-             \x20   if let Err((i, j)) = frustrate::handle::lock_plan(&mut plan) {{\n\
+             \x20   if let Err((i, j)) = frustrate::__private::handle::lock_plan(&mut plan) {{\n\
              \x20       const NAMES: [&str; {n}] = [{}];\n\
              \x20       panic!(\"frustrate: `{method}` received the same locked handle for parameters `{{}}` and `{{}}`\", NAMES[i as usize], NAMES[j as usize]);\n\
              \x20   }}\n",
@@ -3014,7 +3014,7 @@ fn acquire_consumed_container(
         let gather = gather.replace("ENTRIES", &format!("entries_{name}"));
         let _ = write!(
             parts.prelude,
-            "    let mut entries_{name}: Vec<(Option<u64>, frustrate::handle::Use)> = Vec::new();\n{gather}"
+            "    let mut entries_{name}: Vec<(Option<u64>, frustrate::__private::handle::Use)> = Vec::new();\n{gather}"
         );
         parts.aliases.push(AliasEntry {
             name: name.clone(),
@@ -3225,7 +3225,7 @@ fn gather_entries(iface: &Interface, ty: &Type, expr: &str, depth: usize, out: &
                     for (tag, _, ty) in trait_arms(iface, n) {
                         let _ = write!(
                             m,
-                            "{tag} => frustrate::handle::alias_entry::<{ty}>({id}, frustrate::handle::Use::Consume), "
+                            "{tag} => frustrate::__private::handle::alias_entry::<{ty}>({id}, frustrate::__private::handle::Use::Consume), "
                         );
                     }
                     let _ = write!(
@@ -3235,10 +3235,10 @@ fn gather_entries(iface: &Interface, ty: &Type, expr: &str, depth: usize, out: &
                     m
                 }
                 Model::Confined | Model::Resident | Model::Actor => format!(
-                    "frustrate::handle::alias_entry::<{path}>({id}, frustrate::handle::Use::Consume)"
+                    "frustrate::__private::handle::alias_entry::<{path}>({id}, frustrate::__private::handle::Use::Consume)"
                 ),
                 Model::Frozen | Model::Locked => format!(
-                    "frustrate::handle::arc_alias_entry({id}, frustrate::handle::Use::Consume)"
+                    "frustrate::__private::handle::arc_alias_entry({id}, frustrate::__private::handle::Use::Consume)"
                 ),
             };
             let _ = write!(out, "    ENTRIES.push({entry});\n");
@@ -3303,12 +3303,12 @@ fn gather_entries(iface: &Interface, ty: &Type, expr: &str, depth: usize, out: &
 /// through the iterator that short-circuited.
 fn take_expr(iface: &Interface, ty: &Type, expr: &str, depth: usize) -> String {
     if !crate::check::reaches_opaque(iface, ty) {
-        return format!("Ok::<_, frustrate::handle::StillInUse>({expr})");
+        return format!("Ok::<_, frustrate::__private::handle::StillInUse>({expr})");
     }
     match ty {
         // A lent position's id passes through, so the lending half can read it
         // out of the taken value where the argument is built.
-        Type::Ref { .. } => format!("Ok::<_, frustrate::handle::StillInUse>({expr})"),
+        Type::Ref { .. } => format!("Ok::<_, frustrate::__private::handle::StillInUse>({expr})"),
         // A trait handle's adoption is a `__FrOwn_{T}`, whose unwrap already
         // answers the `Result<Box<dyn T>, StillInUse>` every other arm does.
         Type::Opaque(n) if iface.opaque(n).is_some_and(|o| o.dyn_trait) => {
@@ -3321,10 +3321,10 @@ fn take_expr(iface: &Interface, ty: &Type, expr: &str, depth: usize) -> String {
                 // from — and the whole point of the expression is that every
                 // element's `Result` unifies.
                 Model::Confined | Model::Resident | Model::Actor => {
-                    format!("Ok::<_, frustrate::handle::StillInUse>(*{expr})")
+                    format!("Ok::<_, frustrate::__private::handle::StillInUse>(*{expr})")
                 }
-                Model::Frozen => format!("frustrate::handle::frozen_take({expr})"),
-                Model::Locked => format!("frustrate::handle::locked_take({expr})"),
+                Model::Frozen => format!("frustrate::__private::handle::frozen_take({expr})"),
+                Model::Locked => format!("frustrate::__private::handle::locked_take({expr})"),
             }
         }
         Type::Option(inner) => format!(
@@ -3380,7 +3380,7 @@ fn take_expr(iface: &Interface, ty: &Type, expr: &str, depth: usize) -> String {
             };
             format!(
                 "{expr}.into_iter().map(|(k{depth}, v{depth})| {{ let rk = {}; let rv = {}; \
-                 match (rk, rv) {{ (Ok(k), Ok(v)) => Ok((k, v)), _ => Err(frustrate::handle::StillInUse) }} }})\
+                 match (rk, rv) {{ (Ok(k), Ok(v)) => Ok((k, v)), _ => Err(frustrate::__private::handle::StillInUse) }} }})\
                  .collect::<Result<{target}, _>>()",
                 take_expr(iface, k, &format!("k{depth}"), depth + 1),
                 take_expr(iface, v, &format!("v{depth}"), depth + 1)
@@ -3398,7 +3398,7 @@ fn take_expr(iface: &Interface, ty: &Type, expr: &str, depth: usize) -> String {
                 .collect();
             let pat: Vec<String> = binds.iter().map(|b| format!("Ok({b})")).collect();
             format!(
-                "{{ let ({}) = {expr}; {} match ({}) {{ ({}) => Ok(({})), _ => Err(frustrate::handle::StillInUse) }} }}",
+                "{{ let ({}) = {expr}; {} match ({}) {{ ({}) => Ok(({})), _ => Err(frustrate::__private::handle::StillInUse) }} }}",
                 binds.join(", "),
                 takes.join(" "),
                 binds.iter().map(|b| format!("r_{b}")).collect::<Vec<_>>().join(", "),
@@ -3439,7 +3439,7 @@ fn take_expr(iface: &Interface, ty: &Type, expr: &str, depth: usize) -> String {
             };
             let tail = if binds.len() == 1 { "," } else { "" };
             format!(
-                "{{ let ({}{tail}) = {expr}; {} match ({}{tail}) {{ ({}{tail}) => Ok({ctor}), _ => Err(frustrate::handle::StillInUse) }} }}",
+                "{{ let ({}{tail}) = {expr}; {} match ({}{tail}) {{ ({}{tail}) => Ok({ctor}), _ => Err(frustrate::__private::handle::StillInUse) }} }}",
                 binds.join(", "),
                 takes.join(" "),
                 binds.iter().map(|b| format!("r_{b}")).collect::<Vec<_>>().join(", "),
@@ -3736,7 +3736,7 @@ fn lend_positions(
                     for (tag, _, ty) in trait_arms(iface, &pos.opaque) {
                         let _ = write!(
                             m,
-                            "{tag} => frustrate::handle::alias_entry::<{ty}>(*h, {}), ",
+                            "{tag} => frustrate::__private::handle::alias_entry::<{ty}>(*h, {}), ",
                             usage.runtime_use()
                         );
                     }
@@ -3748,11 +3748,11 @@ fn lend_positions(
                     m
                 }
                 (Model::Confined | Model::Resident | Model::Actor, None) => format!(
-                    "frustrate::handle::alias_entry::<{path}>(*h, {})",
+                    "frustrate::__private::handle::alias_entry::<{path}>(*h, {})",
                     usage.runtime_use()
                 ),
                 (Model::Frozen | Model::Locked, _) => {
-                    format!("frustrate::handle::arc_alias_entry(*h, {})", usage.runtime_use())
+                    format!("frustrate::__private::handle::arc_alias_entry(*h, {})", usage.runtime_use())
                 }
             };
             let entries = format!("entries_{}", pos.local_stem);
@@ -3762,7 +3762,7 @@ fn lend_positions(
             };
             let _ = write!(
                 parts.prelude,
-                "    let {entries}: Vec<(Option<u64>, frustrate::handle::Use)> = \
+                "    let {entries}: Vec<(Option<u64>, frustrate::__private::handle::Use)> = \
                  {source}.collect();\n"
             );
             parts.aliases.push(AliasEntry {
@@ -4060,11 +4060,11 @@ fn acquire_handle(
         // constructor follows the container, not the model.
         let entry = match model {
             Model::Confined | Model::Resident | Model::Actor => format!(
-                "frustrate::handle::alias_entry::<{path}>(h_{name}, {})",
+                "frustrate::__private::handle::alias_entry::<{path}>(h_{name}, {})",
                 usage.runtime_use()
             ),
             Model::Frozen | Model::Locked => format!(
-                "frustrate::handle::arc_alias_entry(h_{name}, {})",
+                "frustrate::__private::handle::arc_alias_entry(h_{name}, {})",
                 usage.runtime_use()
             ),
         };
@@ -4317,7 +4317,7 @@ fn take_handle(
             let inner = if boxed { format!("Box::new({name})") } else { name.to_string() };
             let _ = write!(
                 out,
-                "{pad}let {name} = match frustrate::handle::{take}(arc_{name}) {{\n\
+                "{pad}let {name} = match frustrate::__private::handle::{take}(arc_{name}) {{\n\
                  {pad}    Ok({name}) => {inner},\n\
                  {pad}    Err(_) => return Outcome::Contention(ContentionError {{ type_name: \"{ty_name}\", method: \"{method}\", kind: Contention::Take }}),\n\
                  {pad}}};\n"
@@ -4372,7 +4372,7 @@ fn acquire_trait_param(
         parts.aliases.push(AliasEntry {
             name: name.to_string(),
             entry_expr: Some(format!(
-                "frustrate::handle::arc_alias_entry(__h_{name}, {})",
+                "frustrate::__private::handle::arc_alias_entry(__h_{name}, {})",
                 usage.runtime_use()
             )),
             ids_local: format!("__h_{name}"),
@@ -4389,7 +4389,7 @@ fn acquire_trait_param(
         for (tag, _, ty) in &arms {
             let _ = write!(
                 entry,
-                "        {tag} => frustrate::handle::alias_entry::<{ty}>(__h_{name}, {}),\n",
+                "        {tag} => frustrate::__private::handle::alias_entry::<{ty}>(__h_{name}, {}),\n",
                 usage.runtime_use()
             );
         }
@@ -4898,7 +4898,7 @@ fn emit_async_spawn(out: &mut String, iface: &Interface, f: &Function) {
         // the shared run queue and delivers the encoded result through the
         // completion hook when it resolves. This glue is byte-identical native
         // vs web — the only per-config difference is the executor's Scheduler
-        // (frustrate::executor). A suspended future is heap data, not a
+        // (frustrate::__private::executor). A suspended future is heap data, not a
         // parked thread, which is what makes this possible on single-threaded
         // web.
         //
@@ -4921,7 +4921,7 @@ fn emit_async_spawn(out: &mut String, iface: &Interface, f: &Function) {
         // is the only shape that works where a thread cannot wait. Native
         // parallelism is unchanged: `executor::arrange_drain` hands ready tasks
         // to the pool.
-        out.push_str("    frustrate::executor::spawn(call_id, async move {\n");
+        out.push_str("    frustrate::__private::executor::spawn(call_id, async move {\n");
         emit_async_future_body(out, iface, f, &parts, f.rust_async);
         out.push_str("    });\n}\n\n");
     } else {
@@ -4929,7 +4929,7 @@ fn emit_async_spawn(out: &mut String, iface: &Interface, f: &Function) {
         // completion on the pool: native/threaded-web worker threads, inline on
         // single-threaded web. No future to multiplex, and nothing to acquire.
         out.push_str(
-            "    frustrate::pool::spawn_call(call_id, move || {\n        envelope::run(move || {\n",
+            "    frustrate::__private::pool::spawn_call(call_id, move || {\n        envelope::run(move || {\n",
         );
         out.push_str(&parts.body_prelude);
         let call = invocation(iface, f, &parts.args);
@@ -4994,7 +4994,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     out.push_str(ALLOW);
     out.push_str(NO_BLOCK_CHECK_SUPPRESS);
     out.push_str(
-        "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// `owner` owns what the body queues (`frustrate::envelope::run_sync`).\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[unsafe(no_mangle)]\n",
+        "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::__private::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// `owner` owns what the body queues (`frustrate::__private::envelope::run_sync`).\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[unsafe(no_mangle)]\n",
     );
     let _ = write!(
         out,
@@ -5046,7 +5046,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
             } else {
                 let _ = write!(
                     out,
-                    "        #[cfg(target_family = \"wasm\")]\n        {} => Some(|r: &mut ByteReader, call_id: u64| frustrate::post::respond(call_id, envelope::run(|| actor_{}_{}(r)))),\n",
+                    "        #[cfg(target_family = \"wasm\")]\n        {} => Some(|r: &mut ByteReader, call_id: u64| frustrate::__private::post::respond(call_id, envelope::run(|| actor_{}_{}(r)))),\n",
                     f.fn_id, f.fn_id, f.name
                 );
             }
@@ -5078,7 +5078,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     );
     out.push_str(&route);
     out.push_str(
-        "    let req = request_slice(req, req_len);\n    if let Err(p) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {\n        let mut r = ByteReader::new(req);\n        let Some(arm) = select_async(fn_id) else {\n            panic!(\"frustrate: unknown async fn_id {fn_id}\")\n        };\n        arm(&mut r, call_id)\n    })) {\n        frustrate::post::respond(call_id, envelope::panic_envelope(p));\n    }\n}\n\n",
+        "    let req = request_slice(req, req_len);\n    if let Err(p) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {\n        let mut r = ByteReader::new(req);\n        let Some(arm) = select_async(fn_id) else {\n            panic!(\"frustrate: unknown async fn_id {fn_id}\")\n        };\n        arm(&mut r, call_id)\n    })) {\n        frustrate::__private::post::respond(call_id, envelope::panic_envelope(p));\n    }\n}\n\n",
     );
 
     // Native actor entry: copy the request (liveness: bytes leave the
@@ -5144,7 +5144,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
 /// which is the only way a handle comes to exist. What that alone gives is a
 /// bare `Send` obligation at a `handle::confined_new::<T>` call the app author
 /// did not write and cannot edit: the type named is right, the explanation is
-/// missing. These assertions carry it — `frustrate::handle`'s marker traits
+/// missing. These assertions carry it — `frustrate::__private::handle`'s marker traits
 /// name the model, the reason, and `actor` as the model for a
 /// thread-affine type.
 ///
@@ -6400,7 +6400,7 @@ mod tests {
                  #[bridge] impl D {{ #[bridge(sync)] pub fn into_n(self) -> i64 {{ self.n }} }}"
             ));
             assert!(
-                code.contains(&format!("frustrate::handle::{take}(arc_this)")),
+                code.contains(&format!("frustrate::__private::handle::{take}(arc_this)")),
                 "{model}: {code}"
             );
             assert!(code.contains("kind: Contention::Take"), "{model}: {code}");
@@ -6466,7 +6466,7 @@ mod tests {
         // object may forgive a zero-sized type, so a container mixing models
         // must not push every id through one constructor.
         assert!(
-            arm.contains("entries_ds.push(frustrate::handle::alias_entry::<crate::api::D>"),
+            arm.contains("entries_ds.push(frustrate::__private::handle::alias_entry::<crate::api::D>"),
             "{arm}"
         );
         // The refusal names the element, not just the parameter.
@@ -6541,7 +6541,7 @@ mod tests {
             "{code}"
         );
         assert!(
-            code.contains("owned_fs.into_iter().map(|t0| frustrate::handle::frozen_take(t0)).collect::<Result<Vec<_>, _>>()"),
+            code.contains("owned_fs.into_iter().map(|t0| frustrate::__private::handle::frozen_take(t0)).collect::<Result<Vec<_>, _>>()"),
             "{code}"
         );
     }
@@ -6558,11 +6558,11 @@ mod tests {
              #[bridge(sync)] pub fn eat(t: (C, F)) -> i64 { 0 }",
         );
         assert!(
-            code.contains("entries_t.push(frustrate::handle::alias_entry::<crate::api::C>"),
+            code.contains("entries_t.push(frustrate::__private::handle::alias_entry::<crate::api::C>"),
             "{code}"
         );
         assert!(
-            code.contains("entries_t.push(frustrate::handle::arc_alias_entry("),
+            code.contains("entries_t.push(frustrate::__private::handle::arc_alias_entry("),
             "{code}"
         );
         // And the contention message names both, because which of them was
@@ -6593,11 +6593,11 @@ mod tests {
              #[bridge(sync)] pub fn eat(a: &C, b: F) -> i64 { 0 }",
         );
         assert!(
-            code.contains("handle::alias_entry::<crate::api::C>(h_a, frustrate::handle::Use::Shared)"),
+            code.contains("handle::alias_entry::<crate::api::C>(h_a, frustrate::__private::handle::Use::Shared)"),
             "{code}"
         );
         assert!(
-            code.contains("handle::arc_alias_entry(h_b, frustrate::handle::Use::Consume)"),
+            code.contains("handle::arc_alias_entry(h_b, frustrate::__private::handle::Use::Consume)"),
             "{code}"
         );
         // One borrowed handle and nothing else keeps the code it always had.
@@ -6765,7 +6765,7 @@ mod tests {
         let code = emit_src("#[bridge] pub fn slow() -> String { String::new() }");
         assert!(code.contains("fn spawn_#_slow"), "{code}");
         assert!(
-            code.contains("frustrate::pool::spawn_call(call_id, move ||"),
+            code.contains("frustrate::__private::pool::spawn_call(call_id, move ||"),
             "{code}"
         );
     }
@@ -6776,7 +6776,7 @@ mod tests {
         // The async fn body is handed to the cooperative executor as a future,
         // awaited there — no block_on, no pool::spawn_call wrap.
         assert!(
-            code.contains("frustrate::executor::spawn(call_id, async move {"),
+            code.contains("frustrate::__private::executor::spawn(call_id, async move {"),
             "{code}"
         );
         assert!(code.contains("let ret = crate::api::slow(x).await;"), "{code}");
@@ -6787,7 +6787,7 @@ mod tests {
         // A plain (non-`async fn`) async member still runs on the pool.
         let plain = emit_src("#[bridge] pub fn slow2(x: i64) -> i64 { x }");
         assert!(
-            plain.contains("frustrate::pool::spawn_call(call_id, move ||"),
+            plain.contains("frustrate::__private::pool::spawn_call(call_id, move ||"),
             "{plain}"
         );
         assert!(!plain.contains("executor::spawn"), "{plain}");
@@ -6880,7 +6880,7 @@ mod tests {
         // assertion that fails if someone "simplifies" the branch back to
         // `f.rust_async`.
         assert!(
-            spawn.contains("frustrate::executor::spawn(call_id, async move {"),
+            spawn.contains("frustrate::__private::executor::spawn(call_id, async move {"),
             "a locked member must dispatch through the executor: {spawn}"
         );
         assert!(
@@ -6954,12 +6954,12 @@ mod tests {
         // A free `async fn` (no lock) still reaches the same arm by the other
         // half of the condition.
         let free = emit_src("#[bridge] pub async fn f(x: i64) -> i64 { x }");
-        assert!(free.contains("frustrate::executor::spawn"), "{free}");
+        assert!(free.contains("frustrate::__private::executor::spawn"), "{free}");
         assert!(free.contains("let ret = crate::api::f(x).await;"), "{free}");
         // A plain free function with no lock keeps the pool arm — the reroute
         // is scoped to locked members, not to every dispatched one.
         let plain = emit_src("#[bridge] pub fn g(x: i64) -> i64 { x }");
-        assert!(plain.contains("frustrate::pool::spawn_call"), "{plain}");
+        assert!(plain.contains("frustrate::__private::pool::spawn_call"), "{plain}");
         assert!(!plain.contains("executor::spawn"), "{plain}");
     }
 
@@ -7228,7 +7228,7 @@ mod tests {
         );
         assert!(
             code.contains(
-                "Self::Mem(a) => frustrate::handle::locked_take(a).map(|v| { let b: Box<dyn crate::api::Store> = Box::new(v); b }),"
+                "Self::Mem(a) => frustrate::__private::handle::locked_take(a).map(|v| { let b: Box<dyn crate::api::Store> = Box::new(v); b }),"
             ),
             "{code}"
         );
@@ -7273,11 +7273,11 @@ mod tests {
         assert!(gather < adopt, "the ids are read before the adoption\n{code}");
         // Both positions join the duplicate check, with different uses.
         assert!(
-            code.contains("alias_entry::<crate::api::D>(*h, frustrate::handle::Use::Mut)"),
+            code.contains("alias_entry::<crate::api::D>(*h, frustrate::__private::handle::Use::Mut)"),
             "{code}"
         );
         assert!(
-            code.contains("alias_entry::<crate::api::D>(*g1_1, frustrate::handle::Use::Consume)"),
+            code.contains("alias_entry::<crate::api::D>(*g1_1, frustrate::__private::handle::Use::Consume)"),
             "{code}"
         );
         // The argument moves out of the taken value, destructuring rather than
@@ -8395,7 +8395,7 @@ mod tests {
             "{code}"
         );
         assert!(
-            !code.contains("frustrate::post::respond(call_id, envelope::run(|| actor_#_slow"),
+            !code.contains("frustrate::__private::post::respond(call_id, envelope::run(|| actor_#_slow"),
             "the deferred arm must not respond inline: {code}"
         );
     }
@@ -8512,7 +8512,7 @@ mod tests {
         assert!(gather < check && check < deref, "{arm}");
         assert!(
             arm.contains(
-                "frustrate::handle::alias_entry::<crate::api::C>(*h, frustrate::handle::Use::Mut)"
+                "frustrate::__private::handle::alias_entry::<crate::api::C>(*h, frustrate::__private::handle::Use::Mut)"
             ),
             "{arm}"
         );
@@ -8545,7 +8545,7 @@ mod tests {
         ));
         let arm = arm_of(&code, "spawn_#_f");
         assert!(arm.contains("let mut plan: Vec<(u64, u32)> = Vec::new();"), "{arm}");
-        assert!(arm.contains("frustrate::handle::lock_plan(&mut plan[..])"), "{arm}");
+        assert!(arm.contains("frustrate::__private::handle::lock_plan(&mut plan[..])"), "{arm}");
         let plan = arm.find("lock_plan").expect("planned");
         let spawn = arm.find("executor::spawn").expect("spawned");
         assert!(plan < spawn, "the plan is refused on the calling thread: {arm}");

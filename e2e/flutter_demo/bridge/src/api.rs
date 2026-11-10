@@ -67,7 +67,7 @@ pub fn nth_prime(n: i64) -> i64 {
 }
 
 /// A real Rust `async fn` — its body `.await`s, so it *suspends and resumes*
-/// on the cooperative executor (`frustrate::executor`) instead of running
+/// on the cooperative executor (`frustrate::__private::executor`) instead of running
 /// straight through. This is the capability that works on **every** config:
 /// native and threaded web drive the future on pool worker threads;
 /// single-threaded web drives it on a JS microtask, yielding to the event loop

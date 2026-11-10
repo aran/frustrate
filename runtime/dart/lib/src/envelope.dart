@@ -20,7 +20,7 @@ const int frustrateRuntimeAbi = 7;
 
 /// Bytes of the response buffer the transports hand a bridge's `call_sync`,
 /// which answers into it rather than leasing a `Vec` whenever the envelope
-/// fits (`frustrate::envelope::respond_out`).
+/// fits (`frustrate::__private::envelope::respond_out`).
 ///
 /// Not part of the ABI — the capacity travels as an argument, so each
 /// transport could choose its own and the Rust side never assumes a value.
@@ -34,7 +34,7 @@ const int frustrateRuntimeAbi = 7;
 /// request. Responses past it (byte vectors, long strings) are dominated by
 /// copying their own payload, so the crossing the lease costs them is noise.
 ///
-/// Must be at least `frustrate::envelope::RESP_OUT_MIN_CAP` (24), which is
+/// Must be at least `frustrate::__private::envelope::RESP_OUT_MIN_CAP` (24), which is
 /// where the overflow path writes the lease triple.
 const int frustrateRespSlabBytes = 128;
 

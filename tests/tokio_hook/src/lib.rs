@@ -13,7 +13,7 @@
 //! **The recipe** (`mod recipe`) is the same question one layer up: the
 //! `Handle::enter` wrapper, and `frustrate_tokio::set_runtime` (`ext/tokio`),
 //! driving a real `tokio::time::sleep` on a real
-//! [`frustrate::executor::Executor`]. The `ext_*` tests pin what the latter
+//! [`frustrate::__private::executor::Executor`]. The `ext_*` tests pin what the latter
 //! adds: a `block_on` or `blocking_recv` in a bridged `async fn` panics into
 //! its own call, where the `enter` wrapper lets it block the drain.
 //!
@@ -392,8 +392,8 @@ mod gate {
 #[cfg(test)]
 mod recipe {
     use frustrate::codec::FramedWriter;
-    use frustrate::envelope::{Outcome, STATUS_OK, STATUS_PANIC};
-    use frustrate::executor::Executor;
+    use frustrate::__private::envelope::{Outcome, STATUS_OK, STATUS_PANIC};
+    use frustrate::__private::executor::Executor;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};

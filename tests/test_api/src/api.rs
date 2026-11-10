@@ -1664,7 +1664,7 @@ impl Snapshot {
     }
 
     /// Rust `async fn`, portable to every platform: its body evaluates to a
-    /// Future that runs on the cooperative executor (`frustrate::executor`),
+    /// Future that runs on the cooperative executor (`frustrate::__private::executor`),
     /// which multiplexes it with every other in-flight future — native/threaded
     /// web on pool worker threads, single-threaded web via microtask. It
     /// `.await`s [`YieldOnce`], which returns `Pending` on its first poll
@@ -1932,7 +1932,7 @@ impl Counter {
 /// codegen's business and needs no contention contract from it.
 #[bridge(frozen)]
 pub struct LockProbe {
-    cell: Arc<frustrate::handle::LockedCell<i64>>,
+    cell: Arc<frustrate::__private::handle::LockedCell<i64>>,
 }
 
 #[bridge]
@@ -1940,7 +1940,7 @@ impl LockProbe {
     #[bridge(sync)]
     pub fn new() -> LockProbe {
         LockProbe {
-            cell: Arc::new(frustrate::handle::LockedCell::new(0)),
+            cell: Arc::new(frustrate::__private::handle::LockedCell::new(0)),
         }
     }
 
@@ -2544,7 +2544,7 @@ pub async fn stream_with_backpressure(sink: StreamSink<i64>) {
         // A computed pause, NOT `pace_producer`'s `thread::sleep`, and the
         // reason is this fixture's device rather than its gating: it is a
         // bridged `async fn`, so it runs on the cooperative executor
-        // (frustrate::executor), where a blocking sleep holds a worker instead
+        // (frustrate::__private::executor), where a blocking sleep holds a worker instead
         // of yielding it and would stall every other multiplexed call.
         //
         // `black_box` INSIDE the loop is load-bearing. Trailing, it pins the
@@ -2988,7 +2988,7 @@ pub fn sum_on_external_runtime(a: i64, b: i64) -> i64 {
 /// *failed* spawn — must return this to its baseline.
 #[bridge(sync)]
 pub fn actor_host_count() -> i64 {
-    frustrate::actor_host_count() as i64
+    frustrate::testing::actor_host_count() as i64
 }
 
 // --------------------------------------------------------- Actor: Miner --

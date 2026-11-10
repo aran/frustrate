@@ -831,7 +831,7 @@ mod tests {
 
     // ------------------------------------------------- call_async (executor) --
     //
-    // These drive the cooperative path: a real `frustrate::executor::Executor`
+    // These drive the cooperative path: a real `frustrate::__private::executor::Executor`
     // runs an async task that awaits `call_async`, and the test plays the Dart
     // side — reading the posted invocation off the recorded post events and
     // answering through `frustrate_callback_respond`. All serialize on

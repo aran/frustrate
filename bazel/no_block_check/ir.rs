@@ -123,7 +123,7 @@ pub(crate) const KNOWN_SLOTS: &[(&str, &str)] = &[
          when the thread exits, never within a call",
     ),
     (
-        "frustrate::post::native::dl::API",
+        "frustrate::__private::post::native::dl::API",
         "the Dart VM's API table, filled at the isolate handshake; posting a \
          message takes only the VM's port and queue locks, for a map lookup \
          and an enqueue",

@@ -35,7 +35,7 @@ fn all_at_once(jobs: usize, budget: Duration) -> bool {
     let (tx, rx) = mpsc::channel();
     for _ in 0..jobs {
         let tx = tx.clone();
-        pool::spawn(move || {
+        frustrate::__private::pool::spawn(move || {
             ARRIVED.fetch_add(1, Ordering::SeqCst);
             let deadline = Instant::now() + budget;
             // Sleep rather than spin: on a one-core machine two pool threads

@@ -23,7 +23,7 @@ load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_wasm_module")
 #
 #   * sync-only, no opaque types — //tests/bazel_rules:fixture_shared, fenced
 #     in place. This is anyone's first bridge, and the shape whose emitted
-#     `use frustrate::handle;` / `ContentionError` are unused.
+#     `use frustrate::__private::handle;` / `ContentionError` are unused.
 #   * actor-only — here. Both dispatch entry points' `ByteReader` is dead on
 #     native; on wasm the async one comes alive because the actor arms are
 #     `#[cfg(target_family = "wasm")]`. One emitted file, opposite liveness by

@@ -524,7 +524,7 @@ compile_error!(
 ///     wait for the host — see the manual arm below.
 #[cfg(all(not(target_family = "wasm"), not(frustrate_manual_scheduler)))]
 fn arrange_drain() {
-    crate::pool::spawn(|| {
+    crate::__private::pool::spawn(|| {
         global().drain_one();
     });
 }
@@ -626,7 +626,7 @@ fn arrange_drain() {
     if ACTOR_INSTANCE.load(std::sync::atomic::Ordering::Relaxed) {
         schedule_drain_microtask();
     } else {
-        crate::pool::spawn(|| {
+        crate::__private::pool::spawn(|| {
             global().drain_one();
         });
     }

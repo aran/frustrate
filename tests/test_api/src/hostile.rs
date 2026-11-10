@@ -73,7 +73,7 @@
 //! # What it cannot reach
 //!
 //! **Sync arms only.** A pool, cooperative-executor or actor arm answers
-//! through `frustrate::post` on another thread, needs a live runtime, and
+//! through `frustrate::__private::post` on another thread, needs a live runtime, and
 //! delivers its response somewhere this driver cannot read. Standing that up
 //! under Miri is a larger piece of work than this, and pretending to cover it
 //! would be worse than saying so.
@@ -140,9 +140,9 @@ fn call_sync(fn_id: u32, req: &[u8]) -> Vec<u8> {
 fn outcome(resp: &[u8]) -> (u8, String) {
     let status = resp[0];
     let msg = match status {
-        frustrate::envelope::STATUS_ERROR
-        | frustrate::envelope::STATUS_PANIC
-        | frustrate::envelope::STATUS_CONTENTION => ByteReader::new(&resp[1..]).read_string(),
+        frustrate::__private::envelope::STATUS_ERROR
+        | frustrate::__private::envelope::STATUS_PANIC
+        | frustrate::__private::envelope::STATUS_CONTENTION => ByteReader::new(&resp[1..]).read_string(),
         _ => String::new(),
     };
     (status, msg)
@@ -273,7 +273,7 @@ impl Env {
                     continue;
                 }
                 let resp = call_sync(f.fn_id, &w.take());
-                if resp[0] == frustrate::envelope::STATUS_OK {
+                if resp[0] == frustrate::__private::envelope::STATUS_OK {
                     let h = ByteReader::new(&resp[1..]).read_handle();
                     self.minted.push((name.to_string(), h));
                     return Ok(h);
@@ -906,9 +906,9 @@ fn one_object_in_two_positions_is_answered_and_never_undefined() {
             assert!(
                 matches!(
                     status,
-                    frustrate::envelope::STATUS_OK
-                        | frustrate::envelope::STATUS_ERROR
-                        | frustrate::envelope::STATUS_TYPED_ERROR
+                    frustrate::__private::envelope::STATUS_OK
+                        | frustrate::__private::envelope::STATUS_ERROR
+                        | frustrate::__private::envelope::STATUS_TYPED_ERROR
                 ),
                 "`{}` did not answer its own well-formed request: status {status} {msg}",
                 f.name
@@ -956,7 +956,7 @@ fn one_object_in_two_positions_is_answered_and_never_undefined() {
                 &mut env,
                 &acqs,
                 &assign,
-                status != frustrate::envelope::STATUS_PANIC,
+                status != frustrate::__private::envelope::STATUS_PANIC,
             );
             driven += 1;
         }
@@ -988,7 +988,7 @@ fn a_request_with_a_trailing_byte_is_refused_attributably() {
         let (status, msg) = outcome(&call_sync(f.fn_id, &req));
         assert_eq!(
             status,
-            frustrate::envelope::STATUS_PANIC,
+            frustrate::__private::envelope::STATUS_PANIC,
             "`{}` accepted a trailing byte: status {status}",
             f.name
         );
@@ -1028,7 +1028,7 @@ fn a_truncated_request_is_refused_attributably() {
         let (status, msg) = outcome(&call_sync(f.fn_id, &req[..req.len() - 1]));
         assert_eq!(
             status,
-            frustrate::envelope::STATUS_PANIC,
+            frustrate::__private::envelope::STATUS_PANIC,
             "`{}` accepted a truncated request: status {status}",
             f.name
         );
@@ -1078,7 +1078,7 @@ fn an_impossible_length_prefix_is_refused_attributably() {
         let (status, msg) = outcome(&call_sync(f.fn_id, &w.take()));
         assert_eq!(
             status,
-            frustrate::envelope::STATUS_PANIC,
+            frustrate::__private::envelope::STATUS_PANIC,
             "`{}` accepted an impossible length prefix: status {status}",
             f.name
         );
@@ -1149,7 +1149,7 @@ fn an_unknown_impl_tag_is_refused_attributably() {
         let (status, msg) = outcome(&call_sync(f.fn_id, &req));
         assert_eq!(
             status,
-            frustrate::envelope::STATUS_PANIC,
+            frustrate::__private::envelope::STATUS_PANIC,
             "`{}` accepted an unknown impl tag: status {status}",
             f.name
         );
@@ -1169,7 +1169,7 @@ fn an_unknown_impl_tag_is_refused_attributably() {
 fn an_unknown_fn_id_is_refused_attributably() {
     let highest = ir().functions.iter().map(|f| f.fn_id).max().unwrap_or(0);
     let (status, msg) = outcome(&call_sync(highest + 1, &[]));
-    assert_eq!(status, frustrate::envelope::STATUS_PANIC);
+    assert_eq!(status, frustrate::__private::envelope::STATUS_PANIC);
     assert!(msg.contains("unknown sync fn_id"), "{msg}");
 }
 
@@ -1240,7 +1240,7 @@ fn every_baseline_request_is_one_the_wire_accepts() {
         let acqs = acquisitions(env.ir, f).expect("baseline built, so acquisitions did");
         settle(&mut env, &acqs, &assign, true);
         let (status, msg) = outcome(&call_sync(f.fn_id, &req));
-        if status == frustrate::envelope::STATUS_PANIC {
+        if status == frustrate::__private::envelope::STATUS_PANIC {
             assert!(
                 !msg.contains("frustrate codec:"),
                 "`{}`: the driver's own baseline is malformed, so every attack on this \

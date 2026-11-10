@@ -6,7 +6,7 @@
 //!
 //! `//tests/bazel_rules`'s fixture is deliberately handle-free — that is what
 //! makes it the hardest shape for the generated glue's own lint-clean promise,
-//! since `frustrate::handle` and `ContentionError` are emitted there and go
+//! since `frustrate::__private::handle` and `ContentionError` are emitted there and go
 //! unused. A locked handle would use them and quietly retire that fence. And
 //! two bridge crates cannot share a Bazel package, because `frustrate_bridge`
 //! declares its glue at exactly `src/frustrate_generated.rs` (bazel/defs.bzl).

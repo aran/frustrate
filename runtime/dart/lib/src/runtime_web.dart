@@ -1339,7 +1339,7 @@ final class _WebTransport {
   }
 
   /// The `(ptr, len, cap)` triple the overflow path writes at the front of the
-  /// response slab. Mirrors `frustrate::envelope::RESP_OUT_MIN_CAP`.
+  /// response slab. Mirrors `frustrate::__private::envelope::RESP_OUT_MIN_CAP`.
   static const int _leaseTripleBytes = 24;
 
   /// [frustrateRespSlabBytes] as a JS BigInt, converted once. `BigInt(n)` is a

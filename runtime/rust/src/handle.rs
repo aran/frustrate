@@ -146,21 +146,21 @@ impl<T: Send + Sync> LockedSafe for T {}
 /// `const _: fn() = …` line codegen emits per confined opaque.
 ///
 /// ```compile_fail,E0277
-/// frustrate::handle::assert_confined::<std::rc::Rc<i32>>();
+/// frustrate::__private::handle::assert_confined::<std::rc::Rc<i32>>();
 /// ```
 pub fn assert_confined<T: ConfinedSafe>() {}
 
 /// The frozen thread bound, as a named error. See [`assert_confined`].
 ///
 /// ```compile_fail,E0277
-/// frustrate::handle::assert_frozen::<std::cell::Cell<i32>>();
+/// frustrate::__private::handle::assert_frozen::<std::cell::Cell<i32>>();
 /// ```
 pub fn assert_frozen<T: FrozenSafe>() {}
 
 /// The locked thread bound, as a named error. See [`assert_confined`].
 ///
 /// ```compile_fail,E0277
-/// frustrate::handle::assert_locked::<std::cell::Cell<i32>>();
+/// frustrate::__private::handle::assert_locked::<std::cell::Cell<i32>>();
 /// ```
 pub fn assert_locked<T: LockedSafe>() {}
 
@@ -171,7 +171,7 @@ pub fn assert_locked<T: LockedSafe>() {}
 /// it can be born on a pool worker and used from the calling isolate.
 ///
 /// ```compile_fail,E0277
-/// frustrate::handle::confined_new(std::rc::Rc::new(1i32));
+/// frustrate::__private::handle::confined_new(std::rc::Rc::new(1i32));
 /// ```
 pub fn confined_new<T: Send + 'static>(value: T) -> u64 {
     Box::into_raw(Box::new(value)) as u64
@@ -221,14 +221,14 @@ pub unsafe fn confined_drop<T>(h: u64) {
 ///
 /// ```
 /// // The `Rc` that `confined_new` refuses.
-/// let h = frustrate::handle::resident_new(std::rc::Rc::new(1i32), "Probe");
-/// unsafe { frustrate::handle::resident_drop::<std::rc::Rc<i32>>(h) };
+/// let h = frustrate::__private::handle::resident_new(std::rc::Rc::new(1i32), "Probe");
+/// unsafe { frustrate::__private::handle::resident_drop::<std::rc::Rc<i32>>(h) };
 /// ```
 ///
 /// The zero-sized refusal, as a compile error rather than as a promise:
 ///
 /// ```compile_fail,E0080
-/// frustrate::handle::resident_new((), "Zst");
+/// frustrate::__private::handle::resident_new((), "Zst");
 /// ```
 ///
 /// # A resident type may not be zero-sized
@@ -553,7 +553,7 @@ pub fn actor_drop<T: 'static>(slot: u64) {
 /// through [`frozen_ref`], and the last clone can drop on a pool thread.
 ///
 /// ```compile_fail,E0277
-/// frustrate::handle::frozen_new(std::cell::Cell::new(1i32));
+/// frustrate::__private::handle::frozen_new(std::cell::Cell::new(1i32));
 /// ```
 pub fn frozen_new<T: Send + Sync + 'static>(value: T) -> u64 {
     Arc::into_raw(Arc::new(value)) as u64
@@ -589,7 +589,7 @@ pub unsafe fn frozen_drop<T>(h: u64) {
 /// needs to cross to the pool.
 ///
 /// ```compile_fail,E0277
-/// frustrate::handle::locked_new(std::cell::Cell::new(1i32));
+/// frustrate::__private::handle::locked_new(std::cell::Cell::new(1i32));
 /// ```
 pub fn locked_new<T: Send + Sync + 'static>(value: T) -> u64 {
     Arc::into_raw(Arc::new(RwLock::new(value))) as u64

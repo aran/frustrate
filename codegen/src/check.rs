@@ -173,7 +173,7 @@ pub fn check(iface: Interface) -> Result<Interface, Vec<Diagnostic>> {
     //   - `on_contention = "block"`, which declares that the acquisition itself
     //     waits. Its sibling `"error"` does not: the try-lock is one
     //     compare-exchange and the release reaches no wait instruction
-    //     (`frustrate::handle::LockedCell`), so a synchronous try-lock is on
+    //     (`frustrate::__private::handle::LockedCell`), so a synchronous try-lock is on
     //     every surface and only the blocking contract is derived here; or
     //   - a value-returning `DartFunction` invoked via the BLOCKING
     //     `DartFunction::call` — which parks the
@@ -5317,7 +5317,7 @@ fn check_function(
     //
     // A sync `on_contention = "error"` member conforms: its acquisition is a
     // compare-exchange and its release reaches no wait instruction
-    // (`frustrate::handle::LockedCell`). Refusing it also foreclosed the one
+    // (`frustrate::__private::handle::LockedCell`). Refusing it also foreclosed the one
     // *mechanical* proof of that, because the member is in the wasm build now
     // — `Dispatch::Caller`, so `claims` settles it `Artifact` and a root
     // reaches the whole body, release included.

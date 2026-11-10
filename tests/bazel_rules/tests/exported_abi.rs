@@ -18,7 +18,7 @@
 //! archive members.
 
 use frustrate::codec::{ByteReader, ByteWriter};
-use frustrate::envelope::{STATUS_OK, STATUS_PANIC};
+use frustrate::__private::envelope::{STATUS_OK, STATUS_PANIC};
 
 /// The dispatch id of a member, by the name the bridge declares it under.
 /// Ids are derived from each member's wire facts, so this is a lookup rather

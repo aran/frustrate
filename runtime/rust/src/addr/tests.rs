@@ -63,7 +63,7 @@ fn spawn_log_on(host: Arc<Host>) -> (Arc<Host>, Arc<Mutex<Vec<String>>>) {
     let log = Arc::new(Mutex::new(Vec::new()));
     let theirs = Arc::clone(&log);
     on_host(&host, move || {
-        crate::handle::actor_new(
+        crate::__private::handle::actor_new(
             Log {
                 me: Addr::__here(),
                 log: theirs,
@@ -262,7 +262,7 @@ fn posts_after_dispose_and_behind_the_stop_drop_unrun() {
         on_host(&host, move || {
             let me = root().me.clone();
             // The orderly dispose: the drop call removes the root.
-            crate::handle::actor_drop::<Log>(crate::objects::root_slot());
+            crate::__private::handle::actor_drop::<Log>(crate::objects::root_slot());
             // Posted after the root is gone: dropped unrun.
             let held = Tracked {
                 drops: Arc::clone(&drops),

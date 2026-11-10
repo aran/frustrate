@@ -56,7 +56,7 @@ frustrate_bridge(
 # `-Dwarnings` carries a second contract on this same fixture, documented in
 # //tests/lint_clean: the generated file promises in its own header to be
 # lint-clean, and this crate is the shape that promise is hardest to keep —
-# sync-only and handle-free, so the emitted `frustrate::handle` and
+# sync-only and handle-free, so the emitted `frustrate::__private::handle` and
 # `ContentionError` imports are unused and frustrate_call_async's reader is
 # dead. rustc_flags is per-target and never reaches deps, so this fences the
 # emitted glue (and this fixture's own two files), not the runtime. The macro

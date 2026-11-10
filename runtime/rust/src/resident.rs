@@ -2,7 +2,7 @@
 //! isolate that owns it — so that a use from the wrong thread is refused, and
 //! an isolate's exit can say what it took with it.
 //!
-//! A resident is `Box<T>` with **no `Send` bound** ([`crate::handle::
+//! A resident is `Box<T>` with **no `Send` bound** ([`crate::__private::handle::
 //! resident_new`]). That is the model's point and its whole cost: no thread
 //! but the one that made the object may touch it or run its `Drop`.
 //!
@@ -18,7 +18,7 @@
 //!
 //! So an object built in a spawned isolate and used one `await` later is
 //! reached from a different thread. That is precisely the transfer
-//! `crate::handle`'s module doc says `Send` exists to license, and resident
+//! `crate::__private::handle`'s module doc says `Send` exists to license, and resident
 //! has no `Send`. The model's contract is therefore about **threads, not
 //! isolates**: one thread builds the object and only that thread may touch it.
 //! Which isolates satisfy that is a property of how each is scheduled, not
@@ -35,7 +35,7 @@
 //! Thread identity only. It compares a per-OS-thread tag recorded when the
 //! object was minted against the tag of the thread now asking. It says nothing
 //! about whether the handle is live, or of the right type — those are
-//! `crate::handle`'s `unsafe` preconditions and are upheld by generated code.
+//! `crate::__private::handle`'s `unsafe` preconditions and are upheld by generated code.
 //!
 //! **A handle with no entry is refused**, not allowed. Every mint records one
 //! and only a reclaim removes it, so a missing entry means the object is gone
@@ -45,11 +45,11 @@
 //!
 //! For that to be a *complete* argument the registry has to be complete, and
 //! it is keyed by the handle, which is an address. Every zero-sized `Box`
-//! shares one dangling address ([`crate::handle::alias_entry`] says why), so
+//! shares one dangling address ([`crate::__private::handle::alias_entry`] says why), so
 //! two zero-sized residents would collide on one entry and retiring either
 //! would unregister both. Rather than reason about that, resident refuses a
 //! zero-sized type outright, at compile time, in
-//! [`crate::handle::resident_new`]. The restriction costs nothing real: a
+//! [`crate::__private::handle::resident_new`]. The restriction costs nothing real: a
 //! thread-affine *context* — the thing this model exists for — holds
 //! something.
 //!
@@ -84,7 +84,7 @@
 //! concrete type per impl tag and a header would need a cell type per
 //! implementor in the emitted match. And it leaves the container alone, so a
 //! consuming `self: Box<Self>` still hands back the original allocation
-//! ([`crate::handle::confined_adopt`]) instead of moving the value into a
+//! ([`crate::__private::handle::confined_adopt`]) instead of moving the value into a
 //! fresh one.
 //!
 //! # Why the isolate arrives from Dart
@@ -145,7 +145,7 @@ static LIVE: Lock<BTreeMap<u64, Entry>> = Lock::new(BTreeMap::new());
 /// accumulate for the life of the process without growing without bound.
 static LOST: Lock<BTreeMap<&'static str, usize>> = Lock::new(BTreeMap::new());
 
-/// Record a freshly minted resident. Called by [`crate::handle::resident_new`].
+/// Record a freshly minted resident. Called by [`crate::__private::handle::resident_new`].
 pub(crate) fn record(handle: u64, name: &'static str) {
     let born = thread_tag();
     LIVE.with(|live| live.insert(handle, Entry { name, born, isolate: None }));
@@ -259,7 +259,7 @@ fn warn(message: String) {
 }
 
 /// Record a resident that cannot be reclaimed because the reclaim arrived on
-/// the wrong thread. Called by [`crate::handle::resident_drop`], which then
+/// the wrong thread. Called by [`crate::__private::handle::resident_drop`], which then
 /// does *not* free the object: running a `!Send` value's `Drop` on a thread
 /// that may not touch it is exactly the undefined behaviour this model is
 /// arranged to avoid, and leaking is the only other answer.
@@ -353,7 +353,7 @@ pub extern "C" fn frustrate_resident_attach(handle: u64, isolate: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handle::{resident_drop, resident_new};
+    use crate::__private::handle::{resident_drop, resident_new};
 
     fn leaked(name: &str) -> Option<usize> {
         leak_report().into_iter().find(|(n, _)| n == name).map(|(_, n)| n)

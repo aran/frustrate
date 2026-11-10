@@ -271,7 +271,7 @@ pub fn spawn_call(
 /// A minimal, dependency-free blocking executor — a poll loop with a
 /// thread-parking `Waker`. This is NOT the path a bridged Rust `async fn`
 /// takes: those run on the cooperative multiplexing executor
-/// (`frustrate::executor`), which suspends a `Pending` future as heap data
+/// (`frustrate::__private::executor`), which suspends a `Pending` future as heap data
 /// rather than parking a thread (and so works on single-threaded web, where
 /// this cannot). `block_on` is retained for the worker/native CPU-drive path —
 /// blocking one owned thread on a self-driving future — and is std-only:

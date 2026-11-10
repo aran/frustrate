@@ -74,10 +74,19 @@ pub mod deferred;
 /// Rust handles to Dart objects — the dual of opaque handles. See the module
 /// docs for which mirror to take.
 pub mod dart;
-pub mod envelope;
 pub mod error;
-pub mod executor;
-pub mod handle;
+/// What generated glue calls. Not API: it changes with the codegen of the
+/// same release, which is the only caller it serves.
+#[doc(hidden)]
+pub mod __private;
+use __private::{envelope, executor, post};
+/// The async execution pool's width, and `block_on` for a plain bridged fn
+/// that waits on a future of its own.
+pub mod pool {
+    #[cfg(any(not(target_family = "wasm"), feature = "wasm-threads"))]
+    pub use crate::__private::pool::block_on;
+    pub use crate::__private::pool::{declare_width, width, WidthError};
+}
 /// Taking a patch into a running library. Present only in a library built with
 /// `--cfg=frustrate_hot_patch` (`frustrate_hot_patchable`, `-c dbg`).
 #[cfg(all(frustrate_hot_patch, not(target_family = "wasm")))]
@@ -102,8 +111,6 @@ pub mod carry;
 /// The panic listener: one process-global callback told about every Rust panic
 /// this runtime observes, so crash reporting can live on the Rust side.
 pub mod panic;
-pub mod pool;
-pub mod post;
 /// The host CSPRNG (`crypto.getRandomValues`), for a wasm module that has no
 /// OS to ask. Wasm-only; native has `getrandom` and the module doc says why
 /// reimplementing it here would be worse than absent.
@@ -124,7 +131,7 @@ mod bounded;
 /// wasm with `+atomics`.
 mod spin;
 /// The `locked` model's read/write lock. Private: what a bridge names is
-/// [`handle::LockedCell`] and its guards, which are re-exported there so
+/// [`__private::handle::LockedCell`] and its guards, which are re-exported there so
 /// generated glue reaches one module.
 mod rwlock;
 /// Which Dart zone hears a panic that answers no call.
@@ -163,19 +170,6 @@ pub use addr::{Addr, Gone};
 pub use deferred::Deferred;
 pub use stream::{StreamClosed, StreamSink};
 
-/// Number of live native actor hosts. 0 on wasm, where the actor executor
-/// is a Worker owned by the Dart side and this crate hosts nothing. Test
-/// support for executor-leak pins; portable so bridge fixtures need no cfg.
-pub fn actor_host_count() -> usize {
-    #[cfg(not(target_family = "wasm"))]
-    {
-        actor::host_count()
-    }
-    #[cfg(target_family = "wasm")]
-    {
-        0
-    }
-}
 
 // --- no-block-check export gating ---------------------------------------------
 //
