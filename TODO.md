@@ -21,7 +21,8 @@ Before pushing `main`:
   `runtime/dart`'s `runfiles` dev dependency moves to the same version.
 - Move the `rules_flutter` pin to a release that builds its web builds for a
   platform with `@rules_dart//dart/constraints:js` or `:wasm`, builds
-  Android APKs for `--@rules_android//flags:android_platforms`, and has the
+  Android APKs for `--@rules_android//flags:android_platforms`, links Android
+  native libraries for 16 KB pages, and has the
   `@rules_flutter//flutter/pub:extensions.bzl` `pub` extension the e2e demos
   use.
 - Move the `overhead` pin (`MODULE.bazel` and the workflows) to the rules_dart

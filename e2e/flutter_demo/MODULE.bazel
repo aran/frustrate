@@ -27,23 +27,6 @@ bazel_dep(name = "rules_java", version = "9.9.0")
 bazel_dep(name = "rules_go", version = "0.64.2")
 bazel_dep(name = "rules_jvm_external", version = "7.2")
 
-# Pinned to a commit, not a release: 0.1.5 hardcodes
-# `-Wl,-z,max-page-size=4096` in its toolchain, so every Android .so links
-# 4KB-aligned. A device running 16KB pages then refuses to load them: "ELF
-# alignment check failed". Nothing surfaces at build time;
-# the APK builds, installs, and dies on launch, which is why a green build
-# is not evidence here.
-#
-# The pinned commit uses 16384 for both max- and common-page-size across
-# all link actions. Fixing it in the toolchain rather than per-target also
-# covers native libraries this module does not own.
-archive_override(
-    module_name = "rules_android_ndk",
-    sha256 = "420b58372108f974979ff7417959d1409b90bc6d70677e17da005844f4eb8d54",
-    strip_prefix = "rules_android_ndk-8ba0720dcf044fc1cdd82ca8160df0dd394f8711",
-    urls = ["https://github.com/bazelbuild/rules_android_ndk/archive/8ba0720dcf044fc1cdd82ca8160df0dd394f8711.tar.gz"],
-)
-
 # This app bundles the Rust bridge for every platform it targets, so it
 # declares the cross-compile triples here: the app module is the root of its
 # own build, and a dependency's (frustrate's) toolchain config does not
