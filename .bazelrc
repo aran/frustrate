@@ -24,6 +24,11 @@ test --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
 test --output_groups=+clippy_checks
 build --@rules_rust//rust/settings:clippy_flags=-Dwarnings
 
+# rustfmt checks every Rust target a `bazel test` names, in its default style.
+# `bazel run @rules_rust//:rustfmt` rewrites what it reports.
+test --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
+test --output_groups=+rustfmt_checks
+
 # Linux builds here use the `llvm` C toolchain (MODULE.bazel), whose libunwind
 # a Rust shared library has to link itself; see //runtime/rust:unwinder.
 common --//runtime/rust:unwinder=//toolchain/cc:libunwind

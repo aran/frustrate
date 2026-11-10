@@ -23,16 +23,24 @@
 use frustrate::bridge;
 
 #[bridge(confined)]
-pub struct ShapeConfinedSA { pub v: i64 }
+pub struct ShapeConfinedSA {
+    pub v: i64,
+}
 
 #[bridge(sync)]
-pub fn new_shapeconfinedsa() -> ShapeConfinedSA { ShapeConfinedSA { v: 0 } }
+pub fn new_shapeconfinedsa() -> ShapeConfinedSA {
+    ShapeConfinedSA { v: 0 }
+}
 
 #[bridge(confined)]
-pub struct ShapeConfinedSB { pub v: i64 }
+pub struct ShapeConfinedSB {
+    pub v: i64,
+}
 
 #[bridge(sync)]
-pub fn new_shapeconfinedsb() -> ShapeConfinedSB { ShapeConfinedSB { v: 0 } }
+pub fn new_shapeconfinedsb() -> ShapeConfinedSB {
+    ShapeConfinedSB { v: 0 }
+}
 
 #[bridge(confined)]
 pub trait ShapeConfinedDynB: Send {}
@@ -41,19 +49,29 @@ pub struct ShapeConfinedDynBImpl;
 impl ShapeConfinedDynB for ShapeConfinedDynBImpl {}
 
 #[bridge(sync)]
-pub fn new_shapeconfineddynb() -> Box<dyn ShapeConfinedDynB> { Box::new(ShapeConfinedDynBImpl) }
+pub fn new_shapeconfineddynb() -> Box<dyn ShapeConfinedDynB> {
+    Box::new(ShapeConfinedDynBImpl)
+}
 
 #[bridge(resident)]
-pub struct ShapeResidentSA { pub v: i64 }
+pub struct ShapeResidentSA {
+    pub v: i64,
+}
 
 #[bridge(sync)]
-pub fn new_shaperesidentsa() -> ShapeResidentSA { ShapeResidentSA { v: 0 } }
+pub fn new_shaperesidentsa() -> ShapeResidentSA {
+    ShapeResidentSA { v: 0 }
+}
 
 #[bridge(resident)]
-pub struct ShapeResidentSB { pub v: i64 }
+pub struct ShapeResidentSB {
+    pub v: i64,
+}
 
 #[bridge(sync)]
-pub fn new_shaperesidentsb() -> ShapeResidentSB { ShapeResidentSB { v: 0 } }
+pub fn new_shaperesidentsb() -> ShapeResidentSB {
+    ShapeResidentSB { v: 0 }
+}
 
 #[bridge(resident)]
 pub trait ShapeResidentDynB {}
@@ -62,19 +80,29 @@ pub struct ShapeResidentDynBImpl;
 impl ShapeResidentDynB for ShapeResidentDynBImpl {}
 
 #[bridge(sync)]
-pub fn new_shaperesidentdynb() -> Box<dyn ShapeResidentDynB> { Box::new(ShapeResidentDynBImpl) }
+pub fn new_shaperesidentdynb() -> Box<dyn ShapeResidentDynB> {
+    Box::new(ShapeResidentDynBImpl)
+}
 
 #[bridge(frozen)]
-pub struct ShapeFrozenSA { pub v: i64 }
+pub struct ShapeFrozenSA {
+    pub v: i64,
+}
 
 #[bridge(sync)]
-pub fn new_shapefrozensa() -> ShapeFrozenSA { ShapeFrozenSA { v: 0 } }
+pub fn new_shapefrozensa() -> ShapeFrozenSA {
+    ShapeFrozenSA { v: 0 }
+}
 
 #[bridge(frozen)]
-pub struct ShapeFrozenSB { pub v: i64 }
+pub struct ShapeFrozenSB {
+    pub v: i64,
+}
 
 #[bridge(sync)]
-pub fn new_shapefrozensb() -> ShapeFrozenSB { ShapeFrozenSB { v: 0 } }
+pub fn new_shapefrozensb() -> ShapeFrozenSB {
+    ShapeFrozenSB { v: 0 }
+}
 
 #[bridge(frozen)]
 pub trait ShapeFrozenDynB: Send + Sync {}
@@ -83,19 +111,29 @@ pub struct ShapeFrozenDynBImpl;
 impl ShapeFrozenDynB for ShapeFrozenDynBImpl {}
 
 #[bridge(sync)]
-pub fn new_shapefrozendynb() -> Box<dyn ShapeFrozenDynB> { Box::new(ShapeFrozenDynBImpl) }
+pub fn new_shapefrozendynb() -> Box<dyn ShapeFrozenDynB> {
+    Box::new(ShapeFrozenDynBImpl)
+}
 
 #[bridge(locked)]
-pub struct ShapeLockedSA { pub v: i64 }
+pub struct ShapeLockedSA {
+    pub v: i64,
+}
 
 #[bridge(sync)]
-pub fn new_shapelockedsa() -> ShapeLockedSA { ShapeLockedSA { v: 0 } }
+pub fn new_shapelockedsa() -> ShapeLockedSA {
+    ShapeLockedSA { v: 0 }
+}
 
 #[bridge(locked)]
-pub struct ShapeLockedSB { pub v: i64 }
+pub struct ShapeLockedSB {
+    pub v: i64,
+}
 
 #[bridge(sync)]
-pub fn new_shapelockedsb() -> ShapeLockedSB { ShapeLockedSB { v: 0 } }
+pub fn new_shapelockedsb() -> ShapeLockedSB {
+    ShapeLockedSB { v: 0 }
+}
 
 #[bridge(locked)]
 pub trait ShapeLockedDynB: Send + Sync {}
@@ -104,22 +142,32 @@ pub struct ShapeLockedDynBImpl;
 impl ShapeLockedDynB for ShapeLockedDynBImpl {}
 
 #[bridge(sync)]
-pub fn new_shapelockeddynb() -> Box<dyn ShapeLockedDynB> { Box::new(ShapeLockedDynBImpl) }
-
-#[bridge(actor)]
-pub struct ShapeActorSA { pub v: i64 }
-
-#[bridge]
-impl ShapeActorSA {
-    pub fn new_shapeactorsa() -> Self { ShapeActorSA { v: 0 } }
+pub fn new_shapelockeddynb() -> Box<dyn ShapeLockedDynB> {
+    Box::new(ShapeLockedDynBImpl)
 }
 
 #[bridge(actor)]
-pub struct ShapeActorSB { pub v: i64 }
+pub struct ShapeActorSA {
+    pub v: i64,
+}
+
+#[bridge]
+impl ShapeActorSA {
+    pub fn new_shapeactorsa() -> Self {
+        ShapeActorSA { v: 0 }
+    }
+}
+
+#[bridge(actor)]
+pub struct ShapeActorSB {
+    pub v: i64,
+}
 
 #[bridge]
 impl ShapeActorSB {
-    pub fn new_shapeactorsb() -> Self { ShapeActorSB { v: 0 } }
+    pub fn new_shapeactorsb() -> Self {
+        ShapeActorSB { v: 0 }
+    }
 }
 
 #[bridge(confined)]
@@ -263,11 +311,23 @@ pub trait ShapeConfinedDynA: Send {
     #[bridge(native_only)]
     fn probe_235(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>) -> i64;
     #[bridge]
-    fn probe_236(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64;
+    fn probe_236(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynB>,
+    ) -> i64;
     #[bridge(no_block)]
-    fn probe_237(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64;
+    fn probe_237(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynB>,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_238(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64;
+    fn probe_238(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynB>,
+    ) -> i64;
     #[bridge]
     fn probe_239(self: Box<Self>, p0: &dyn ShapeConfinedDynA) -> i64;
     #[bridge(no_block)]
@@ -287,17 +347,41 @@ pub trait ShapeConfinedDynA: Send {
     #[bridge(native_only)]
     fn probe_247(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA) -> i64;
     #[bridge]
-    fn probe_248(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64;
+    fn probe_248(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynB,
+    ) -> i64;
     #[bridge(no_block)]
-    fn probe_249(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64;
+    fn probe_249(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynB,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_250(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64;
+    fn probe_250(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynB,
+    ) -> i64;
     #[bridge]
-    fn probe_251(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64;
+    fn probe_251(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynA>,
+    ) -> i64;
     #[bridge(no_block)]
-    fn probe_252(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64;
+    fn probe_252(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynA>,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_253(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64;
+    fn probe_253(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynA>,
+    ) -> i64;
     #[bridge]
     fn probe_254(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64;
     #[bridge(no_block)]
@@ -305,112 +389,360 @@ pub trait ShapeConfinedDynA: Send {
     #[bridge(native_only)]
     fn probe_256(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64;
     #[bridge]
-    fn probe_257(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64;
+    fn probe_257(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynA,
+    ) -> i64;
     #[bridge(no_block)]
-    fn probe_258(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64;
+    fn probe_258(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynA,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_259(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64;
+    fn probe_259(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynA,
+    ) -> i64;
 }
 
 pub struct ShapeConfinedDynAImpl;
 impl ShapeConfinedDynA for ShapeConfinedDynAImpl {
-    fn probe_156(&self, p0: &dyn ShapeConfinedDynB, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_157(&self, p0: &dyn ShapeConfinedDynB, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_158(&self, p0: &dyn ShapeConfinedDynB, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_161(&self, p0: &mut dyn ShapeConfinedDynB, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_162(&self, p0: &mut dyn ShapeConfinedDynB, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_163(&self, p0: &mut dyn ShapeConfinedDynB, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_173(&self) -> i64 { 0 }
-    fn probe_174(&self) -> i64 { 0 }
-    fn probe_175(&self, p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_176(&self, p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_177(&self, p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_178(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
-    fn probe_179(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
-    fn probe_180(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
-    fn probe_181(&self, p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_182(&self, p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_183(&self, p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_184(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_185(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_186(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_187(&self, p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_188(&self, p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_189(&self, p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_190(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_191(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_192(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_193(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_194(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_195(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_196(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_197(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_198(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_199(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_200(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_201(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_202(&mut self) -> i64 { 0 }
-    fn probe_203(&mut self) -> i64 { 0 }
-    fn probe_204(&mut self, p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_205(&mut self, p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_206(&mut self, p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_207(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
-    fn probe_208(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
-    fn probe_209(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
-    fn probe_210(&mut self, p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_211(&mut self, p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_212(&mut self, p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_213(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_214(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_215(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_216(&mut self, p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_217(&mut self, p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_218(&mut self, p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_219(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_220(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_221(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_222(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_223(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_224(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_225(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_226(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_227(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_228(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_229(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_230(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_231(self: Box<Self>) -> i64 { 0 }
-    fn probe_232(self: Box<Self>) -> i64 { 0 }
-    fn probe_233(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_234(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_235(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_236(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
-    fn probe_237(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
-    fn probe_238(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
-    fn probe_239(self: Box<Self>, p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_240(self: Box<Self>, p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_241(self: Box<Self>, p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_242(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_243(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_244(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_245(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_246(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_247(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_248(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_249(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_250(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 { 0 }
-    fn probe_251(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_252(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_253(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
-    fn probe_254(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_255(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_256(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_257(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_258(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
-    fn probe_259(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
+    fn probe_156(&self, p0: &dyn ShapeConfinedDynB, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_157(&self, p0: &dyn ShapeConfinedDynB, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_158(&self, p0: &dyn ShapeConfinedDynB, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_161(&self, p0: &mut dyn ShapeConfinedDynB, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_162(&self, p0: &mut dyn ShapeConfinedDynB, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_163(&self, p0: &mut dyn ShapeConfinedDynB, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_173(&self) -> i64 {
+        0
+    }
+    fn probe_174(&self) -> i64 {
+        0
+    }
+    fn probe_175(&self, p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_176(&self, p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_177(&self, p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_178(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+        0
+    }
+    fn probe_179(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+        0
+    }
+    fn probe_180(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+        0
+    }
+    fn probe_181(&self, p0: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_182(&self, p0: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_183(&self, p0: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_184(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_185(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_186(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_187(&self, p0: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_188(&self, p0: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_189(&self, p0: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_190(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_191(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_192(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_193(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_194(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_195(&self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_196(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_197(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_198(&self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_199(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_200(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_201(&self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_202(&mut self) -> i64 {
+        0
+    }
+    fn probe_203(&mut self) -> i64 {
+        0
+    }
+    fn probe_204(&mut self, p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_205(&mut self, p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_206(&mut self, p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_207(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+        0
+    }
+    fn probe_208(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+        0
+    }
+    fn probe_209(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+        0
+    }
+    fn probe_210(&mut self, p0: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_211(&mut self, p0: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_212(&mut self, p0: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_213(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_214(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_215(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_216(&mut self, p0: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_217(&mut self, p0: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_218(&mut self, p0: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_219(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_220(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_221(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_222(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_223(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_224(&mut self, p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_225(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_226(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_227(&mut self, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_228(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_229(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_230(&mut self, p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_231(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_232(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_233(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_234(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_235(self: Box<Self>, p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+        0
+    }
+    fn probe_236(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_237(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_238(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_239(self: Box<Self>, p0: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_240(self: Box<Self>, p0: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_241(self: Box<Self>, p0: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_242(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_243(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_244(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynB) -> i64 {
+        0
+    }
+    fn probe_245(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_246(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_247(self: Box<Self>, p0: &mut dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_248(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_249(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_250(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_251(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_252(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_253(
+        self: Box<Self>,
+        p0: Box<dyn ShapeConfinedDynA>,
+        p1: Box<dyn ShapeConfinedDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_254(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_255(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_256(self: Box<Self>, p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+        0
+    }
+    fn probe_257(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_258(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_259(
+        self: Box<Self>,
+        p0: &mut dyn ShapeConfinedDynA,
+        p1: &mut dyn ShapeConfinedDynA,
+    ) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn new_shapeconfineddyna() -> Box<dyn ShapeConfinedDynA> { Box::new(ShapeConfinedDynAImpl) }
+pub fn new_shapeconfineddyna() -> Box<dyn ShapeConfinedDynA> {
+    Box::new(ShapeConfinedDynAImpl)
+}
 
 #[bridge(resident)]
 pub trait ShapeResidentDynA {
@@ -565,11 +897,23 @@ pub trait ShapeResidentDynA {
     #[bridge(native_only)]
     fn probe_500(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>) -> i64;
     #[bridge]
-    fn probe_501(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64;
+    fn probe_501(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynB>,
+    ) -> i64;
     #[bridge(no_block)]
-    fn probe_502(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64;
+    fn probe_502(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynB>,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_503(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64;
+    fn probe_503(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynB>,
+    ) -> i64;
     #[bridge]
     fn probe_504(self: Box<Self>, p0: &dyn ShapeResidentDynA) -> i64;
     #[bridge(no_block)]
@@ -589,17 +933,41 @@ pub trait ShapeResidentDynA {
     #[bridge(native_only)]
     fn probe_512(self: Box<Self>, p0: &mut dyn ShapeResidentDynA) -> i64;
     #[bridge]
-    fn probe_513(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64;
+    fn probe_513(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynB,
+    ) -> i64;
     #[bridge(no_block)]
-    fn probe_514(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64;
+    fn probe_514(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynB,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_515(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64;
+    fn probe_515(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynB,
+    ) -> i64;
     #[bridge]
-    fn probe_516(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64;
+    fn probe_516(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynA>,
+    ) -> i64;
     #[bridge(no_block)]
-    fn probe_517(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64;
+    fn probe_517(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynA>,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_518(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64;
+    fn probe_518(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynA>,
+    ) -> i64;
     #[bridge]
     fn probe_519(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64;
     #[bridge(no_block)]
@@ -607,118 +975,378 @@ pub trait ShapeResidentDynA {
     #[bridge(native_only)]
     fn probe_521(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64;
     #[bridge]
-    fn probe_522(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64;
+    fn probe_522(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynA,
+    ) -> i64;
     #[bridge(no_block)]
-    fn probe_523(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64;
+    fn probe_523(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynA,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_524(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64;
+    fn probe_524(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynA,
+    ) -> i64;
 }
 
 pub struct ShapeResidentDynAImpl;
 impl ShapeResidentDynA for ShapeResidentDynAImpl {
-    fn probe_411(&self, p0: Box<dyn ShapeResidentDynB>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_412(&self, p0: Box<dyn ShapeResidentDynB>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_413(&self, p0: Box<dyn ShapeResidentDynB>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_417(&self, p0: &dyn ShapeResidentDynB, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_418(&self, p0: &dyn ShapeResidentDynB, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_419(&self, p0: &dyn ShapeResidentDynB, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_423(&self, p0: &mut dyn ShapeResidentDynB, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_424(&self, p0: &mut dyn ShapeResidentDynB, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_425(&self, p0: &mut dyn ShapeResidentDynB, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_435(&self) -> i64 { 0 }
-    fn probe_436(&self) -> i64 { 0 }
-    fn probe_437(&self) -> i64 { 0 }
-    fn probe_438(&self, p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_439(&self, p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_440(&self, p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_441(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 { 0 }
-    fn probe_442(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 { 0 }
-    fn probe_443(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 { 0 }
-    fn probe_444(&self, p0: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_445(&self, p0: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_446(&self, p0: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_447(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_448(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_449(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_450(&self, p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_451(&self, p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_452(&self, p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_453(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_454(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_455(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_456(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_457(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_458(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_459(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_460(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_461(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_462(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_463(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_464(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_465(&mut self) -> i64 { 0 }
-    fn probe_466(&mut self) -> i64 { 0 }
-    fn probe_467(&mut self) -> i64 { 0 }
-    fn probe_468(&mut self, p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_469(&mut self, p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_470(&mut self, p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_471(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 { 0 }
-    fn probe_472(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 { 0 }
-    fn probe_473(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 { 0 }
-    fn probe_474(&mut self, p0: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_475(&mut self, p0: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_476(&mut self, p0: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_477(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_478(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_479(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_480(&mut self, p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_481(&mut self, p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_482(&mut self, p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_483(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_484(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_485(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_486(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_487(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_488(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_489(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_490(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_491(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_492(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_493(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_494(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_495(self: Box<Self>) -> i64 { 0 }
-    fn probe_496(self: Box<Self>) -> i64 { 0 }
-    fn probe_497(self: Box<Self>) -> i64 { 0 }
-    fn probe_498(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_499(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_500(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_501(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 { 0 }
-    fn probe_502(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 { 0 }
-    fn probe_503(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 { 0 }
-    fn probe_504(self: Box<Self>, p0: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_505(self: Box<Self>, p0: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_506(self: Box<Self>, p0: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_507(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_508(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_509(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_510(self: Box<Self>, p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_511(self: Box<Self>, p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_512(self: Box<Self>, p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_513(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_514(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_515(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 { 0 }
-    fn probe_516(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_517(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_518(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
-    fn probe_519(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_520(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_521(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_522(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_523(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
-    fn probe_524(self: Box<Self>, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
+    fn probe_411(&self, p0: Box<dyn ShapeResidentDynB>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_412(&self, p0: Box<dyn ShapeResidentDynB>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_413(&self, p0: Box<dyn ShapeResidentDynB>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_417(&self, p0: &dyn ShapeResidentDynB, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_418(&self, p0: &dyn ShapeResidentDynB, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_419(&self, p0: &dyn ShapeResidentDynB, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_423(&self, p0: &mut dyn ShapeResidentDynB, p1: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_424(&self, p0: &mut dyn ShapeResidentDynB, p1: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_425(&self, p0: &mut dyn ShapeResidentDynB, p1: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_435(&self) -> i64 {
+        0
+    }
+    fn probe_436(&self) -> i64 {
+        0
+    }
+    fn probe_437(&self) -> i64 {
+        0
+    }
+    fn probe_438(&self, p0: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_439(&self, p0: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_440(&self, p0: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_441(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 {
+        0
+    }
+    fn probe_442(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 {
+        0
+    }
+    fn probe_443(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 {
+        0
+    }
+    fn probe_444(&self, p0: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_445(&self, p0: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_446(&self, p0: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_447(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_448(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_449(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_450(&self, p0: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_451(&self, p0: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_452(&self, p0: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_453(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_454(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_455(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_456(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_457(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_458(&self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_459(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_460(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_461(&self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_462(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_463(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_464(&self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_465(&mut self) -> i64 {
+        0
+    }
+    fn probe_466(&mut self) -> i64 {
+        0
+    }
+    fn probe_467(&mut self) -> i64 {
+        0
+    }
+    fn probe_468(&mut self, p0: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_469(&mut self, p0: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_470(&mut self, p0: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_471(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 {
+        0
+    }
+    fn probe_472(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 {
+        0
+    }
+    fn probe_473(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynB>) -> i64 {
+        0
+    }
+    fn probe_474(&mut self, p0: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_475(&mut self, p0: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_476(&mut self, p0: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_477(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_478(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_479(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_480(&mut self, p0: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_481(&mut self, p0: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_482(&mut self, p0: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_483(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_484(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_485(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_486(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_487(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_488(&mut self, p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_489(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_490(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_491(&mut self, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_492(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_493(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_494(&mut self, p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_495(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_496(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_497(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_498(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_499(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_500(self: Box<Self>, p0: Box<dyn ShapeResidentDynA>) -> i64 {
+        0
+    }
+    fn probe_501(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_502(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_503(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_504(self: Box<Self>, p0: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_505(self: Box<Self>, p0: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_506(self: Box<Self>, p0: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_507(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_508(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_509(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynB) -> i64 {
+        0
+    }
+    fn probe_510(self: Box<Self>, p0: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_511(self: Box<Self>, p0: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_512(self: Box<Self>, p0: &mut dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_513(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_514(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_515(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_516(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_517(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_518(
+        self: Box<Self>,
+        p0: Box<dyn ShapeResidentDynA>,
+        p1: Box<dyn ShapeResidentDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_519(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_520(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_521(self: Box<Self>, p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+        0
+    }
+    fn probe_522(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_523(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_524(
+        self: Box<Self>,
+        p0: &mut dyn ShapeResidentDynA,
+        p1: &mut dyn ShapeResidentDynA,
+    ) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn new_shaperesidentdyna() -> Box<dyn ShapeResidentDynA> { Box::new(ShapeResidentDynAImpl) }
+pub fn new_shaperesidentdyna() -> Box<dyn ShapeResidentDynA> {
+    Box::new(ShapeResidentDynAImpl)
+}
 
 #[bridge(frozen)]
 pub trait ShapeFrozenDynA: Send + Sync {
@@ -775,11 +1403,23 @@ pub trait ShapeFrozenDynA: Send + Sync {
     #[bridge(sync, native_only)]
     fn probe_651(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64;
     #[bridge(sync)]
-    fn probe_652(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64;
+    fn probe_652(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64;
     #[bridge(sync, no_block)]
-    fn probe_653(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64;
+    fn probe_653(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64;
     #[bridge(sync, native_only)]
-    fn probe_654(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64;
+    fn probe_654(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64;
     #[bridge(sync)]
     fn probe_655(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64;
     #[bridge(sync, no_block)]
@@ -793,11 +1433,23 @@ pub trait ShapeFrozenDynA: Send + Sync {
     #[bridge(sync, native_only)]
     fn probe_660(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64;
     #[bridge(sync)]
-    fn probe_661(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64;
+    fn probe_661(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64;
     #[bridge(sync, no_block)]
-    fn probe_662(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64;
+    fn probe_662(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64;
     #[bridge(sync, native_only)]
-    fn probe_663(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64;
+    fn probe_663(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64;
     #[bridge(sync)]
     fn probe_664(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64;
     #[bridge(sync, no_block)]
@@ -837,9 +1489,17 @@ pub trait ShapeFrozenDynA: Send + Sync {
     #[bridge(native_only)]
     fn probe_1185(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64;
     #[bridge]
-    fn probe_1186(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64;
+    fn probe_1186(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_1187(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64;
+    fn probe_1187(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64;
     #[bridge]
     fn probe_1188(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64;
     #[bridge(native_only)]
@@ -849,9 +1509,17 @@ pub trait ShapeFrozenDynA: Send + Sync {
     #[bridge(native_only)]
     fn probe_1191(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64;
     #[bridge]
-    fn probe_1192(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64;
+    fn probe_1192(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_1193(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64;
+    fn probe_1193(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64;
     #[bridge]
     fn probe_1194(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64;
     #[bridge(native_only)]
@@ -860,77 +1528,253 @@ pub trait ShapeFrozenDynA: Send + Sync {
 
 pub struct ShapeFrozenDynAImpl;
 impl ShapeFrozenDynA for ShapeFrozenDynAImpl {
-    fn probe_626(&self) -> i64 { 0 }
-    fn probe_627(&self) -> i64 { 0 }
-    fn probe_628(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_629(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_630(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_631(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_632(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_633(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_634(&self, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_635(&self, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_636(&self, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_637(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_638(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_639(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_640(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_641(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_642(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_643(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_644(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_645(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_646(self: Box<Self>) -> i64 { 0 }
-    fn probe_647(self: Box<Self>) -> i64 { 0 }
-    fn probe_648(self: Box<Self>) -> i64 { 0 }
-    fn probe_649(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_650(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_651(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_652(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_653(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_654(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_655(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_656(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_657(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_658(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_659(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_660(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_661(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_662(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_663(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_664(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_665(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_666(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_1170(&self) -> i64 { 0 }
-    fn probe_1171(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_1172(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_1173(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_1174(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_1175(&self, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_1176(&self, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_1177(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_1178(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_1179(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_1180(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_1181(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_1182(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_1183(self: Box<Self>) -> i64 { 0 }
-    fn probe_1184(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_1185(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_1186(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_1187(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
-    fn probe_1188(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_1189(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_1190(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_1191(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
-    fn probe_1192(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_1193(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
-    fn probe_1194(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
-    fn probe_1195(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
+    fn probe_626(&self) -> i64 {
+        0
+    }
+    fn probe_627(&self) -> i64 {
+        0
+    }
+    fn probe_628(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_629(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_630(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_631(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+        0
+    }
+    fn probe_632(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+        0
+    }
+    fn probe_633(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+        0
+    }
+    fn probe_634(&self, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_635(&self, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_636(&self, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_637(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_638(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_639(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_640(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_641(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_642(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_643(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_644(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_645(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_646(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_647(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_648(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_649(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_650(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_651(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_652(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_653(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_654(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_655(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_656(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_657(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_658(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_659(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_660(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_661(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_662(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_663(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_664(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_665(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_666(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_1170(&self) -> i64 {
+        0
+    }
+    fn probe_1171(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_1172(&self, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_1173(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+        0
+    }
+    fn probe_1174(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+        0
+    }
+    fn probe_1175(&self, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_1176(&self, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_1177(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_1178(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_1179(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_1180(&self, p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_1181(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_1182(&self, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_1183(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_1184(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_1185(self: Box<Self>, p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+        0
+    }
+    fn probe_1186(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1187(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1188(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_1189(self: Box<Self>, p0: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_1190(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_1191(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+        0
+    }
+    fn probe_1192(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1193(
+        self: Box<Self>,
+        p0: Box<dyn ShapeFrozenDynA>,
+        p1: Box<dyn ShapeFrozenDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1194(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
+    fn probe_1195(self: Box<Self>, p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn new_shapefrozendyna() -> Box<dyn ShapeFrozenDynA> { Box::new(ShapeFrozenDynAImpl) }
+pub fn new_shapefrozendyna() -> Box<dyn ShapeFrozenDynA> {
+    Box::new(ShapeFrozenDynAImpl)
+}
 
 #[bridge(locked)]
 pub trait ShapeLockedDynA: Send + Sync {
@@ -1153,11 +1997,23 @@ pub trait ShapeLockedDynA: Send + Sync {
     #[bridge(sync, native_only)]
     fn probe_1046(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64;
     #[bridge(sync)]
-    fn probe_1047(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64;
+    fn probe_1047(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64;
     #[bridge(sync, no_block)]
-    fn probe_1048(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64;
+    fn probe_1048(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64;
     #[bridge(sync, native_only)]
-    fn probe_1049(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64;
+    fn probe_1049(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64;
     #[bridge(sync, on_contention = "error")]
     fn probe_1050(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64;
     #[bridge(sync, on_contention = "error", no_block)]
@@ -1189,21 +2045,53 @@ pub trait ShapeLockedDynA: Send + Sync {
     #[bridge(sync, on_contention = "block", native_only)]
     fn probe_1064(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64;
     #[bridge(sync, on_contention = "error")]
-    fn probe_1065(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64;
+    fn probe_1065(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64;
     #[bridge(sync, on_contention = "error", no_block)]
-    fn probe_1066(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64;
+    fn probe_1066(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64;
     #[bridge(sync, on_contention = "error", native_only)]
-    fn probe_1067(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64;
+    fn probe_1067(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64;
     #[bridge(sync, on_contention = "block")]
-    fn probe_1068(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64;
+    fn probe_1068(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64;
     #[bridge(sync, on_contention = "block", native_only)]
-    fn probe_1069(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64;
+    fn probe_1069(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64;
     #[bridge(sync)]
-    fn probe_1070(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64;
+    fn probe_1070(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64;
     #[bridge(sync, no_block)]
-    fn probe_1071(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64;
+    fn probe_1071(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64;
     #[bridge(sync, native_only)]
-    fn probe_1072(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64;
+    fn probe_1072(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64;
     #[bridge(sync, on_contention = "error")]
     fn probe_1073(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64;
     #[bridge(sync, on_contention = "error", no_block)]
@@ -1215,15 +2103,35 @@ pub trait ShapeLockedDynA: Send + Sync {
     #[bridge(sync, on_contention = "block", native_only)]
     fn probe_1077(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64;
     #[bridge(sync, on_contention = "error")]
-    fn probe_1078(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64;
+    fn probe_1078(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64;
     #[bridge(sync, on_contention = "error", no_block)]
-    fn probe_1079(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64;
+    fn probe_1079(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64;
     #[bridge(sync, on_contention = "error", native_only)]
-    fn probe_1080(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64;
+    fn probe_1080(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64;
     #[bridge(sync, on_contention = "block")]
-    fn probe_1081(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64;
+    fn probe_1081(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64;
     #[bridge(sync, on_contention = "block", native_only)]
-    fn probe_1082(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64;
+    fn probe_1082(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64;
     #[bridge(native_only)]
     fn probe_1305(&self) -> i64;
     #[bridge]
@@ -1309,9 +2217,17 @@ pub trait ShapeLockedDynA: Send + Sync {
     #[bridge(native_only)]
     fn probe_1346(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64;
     #[bridge]
-    fn probe_1347(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64;
+    fn probe_1347(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_1348(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64;
+    fn probe_1348(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64;
     #[bridge]
     fn probe_1349(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64;
     #[bridge(native_only)]
@@ -1325,5672 +2241,8355 @@ pub trait ShapeLockedDynA: Send + Sync {
     #[bridge(native_only)]
     fn probe_1354(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64;
     #[bridge]
-    fn probe_1355(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64;
+    fn probe_1355(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_1356(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64;
+    fn probe_1356(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64;
     #[bridge]
-    fn probe_1357(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64;
+    fn probe_1357(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_1358(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64;
+    fn probe_1358(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64;
     #[bridge]
     fn probe_1359(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64;
     #[bridge(native_only)]
     fn probe_1360(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64;
     #[bridge]
-    fn probe_1361(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64;
+    fn probe_1361(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64;
     #[bridge(native_only)]
-    fn probe_1362(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64;
+    fn probe_1362(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64;
 }
 
 pub struct ShapeLockedDynAImpl;
 impl ShapeLockedDynA for ShapeLockedDynAImpl {
-    fn probe_906(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_907(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_908(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_909(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_910(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_943(&self) -> i64 { 0 }
-    fn probe_944(&self) -> i64 { 0 }
-    fn probe_945(&self) -> i64 { 0 }
-    fn probe_946(&self) -> i64 { 0 }
-    fn probe_947(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_948(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_949(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_950(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_951(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_952(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_953(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_954(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_955(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_956(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_957(&self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_958(&self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_959(&self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_960(&self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_961(&self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_962(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_963(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_964(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_965(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_966(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_967(&self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_968(&self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_969(&self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_970(&self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_971(&self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_972(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_973(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_974(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_975(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_976(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_977(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_978(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_979(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_980(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_981(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_982(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_983(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_984(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_985(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_986(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_987(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_988(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_989(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_990(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_991(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_992(&mut self) -> i64 { 0 }
-    fn probe_993(&mut self) -> i64 { 0 }
-    fn probe_994(&mut self) -> i64 { 0 }
-    fn probe_995(&mut self) -> i64 { 0 }
-    fn probe_996(&mut self) -> i64 { 0 }
-    fn probe_997(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_998(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_999(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1000(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1001(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1002(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1003(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1004(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1005(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1006(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1007(&mut self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1008(&mut self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1009(&mut self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1010(&mut self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1011(&mut self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1012(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1013(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1014(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1015(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1016(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1017(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1018(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1019(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1020(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1021(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1022(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1023(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1024(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1025(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1026(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1027(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1028(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1029(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1030(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1031(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1032(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1033(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1034(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1035(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1036(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1037(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1038(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1039(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1040(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1041(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1042(self: Box<Self>) -> i64 { 0 }
-    fn probe_1043(self: Box<Self>) -> i64 { 0 }
-    fn probe_1044(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1045(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1046(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1047(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1048(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1049(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1050(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1051(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1052(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1053(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1054(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1055(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1056(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1057(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1058(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1059(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1060(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1061(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1062(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1063(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1064(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1065(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1066(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1067(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1068(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1069(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1070(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1071(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1072(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1073(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1074(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1075(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1076(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1077(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1078(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1079(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1080(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1081(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1082(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1305(&self) -> i64 { 0 }
-    fn probe_1306(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1307(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1308(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1309(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1310(&self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1311(&self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1312(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1313(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1314(&self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1315(&self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1316(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1317(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1318(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1319(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1320(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1321(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1322(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1323(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1324(&mut self) -> i64 { 0 }
-    fn probe_1325(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1326(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1327(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1328(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1329(&mut self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1330(&mut self, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1331(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1332(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1333(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1334(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1335(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1336(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1337(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1338(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1339(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1340(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1341(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1342(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1343(self: Box<Self>) -> i64 { 0 }
-    fn probe_1344(self: Box<Self>) -> i64 { 0 }
-    fn probe_1345(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1346(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1347(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1348(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-    fn probe_1349(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1350(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1351(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1352(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1353(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1354(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1355(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1356(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-    fn probe_1357(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1358(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-    fn probe_1359(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1360(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1361(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-    fn probe_1362(self: Box<Self>, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
+    fn probe_906(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_907(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_908(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_909(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_910(&self, p0: Box<dyn ShapeLockedDynB>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_943(&self) -> i64 {
+        0
+    }
+    fn probe_944(&self) -> i64 {
+        0
+    }
+    fn probe_945(&self) -> i64 {
+        0
+    }
+    fn probe_946(&self) -> i64 {
+        0
+    }
+    fn probe_947(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_948(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_949(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_950(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_951(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_952(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_953(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_954(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_955(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_956(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_957(&self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_958(&self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_959(&self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_960(&self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_961(&self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_962(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_963(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_964(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_965(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_966(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_967(&self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_968(&self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_969(&self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_970(&self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_971(&self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_972(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_973(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_974(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_975(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_976(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_977(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_978(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_979(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_980(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_981(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_982(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_983(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_984(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_985(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_986(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_987(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_988(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_989(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_990(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_991(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_992(&mut self) -> i64 {
+        0
+    }
+    fn probe_993(&mut self) -> i64 {
+        0
+    }
+    fn probe_994(&mut self) -> i64 {
+        0
+    }
+    fn probe_995(&mut self) -> i64 {
+        0
+    }
+    fn probe_996(&mut self) -> i64 {
+        0
+    }
+    fn probe_997(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_998(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_999(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1000(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1001(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1002(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_1003(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_1004(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_1005(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_1006(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_1007(&mut self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1008(&mut self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1009(&mut self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1010(&mut self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1011(&mut self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1012(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1013(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1014(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1015(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1016(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1017(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1018(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1019(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1020(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1021(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1022(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1023(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1024(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1025(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1026(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1027(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1028(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1029(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1030(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1031(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1032(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1033(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1034(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1035(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1036(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1037(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1038(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1039(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1040(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1041(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1042(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_1043(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_1044(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1045(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1046(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1047(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1048(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1049(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1050(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1051(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1052(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1053(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1054(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1055(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1056(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1057(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1058(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1059(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1060(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1061(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1062(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1063(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1064(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1065(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_1066(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_1067(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_1068(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_1069(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_1070(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1071(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1072(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1073(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1074(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1075(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1076(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1077(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1078(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_1079(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_1080(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_1081(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_1082(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_1305(&self) -> i64 {
+        0
+    }
+    fn probe_1306(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1307(&self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1308(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_1309(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_1310(&self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1311(&self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1312(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1313(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1314(&self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1315(&self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1316(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1317(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1318(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1319(&self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1320(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1321(&self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1322(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1323(&self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1324(&mut self) -> i64 {
+        0
+    }
+    fn probe_1325(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1326(&mut self, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1327(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_1328(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+        0
+    }
+    fn probe_1329(&mut self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1330(&mut self, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1331(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1332(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1333(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1334(&mut self, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1335(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1336(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1337(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1338(&mut self, p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1339(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1340(&mut self, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1341(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1342(&mut self, p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1343(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_1344(self: Box<Self>) -> i64 {
+        0
+    }
+    fn probe_1345(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1346(self: Box<Self>, p0: Box<dyn ShapeLockedDynA>) -> i64 {
+        0
+    }
+    fn probe_1347(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1348(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynB>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1349(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1350(self: Box<Self>, p0: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1351(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1352(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+        0
+    }
+    fn probe_1353(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1354(self: Box<Self>, p0: &mut dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1355(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_1356(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynB,
+    ) -> i64 {
+        0
+    }
+    fn probe_1357(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1358(
+        self: Box<Self>,
+        p0: Box<dyn ShapeLockedDynA>,
+        p1: Box<dyn ShapeLockedDynA>,
+    ) -> i64 {
+        0
+    }
+    fn probe_1359(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1360(self: Box<Self>, p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+        0
+    }
+    fn probe_1361(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64 {
+        0
+    }
+    fn probe_1362(
+        self: Box<Self>,
+        p0: &mut dyn ShapeLockedDynA,
+        p1: &mut dyn ShapeLockedDynA,
+    ) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn new_shapelockeddyna() -> Box<dyn ShapeLockedDynA> { Box::new(ShapeLockedDynAImpl) }
+pub fn new_shapelockeddyna() -> Box<dyn ShapeLockedDynA> {
+    Box::new(ShapeLockedDynAImpl)
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_0() -> i64 { 0 }
+pub fn probe_0() -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_1(p0: String) -> i64 { 0 }
+pub fn probe_1(p0: String) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_2(p0: &String) -> i64 { 0 }
+pub fn probe_2(p0: &String) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_3(p0: &String) -> i64 { 0 }
+pub fn probe_3(p0: &String) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_4(p0: String, p1: i64) -> i64 { 0 }
+pub fn probe_4(p0: String, p1: i64) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_5(p0: &String, p1: i64) -> i64 { 0 }
+pub fn probe_5(p0: &String, p1: i64) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_6(p0: &String, p1: i64) -> i64 { 0 }
+pub fn probe_6(p0: &String, p1: i64) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeConfinedSA {
     #[bridge(sync, native_only)]
-    pub fn probe_7() -> i64 { 0 }
+    pub fn probe_7() -> i64 {
+        0
+    }
 }
 
 #[bridge(sync, no_block)]
-pub fn probe_8(p0: ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_8(p0: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_9(p0: ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_9(p0: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_10(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
+pub fn probe_10(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_11(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
+pub fn probe_11(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_12(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
+pub fn probe_12(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_13(p0: &ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_13(p0: &ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_14(p0: &ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_14(p0: &ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeConfinedSB {
     #[bridge]
-    pub fn probe_15(&self, p0: &ShapeConfinedSB, p1: &ShapeConfinedSA) -> i64 { 0 }
+    pub fn probe_15(&self, p0: &ShapeConfinedSB, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeConfinedSB {
     #[bridge(no_block)]
-    pub fn probe_16(&self, p0: &ShapeConfinedSB, p1: &ShapeConfinedSA) -> i64 { 0 }
+    pub fn probe_16(&self, p0: &ShapeConfinedSB, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeConfinedSB {
     #[bridge(native_only)]
-    pub fn probe_17(&self, p0: &ShapeConfinedSB, p1: &ShapeConfinedSA) -> i64 { 0 }
+    pub fn probe_17(&self, p0: &ShapeConfinedSB, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn probe_18(p0: &mut ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_18(p0: &mut ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_19(p0: &mut ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_19(p0: &mut ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_20(p0: &mut ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_20(p0: &mut ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeConfinedSB {
     #[bridge]
-    pub fn probe_21(&self, p0: &mut ShapeConfinedSB, p1: &mut ShapeConfinedSA) -> i64 { 0 }
+    pub fn probe_21(&self, p0: &mut ShapeConfinedSB, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeConfinedSB {
     #[bridge(no_block)]
-    pub fn probe_22(&self, p0: &mut ShapeConfinedSB, p1: &mut ShapeConfinedSA) -> i64 { 0 }
+    pub fn probe_22(&self, p0: &mut ShapeConfinedSB, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeConfinedSB {
     #[bridge(native_only)]
-    pub fn probe_23(&self, p0: &mut ShapeConfinedSB, p1: &mut ShapeConfinedSA) -> i64 { 0 }
+    pub fn probe_23(&self, p0: &mut ShapeConfinedSB, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn probe_24(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge(sync, no_block)]
-pub fn probe_25(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge(sync, native_only)]
-pub fn probe_26(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge(sync, no_block)]
-pub fn probe_27(p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge(sync, native_only)]
-pub fn probe_28(p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge(sync, no_block)]
-pub fn probe_29(p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge(sync, native_only)]
-pub fn probe_30(p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_31(&self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_32(&self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_33(&self, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_34(&self, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_35(&self, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_36(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_37(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_38(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_39(&self, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_40(&self, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_41(&self, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_42(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_43(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_44(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_45(&self, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_46(&self, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_47(&self, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_48(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_49(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_50(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_51(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_52(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_53(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_54(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_55(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_56(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_57(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_58(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_59(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_60(&mut self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_61(&mut self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_62(&mut self, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_63(&mut self, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_64(&mut self, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_65(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_66(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_67(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_68(&mut self, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_69(&mut self, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_70(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_71(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_72(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_73(&mut self, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_74(&mut self, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_75(&mut self, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_76(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_77(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_78(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_79(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_80(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_81(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_82(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_83(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_84(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_85(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_86(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_87(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_88(self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_89(self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_90(self, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_91(self, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_92(self, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_93(self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_94(self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_95(self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_96(self, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_97(self, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_98(self, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_99(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_100(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_101(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_102(self, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_103(self, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_104(self, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_105(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_106(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_107(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_108(self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_109(self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_110(self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_111(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_112(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_113(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_114(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_115(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_116(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_117(self: Box<Self>) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_118(self: Box<Self>) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_119(self: Box<Self>, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_120(self: Box<Self>, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_121(self: Box<Self>, p0: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_122(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_123(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_124(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_125(self: Box<Self>, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_126(self: Box<Self>, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_127(self: Box<Self>, p0: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_128(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_129(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_130(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_131(self: Box<Self>, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_132(self: Box<Self>, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_133(self: Box<Self>, p0: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_134(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_135(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_136(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_137(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_138(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_139(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_140(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_141(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_142(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge]
-    pub fn probe_143(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(no_block)]
-    pub fn probe_144(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeConfinedSA {
-    #[bridge(native_only)]
-    pub fn probe_145(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_24(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+    0
 }
 
 #[bridge(sync, no_block)]
-pub fn probe_146() -> Box<dyn ShapeConfinedDynA> { Box::new(ShapeConfinedDynAImpl) }
+pub fn probe_25(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_147() -> Box<dyn ShapeConfinedDynA> { Box::new(ShapeConfinedDynAImpl) }
+pub fn probe_26(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_148(p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
+pub fn probe_27(p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_149(p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
+pub fn probe_28(p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+    0
+}
+
+#[bridge(sync, no_block)]
+pub fn probe_29(p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+    0
+}
+
+#[bridge(sync, native_only)]
+pub fn probe_30(p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+    0
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_31(&self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_32(&self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_33(&self, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_34(&self, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_35(&self, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_36(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_37(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_38(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_39(&self, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_40(&self, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_41(&self, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_42(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_43(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_44(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_45(&self, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_46(&self, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_47(&self, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_48(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_49(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_50(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_51(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_52(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_53(&self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_54(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_55(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_56(&self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_57(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_58(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_59(&self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_60(&mut self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_61(&mut self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_62(&mut self, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_63(&mut self, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_64(&mut self, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_65(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_66(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_67(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_68(&mut self, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_69(&mut self, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_70(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_71(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_72(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_73(&mut self, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_74(&mut self, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_75(&mut self, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_76(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_77(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_78(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_79(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_80(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_81(&mut self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_82(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_83(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_84(&mut self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_85(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_86(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_87(&mut self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_88(self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_89(self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_90(self, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_91(self, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_92(self, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_93(self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_94(self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_95(self, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_96(self, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_97(self, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_98(self, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_99(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_100(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_101(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_102(self, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_103(self, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_104(self, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_105(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_106(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_107(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_108(self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_109(self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_110(self, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_111(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_112(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_113(self, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_114(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_115(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_116(self, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_117(self: Box<Self>) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_118(self: Box<Self>) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_119(self: Box<Self>, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_120(self: Box<Self>, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_121(self: Box<Self>, p0: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_122(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_123(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_124(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_125(self: Box<Self>, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_126(self: Box<Self>, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_127(self: Box<Self>, p0: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_128(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_129(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_130(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_131(self: Box<Self>, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_132(self: Box<Self>, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_133(self: Box<Self>, p0: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_134(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_135(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_136(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_137(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_138(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_139(self: Box<Self>, p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_140(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_141(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_142(self: Box<Self>, p0: &ShapeConfinedSA, p1: &ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge]
+    pub fn probe_143(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(no_block)]
+    pub fn probe_144(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeConfinedSA {
+    #[bridge(native_only)]
+    pub fn probe_145(self: Box<Self>, p0: &mut ShapeConfinedSA, p1: &mut ShapeConfinedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge(sync, no_block)]
+pub fn probe_146() -> Box<dyn ShapeConfinedDynA> {
+    Box::new(ShapeConfinedDynAImpl)
+}
+
+#[bridge(sync, native_only)]
+pub fn probe_147() -> Box<dyn ShapeConfinedDynA> {
+    Box::new(ShapeConfinedDynAImpl)
+}
+
+#[bridge(sync, no_block)]
+pub fn probe_148(p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+    0
+}
+
+#[bridge(sync, native_only)]
+pub fn probe_149(p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_150(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
+pub fn probe_150(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_151(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
+pub fn probe_151(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_152(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
+pub fn probe_152(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_153(p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_153(p0: &dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_154(p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_154(p0: &dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_155(p0: &dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_155(p0: &dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_159(p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_159(p0: &mut dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_160(p0: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_160(p0: &mut dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_164(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
+pub fn probe_164(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_165(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
+pub fn probe_165(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_166(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
+pub fn probe_166(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_167(p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_167(p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_168(p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_168(p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_169(p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_169(p0: &dyn ShapeConfinedDynA, p1: &dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_170(p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_170(p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_171(p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_171(p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_172(p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 { 0 }
+pub fn probe_172(p0: &mut dyn ShapeConfinedDynA, p1: &mut dyn ShapeConfinedDynA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeResidentSA {
     #[bridge(sync, no_block)]
-    pub fn probe_260() -> i64 { 0 }
+    pub fn probe_260() -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeResidentSA {
     #[bridge(sync, native_only)]
-    pub fn probe_261() -> i64 { 0 }
+    pub fn probe_261() -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn probe_262(p0: ShapeResidentSA) -> i64 { 0 }
+pub fn probe_262(p0: ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_263(p0: ShapeResidentSA) -> i64 { 0 }
+pub fn probe_263(p0: ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_264(p0: ShapeResidentSA) -> i64 { 0 }
+pub fn probe_264(p0: ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeResidentSB {
     #[bridge]
-    pub fn probe_265(&self, p0: ShapeResidentSB, p1: ShapeResidentSA) -> i64 { 0 }
+    pub fn probe_265(&self, p0: ShapeResidentSB, p1: ShapeResidentSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeResidentSB {
     #[bridge(no_block)]
-    pub fn probe_266(&self, p0: ShapeResidentSB, p1: ShapeResidentSA) -> i64 { 0 }
+    pub fn probe_266(&self, p0: ShapeResidentSB, p1: ShapeResidentSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeResidentSB {
     #[bridge(native_only)]
-    pub fn probe_267(&self, p0: ShapeResidentSB, p1: ShapeResidentSA) -> i64 { 0 }
+    pub fn probe_267(&self, p0: ShapeResidentSB, p1: ShapeResidentSA) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn probe_268(p0: &ShapeResidentSA) -> i64 { 0 }
+pub fn probe_268(p0: &ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_269(p0: &ShapeResidentSA) -> i64 { 0 }
+pub fn probe_269(p0: &ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_270(p0: &ShapeResidentSA) -> i64 { 0 }
+pub fn probe_270(p0: &ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeResidentSB {
     #[bridge]
-    pub fn probe_271(&self, p0: &ShapeResidentSB, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSB {
-    #[bridge(no_block)]
-    pub fn probe_272(&self, p0: &ShapeResidentSB, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSB {
-    #[bridge(native_only)]
-    pub fn probe_273(&self, p0: &ShapeResidentSB, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge(sync)]
-pub fn probe_274(p0: &mut ShapeResidentSA) -> i64 { 0 }
-
-#[bridge(sync, no_block)]
-pub fn probe_275(p0: &mut ShapeResidentSA) -> i64 { 0 }
-
-#[bridge(sync, native_only)]
-pub fn probe_276(p0: &mut ShapeResidentSA) -> i64 { 0 }
-
-#[bridge]
-impl ShapeResidentSB {
-    #[bridge]
-    pub fn probe_277(&self, p0: &mut ShapeResidentSB, p1: &mut ShapeResidentSA) -> i64 { 0 }
+    pub fn probe_271(&self, p0: &ShapeResidentSB, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeResidentSB {
     #[bridge(no_block)]
-    pub fn probe_278(&self, p0: &mut ShapeResidentSB, p1: &mut ShapeResidentSA) -> i64 { 0 }
+    pub fn probe_272(&self, p0: &ShapeResidentSB, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeResidentSB {
     #[bridge(native_only)]
-    pub fn probe_279(&self, p0: &mut ShapeResidentSB, p1: &mut ShapeResidentSA) -> i64 { 0 }
+    pub fn probe_273(&self, p0: &ShapeResidentSB, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn probe_280(p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
+pub fn probe_274(p0: &mut ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_281(p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
+pub fn probe_275(p0: &mut ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_282(p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-
-#[bridge(sync)]
-pub fn probe_283(p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-
-#[bridge(sync, no_block)]
-pub fn probe_284(p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-
-#[bridge(sync, native_only)]
-pub fn probe_285(p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-
-#[bridge(sync, no_block)]
-pub fn probe_286(p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-
-#[bridge(sync, native_only)]
-pub fn probe_287(p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_288(&self) -> i64 { 0 }
+pub fn probe_276(p0: &mut ShapeResidentSA) -> i64 {
+    0
 }
 
 #[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_289(&self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
+impl ShapeResidentSB {
     #[bridge]
-    pub fn probe_290(&self, p0: ShapeResidentSA) -> i64 { 0 }
+    pub fn probe_277(&self, p0: &mut ShapeResidentSB, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
-impl ShapeResidentSA {
+impl ShapeResidentSB {
     #[bridge(no_block)]
-    pub fn probe_291(&self, p0: ShapeResidentSA) -> i64 { 0 }
+    pub fn probe_278(&self, p0: &mut ShapeResidentSB, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
-impl ShapeResidentSA {
+impl ShapeResidentSB {
     #[bridge(native_only)]
-    pub fn probe_292(&self, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_293(&self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_294(&self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_295(&self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_296(&self, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_297(&self, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_298(&self, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_299(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_300(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_301(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_302(&self, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_303(&self, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_304(&self, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_305(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_306(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_307(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_308(&self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_309(&self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_310(&self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_311(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_312(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_313(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_314(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_315(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_316(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_317(&mut self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_318(&mut self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_319(&mut self, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_320(&mut self, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_321(&mut self, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_322(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_323(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_324(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_325(&mut self, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_326(&mut self, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_327(&mut self, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_328(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_329(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_330(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_331(&mut self, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_332(&mut self, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_333(&mut self, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_334(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_335(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_336(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_337(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_338(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_339(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_340(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_341(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_342(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_343(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_344(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_345(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_346(self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_347(self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_348(self, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_349(self, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_350(self, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_351(self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_352(self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_353(self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_354(self, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_355(self, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_356(self, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_357(self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_358(self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_359(self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_360(self, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_361(self, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_362(self, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_363(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_364(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_365(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_366(self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_367(self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_368(self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_369(self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_370(self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_371(self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_372(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_373(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_374(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_375(self: Box<Self>) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_376(self: Box<Self>) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_377(self: Box<Self>) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_378(self: Box<Self>, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_379(self: Box<Self>, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_380(self: Box<Self>, p0: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_381(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_382(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_383(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_384(self: Box<Self>, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_385(self: Box<Self>, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_386(self: Box<Self>, p0: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_387(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_388(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_389(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_390(self: Box<Self>, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_391(self: Box<Self>, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_392(self: Box<Self>, p0: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_393(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_394(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_395(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_396(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_397(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_398(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_399(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_400(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_401(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge]
-    pub fn probe_402(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(no_block)]
-    pub fn probe_403(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeResidentSA {
-    #[bridge(native_only)]
-    pub fn probe_404(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 { 0 }
+    pub fn probe_279(&self, p0: &mut ShapeResidentSB, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn probe_405() -> Box<dyn ShapeResidentDynA> { Box::new(ShapeResidentDynAImpl) }
+pub fn probe_280(p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_406() -> Box<dyn ShapeResidentDynA> { Box::new(ShapeResidentDynAImpl) }
+pub fn probe_281(p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_407() -> Box<dyn ShapeResidentDynA> { Box::new(ShapeResidentDynAImpl) }
+pub fn probe_282(p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_408(p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
+pub fn probe_283(p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_409(p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
+pub fn probe_284(p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_410(p0: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
+pub fn probe_285(p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+    0
+}
+
+#[bridge(sync, no_block)]
+pub fn probe_286(p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+    0
+}
+
+#[bridge(sync, native_only)]
+pub fn probe_287(p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+    0
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_288(&self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_289(&self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_290(&self, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_291(&self, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_292(&self, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_293(&self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_294(&self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_295(&self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_296(&self, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_297(&self, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_298(&self, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_299(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_300(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_301(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_302(&self, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_303(&self, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_304(&self, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_305(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_306(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_307(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_308(&self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_309(&self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_310(&self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_311(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_312(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_313(&self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_314(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_315(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_316(&self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_317(&mut self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_318(&mut self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_319(&mut self, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_320(&mut self, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_321(&mut self, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_322(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_323(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_324(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_325(&mut self, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_326(&mut self, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_327(&mut self, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_328(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_329(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_330(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_331(&mut self, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_332(&mut self, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_333(&mut self, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_334(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_335(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_336(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_337(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_338(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_339(&mut self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_340(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_341(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_342(&mut self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_343(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_344(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_345(&mut self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_346(self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_347(self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_348(self, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_349(self, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_350(self, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_351(self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_352(self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_353(self, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_354(self, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_355(self, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_356(self, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_357(self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_358(self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_359(self, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_360(self, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_361(self, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_362(self, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_363(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_364(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_365(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_366(self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_367(self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_368(self, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_369(self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_370(self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_371(self, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_372(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_373(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_374(self, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_375(self: Box<Self>) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_376(self: Box<Self>) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_377(self: Box<Self>) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_378(self: Box<Self>, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_379(self: Box<Self>, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_380(self: Box<Self>, p0: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_381(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_382(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_383(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_384(self: Box<Self>, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_385(self: Box<Self>, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_386(self: Box<Self>, p0: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_387(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_388(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_389(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_390(self: Box<Self>, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_391(self: Box<Self>, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_392(self: Box<Self>, p0: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_393(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_394(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_395(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_396(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_397(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_398(self: Box<Self>, p0: ShapeResidentSA, p1: ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_399(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_400(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_401(self: Box<Self>, p0: &ShapeResidentSA, p1: &ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge]
+    pub fn probe_402(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(no_block)]
+    pub fn probe_403(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeResidentSA {
+    #[bridge(native_only)]
+    pub fn probe_404(self: Box<Self>, p0: &mut ShapeResidentSA, p1: &mut ShapeResidentSA) -> i64 {
+        0
+    }
+}
 
 #[bridge(sync)]
-pub fn probe_414(p0: &dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_405() -> Box<dyn ShapeResidentDynA> {
+    Box::new(ShapeResidentDynAImpl)
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_415(p0: &dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_406() -> Box<dyn ShapeResidentDynA> {
+    Box::new(ShapeResidentDynAImpl)
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_416(p0: &dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_407() -> Box<dyn ShapeResidentDynA> {
+    Box::new(ShapeResidentDynAImpl)
+}
 
 #[bridge(sync)]
-pub fn probe_420(p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_408(p0: Box<dyn ShapeResidentDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_421(p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_409(p0: Box<dyn ShapeResidentDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_422(p0: &mut dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_410(p0: Box<dyn ShapeResidentDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_426(p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
+pub fn probe_414(p0: &dyn ShapeResidentDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_427(p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
+pub fn probe_415(p0: &dyn ShapeResidentDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_428(p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 { 0 }
+pub fn probe_416(p0: &dyn ShapeResidentDynA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_429(p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_420(p0: &mut dyn ShapeResidentDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_430(p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_421(p0: &mut dyn ShapeResidentDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_431(p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_422(p0: &mut dyn ShapeResidentDynA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_432(p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_426(p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_433(p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_427(p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_434(p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 { 0 }
+pub fn probe_428(p0: Box<dyn ShapeResidentDynA>, p1: Box<dyn ShapeResidentDynA>) -> i64 {
+    0
+}
+
+#[bridge(sync)]
+pub fn probe_429(p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, no_block)]
+pub fn probe_430(p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, native_only)]
+pub fn probe_431(p0: &dyn ShapeResidentDynA, p1: &dyn ShapeResidentDynA) -> i64 {
+    0
+}
+
+#[bridge(sync)]
+pub fn probe_432(p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, no_block)]
+pub fn probe_433(p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, native_only)]
+pub fn probe_434(p0: &mut dyn ShapeResidentDynA, p1: &mut dyn ShapeResidentDynA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_525() -> i64 { 0 }
+    pub fn probe_525() -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_526() -> i64 { 0 }
+    pub fn probe_526() -> i64 {
+        0
+    }
 }
 
 #[bridge(sync)]
-pub fn probe_527(p0: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_527(p0: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_528(p0: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_528(p0: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_529(p0: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_529(p0: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_530(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_530(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_531(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_531(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_532(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_532(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_533(p0: &ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_533(p0: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_534(p0: &ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_534(p0: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_535(p0: &ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_535(p0: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_536(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_536(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_537(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_537(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_538(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_538(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_539(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_539(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_540(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_540(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_541(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_541(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_542(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_542(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_543(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_543(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_544(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_544(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_545(&self) -> i64 { 0 }
+    pub fn probe_545(&self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_546(&self) -> i64 { 0 }
+    pub fn probe_546(&self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_547(&self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_547(&self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_548(&self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_548(&self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_549(&self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_549(&self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_550(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_550(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_551(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_551(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_552(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_552(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_553(&self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_553(&self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_554(&self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_554(&self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_555(&self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_555(&self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_556(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_556(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_557(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_557(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_558(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_558(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_559(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_559(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_560(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_560(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_561(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_561(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_562(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_562(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_563(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_563(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_564(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_564(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_565(self) -> i64 { 0 }
+    pub fn probe_565(self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_566(self) -> i64 { 0 }
+    pub fn probe_566(self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_567(self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_567(self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_568(self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_568(self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_569(self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_569(self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_570(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_570(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_571(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_571(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_572(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_572(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_573(self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_573(self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_574(self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_574(self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_575(self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_575(self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_576(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_576(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_577(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_577(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_578(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_578(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_579(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_579(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_580(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_580(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_581(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_581(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_582(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_582(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_583(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_583(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_584(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_584(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_585(self: Box<Self>) -> i64 { 0 }
+    pub fn probe_585(self: Box<Self>) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_586(self: Box<Self>) -> i64 { 0 }
+    pub fn probe_586(self: Box<Self>) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_587(self: Box<Self>) -> i64 { 0 }
+    pub fn probe_587(self: Box<Self>) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_588(self: Box<Self>, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_588(self: Box<Self>, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_589(self: Box<Self>, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_589(self: Box<Self>, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_590(self: Box<Self>, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_590(self: Box<Self>, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_591(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_591(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_592(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_592(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_593(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_593(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_594(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_594(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_595(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_595(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_596(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_596(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_597(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_597(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_598(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_598(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_599(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_599(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_600(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_600(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_601(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_601(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_602(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_602(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync)]
-    pub fn probe_603(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_603(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, no_block)]
-    pub fn probe_604(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_604(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(sync, native_only)]
-    pub fn probe_605(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_605(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync, no_block)]
-pub fn probe_606() -> Box<dyn ShapeFrozenDynA> { Box::new(ShapeFrozenDynAImpl) }
+pub fn probe_606() -> Box<dyn ShapeFrozenDynA> {
+    Box::new(ShapeFrozenDynAImpl)
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_607() -> Box<dyn ShapeFrozenDynA> { Box::new(ShapeFrozenDynAImpl) }
+pub fn probe_607() -> Box<dyn ShapeFrozenDynA> {
+    Box::new(ShapeFrozenDynAImpl)
+}
 
 #[bridge(sync)]
-pub fn probe_608(p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
+pub fn probe_608(p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_609(p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
+pub fn probe_609(p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_610(p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
+pub fn probe_610(p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_611(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
+pub fn probe_611(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_612(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
+pub fn probe_612(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_613(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
+pub fn probe_613(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_614(p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
+pub fn probe_614(p0: &dyn ShapeFrozenDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_615(p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
+pub fn probe_615(p0: &dyn ShapeFrozenDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_616(p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
+pub fn probe_616(p0: &dyn ShapeFrozenDynA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_617(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
+pub fn probe_617(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_618(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
+pub fn probe_618(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_619(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
+pub fn probe_619(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_620(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
+pub fn probe_620(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_621(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
+pub fn probe_621(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_622(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
+pub fn probe_622(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_623(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
+pub fn probe_623(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_624(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
+pub fn probe_624(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_625(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
+pub fn probe_625(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(sync, no_block)]
-    pub fn probe_667() -> i64 { 0 }
+    pub fn probe_667() -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(sync, native_only)]
-    pub fn probe_668() -> i64 { 0 }
+    pub fn probe_668() -> i64 {
+        0
+    }
 }
 
 #[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_669(p0: Vec<&ShapeLockedSA>) -> i64 { 0 }
+pub fn probe_669(p0: Vec<&ShapeLockedSA>) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_670(p0: Vec<&ShapeLockedSA>) -> i64 { 0 }
+pub fn probe_670(p0: Vec<&ShapeLockedSA>) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block")]
-pub fn probe_671(p0: Vec<&ShapeLockedSA>) -> i64 { 0 }
+pub fn probe_671(p0: Vec<&ShapeLockedSA>) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_672(p0: Vec<&ShapeLockedSA>) -> i64 { 0 }
+pub fn probe_672(p0: Vec<&ShapeLockedSA>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_673(p0: ShapeLockedSA) -> i64 { 0 }
+pub fn probe_673(p0: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_674(p0: ShapeLockedSA) -> i64 { 0 }
+pub fn probe_674(p0: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_675(p0: ShapeLockedSA) -> i64 { 0 }
+pub fn probe_675(p0: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_676(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+pub fn probe_676(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_677(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+pub fn probe_677(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_678(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+pub fn probe_678(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeLockedSB {
     #[bridge(sync, on_contention = "error")]
-    pub fn probe_679(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_679(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSB {
     #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_680(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_680(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSB {
     #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_681(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_681(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSB {
     #[bridge(sync, on_contention = "block")]
-    pub fn probe_682(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_682(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSB {
     #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_683(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_683(&self, p0: ShapeLockedSB, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_684(p0: &ShapeLockedSA) -> i64 { 0 }
+pub fn probe_684(p0: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_685(p0: &ShapeLockedSA) -> i64 { 0 }
+pub fn probe_685(p0: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block")]
-pub fn probe_686(p0: &ShapeLockedSA) -> i64 { 0 }
+pub fn probe_686(p0: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_687(p0: &ShapeLockedSA) -> i64 { 0 }
+pub fn probe_687(p0: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error")]
-pub fn probe_688(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+pub fn probe_688(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_689(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+pub fn probe_689(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_690(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+pub fn probe_690(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block")]
-pub fn probe_691(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+pub fn probe_691(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_692(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+pub fn probe_692(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error")]
-pub fn probe_693(p0: &mut ShapeLockedSA) -> i64 { 0 }
+pub fn probe_693(p0: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_694(p0: &mut ShapeLockedSA) -> i64 { 0 }
+pub fn probe_694(p0: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_695(p0: &mut ShapeLockedSA) -> i64 { 0 }
+pub fn probe_695(p0: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block")]
-pub fn probe_696(p0: &mut ShapeLockedSA) -> i64 { 0 }
+pub fn probe_696(p0: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_697(p0: &mut ShapeLockedSA) -> i64 { 0 }
+pub fn probe_697(p0: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error")]
-pub fn probe_698(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+pub fn probe_698(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_699(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+pub fn probe_699(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_700(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+pub fn probe_700(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block")]
-pub fn probe_701(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+pub fn probe_701(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_702(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-
-#[bridge(sync)]
-pub fn probe_703(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, no_block)]
-pub fn probe_704(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, native_only)]
-pub fn probe_705(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error")]
-pub fn probe_706(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_707(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_708(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block")]
-pub fn probe_709(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_710(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_711(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_712(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block")]
-pub fn probe_713(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_714(&self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_715(&self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_716(&self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_717(&self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_718(&self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_719(&self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_720(&self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_721(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_722(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_723(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_724(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_725(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_726(&self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_727(&self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_728(&self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_729(&self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_730(&self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_731(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_732(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_733(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_734(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_735(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_736(&self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_737(&self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_738(&self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_739(&self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_740(&self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_741(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_742(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_743(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_744(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_745(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_746(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_747(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_748(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_749(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_750(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_751(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_752(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_753(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_754(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_755(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_756(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_757(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_758(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_759(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_760(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_761(&mut self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_762(&mut self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_763(&mut self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_764(&mut self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_765(&mut self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_766(&mut self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_767(&mut self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_768(&mut self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_769(&mut self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_770(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_771(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_772(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_773(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_774(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_775(&mut self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_776(&mut self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_777(&mut self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_778(&mut self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_779(&mut self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_780(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_781(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_782(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_783(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_784(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_785(&mut self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_786(&mut self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_787(&mut self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_788(&mut self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_789(&mut self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_790(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_791(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_792(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_793(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_794(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_795(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_796(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_797(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_798(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_799(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_800(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_801(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_802(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_803(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_804(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_805(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_806(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_807(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_808(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_809(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, no_block)]
-    pub fn probe_810(self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, native_only)]
-    pub fn probe_811(self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync)]
-    pub fn probe_812(self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, no_block)]
-    pub fn probe_813(self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, native_only)]
-    pub fn probe_814(self, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync)]
-    pub fn probe_815(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, no_block)]
-    pub fn probe_816(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, native_only)]
-    pub fn probe_817(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_818(self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_819(self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_820(self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_821(self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_822(self, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_823(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_824(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_825(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_826(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_827(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_828(self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_829(self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_830(self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_831(self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_832(self, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_833(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_834(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_835(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_836(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_837(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync)]
-    pub fn probe_838(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, no_block)]
-    pub fn probe_839(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, native_only)]
-    pub fn probe_840(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_841(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_842(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_843(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_844(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_845(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_846(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_847(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_848(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_849(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_850(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, no_block)]
-    pub fn probe_851(self: Box<Self>) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, native_only)]
-    pub fn probe_852(self: Box<Self>) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync)]
-    pub fn probe_853(self: Box<Self>, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, no_block)]
-    pub fn probe_854(self: Box<Self>, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, native_only)]
-    pub fn probe_855(self: Box<Self>, p0: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync)]
-    pub fn probe_856(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, no_block)]
-    pub fn probe_857(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, native_only)]
-    pub fn probe_858(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_859(self: Box<Self>, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_860(self: Box<Self>, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_861(self: Box<Self>, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_862(self: Box<Self>, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_863(self: Box<Self>, p0: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_864(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_865(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_866(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_867(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_868(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_869(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_870(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_871(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_872(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_873(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_874(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_875(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_876(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_877(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_878(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync)]
-    pub fn probe_879(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, no_block)]
-    pub fn probe_880(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, native_only)]
-    pub fn probe_881(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_882(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_883(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_884(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_885(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_886(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error")]
-    pub fn probe_887(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", no_block)]
-    pub fn probe_888(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "error", native_only)]
-    pub fn probe_889(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block")]
-    pub fn probe_890(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(sync, on_contention = "block", native_only)]
-    pub fn probe_891(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+pub fn probe_702(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+    0
 }
 
 #[bridge(sync)]
-pub fn probe_892() -> Box<dyn ShapeLockedDynA> { Box::new(ShapeLockedDynAImpl) }
+pub fn probe_703(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_893() -> Box<dyn ShapeLockedDynA> { Box::new(ShapeLockedDynAImpl) }
+pub fn probe_704(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_894() -> Box<dyn ShapeLockedDynA> { Box::new(ShapeLockedDynAImpl) }
+pub fn probe_705(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error")]
-pub fn probe_895(p0: Vec<&dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_706(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_896(p0: Vec<&dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_707(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_897(p0: Vec<&dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_708(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block")]
-pub fn probe_898(p0: Vec<&dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_709(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_899(p0: Vec<&dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_710(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", no_block)]
+pub fn probe_711(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", native_only)]
+pub fn probe_712(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block")]
+pub fn probe_713(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_714(&self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_715(&self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_716(&self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_717(&self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_718(&self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_719(&self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_720(&self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_721(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_722(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_723(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_724(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_725(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_726(&self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_727(&self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_728(&self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_729(&self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_730(&self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_731(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_732(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_733(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_734(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_735(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_736(&self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_737(&self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_738(&self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_739(&self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_740(&self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_741(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_742(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_743(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_744(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_745(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_746(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_747(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_748(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_749(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_750(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_751(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_752(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_753(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_754(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_755(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_756(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_757(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_758(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_759(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_760(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_761(&mut self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_762(&mut self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_763(&mut self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_764(&mut self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_765(&mut self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_766(&mut self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_767(&mut self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_768(&mut self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_769(&mut self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_770(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_771(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_772(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_773(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_774(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_775(&mut self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_776(&mut self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_777(&mut self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_778(&mut self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_779(&mut self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_780(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_781(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_782(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_783(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_784(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_785(&mut self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_786(&mut self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_787(&mut self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_788(&mut self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_789(&mut self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_790(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_791(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_792(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_793(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_794(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_795(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_796(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_797(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_798(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_799(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_800(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_801(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_802(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_803(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_804(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_805(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_806(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_807(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_808(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_809(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, no_block)]
+    pub fn probe_810(self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, native_only)]
+    pub fn probe_811(self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync)]
+    pub fn probe_812(self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, no_block)]
+    pub fn probe_813(self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, native_only)]
+    pub fn probe_814(self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync)]
+    pub fn probe_815(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, no_block)]
+    pub fn probe_816(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, native_only)]
+    pub fn probe_817(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_818(self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_819(self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_820(self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_821(self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_822(self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_823(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_824(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_825(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_826(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_827(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_828(self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_829(self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_830(self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_831(self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_832(self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_833(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_834(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_835(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_836(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_837(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync)]
+    pub fn probe_838(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, no_block)]
+    pub fn probe_839(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, native_only)]
+    pub fn probe_840(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_841(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_842(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_843(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_844(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_845(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_846(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_847(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_848(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_849(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_850(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, no_block)]
+    pub fn probe_851(self: Box<Self>) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, native_only)]
+    pub fn probe_852(self: Box<Self>) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync)]
+    pub fn probe_853(self: Box<Self>, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, no_block)]
+    pub fn probe_854(self: Box<Self>, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, native_only)]
+    pub fn probe_855(self: Box<Self>, p0: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync)]
+    pub fn probe_856(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, no_block)]
+    pub fn probe_857(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, native_only)]
+    pub fn probe_858(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_859(self: Box<Self>, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_860(self: Box<Self>, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_861(self: Box<Self>, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_862(self: Box<Self>, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_863(self: Box<Self>, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_864(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_865(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_866(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_867(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_868(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_869(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_870(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_871(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_872(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_873(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_874(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_875(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_876(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_877(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_878(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync)]
+    pub fn probe_879(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, no_block)]
+    pub fn probe_880(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, native_only)]
+    pub fn probe_881(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_882(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_883(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_884(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_885(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_886(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error")]
+    pub fn probe_887(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", no_block)]
+    pub fn probe_888(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "error", native_only)]
+    pub fn probe_889(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block")]
+    pub fn probe_890(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(sync, on_contention = "block", native_only)]
+    pub fn probe_891(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
+}
 
 #[bridge(sync)]
-pub fn probe_900(p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_892() -> Box<dyn ShapeLockedDynA> {
+    Box::new(ShapeLockedDynAImpl)
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_901(p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_893() -> Box<dyn ShapeLockedDynA> {
+    Box::new(ShapeLockedDynAImpl)
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_902(p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_894() -> Box<dyn ShapeLockedDynA> {
+    Box::new(ShapeLockedDynAImpl)
+}
+
+#[bridge(sync, on_contention = "error")]
+pub fn probe_895(p0: Vec<&dyn ShapeLockedDynA>) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", no_block)]
+pub fn probe_896(p0: Vec<&dyn ShapeLockedDynA>) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", native_only)]
+pub fn probe_897(p0: Vec<&dyn ShapeLockedDynA>) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block")]
+pub fn probe_898(p0: Vec<&dyn ShapeLockedDynA>) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block", native_only)]
+pub fn probe_899(p0: Vec<&dyn ShapeLockedDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_903(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
+pub fn probe_900(p0: Box<dyn ShapeLockedDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_904(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
+pub fn probe_901(p0: Box<dyn ShapeLockedDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_905(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_911(p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_912(p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block")]
-pub fn probe_913(p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_914(p0: &dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error")]
-pub fn probe_915(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_916(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_917(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block")]
-pub fn probe_918(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_919(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error")]
-pub fn probe_920(p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_921(p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_922(p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block")]
-pub fn probe_923(p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_924(p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error")]
-pub fn probe_925(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_926(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_927(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block")]
-pub fn probe_928(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_929(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
+pub fn probe_902(p0: Box<dyn ShapeLockedDynA>) -> i64 {
+    0
+}
 
 #[bridge(sync)]
-pub fn probe_930(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_903(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+    0
+}
 
 #[bridge(sync, no_block)]
-pub fn probe_931(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_904(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+    0
+}
 
 #[bridge(sync, native_only)]
-pub fn probe_932(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error")]
-pub fn probe_933(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_934(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_935(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block")]
-pub fn probe_936(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_937(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
-
-#[bridge(sync, on_contention = "error")]
-pub fn probe_938(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_905(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", no_block)]
-pub fn probe_939(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_911(p0: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "error", native_only)]
-pub fn probe_940(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_912(p0: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block")]
-pub fn probe_941(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_913(p0: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
 
 #[bridge(sync, on_contention = "block", native_only)]
-pub fn probe_942(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_914(p0: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error")]
+pub fn probe_915(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", no_block)]
+pub fn probe_916(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", native_only)]
+pub fn probe_917(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block")]
+pub fn probe_918(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block", native_only)]
+pub fn probe_919(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error")]
+pub fn probe_920(p0: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", no_block)]
+pub fn probe_921(p0: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", native_only)]
+pub fn probe_922(p0: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block")]
+pub fn probe_923(p0: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block", native_only)]
+pub fn probe_924(p0: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error")]
+pub fn probe_925(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", no_block)]
+pub fn probe_926(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", native_only)]
+pub fn probe_927(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block")]
+pub fn probe_928(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block", native_only)]
+pub fn probe_929(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+    0
+}
+
+#[bridge(sync)]
+pub fn probe_930(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+    0
+}
+
+#[bridge(sync, no_block)]
+pub fn probe_931(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+    0
+}
+
+#[bridge(sync, native_only)]
+pub fn probe_932(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error")]
+pub fn probe_933(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", no_block)]
+pub fn probe_934(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", native_only)]
+pub fn probe_935(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block")]
+pub fn probe_936(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block", native_only)]
+pub fn probe_937(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error")]
+pub fn probe_938(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", no_block)]
+pub fn probe_939(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "error", native_only)]
+pub fn probe_940(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block")]
+pub fn probe_941(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
+
+#[bridge(sync, on_contention = "block", native_only)]
+pub fn probe_942(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1083() -> i64 { 0 }
+pub fn probe_1083() -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1084(p0: String) -> i64 { 0 }
+pub fn probe_1084(p0: String) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1085(p0: &String) -> i64 { 0 }
+pub fn probe_1085(p0: &String) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1086(p0: &String, p1: i64) -> i64 { 0 }
+pub fn probe_1086(p0: &String, p1: i64) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1087(p0: &String, p1: i64) -> i64 { 0 }
+pub fn probe_1087(p0: &String, p1: i64) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeConfinedSA {
     #[bridge(native_only)]
-    pub fn probe_1088() -> i64 { 0 }
+    pub fn probe_1088() -> i64 {
+        0
+    }
 }
 
 #[bridge]
-pub fn probe_1089(p0: ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_1089(p0: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1090(p0: ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_1090(p0: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1091(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
+pub fn probe_1091(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1092(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
+pub fn probe_1092(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1093(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_1093(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1094(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
+pub fn probe_1094(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1095() -> Box<dyn ShapeConfinedDynA> { Box::new(ShapeConfinedDynAImpl) }
+pub fn probe_1095() -> Box<dyn ShapeConfinedDynA> {
+    Box::new(ShapeConfinedDynAImpl)
+}
 
 #[bridge(no_block)]
-pub fn probe_1096() -> Box<dyn ShapeConfinedDynA> { Box::new(ShapeConfinedDynAImpl) }
+pub fn probe_1096() -> Box<dyn ShapeConfinedDynA> {
+    Box::new(ShapeConfinedDynAImpl)
+}
 
 #[bridge(native_only)]
-pub fn probe_1097() -> Box<dyn ShapeConfinedDynA> { Box::new(ShapeConfinedDynAImpl) }
+pub fn probe_1097() -> Box<dyn ShapeConfinedDynA> {
+    Box::new(ShapeConfinedDynAImpl)
+}
 
 #[bridge]
-pub fn probe_1098(p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
+pub fn probe_1098(p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1099(p0: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
+pub fn probe_1099(p0: Box<dyn ShapeConfinedDynA>) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1100(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
+pub fn probe_1100(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1101(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 { 0 }
+pub fn probe_1101(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynB>) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1102(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
+pub fn probe_1102(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1103(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 { 0 }
+pub fn probe_1103(p0: Box<dyn ShapeConfinedDynA>, p1: Box<dyn ShapeConfinedDynA>) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeResidentSA {
     #[bridge]
-    pub fn probe_1104() -> i64 { 0 }
+    pub fn probe_1104() -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeResidentSA {
     #[bridge(native_only)]
-    pub fn probe_1105() -> i64 { 0 }
+    pub fn probe_1105() -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1106() -> i64 { 0 }
+    pub fn probe_1106() -> i64 {
+        0
+    }
 }
 
 #[bridge]
-pub fn probe_1107(p0: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_1107(p0: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1108(p0: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_1108(p0: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1109(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_1109(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1110(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_1110(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1111(p0: &ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_1111(p0: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1112(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_1112(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1113(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+pub fn probe_1113(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1114(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_1114(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1115(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_1115(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1116(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_1116(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1117(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+pub fn probe_1117(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1118(&self) -> i64 { 0 }
+    pub fn probe_1118(&self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1119(&self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1119(&self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1120(&self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1120(&self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1121(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1121(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1122(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1122(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1123(&self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1123(&self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1124(&self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1124(&self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1125(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1125(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1126(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1126(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1127(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1127(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1128(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1128(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1129(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1129(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1130(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1130(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1131(self) -> i64 { 0 }
+    pub fn probe_1131(self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1132(self) -> i64 { 0 }
+    pub fn probe_1132(self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1133(self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1133(self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1134(self, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1134(self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1135(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1135(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1136(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1136(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1137(self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1137(self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1138(self, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1138(self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1139(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1139(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1140(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1140(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1141(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1141(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1142(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1142(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1143(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1143(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1144(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1144(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1145(self: Box<Self>) -> i64 { 0 }
+    pub fn probe_1145(self: Box<Self>) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1146(self: Box<Self>, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1146(self: Box<Self>, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1147(self: Box<Self>, p0: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1147(self: Box<Self>, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1148(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1148(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1149(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1149(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1150(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1150(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1151(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1151(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1152(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1152(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1153(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+    pub fn probe_1153(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1154(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1154(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1155(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1155(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge]
-    pub fn probe_1156(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1156(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeFrozenSA {
     #[bridge(native_only)]
-    pub fn probe_1157(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+    pub fn probe_1157(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
 }
 
 #[bridge(no_block)]
-pub fn probe_1158() -> Box<dyn ShapeFrozenDynA> { Box::new(ShapeFrozenDynAImpl) }
+pub fn probe_1158() -> Box<dyn ShapeFrozenDynA> {
+    Box::new(ShapeFrozenDynAImpl)
+}
 
 #[bridge(native_only)]
-pub fn probe_1159() -> Box<dyn ShapeFrozenDynA> { Box::new(ShapeFrozenDynAImpl) }
+pub fn probe_1159() -> Box<dyn ShapeFrozenDynA> {
+    Box::new(ShapeFrozenDynAImpl)
+}
 
 #[bridge(native_only)]
-pub fn probe_1160(p0: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
+pub fn probe_1160(p0: Box<dyn ShapeFrozenDynA>) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1161(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
+pub fn probe_1161(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1162(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 { 0 }
+pub fn probe_1162(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynB>) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1163(p0: &dyn ShapeFrozenDynA) -> i64 { 0 }
+pub fn probe_1163(p0: &dyn ShapeFrozenDynA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1164(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
+pub fn probe_1164(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1165(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 { 0 }
+pub fn probe_1165(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynB) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1166(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
+pub fn probe_1166(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1167(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 { 0 }
+pub fn probe_1167(p0: Box<dyn ShapeFrozenDynA>, p1: Box<dyn ShapeFrozenDynA>) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1168(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
+pub fn probe_1168(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1169(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 { 0 }
+pub fn probe_1169(p0: &dyn ShapeFrozenDynA, p1: &dyn ShapeFrozenDynA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1196() -> i64 { 0 }
+    pub fn probe_1196() -> i64 {
+        0
+    }
 }
 
 #[bridge]
-pub fn probe_1197(p0: ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1197(p0: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1198(p0: ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1198(p0: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1199(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+pub fn probe_1199(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1200(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+pub fn probe_1200(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1201(p0: &ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1201(p0: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1202(p0: &ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1202(p0: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1203(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+pub fn probe_1203(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1204(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+pub fn probe_1204(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1205(p0: &mut ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1205(p0: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1206(p0: &mut ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1206(p0: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1207(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+pub fn probe_1207(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1208(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+pub fn probe_1208(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1209(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1209(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1210(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1210(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1211(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1211(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1212(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1212(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1213(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+pub fn probe_1213(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1214(&self) -> i64 { 0 }
+    pub fn probe_1214(&self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1215(&self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1215(&self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1216(&self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1216(&self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1217(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1217(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1218(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1218(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1219(&self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1219(&self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1220(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1220(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1221(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1221(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1222(&self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1222(&self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1223(&self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1223(&self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1224(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1224(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1225(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1225(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1226(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1226(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1227(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1227(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1228(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1228(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1229(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1229(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1230(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1230(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1231(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1231(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1232(&mut self) -> i64 { 0 }
+    pub fn probe_1232(&mut self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1233(&mut self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1233(&mut self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1234(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1234(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1235(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1235(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1236(&mut self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1236(&mut self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1237(&mut self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1237(&mut self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1238(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1238(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1239(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1239(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1240(&mut self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1240(&mut self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1241(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1241(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1242(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1242(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1243(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1243(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1244(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1244(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1245(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1245(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1246(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1246(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1247(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1247(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1248(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1248(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1249(self) -> i64 { 0 }
+    pub fn probe_1249(self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1250(self) -> i64 { 0 }
+    pub fn probe_1250(self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1251(self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1251(self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1252(self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1252(self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1253(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1253(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1254(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1254(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1255(self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1255(self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1256(self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1256(self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1257(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1257(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1258(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1258(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1259(self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1259(self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1260(self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1260(self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1261(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1261(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1262(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1262(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1263(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1263(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1264(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1264(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1265(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1265(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1266(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1266(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1267(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1267(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1268(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1268(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1269(self: Box<Self>) -> i64 { 0 }
+    pub fn probe_1269(self: Box<Self>) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1270(self: Box<Self>) -> i64 { 0 }
+    pub fn probe_1270(self: Box<Self>) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1271(self: Box<Self>, p0: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1271(self: Box<Self>, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1272(self: Box<Self>, p0: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1272(self: Box<Self>, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1273(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1273(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1274(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1274(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1275(self: Box<Self>, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1275(self: Box<Self>, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1276(self: Box<Self>, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1276(self: Box<Self>, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1277(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1277(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1278(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1278(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1279(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1279(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1280(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1280(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1281(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1281(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1282(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub fn probe_1282(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1283(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1283(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1284(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1284(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1285(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1285(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1286(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1286(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub fn probe_1287(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1287(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub fn probe_1288(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub fn probe_1288(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge(no_block)]
-pub fn probe_1289() -> Box<dyn ShapeLockedDynA> { Box::new(ShapeLockedDynAImpl) }
+pub fn probe_1289() -> Box<dyn ShapeLockedDynA> {
+    Box::new(ShapeLockedDynAImpl)
+}
 
 #[bridge(native_only)]
-pub fn probe_1290() -> Box<dyn ShapeLockedDynA> { Box::new(ShapeLockedDynAImpl) }
+pub fn probe_1290() -> Box<dyn ShapeLockedDynA> {
+    Box::new(ShapeLockedDynAImpl)
+}
 
 #[bridge(native_only)]
-pub fn probe_1291(p0: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_1291(p0: Box<dyn ShapeLockedDynA>) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1292(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
+pub fn probe_1292(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1293(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 { 0 }
+pub fn probe_1293(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynB>) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1294(p0: &dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_1294(p0: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1295(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
+pub fn probe_1295(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1296(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 { 0 }
+pub fn probe_1296(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1297(p0: &mut dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_1297(p0: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1298(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
+pub fn probe_1298(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1299(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 { 0 }
+pub fn probe_1299(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynB) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1300(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_1300(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1301(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 { 0 }
+pub fn probe_1301(p0: Box<dyn ShapeLockedDynA>, p1: Box<dyn ShapeLockedDynA>) -> i64 {
+    0
+}
 
 #[bridge]
-pub fn probe_1302(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_1302(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1303(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_1303(p0: &dyn ShapeLockedDynA, p1: &dyn ShapeLockedDynA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub fn probe_1304(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 { 0 }
+pub fn probe_1304(p0: &mut dyn ShapeLockedDynA, p1: &mut dyn ShapeLockedDynA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1363() -> i64 { 0 }
+pub async fn probe_1363() -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1364(p0: String) -> i64 { 0 }
+pub async fn probe_1364(p0: String) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1365(p0: &String) -> i64 { 0 }
+pub async fn probe_1365(p0: &String) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1366(p0: &String) -> i64 { 0 }
+pub async fn probe_1366(p0: &String) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1367(p0: String, p1: i64) -> i64 { 0 }
+pub async fn probe_1367(p0: String, p1: i64) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1368(p0: &String, p1: i64) -> i64 { 0 }
+pub async fn probe_1368(p0: &String, p1: i64) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1369(p0: &String, p1: i64) -> i64 { 0 }
+pub async fn probe_1369(p0: &String, p1: i64) -> i64 {
+    0
+}
 
 #[bridge(no_block)]
-pub async fn probe_1370() -> ShapeConfinedSA { ShapeConfinedSA { v: 0 } }
-
-#[bridge(native_only)]
-pub async fn probe_1371() -> ShapeConfinedSA { ShapeConfinedSA { v: 0 } }
-
-#[bridge(native_only)]
-pub async fn probe_1372(p0: ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge]
-pub async fn probe_1373(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-
-#[bridge(native_only)]
-pub async fn probe_1374(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 { 0 }
-
-#[bridge]
-pub async fn probe_1375(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge(native_only)]
-pub async fn probe_1376(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 { 0 }
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1377() -> i64 { 0 }
+pub async fn probe_1370() -> ShapeConfinedSA {
+    ShapeConfinedSA { v: 0 }
 }
 
 #[bridge(native_only)]
-pub async fn probe_1378(p0: ShapeFrozenSA) -> i64 { 0 }
-
-#[bridge]
-pub async fn probe_1379(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+pub async fn probe_1371() -> ShapeConfinedSA {
+    ShapeConfinedSA { v: 0 }
+}
 
 #[bridge(native_only)]
-pub async fn probe_1380(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
+pub async fn probe_1372(p0: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1381(p0: &ShapeFrozenSA) -> i64 { 0 }
+pub async fn probe_1373(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1382(p0: &ShapeFrozenSA) -> i64 { 0 }
+pub async fn probe_1374(p0: ShapeConfinedSA, p1: ShapeConfinedSB) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1383(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+pub async fn probe_1375(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1384(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
+pub async fn probe_1376(p0: ShapeConfinedSA, p1: ShapeConfinedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1385(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1377() -> i64 {
+        0
+    }
+}
 
 #[bridge(native_only)]
-pub async fn probe_1386(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
+pub async fn probe_1378(p0: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1387(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
+pub async fn probe_1379(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1388(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1389(&self) -> i64 { 0 }
+pub async fn probe_1380(p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+    0
 }
 
 #[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1390(&self, p0: ShapeFrozenSA) -> i64 { 0 }
+pub async fn probe_1381(p0: &ShapeFrozenSA) -> i64 {
+    0
 }
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1391(&self, p0: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1392(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1393(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1394(&self, p0: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1395(&self, p0: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1396(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1397(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1398(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1399(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1400(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1401(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1402(self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1403(self) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1404(self, p0: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1405(self, p0: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1406(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1407(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1408(self, p0: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1409(self, p0: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1410(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1411(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1412(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1413(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1414(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1415(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1416(self: Box<Self>) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1417(self: Box<Self>) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1418(self: Box<Self>, p0: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1419(self: Box<Self>, p0: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1420(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1421(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1422(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1423(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1424(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1425(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1426(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1427(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge]
-    pub async fn probe_1428(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeFrozenSA {
-    #[bridge(native_only)]
-    pub async fn probe_1429(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 { 0 }
-}
-
-#[bridge]
-impl ShapeLockedSA {
-    #[bridge(native_only)]
-    pub async fn probe_1430() -> i64 { 0 }
-}
-
-#[bridge]
-pub async fn probe_1431(p0: ShapeLockedSA) -> i64 { 0 }
 
 #[bridge(native_only)]
-pub async fn probe_1432(p0: ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1382(p0: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1433(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+pub async fn probe_1383(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1434(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+pub async fn probe_1384(p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1435(p0: &ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1385(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1436(p0: &ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1386(p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1437(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+pub async fn probe_1387(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1438(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+pub async fn probe_1388(p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1439(p0: &mut ShapeLockedSA) -> i64 { 0 }
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1389(&self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1390(&self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1391(&self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1392(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1393(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1394(&self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1395(&self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1396(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1397(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1398(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1399(&self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1400(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1401(&self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1402(self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1403(self) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1404(self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1405(self, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1406(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1407(self, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1408(self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1409(self, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1410(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1411(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1412(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1413(self, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1414(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1415(self, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1416(self: Box<Self>) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1417(self: Box<Self>) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1418(self: Box<Self>, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1419(self: Box<Self>, p0: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1420(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1421(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1422(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1423(self: Box<Self>, p0: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1424(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1425(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSB) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1426(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1427(self: Box<Self>, p0: ShapeFrozenSA, p1: ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge]
+    pub async fn probe_1428(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeFrozenSA {
+    #[bridge(native_only)]
+    pub async fn probe_1429(self: Box<Self>, p0: &ShapeFrozenSA, p1: &ShapeFrozenSA) -> i64 {
+        0
+    }
+}
+
+#[bridge]
+impl ShapeLockedSA {
+    #[bridge(native_only)]
+    pub async fn probe_1430() -> i64 {
+        0
+    }
+}
+
+#[bridge]
+pub async fn probe_1431(p0: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1440(p0: &mut ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1432(p0: ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1441(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+pub async fn probe_1433(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1442(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+pub async fn probe_1434(p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1443(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1435(p0: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1444(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1436(p0: &ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1445(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1437(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1446(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1438(p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+    0
+}
 
 #[bridge]
-pub async fn probe_1447(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1439(p0: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge(native_only)]
-pub async fn probe_1448(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+pub async fn probe_1440(p0: &mut ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge]
+pub async fn probe_1441(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+    0
+}
+
+#[bridge(native_only)]
+pub async fn probe_1442(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+    0
+}
+
+#[bridge]
+pub async fn probe_1443(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge(native_only)]
+pub async fn probe_1444(p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge]
+pub async fn probe_1445(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge(native_only)]
+pub async fn probe_1446(p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge]
+pub async fn probe_1447(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+    0
+}
+
+#[bridge(native_only)]
+pub async fn probe_1448(p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+    0
+}
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1449(&self) -> i64 { 0 }
+    pub async fn probe_1449(&self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1450(&self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1450(&self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1451(&self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1451(&self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1452(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1452(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1453(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1453(&self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1454(&self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1454(&self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1455(&self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1455(&self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1456(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1456(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1457(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1457(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1458(&self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1458(&self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1459(&self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1459(&self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1460(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1460(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1461(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1461(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1462(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1462(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1463(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1463(&self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1464(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1464(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1465(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1465(&self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1466(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1466(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1467(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1467(&self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1468(&mut self) -> i64 { 0 }
+    pub async fn probe_1468(&mut self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1469(&mut self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1469(&mut self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1470(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1470(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1471(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1471(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1472(&mut self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1472(&mut self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1473(&mut self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1473(&mut self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1474(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1474(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1475(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1475(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1476(&mut self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1476(&mut self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1477(&mut self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1477(&mut self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1478(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1478(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1479(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1479(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1480(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1480(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1481(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1481(&mut self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1482(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1482(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1483(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1483(&mut self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1484(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1484(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1485(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1485(&mut self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1486(self) -> i64 { 0 }
+    pub async fn probe_1486(self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1487(self) -> i64 { 0 }
+    pub async fn probe_1487(self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1488(self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1488(self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1489(self, p0: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1489(self, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1490(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1490(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1491(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1491(self, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1492(self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1492(self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1493(self, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1493(self, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1494(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1494(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1495(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1495(self, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1496(self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1496(self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1497(self, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1497(self, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1498(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1498(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1499(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1499(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1500(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1500(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1501(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1501(self, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1502(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1502(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1503(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1503(self, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1504(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1504(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1505(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1505(self, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1506(self: Box<Self>) -> i64 { 0 }
+    pub async fn probe_1506(self: Box<Self>) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1507(self: Box<Self>) -> i64 { 0 }
+    pub async fn probe_1507(self: Box<Self>) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1508(self: Box<Self>, p0: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1508(self: Box<Self>, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1509(self: Box<Self>, p0: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1509(self: Box<Self>, p0: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1510(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1510(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1511(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1511(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1512(self: Box<Self>, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1512(self: Box<Self>, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1513(self: Box<Self>, p0: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1513(self: Box<Self>, p0: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1514(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1514(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1515(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1515(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSB) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1516(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1516(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1517(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1517(self: Box<Self>, p0: &mut ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1518(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1518(
+        self: Box<Self>,
+        p0: &mut ShapeLockedSA,
+        p1: &mut ShapeLockedSB,
+    ) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1519(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSB) -> i64 { 0 }
+    pub async fn probe_1519(
+        self: Box<Self>,
+        p0: &mut ShapeLockedSA,
+        p1: &mut ShapeLockedSB,
+    ) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1520(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1520(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1521(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1521(self: Box<Self>, p0: ShapeLockedSA, p1: ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1522(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1522(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1523(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1523(self: Box<Self>, p0: &ShapeLockedSA, p1: &ShapeLockedSA) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge]
-    pub async fn probe_1524(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1524(
+        self: Box<Self>,
+        p0: &mut ShapeLockedSA,
+        p1: &mut ShapeLockedSA,
+    ) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeLockedSA {
     #[bridge(native_only)]
-    pub async fn probe_1525(self: Box<Self>, p0: &mut ShapeLockedSA, p1: &mut ShapeLockedSA) -> i64 { 0 }
+    pub async fn probe_1525(
+        self: Box<Self>,
+        p0: &mut ShapeLockedSA,
+        p1: &mut ShapeLockedSA,
+    ) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeActorSA {
     #[bridge(native_only)]
-    pub fn probe_1526() -> Self { Self { v: 0 } }
+    pub fn probe_1526() -> Self {
+        Self { v: 0 }
+    }
 }
 
 #[bridge]
 impl ShapeActorSA {
     #[bridge(native_only)]
-    pub fn probe_1527(&self) -> i64 { 0 }
+    pub fn probe_1527(&self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeActorSA {
     #[bridge(native_only)]
-    pub fn probe_1528(&mut self) -> i64 { 0 }
+    pub fn probe_1528(&mut self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeActorSA {
     #[bridge(native_only)]
-    pub fn probe_1529(self) -> i64 { 0 }
+    pub fn probe_1529(self) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeActorSA {
     #[bridge]
-    pub fn probe_1530(self: Box<Self>) -> i64 { 0 }
+    pub fn probe_1530(self: Box<Self>) -> i64 {
+        0
+    }
 }
 
 #[bridge]
 impl ShapeActorSA {
     #[bridge(native_only)]
-    pub fn probe_1531(self: Box<Self>) -> i64 { 0 }
+    pub fn probe_1531(self: Box<Self>) -> i64 {
+        0
+    }
 }
-

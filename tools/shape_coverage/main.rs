@@ -275,9 +275,15 @@ type Pattern = [Option<u8>; AXES];
 /// Per axis: its name, and its values in the order the discriminants take.
 const AXIS: [(&str, &[&str]); AXES] = [
     ("arm", &["sync", "pool", "async_fn", "actor"]),
-    ("model", &["-", "confined", "resident", "frozen", "locked", "actor"]),
+    (
+        "model",
+        &["-", "confined", "resident", "frozen", "locked", "actor"],
+    ),
     ("dyn", &["no", "yes"]),
-    ("recv", &["-", "&self", "&mut self", "self", "self: Box<Self>"]),
+    (
+        "recv",
+        &["-", "&self", "&mut self", "self", "self: Box<Self>"],
+    ),
     ("params", &["0", "1", "2+"]),
     ("borrow", &["-", "value", "&", "&mut"]),
     ("sibling", &["no", "yes"]),
@@ -325,7 +331,6 @@ impl fmt::Display for Cell {
         write!(f, "{}", render(&self.key().map(Some)))
     }
 }
-
 
 // ------------------------------------------------------- classification --
 
@@ -408,9 +413,10 @@ fn cells_of(iface: &Interface, op: &Opaques, f: &Function) -> Vec<Cell> {
                 .iter()
                 .filter(|p| matches!(&p.ty, Type::Opaque(n) if n == name))
                 .collect();
-            let sibling = f.params.iter().any(
-                |p| matches!(&p.ty, Type::Opaque(n) if n != name),
-            );
+            let sibling = f
+                .params
+                .iter()
+                .any(|p| matches!(&p.ty, Type::Opaque(n) if n != name));
             Cell {
                 arm: arm_of(iface, f),
                 model: match model {
@@ -567,7 +573,13 @@ fn grid() -> Vec<Point> {
                 continue;
             }
             for exec in [ExecDecl::Sync, ExecDecl::Default, ExecDecl::AsyncFn] {
-                for recv in [Recv::None, Recv::Ref, Recv::RefMut, Recv::Value, Recv::Boxed] {
+                for recv in [
+                    Recv::None,
+                    Recv::Ref,
+                    Recv::RefMut,
+                    Recv::Value,
+                    Recv::Boxed,
+                ] {
                     // A receiver needs a type to hang off.
                     if recv != Recv::None && !has_type {
                         continue;
@@ -953,7 +965,10 @@ fn survey() -> Survey {
                 .iter()
                 .find(|f| f.name == PROBE)
                 .expect("every spelling declares the probe member");
-            if let Some(cell) = cells_of(&iface, &op, probe).into_iter().find(|c| c.intent() == want) {
+            if let Some(cell) = cells_of(&iface, &op, probe)
+                .into_iter()
+                .find(|c| c.intent() == want)
+            {
                 ifaces.insert(cell, iface.clone());
                 spelling.insert(cell, (p, src.clone()));
                 landed = Some(cell);
@@ -1039,9 +1054,11 @@ fn normalize_emission(code: &str) -> String {
         if in_schema_hash_export {
             if line == "}" {
                 in_schema_hash_export = false;
-            } else if line.trim().strip_prefix("0x").is_some_and(|h| {
-                !h.is_empty() && h.bytes().all(|b| b.is_ascii_hexdigit())
-            }) {
+            } else if line
+                .trim()
+                .strip_prefix("0x")
+                .is_some_and(|h| !h.is_empty() && h.bytes().all(|b| b.is_ascii_hexdigit()))
+            {
                 continue;
             }
         }
@@ -1213,28 +1230,36 @@ fn fixture_member(cell: &Cell, point: &Point, src: &str, n: usize) -> FixtureIte
         // The LAST `pub trait` is the one carrying the probe: a sibling
         // parameter makes `spellings` declare `U` first, and anchoring on the
         // first brace would swallow that declaration whole.
-        let at = out.rfind("pub trait").expect("a dyn member declares its trait");
+        let at = out
+            .rfind("pub trait")
+            .expect("a dyn member declares its trait");
         let open = out[at..]
             .find('{')
             .map(|i| at + i)
             .expect("a trait declaration has a body");
         let close = out.rfind('}').expect("a trait declaration is closed");
         let inner = out[open + 1..close].trim().to_string();
-        let decl = format!("    {inner}
-");
+        let decl = format!(
+            "    {inner}
+"
+        );
         let imp = inner
             .lines()
             .filter(|l| !l.trim_start().starts_with("#["))
             .map(|l| format!("    {}", l.trim()))
             .collect::<Vec<_>>()
-            .join("
-")
+            .join(
+                "
+",
+            )
             .replace("-> i64;", "-> i64 { 0 }");
         return FixtureItem::TraitMethod {
             model: cell.model,
             decl,
-            imp: format!("{imp}
-"),
+            imp: format!(
+                "{imp}
+"
+            ),
         };
     }
     FixtureItem::Item(out)
@@ -1358,6 +1383,7 @@ fn write_fixture(survey: &Survey, covered: &BTreeSet<Cell>, out: &Path) -> std::
         f.push('\n');
     }
     std::fs::write(out, f)?;
+    rustfmt(out)?;
 
     // Step 5: the reclaim rows for the types this just wrote, as a fragment
     // `hostile.rs` includes. Hand-written rows for hand-written types stay hand
@@ -1472,8 +1498,12 @@ fn instantiated(sources: &[(PathBuf, &str)]) -> Result<BTreeSet<Cell>, String> {
                 .map_err(|e| format!("parsing {}: {e}", path.display()))?,
         );
     }
-    let iface = check::check(parse::merge("test_api", parts))
-        .map_err(|d| d.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n"))?;
+    let iface = check::check(parse::merge("test_api", parts)).map_err(|d| {
+        d.iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    })?;
     let op = Opaques::of(&iface);
     Ok(iface
         .functions
@@ -1498,10 +1528,7 @@ fn repo_sources_less_fixture(root: &Path) -> Vec<(PathBuf, &'static str)> {
 
 fn repo_sources(root: &Path) -> Vec<(PathBuf, &'static str)> {
     vec![
-        (
-            root.join("tests/test_api/src/api.rs"),
-            "crate::api",
-        ),
+        (root.join("tests/test_api/src/api.rs"), "crate::api"),
         (
             root.join("tests/test_api/src/cancel_api.rs"),
             "crate::cancel_api",
@@ -1509,11 +1536,27 @@ fn repo_sources(root: &Path) -> Vec<(PathBuf, &'static str)> {
         // Written by `--write-fixture`, and read back here: what the tool
         // generated is what the tool then judges, so a member it failed to
         // generate correctly shows up as still-missing rather than as covered.
-        (
-            root.join("tests/test_api/src/shapes.rs"),
-            "crate::shapes",
-        ),
+        (root.join("tests/test_api/src/shapes.rs"), "crate::shapes"),
     ]
+}
+
+/// Lays the fixture out as rustfmt would, so the checked-in file passes the
+/// rustfmt check every Rust source gets. Under Bazel this is the toolchain's
+/// rustfmt; under cargo, the one on `PATH`.
+fn rustfmt(path: &Path) -> std::io::Result<()> {
+    let bin = option_env!("SHAPE_COVERAGE_RUSTFMT").unwrap_or("rustfmt");
+    let status = std::process::Command::new(bin)
+        .args(["--edition", "2021"])
+        .arg(path)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "{bin} failed on {}",
+            path.display()
+        )))
+    }
 }
 
 /// The repo root: under `bazel test`, the runfiles tree the test runs in;
@@ -1606,7 +1649,6 @@ fn main() -> ExitCode {
     };
 
     let outside: Vec<&Cell> = covered.difference(&survey.legal).collect();
-
 
     if census {
         // Cell-level, deliberately, and it is a different question from the
@@ -1755,7 +1797,10 @@ mod tests {
                 let (a, b) = (it.next().unwrap(), it.next().unwrap());
                 let diffs = usize::from(a.no_block != b.no_block)
                     + usize::from(a.native_only != b.native_only);
-                assert_eq!(diffs, 1, "a pair differing other than in one foldable axis: {a} / {b}");
+                assert_eq!(
+                    diffs, 1,
+                    "a pair differing other than in one foldable axis: {a} / {b}"
+                );
                 // The axes that certainly change the emitted dispatch never do.
                 assert_eq!(a.arm, b.arm, "{a} / {b}");
                 assert_eq!(a.model, b.model, "{a} / {b}");
@@ -1779,13 +1824,19 @@ mod tests {
         let b = normalize_emission(
             "fn call_7_probe(r: &mut ByteReader) {}\npub extern \"C\" fn frustrate_probe_schema_hash() -> u64 {\n    0x0000000000000002\n}\n",
         );
-        assert_eq!(a, b, "fn id and schema hash must not distinguish two emissions");
+        assert_eq!(
+            a, b,
+            "fn id and schema hash must not distinguish two emissions"
+        );
         // But a real difference still is one.
         let c = normalize_emission("fn call_0_probe(r: &mut ByteWriter) {}\n");
         assert_ne!(a, c, "a genuine difference must survive normalization");
         // A member named like the export is not the export.
         let d = normalize_emission("fn call_0_get_schema_hash(r: &mut ByteReader) {\n    0x1\n}\n");
-        assert!(d.contains("0x1"), "a member is not the schema-hash export: {d}");
+        assert!(
+            d.contains("0x1"),
+            "a member is not the schema-hash export: {d}"
+        );
     }
 
     /// Aliasing is the difference between `f(&T, &T)` and `f(&T, &U)`, and it
@@ -1879,7 +1930,10 @@ mod tests {
         let s = survey();
         let groups = emission_classes(&s);
         let stale = stale_exemptions(&groups, &covered);
-        assert!(stale.is_empty(), "exemptions that are no longer true: {stale:?}");
+        assert!(
+            stale.is_empty(),
+            "exemptions that are no longer true: {stale:?}"
+        );
     }
 
     use super::*;
@@ -2011,9 +2065,8 @@ mod tests {
         assert_eq!(bare[0].recv, Recv::Value);
         assert_eq!(boxed[0].recv, Recv::Boxed);
         assert_ne!(bare[0], boxed[0]);
-        let emitted = |s: &str| {
-            normalize_emission(&frustrate_codegen::emit_rust::emit(&checked(&src(s))))
-        };
+        let emitted =
+            |s: &str| normalize_emission(&frustrate_codegen::emit_rust::emit(&checked(&src(s))));
         assert_ne!(emitted("self"), emitted("self: Box<Self>"));
     }
 
@@ -2117,7 +2170,6 @@ mod tests {
             );
         }
     }
-
 
     /// The grid must be able to spell everything this repo actually writes.
     /// It is allowed not to be — the header says so — but the number is the

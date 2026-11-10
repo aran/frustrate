@@ -11,9 +11,16 @@ common --lockfile_mode=error
 common --macos_minimum_os=26.0 --host_macos_minimum_os=26.0
 common --action_env=MACOSX_DEPLOYMENT_TARGET=26.0 --host_action_env=MACOSX_DEPLOYMENT_TARGET=26.0
 
-# `dart analyze` runs as an aspect over every Dart target a `bazel test` names.
+# `dart analyze` and the `dart format` check run as an aspect over every Dart
+# target a `bazel test` names.
 test --aspects=@rules_dart//dart:analyze.bzl%dart_analyze
 test --output_groups=+dart_analyze
+test --output_groups=+dart_format
 common --@rules_dart//dart:analysis_config=//:analysis_config
+
+# rustfmt checks every Rust target a `bazel test` names, in its default style.
+# `bazel run @rules_rust//:rustfmt` rewrites what it reports.
+test --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
+test --output_groups=+rustfmt_checks
 
 try-import %workspace%/.bazelrc.user

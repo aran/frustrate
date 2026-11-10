@@ -1,5 +1,11 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
+# The fixture is written through the toolchain's rustfmt, so the checked-in
+# file passes the rustfmt check.
+RUSTFMT = "@rules_rust//tools/upstream_wrapper:rustfmt"
+
+RUSTFMT_ENV = {"SHAPE_COVERAGE_RUSTFMT": "$(rootpath @rules_rust//tools/upstream_wrapper:rustfmt)"}
+
 # The gate and its fixture's freshness, in `bazel test //...`: every emitted
 # code path is instantiated, and tests/test_api/src/shapes.rs is exactly what
 # `bazel run //tools/shape_coverage -- --write-fixture` writes today.
@@ -9,7 +15,9 @@ rust_binary(
     name = "shape_coverage",
     srcs = ["main.rs"],
     crate_root = "main.rs",
+    data = [RUSTFMT],
     edition = "2021",
+    rustc_env = RUSTFMT_ENV,
     deps = ["//codegen:frustrate_codegen"],
 )
 
@@ -23,7 +31,9 @@ rust_test(
         "//tests/test_api:src/cancel_api.rs",
         "//tests/test_api:src/shapes.rs",
         "//tests/test_api:src/shapes_reclaim.rs",
+        RUSTFMT,
     ],
     edition = "2021",
+    rustc_env = RUSTFMT_ENV,
     deps = ["//codegen:frustrate_codegen"],
 )
