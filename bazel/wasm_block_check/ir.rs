@@ -15,7 +15,8 @@
 //! the headers of rustc's own LLVM version; the Rust toolchain ships neither.
 //! `opt`'s call graph has the direct calls only, not the address-takes in
 //! initialisers or where an indirect call's value came from, which
-//! [`super::provenance`] needs.
+//! [`super::provenance`] needs. The reader's direct calls are checked
+//! against that graph by `:callgraph_test` (`callgraph_check.rs`).
 //!
 //! # How it decides
 //!
@@ -1135,6 +1136,11 @@ fn shortest(
     None
 }
 
+
+// Built only by :callgraph_test, which supplies the file and the cfg.
+#[cfg(callgraph_check)]
+#[path = "callgraph_check.rs"]
+mod callgraph_check;
 
 #[cfg(test)]
 mod tests {

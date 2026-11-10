@@ -31,5 +31,8 @@ no_block_check_artifacts(
     bridge = ":bridge",
     crate = ":asm_shared",
     platforms = ["//bazel:macos_aarch64"],
-    visibility = ["//tests/bazel_rules/native_red:__pkg__"],
+    visibility = [
+        "//bazel/wasm_block_check:__pkg__",
+        "//tests/bazel_rules/native_red:__pkg__",
+    ],
 )

@@ -54,6 +54,33 @@ rust.toolchain(
 )
 use_repo(rust, "rust_toolchains")
 
+# `opt` from the llvm-tools archive rules_rust unpacks into each host
+# toolchain's tools repo, for //bazel/wasm_block_check:callgraph_test, which
+# checks the native IR reader against LLVM's own call graph. Dev-only.
+rust_dev = use_extension(
+    "@rules_rust//rust:extensions.bzl",
+    "rust",
+    dev_dependency = True,
+)
+use_repo(
+    rust_dev,
+    "rust_linux_aarch64__aarch64-unknown-linux-gnu__stable_tools",
+    "rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools",
+    "rust_macos_aarch64__aarch64-apple-darwin__stable_tools",
+)
+
+llvm_opt = use_extension(
+    "//bazel/wasm_block_check:llvm_opt.bzl",
+    "llvm_opt",
+    dev_dependency = True,
+)
+use_repo(
+    llvm_opt,
+    "llvm_opt_linux_aarch64",
+    "llvm_opt_linux_x86_64",
+    "llvm_opt_macos_aarch64",
+)
+
 # Custom wasm stds: pinned nightly + a locally built, patched std, one repo per
 # flavour (bazel/custom_std.bzl). Each is a loud fail()-ing stub until its
 # flavour has been staged by the builder.

@@ -44,3 +44,57 @@ rust_test(
     crate = ":wasm_block_check",
     edition = "2021",
 )
+
+# The IR reader's direct calls against `opt -passes=print-callgraph`, from the
+# llvm-tools of the same Rust release, over real check-build IR: every native
+# platform's, at opt-level 0 and 2, inline asm included (callgraph_check.rs).
+# The module and its cfg exist in this target alone. SKIPPED on a host
+# :opt has no `opt` for.
+_MODULES = [
+    "//tests/bazel_rules/native_red/asm:artifacts",
+    "//tests/bazel_rules/native_red/dirty:artifacts",
+    "//tests/bazel_rules/native_red/optimized:artifacts",
+]
+
+rust_test(
+    name = "callgraph_test",
+    # Only the cross-check: the unit tests run in :wasm_block_check_test.
+    args = ["callgraph_check::"],
+    compile_data = ["callgraph_check.rs"],
+    crate = ":wasm_block_check",
+    data = [":opt"] + _MODULES,
+    edition = "2021",
+    env = {
+        "MODULES": " ".join(["$(rootpaths %s)" % m for m in _MODULES]),
+        "OPT": "$(rootpath :opt)",
+    },
+    rustc_flags = ["--cfg=callgraph_check"],
+)
+
+# `opt` for the host, from the Rust toolchain's llvm-tools (llvm_opt.bzl).
+alias(
+    name = "opt",
+    actual = select({
+        ":linux_aarch64": "@llvm_opt_linux_aarch64//:opt",
+        ":linux_x86_64": "@llvm_opt_linux_x86_64//:opt",
+        ":macos_aarch64": "@llvm_opt_macos_aarch64//:opt",
+        "//conditions:default": ":no_opt",
+    }),
+)
+
+filegroup(
+    name = "no_opt",
+    target_compatible_with = ["@platforms//:incompatible"],
+)
+
+[config_setting(
+    name = os + "_" + cpu,
+    constraint_values = [
+        "@platforms//os:" + os,
+        "@platforms//cpu:" + cpu,
+    ],
+) for os, cpu in [
+    ("linux", "aarch64"),
+    ("linux", "x86_64"),
+    ("macos", "aarch64"),
+]]

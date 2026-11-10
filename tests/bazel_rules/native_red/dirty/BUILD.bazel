@@ -40,5 +40,8 @@ no_block_check_artifacts(
         "//bazel:linux_x86_64",
         "//bazel:macos_aarch64",
     ],
-    visibility = ["//tests/bazel_rules/native_red:__pkg__"],
+    visibility = [
+        "//bazel/wasm_block_check:__pkg__",
+        "//tests/bazel_rules/native_red:__pkg__",
+    ],
 )
