@@ -4,6 +4,7 @@ load("@rules_dart//dart:defs.bzl", "dart_library")
 dart_library(
     name = "i64_list",
     package_name = "frustrate_i64_list",
+    language_version = "3.13",
     srcs = ["lib/frustrate_i64_list.dart"],
     visibility = ["//visibility:public"],
 )

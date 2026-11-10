@@ -104,7 +104,7 @@ String _withJsI64List(String packageDir, String scratch) {
       'name': 'frustrate_i64_list',
       'rootUri': Directory('$packageDir/i64_list/js').uri.toString(),
       'packageUri': 'lib/',
-      'languageVersion': '3.5',
+      'languageVersion': '3.13',
     },
   ];
   final path = '$scratch/package_config.json';

@@ -16,6 +16,7 @@ dart_library(
     name = "frustrate",
     srcs = glob(["lib/**/*.dart"]),
     package_name = "frustrate",
+    language_version = "3.13",
     visibility = ["//visibility:public"],
     deps = ["@pub_deps//:ffi"] + select({
         "@rules_dart//dart/constraints:js": ["//runtime/dart/i64_list/js:i64_list"],
