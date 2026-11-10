@@ -32,7 +32,7 @@ class _FakeRuntime implements FrustrateRuntime {
   Object get bridgeIdentity => this;
 
   @override
-  FrustrateBridge get servedBridge => frustrateBridge;
+  FrustrateBridge get servedBridge => testApiBridge;
 
   @override
   BinaryReader callSync(

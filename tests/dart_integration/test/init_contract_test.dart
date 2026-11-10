@@ -50,7 +50,7 @@ void main() {
 
   test('a second init naming the same library is a declared no-op', () {
     final installed = Frustrate.instance;
-    expect(() => FrustrateNative.init(testApiBridge), returnsNormally);
+    expect(() => FrustrateNative.init(testApiLibrary), returnsNormally);
     // Same transport object: the second call did not install a replacement,
     // and (see the strong-idempotence pin in runtime/dart/test) did not build
     // one to discard either.

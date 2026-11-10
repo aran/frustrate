@@ -19,7 +19,7 @@ const bool panicClosesStreams = true;
 const bool isNativeVm = true;
 
 Future<void> initBridge() async {
-  FrustrateNative.init(testApiBridge);
+  FrustrateNative.init(testApiLibrary);
   // Fail loudly here if the loaded dylib and these bindings disagree on the
   // wire schema, rather than dispatching wrong fn_ids into unsafe derefs.
   checkFrustrateSchema();

@@ -26,7 +26,7 @@ const bool isNativeVm = false;
 const String bridgeModuleUrl = '../packages/web_test_fixtures/test_api.wasm';
 
 Future<void> initBridge() async {
-  await FrustrateWeb.initFromUrl(frustrateBridge, bridgeModuleUrl);
+  await FrustrateWeb.initFromUrl(testApiBridge, bridgeModuleUrl);
   // Fail loudly here if the wasm module and these bindings disagree on the
   // wire schema, rather than dispatching wrong fn_ids into unsafe derefs.
   checkFrustrateSchema();

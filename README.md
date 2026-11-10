@@ -213,7 +213,7 @@ crate. The demos declare a single pair because one file covers them, not because
 the tool takes one.
 
 **The bridge library is a Dart code asset.** `package_name` is the Dart package
-the bindings compile into. The generated `<crate>Bridge` (`myBridgeBridge` for
+the bindings compile into. The generated `<crate>Library` (`myBridgeLibrary` for
 crate `my_bridge`) resolves the library by the asset id `package:<package_name>/<crate>`,
 and a `frustrate_code_asset` binds that id to the built library:
 
@@ -234,21 +234,21 @@ dart_library(
 
 ### 4. Call it from Dart
 
-`FrustrateNative.init(myBridgeBridge)` once, then call the bindings:
+`FrustrateNative.init(myBridgeLibrary)` once, then call the bindings:
 
 ```dart
-FrustrateNative.init(myBridgeBridge);
+FrustrateNative.init(myBridgeLibrary);
 final log = EventLog.new_();
 log.append('hello');
 ```
 
 A `dart_test` or `dart_binary` depending on `:bindings` gets the library built
 for the host it runs on, and an app bundler (rules_flutter) ships it per
-platform. On the web, `FrustrateWeb.initFromUrl(frustrateBridge,
+platform. On the web, `FrustrateWeb.initFromUrl(myBridgeBridge,
 'my_bridge.wasm')` serves the bridge from a `frustrate_wasm_module`; [Choosing a
 web platform](#choosing-a-web-platform) says which one to build.
 `BridgeLibrary.dynamic(DynamicLibrary.open(path), name: path, bridge:
-frustrateBridge)` loads a library you built yourself.
+myBridgeBridge)` loads a library you built yourself.
 
 ### A complete example
 
@@ -293,9 +293,9 @@ dart_binary(
 the rest attach to it. A library built separately is refused. On web,
 `frustrate_wasm_module(name = "app_rust.wasm", crate = ":app_rust")` builds the
 one module, and
-`FrustrateWeb.initFromUrl(main.frustrateBridge, 'app_rust.wasm')` serves a
+`FrustrateWeb.initFromUrl(main.mainRustBridge, 'app_rust.wasm')` serves a
 bridge from it, once per bridge, the same way. Generated code reaches its
-runtime with `Frustrate.of(frustrateBridge)`; `Frustrate.instance` answers
+runtime with `Frustrate.of(<crate>Bridge)`; `Frustrate.instance` answers
 only while one bridge is active, and `Frustrate.activate` replaces only the
 bridge its runtime serves, so a test can fake one bridge and keep another real.
 
@@ -668,7 +668,7 @@ export function read(ptr, cap) {
 ```
 
 ```dart
-await FrustrateWeb.initFromUrl(frustrateBridge, 'app.wasm',
+await FrustrateWeb.initFromUrl(appBridge, 'app.wasm',
     hostImports: {'my_files': 'my_files.js'});
 ```
 

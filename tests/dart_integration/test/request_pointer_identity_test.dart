@@ -84,7 +84,7 @@ void main() {
 
   setUpAll(() async {
     await initBridge();
-    callSync = testApiBridge
+    callSync = testApiLibrary
         .address(NativeExport.callSync)
         .cast<NativeFunction<_CallSyncC>>()
         .asFunction<_CallSyncDart>();

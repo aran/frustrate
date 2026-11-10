@@ -22,7 +22,7 @@ final class _B extends b.FakeModelsB {
 
 void main() {
   setUpAll(() {
-    FrustrateNative.init(a.modelsABridge);
+    FrustrateNative.init(a.modelsALibrary);
     a.checkFrustrateSchema();
   });
 
@@ -34,7 +34,7 @@ void main() {
     Frustrate.activate(FakeRuntime(b.FakeModelsBBridge(fake)));
     final echoed = b.echo(block: block);
     final graph = b.wrap(block: block, shape: const a.ShapeSquare(2));
-    Frustrate.reset(b.frustrateBridge);
+    Frustrate.reset(b.modelsBBridge);
 
     expect(fake.received, [block, block]);
     expect(fake.received.first, isA<a.Block>());

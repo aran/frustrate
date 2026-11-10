@@ -55,7 +55,7 @@ void main() {
       '../packages/web_test_fixtures/frustrate.js'.toJS,
     );
     await FrustrateWeb.initFromUrl(
-      frustrateBridge,
+      testApiBridge,
       '../packages/web_test_fixtures/test_api.wasm',
     );
   });

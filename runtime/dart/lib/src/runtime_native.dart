@@ -179,7 +179,7 @@ typedef HandleExports = ({Pointer<Void> drop, Pointer<Void> finalize});
 
 /// The native library that serves a bridge's exports.
 ///
-/// Generated bindings declare one `const` (`<crate>Bridge`) that resolves the
+/// Generated bindings declare one `const` (`<crate>Library`) that resolves the
 /// bridge as a Dart code asset, so the build decides which library file backs
 /// it; pass it to [FrustrateNative.init]. [BridgeLibrary.dynamic] adapts an
 /// already-open [DynamicLibrary] for a library loaded by hand.
@@ -188,7 +188,7 @@ abstract class BridgeLibrary {
   String get name;
 
   /// The bridge whose exports this resolves: the generated bindings'
-  /// `frustrateBridge`.
+  /// `<crate>Bridge`.
   FrustrateBridge get bridge;
 
   /// The address of [export].

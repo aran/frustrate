@@ -181,7 +181,7 @@ frustrate_code_asset = rule(
     cfg = non_dart_transition,
     doc = """A bridge library as the Dart code asset its generated bindings resolve.
 
-The generated `<crate>Bridge` names its exports by the asset id of `bridge`;
+The generated `<crate>Library` names its exports by the asset id of `bridge`;
 this binds that id to `library`'s file. List it in the `code_assets` of the
 `dart_library` that holds the bindings, and any `dart_test` or `dart_binary`
 depending on that package loads `library` built for the host it runs on. An app
@@ -408,7 +408,7 @@ def frustrate_library(name, bridges, crate_name = None, visibility = None, **kwa
       code asset replaces the one a bindings package declares under its id.
 
     In Dart, `FrustrateNative.init` each bridge's generated library, and on
-    web `FrustrateWeb.init` each bridge's `frustrateBridge` with the one
+    web `FrustrateWeb.init` each bridge's `<crate>Bridge` with the one
     module; every init after the first attaches to the transport the first
     built.
 

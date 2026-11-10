@@ -1136,7 +1136,9 @@ fn emit_arm(out: &mut String, iface: &Interface, f: &Function) {
 }
 
 fn emit_bridge(out: &mut String, iface: &Interface, web: bool) {
+    use heck::ToLowerCamelCase;
     let stem = crate_stem(iface);
+    let lower = iface.crate_name.to_lower_camel_case();
     let _ = write!(
         out,
         "/// Answers bridge requests from a [Fake{stem}] and the `Fake<Type>` objects\n\
@@ -1148,7 +1150,7 @@ fn emit_bridge(out: &mut String, iface: &Interface, web: bool) {
          /// addTearDown(Frustrate.reset);\n\
          /// ```\n\
          ///\n\
-         /// It serves [frustrateBridge], so activating it replaces this bridge\n\
+         /// It serves [{lower}Bridge], so activating it replaces this bridge\n\
          /// alone and leaves any other bridge in the app on its own runtime. It\n\
          /// accepts exactly [frustrateSchemaHash], so a harness generated from\n\
          /// one interface cannot answer for another's bindings.\n\
@@ -1156,7 +1158,7 @@ fn emit_bridge(out: &mut String, iface: &Interface, web: bool) {
          \x20 /// The free functions, statics and constructors. Every other member\n\
          \x20 /// is reached through the `Fake<Type>` a constructor returned.\n\
          \x20 final Fake{stem} impl;\n\n\
-         \x20 Fake{stem}Bridge(this.impl) : super(frustrateBridge, frustrateSchemaHash);\n\n\
+         \x20 Fake{stem}Bridge(this.impl) : super({lower}Bridge, frustrateSchemaHash);\n\n\
          \x20 /// The member a fn id names, or a placeholder for one this\n\
          \x20 /// interface does not have — read only for attribution, and never\n\
          \x20 /// allowed to throw inside an error path.\n\

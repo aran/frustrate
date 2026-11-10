@@ -11,7 +11,7 @@ import 'package:wasi_bridge/wasi_rust.frustrate.dart';
 /// build step. The platform choice is made once, in BUILD.bazel, and nothing
 /// downstream of it changes.
 Future<void> initBridge() async {
-  await FrustrateWeb.initFromUrl(frustrateBridge, 'wasi_rust.wasm');
+  await FrustrateWeb.initFromUrl(wasiRustBridge, 'wasi_rust.wasm');
   // Loud stale-bindings guard: the wasm module and these bindings must agree
   // on the wire schema before any call reaches an unsafe deref.
   checkFrustrateSchema();

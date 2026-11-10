@@ -14,7 +14,7 @@ import 'package:iroh_bridge/iroh_rust.frustrate.dart';
 /// Both assets are staged by //:app_web's `extra_web_assets`.
 Future<void> initBridge() async {
   await FrustrateWeb.initFromUrl(
-    frustrateBridge,
+    irohRustBridge,
     'iroh_rust.wasm',
     bindgenGlueUrl: 'iroh_rust_bg.js',
   );

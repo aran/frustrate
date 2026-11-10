@@ -11,16 +11,16 @@ import 'package:test/test.dart';
 
 void main() {
   setUpAll(() {
-    FrustrateNative.init(one.composeTwinOneBridge);
+    FrustrateNative.init(one.composeTwinOneLibrary);
     one.checkFrustrateSchema();
-    FrustrateNative.init(two.composeTwinTwoBridge);
+    FrustrateNative.init(two.composeTwinTwoLibrary);
     two.checkFrustrateSchema();
   });
 
   test('both bridges resolve into one image', () {
     expect(
-      two.composeTwinTwoBridge.address(NativeExport.runtimeAbi).address,
-      one.composeTwinOneBridge.address(NativeExport.runtimeAbi).address,
+      two.composeTwinTwoLibrary.address(NativeExport.runtimeAbi).address,
+      one.composeTwinOneLibrary.address(NativeExport.runtimeAbi).address,
     );
   });
 

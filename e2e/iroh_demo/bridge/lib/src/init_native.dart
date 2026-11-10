@@ -7,7 +7,7 @@ import 'package:iroh_bridge/iroh_rust.frustrate.dart';
 /// transport is the same everywhere. This file is only compiled for native
 /// targets (init.dart's conditional export routes web to init_web.dart).
 Future<void> initBridge() async {
-  FrustrateNative.init(irohRustBridge);
+  FrustrateNative.init(irohRustLibrary);
   // Loud stale-bindings guard: the loaded library and these bindings must
   // agree on the wire schema before any call reaches an unsafe deref.
   checkFrustrateSchema();

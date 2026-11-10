@@ -17,11 +17,11 @@ void main() {
   test('concurrent inits of two bridges share one transport', () async {
     const module = '../packages/web_test_fixtures/composed.wasm';
     await Future.wait([
-      FrustrateWeb.initFromUrl(alpha.frustrateBridge, module),
-      FrustrateWeb.initFromUrl(beta.frustrateBridge, module),
+      FrustrateWeb.initFromUrl(alpha.composeAlphaBridge, module),
+      FrustrateWeb.initFromUrl(beta.composeBetaBridge, module),
     ]);
-    final a = Frustrate.of(alpha.frustrateBridge);
-    final b = Frustrate.of(beta.frustrateBridge);
+    final a = Frustrate.of(alpha.composeAlphaBridge);
+    final b = Frustrate.of(beta.composeBetaBridge);
     expect(identical(a.bridgeIdentity, b.bridgeIdentity), isTrue);
     alpha.alphaPut(v: 3);
     expect(beta.betaGet(), 3);

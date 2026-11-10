@@ -31,7 +31,7 @@ void main() {
 
   test('a second init naming the same module is a declared no-op', () async {
     final installed = Frustrate.instance;
-    await FrustrateWeb.initFromUrl(frustrateBridge, bridgeModuleUrl);
+    await FrustrateWeb.initFromUrl(testApiBridge, bridgeModuleUrl);
     expect(identical(Frustrate.instance, installed), isTrue);
   });
 
@@ -43,7 +43,7 @@ void main() {
       // already installed and never reaches the network.
       await expectLater(
         FrustrateWeb.initFromUrl(
-          frustrateBridge,
+          testApiBridge,
           '../packages/web_test_fixtures/not_the_bridge.wasm',
         ),
         throwsA(
@@ -67,7 +67,7 @@ void main() {
     // disagreement — which is also what stops the empty buffer from reaching
     // `WebAssembly.compile`.
     await expectLater(
-      FrustrateWeb.init(frustrateBridge, Uint8List(0)),
+      FrustrateWeb.init(testApiBridge, Uint8List(0)),
       throwsA(
         isA<StateError>().having(
           (e) => e.message,

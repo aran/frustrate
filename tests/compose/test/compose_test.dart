@@ -33,7 +33,7 @@ final class _AlphaAlone implements BridgeLibrary {
   String get name => 'package:compose_alpha/alone';
 
   @override
-  FrustrateBridge get bridge => alpha.frustrateBridge;
+  FrustrateBridge get bridge => alpha.composeAlphaBridge;
 
   @override
   Pointer<Void> address(NativeExport export) => switch (export) {
@@ -60,9 +60,9 @@ Future<List<int>> _items(
 
 void main() {
   setUpAll(() {
-    FrustrateNative.init(alpha.composeAlphaBridge);
+    FrustrateNative.init(alpha.composeAlphaLibrary);
     alpha.checkFrustrateSchema();
-    FrustrateNative.init(beta.composeBetaBridge);
+    FrustrateNative.init(beta.composeBetaLibrary);
     beta.checkFrustrateSchema();
   });
 
@@ -70,14 +70,14 @@ void main() {
     // What the runtime decides "one image" by: a runtime export resolves to
     // one address through both bridges' tables.
     expect(
-      beta.composeBetaBridge.address(NativeExport.runtimeAbi).address,
-      alpha.composeAlphaBridge.address(NativeExport.runtimeAbi).address,
+      beta.composeBetaLibrary.address(NativeExport.runtimeAbi).address,
+      alpha.composeAlphaLibrary.address(NativeExport.runtimeAbi).address,
     );
   });
 
   test('the second bridge attaches to the transport the first built', () {
-    final a = Frustrate.of(alpha.frustrateBridge);
-    final b = Frustrate.of(beta.frustrateBridge);
+    final a = Frustrate.of(alpha.composeAlphaBridge);
+    final b = Frustrate.of(beta.composeBetaBridge);
     expect(identical(a, b), isFalse, reason: 'each bridge has its runtime');
     expect(identical(a.bridgeIdentity, b.bridgeIdentity), isTrue);
   });
@@ -97,7 +97,7 @@ void main() {
   test('a stream on each bridge', () async {
     expect(await _items((s) => alpha.alphaCount(n: 3, sink: s)), [1, 2, 3]);
     expect(await _items((s) => beta.betaCount(n: 2, sink: s)), [1, 2]);
-    expect(Frustrate.of(alpha.frustrateBridge).openChannelCount, 0);
+    expect(Frustrate.of(alpha.composeAlphaBridge).openChannelCount, 0);
   });
 
   test('each bridge frees its handles through its own drop export', () {
@@ -151,7 +151,7 @@ void main() {
         reason: 'alpha is still served by what minted it',
       );
     } finally {
-      Frustrate.reset(beta.frustrateBridge);
+      Frustrate.reset(beta.composeBetaBridge);
     }
     expect(box.value(), 4, reason: 'usable again once its runtime is back');
     box.dispose();
@@ -164,15 +164,15 @@ void main() {
     await alpha.alphaHold(sink: held);
     alpha.alphaCloseGate();
     final waiting = alpha.alphaWait();
-    final alphaRuntime = Frustrate.of(alpha.frustrateBridge);
+    final alphaRuntime = Frustrate.of(alpha.composeAlphaBridge);
     expect(alphaRuntime.inFlightCallCount, 1);
     expect(alphaRuntime.openChannelCount, 1);
-    expect(Frustrate.of(beta.frustrateBridge).inFlightCallCount, 0);
-    expect(Frustrate.of(beta.frustrateBridge).openChannelCount, 0);
+    expect(Frustrate.of(beta.composeBetaBridge).inFlightCallCount, 0);
+    expect(Frustrate.of(beta.composeBetaBridge).openChannelCount, 0);
 
     Frustrate.activate(FakeRuntime(beta.FakeComposeBetaBridge(_FakeBeta())));
     expect(beta.betaGet(), 99);
-    Frustrate.reset(beta.frustrateBridge);
+    Frustrate.reset(beta.composeBetaBridge);
 
     alpha.alphaOpenGate();
     expect(await waiting, 1);
@@ -189,7 +189,7 @@ void main() {
       } on StateError catch (e) {
         return e;
       }
-      Frustrate.reset(beta.frustrateBridge);
+      Frustrate.reset(beta.composeBetaBridge);
       return null;
     }
 
@@ -211,7 +211,7 @@ void main() {
   test('one bridge is faked while the other stays real', () {
     alpha.alphaPut(v: 3);
     Frustrate.activate(FakeRuntime(beta.FakeComposeBetaBridge(_FakeBeta())));
-    addTearDown(() => Frustrate.reset(beta.frustrateBridge));
+    addTearDown(() => Frustrate.reset(beta.composeBetaBridge));
     expect(beta.betaGet(), 99, reason: 'beta answers from the fake');
     expect(alpha.alphaGet(), 3, reason: 'alpha still reaches Rust');
     final box = alpha.AlphaBox.new_(value: 9);

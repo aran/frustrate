@@ -762,7 +762,7 @@ class Frustrate {
       'frustrate: $bridge is not initialized. This isolate runs the library '
       'loaded from $source; on native, pass the generated bridge library of '
       '${bridge.crate} to FrustrateNative.init, and on web, pass its '
-      'frustrateBridge to FrustrateWeb.init with the module it is linked '
+      '<crate>Bridge to FrustrateWeb.init with the module it is linked '
       'into. Bridges used together are composed into one library with '
       'frustrate_library.',
     );
@@ -784,7 +784,7 @@ class Frustrate {
       'frustrate: ${active.length} bridges are active '
       '(${[for (final r in active) r.servedBridge].join(', ')}), so '
       'Frustrate.instance cannot tell which one you mean. Name it: '
-      'Frustrate.of(frustrateBridge), with the frustrateBridge of the '
+      'Frustrate.of(<crate>Bridge), with the <crate>Bridge of the '
       'bindings you want.',
     );
   }

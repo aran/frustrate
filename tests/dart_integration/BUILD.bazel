@@ -87,7 +87,7 @@ dart_binary(
 # {dbg: 0, fastbuild: 0, opt: 3}) — so loading it would mean a plain
 # `bazel run` silently benchmarked unoptimized Rust. The driver runs
 # `cargo build --release -p test_api` itself and hands the path cargo reports
-# to `BridgeLibrary.dynamic`, never touching `testApiBridge` (the bindings'
+# to `BridgeLibrary.dynamic`, never touching `testApiLibrary` (the bindings'
 # code asset, which resolves to the Bazel build).
 #
 # Not a `bazel test` target and asserts nothing about absolute time: an

@@ -39,7 +39,7 @@ const int _tickCount = 40;
 /// (which fires as the stream closes, just before the isolate exits).
 Future<void> _tickerEntry((SendPort, int) args) async {
   final (toMain, count) = args;
-  FrustrateNative.init(testApiBridge);
+  FrustrateNative.init(testApiLibrary);
   final c = StreamController<int>();
   final received = <int>[];
   c.stream.listen(received.add, onDone: () => toMain.send(received.length));
@@ -55,7 +55,7 @@ Future<void> _tickerEntry((SendPort, int) args) async {
 /// Reports what the refusal was so the parent can check it arrived through the
 /// future rather than as a synchronous throw.
 Future<void> _failedIssueEntry(SendPort toMain) async {
-  FrustrateNative.init(testApiBridge);
+  FrustrateNative.init(testApiLibrary);
   final host = await Frustrate.instance.spawnActorHost();
   await host.shutdown();
   // Not wrapped: a synchronous throw here would escape the entry, and the
@@ -74,7 +74,7 @@ void main() {
   setUpAll(() {
     // The main isolate reads the process-global ticker counters; the ticker's
     // sink belongs to the spawned isolate.
-    FrustrateNative.init(testApiBridge);
+    FrustrateNative.init(testApiLibrary);
   });
 
   test(

@@ -7,9 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:frustrate/frustrate.dart';
 
 void main() {
-  FrustrateNative.init(ping.composePingBridge);
+  FrustrateNative.init(ping.composePingLibrary);
   ping.checkFrustrateSchema();
-  FrustrateNative.init(pong.composePongBridge);
+  FrustrateNative.init(pong.composePongLibrary);
   pong.checkFrustrateSchema();
   runApp(const MaterialApp(title: 'frustrate compose', home: ComposePage()));
 }

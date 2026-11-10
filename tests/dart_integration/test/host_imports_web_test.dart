@@ -39,7 +39,7 @@ final _filesActor = jsonEncode({'bridge': 'host_imports_api', 'type': 'Files'});
 
 Future<void> _init() async {
   await FrustrateWeb.initFromUrl(
-    frustrateBridge,
+    hostImportsApiBridge,
     _module,
     hostImports: {'frustrate_test_host': _host},
   );
@@ -51,7 +51,7 @@ void main() {
   // installs nothing and the next one starts over.
   test('a namespace with no URL fails, naming it and hostImports', () async {
     await expectLater(
-      FrustrateWeb.initFromUrl(frustrateBridge, _module),
+      FrustrateWeb.initFromUrl(hostImportsApiBridge, _module),
       throwsA(
         predicate(
           (e) =>
@@ -66,7 +66,7 @@ void main() {
   test('a URL that fails to load fails, naming the namespace', () async {
     await expectLater(
       FrustrateWeb.initFromUrl(
-        frustrateBridge,
+        hostImportsApiBridge,
         _module,
         hostImports: {
           'frustrate_test_host':
@@ -94,7 +94,7 @@ void main() {
     for (final ns in list) {
       await expectLater(
         FrustrateWeb.initFromUrl(
-          frustrateBridge,
+          hostImportsApiBridge,
           _module,
           hostImports: {ns: _host},
         ),
@@ -112,7 +112,7 @@ void main() {
   test("hostImports may not name wasm-bindgen's namespace", () async {
     await expectLater(
       FrustrateWeb.initFromUrl(
-        frustrateBridge,
+        hostImportsApiBridge,
         _module,
         hostImports: {'./host_imports_api_bg.js': _host},
       ),

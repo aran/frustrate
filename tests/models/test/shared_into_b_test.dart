@@ -5,7 +5,7 @@ import 'package:test/test.dart';
 
 void main() {
   setUpAll(() {
-    FrustrateNative.init(b.modelsBBridge);
+    FrustrateNative.init(b.modelsBLibrary);
     b.checkFrustrateSchema();
   });
 

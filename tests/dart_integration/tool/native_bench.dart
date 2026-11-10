@@ -186,7 +186,7 @@ Future<void> main(List<String> args) async {
   );
 
   FrustrateNative.init(
-    BridgeLibrary.dynamic(dylib, name: dylibPath, bridge: frustrateBridge),
+    BridgeLibrary.dynamic(dylib, name: dylibPath, bridge: testApiBridge),
   );
   checkFrustrateSchema();
 

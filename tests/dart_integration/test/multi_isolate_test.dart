@@ -53,7 +53,7 @@ Future<(List<int>, List<String>)> _runBatch() async {
 /// and ship the results (or the failure) back to the main isolate.
 void _workerEntry(SendPort toMain) async {
   try {
-    FrustrateNative.init(testApiBridge);
+    FrustrateNative.init(testApiLibrary);
     toMain.send(await _runBatch());
   } catch (e, st) {
     toMain.send('worker error: $e\n$st');
@@ -65,7 +65,7 @@ void main() {
     // The main isolate is the first to init (isolate tag 1); the worker inits
     // second (tag 2). With one global callback slot, this second init would
     // steal the main isolate's completions.
-    FrustrateNative.init(testApiBridge);
+    FrustrateNative.init(testApiLibrary);
   });
 
   test(

@@ -3,7 +3,7 @@ library;
 
 /// One bridge: the bindings codegen produced for one Rust crate.
 ///
-/// Generated code declares it as `frustrateBridge` and names it on every call
+/// Generated code declares it as `<crate>Bridge` and names it on every call
 /// (`Frustrate.of`). Several bridges can be linked into one library and served
 /// by one Rust runtime; each keeps its own exports, because every export a
 /// bridge's glue defines carries its crate name ([symbol]).

@@ -73,7 +73,7 @@ void main() {
   setUpAll(() {
     // A second runtime over the same library, installed for this isolate. The
     // schema check runs against it exactly as `initBridge` would.
-    final rt = NativeRuntime(testApiBridge, allocator: counting);
+    final rt = NativeRuntime(testApiLibrary, allocator: counting);
     Frustrate.install(
       rt,
       source: counting,

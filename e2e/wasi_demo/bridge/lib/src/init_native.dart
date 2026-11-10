@@ -8,7 +8,7 @@ import 'package:wasi_bridge/wasi_rust.frustrate.dart';
 /// entirely in `//:wasi_rust.wasm`'s `platform` attribute and nothing about it
 /// reaches Dart.
 Future<void> initBridge() async {
-  FrustrateNative.init(wasiRustBridge);
+  FrustrateNative.init(wasiRustLibrary);
   // Loud stale-bindings guard: the loaded library and these bindings must
   // agree on the wire schema before any call reaches an unsafe deref.
   checkFrustrateSchema();

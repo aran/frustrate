@@ -40,7 +40,7 @@ abstract base class FakeBridge {
   final BigInt schemaHash;
 
   /// The bridge whose bindings this harness answers: the generated
-  /// `frustrateBridge`. A fake runtime over it replaces that bridge alone.
+  /// `<crate>Bridge`. A fake runtime over it replaces that bridge alone.
   final FrustrateBridge servedBridge;
 
   FakeBridge(this.servedBridge, this.schemaHash);

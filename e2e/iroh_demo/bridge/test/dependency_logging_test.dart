@@ -46,7 +46,7 @@ bool _isDependency(String target) {
 }
 
 Future<void> main() async {
-  FrustrateNative.init(irohRustBridge);
+  FrustrateNative.init(irohRustLibrary);
   checkFrustrateSchema();
 
   final records = <LogRecord>[];

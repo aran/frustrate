@@ -81,7 +81,7 @@ void main() {
   final recording = _Recording();
 
   setUpAll(() {
-    final rt = NativeRuntime(testApiBridge, allocator: recording);
+    final rt = NativeRuntime(testApiLibrary, allocator: recording);
     Frustrate.install(
       rt,
       source: recording,

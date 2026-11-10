@@ -421,7 +421,7 @@ void _checkNumberBackend() {
 /// Web entry point: initialize each bridge once, then use the generated API.
 ///
 /// Every init names the bridge it serves — the generated bindings'
-/// `frustrateBridge` — and the module that carries it. The first builds the
+/// `<crate>Bridge` — and the module that carries it. The first builds the
 /// transport; a later one naming another bridge in the same module attaches
 /// it, and one naming a different module throws. A bridge is served only once
 /// an init has named it, however many bridges the module links.

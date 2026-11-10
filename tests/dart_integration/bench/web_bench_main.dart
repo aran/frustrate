@@ -298,7 +298,7 @@ Future<void> _run() async {
   // already installed and $frustrateGlueUrl points at the served copy; workers
   // come from that URL rather than blob:, which is what makes the page's strict
   // CSP survivable. `_installGlue` early-returns on that.
-  await FrustrateWeb.initFromUrl(frustrateBridge, 'test_api.wasm');
+  await FrustrateWeb.initFromUrl(testApiBridge, 'test_api.wasm');
   checkFrustrateSchema();
 
   final rt = Frustrate.instance;

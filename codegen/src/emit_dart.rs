@@ -185,10 +185,10 @@ fn emit_surface(iface: &Interface, web: bool, dart_package: &str) -> String {
         "/// The bridge these bindings speak for: what every generated call names\n\
          /// to reach its runtime (`Frustrate.of`), and what a fake of this\n\
          /// interface serves.\n\
-         const FrustrateBridge frustrateBridge = FrustrateBridge('{crate}');\n\n\
-         /// [frustrateBridge], under a name no member of a generated class can\n\
+         const FrustrateBridge {lower}Bridge = FrustrateBridge('{crate}');\n\n\
+         /// [{lower}Bridge], under a name no member of a generated class can\n\
          /// shadow: a handle class's own `frustrateBridge` getter answers it.\n\
-         const FrustrateBridge _frustrateBridge = frustrateBridge;\n\n\
+         const FrustrateBridge _frustrateBridge = {lower}Bridge;\n\n\
          /// Wire-schema fingerprint of the interface these bindings were generated\n\
          /// from. Compared against the loaded library's `{schema_export}`\n\
          /// export by [checkFrustrateSchema].\n\
@@ -200,6 +200,7 @@ fn emit_surface(iface: &Interface, web: bool, dart_package: &str) -> String {
          void checkFrustrateSchema() =>\n\
          \x20   Frustrate.of(_frustrateBridge).checkSchemaHash(frustrateSchemaHash);\n\n",
         crate = iface.crate_name,
+        lower = iface.crate_name.to_lower_camel_case(),
         schema_export = iface.export_symbol("schema_hash"),
         hash = crate::hash::schema_hash(iface)
     );
@@ -296,7 +297,8 @@ const BRIDGE_ENTRIES: &[(&str, &str)] = &[
 fn emit_bridge_library(out: &mut String, iface: &Interface, dart_package: &str) {
     let crate_name = &iface.crate_name;
     let asset_id = format!("package:{dart_package}/{crate_name}");
-    let class = format!("_{}Bridge", crate_name.to_upper_camel_case());
+    let class = format!("_{}Library", crate_name.to_upper_camel_case());
+    let lower = crate_name.to_lower_camel_case();
     let mut declared = 0;
     let mut declare = |out: &mut String, symbol: String| {
         let _ = write!(
@@ -328,7 +330,7 @@ fn emit_bridge_library(out: &mut String, iface: &Interface, dart_package: &str) 
          \x20 @override\n\
          \x20 String get name => '{asset_id}';\n\n\
          \x20 @override\n\
-         \x20 FrustrateBridge get bridge => frustrateBridge;\n\n\
+         \x20 FrustrateBridge get bridge => {lower}Bridge;\n\n\
          \x20 @override\n\
          \x20 ffi.Pointer<ffi.Void> address(NativeExport export) => switch (export) {{\n"
     );
@@ -356,8 +358,7 @@ fn emit_bridge_library(out: &mut String, iface: &Interface, dart_package: &str) 
          }}\n\n\
          /// The `{crate_name}` bridge library, resolved as the `{asset_id}` code\n\
          /// asset. Pass it to `FrustrateNative.init`.\n\
-         const BridgeLibrary {lower}Bridge = {class}();\n\n",
-        lower = crate_name.to_lower_camel_case(),
+         const BridgeLibrary {lower}Library = {class}();\n\n",
     );
 }
 
@@ -5145,8 +5146,8 @@ mod tests {
     /// interface are otherwise identical.
     fn without_bridge_library(native: &str) -> String {
         let start = native.find("@ffi.Native").expect("a bridge library");
-        let end_marker = "Bridge = _";
-        let end = native.find(end_marker).expect("the bridge constant");
+        let end_marker = "Library = _";
+        let end = native.find(end_marker).expect("the bridge library constant");
         let end = end + native[end..].find("\n\n").unwrap() + 2;
         let mut out = String::from(&native[..start]);
         out.push_str(&native[end..]);
@@ -5558,7 +5559,7 @@ mod tests {
             "{native}"
         );
         assert!(native.contains("String get name => 'package:my_app/test_api';"), "{native}");
-        assert!(native.contains("const BridgeLibrary testApiBridge = _TestApiBridge();"), "{native}");
+        assert!(native.contains("const BridgeLibrary testApiLibrary = _TestApiLibrary();"), "{native}");
         assert!(
             native.contains("_ => throw StateError('frustrate: the test_api bindings have no '"),
             "{native}"
@@ -5568,11 +5569,11 @@ mod tests {
         // code reaches its runtime, whatever the platform.
         for surface in [native, web] {
             assert!(
-                surface.contains("const FrustrateBridge frustrateBridge = FrustrateBridge('test_api');"),
+                surface.contains("const FrustrateBridge testApiBridge = FrustrateBridge('test_api');"),
                 "{surface}"
             );
         }
-        for absent in ["dart:ffi", "BridgeLibrary", "@ffi.Native", "testApiBridge"] {
+        for absent in ["dart:ffi", "BridgeLibrary", "@ffi.Native", "testApiLibrary"] {
             assert!(!web.contains(absent), "web surface names {absent}: {web}");
         }
     }
@@ -5602,7 +5603,7 @@ mod tests {
                 "{entry} undeclared"
             );
         }
-        assert!(native.contains("FrustrateBridge get bridge => frustrateBridge;"), "{native}");
+        assert!(native.contains("FrustrateBridge get bridge => testApiBridge;"), "{native}");
         let handles: Vec<&str> = native
             .lines()
             .filter_map(|l| l.trim().strip_prefix("'frustrate_test_api_drop_")?.split_once("' => (drop: "))

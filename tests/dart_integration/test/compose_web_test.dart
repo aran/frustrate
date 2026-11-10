@@ -42,8 +42,8 @@ const _module = '../packages/web_test_fixtures/composed.wasm';
 const _absent = FrustrateBridge('compose_gamma');
 
 Future<void> _initBoth() async {
-  await FrustrateWeb.initFromUrl(alpha.frustrateBridge, _module);
-  await FrustrateWeb.initFromUrl(beta.frustrateBridge, _module);
+  await FrustrateWeb.initFromUrl(alpha.composeAlphaBridge, _module);
+  await FrustrateWeb.initFromUrl(beta.composeBetaBridge, _module);
   alpha.checkFrustrateSchema();
   beta.checkFrustrateSchema();
 }
@@ -69,13 +69,13 @@ void main() {
     });
 
     test('a bridge is served once its own init names it', () async {
-      await FrustrateWeb.initFromUrl(alpha.frustrateBridge, _module);
-      expect(Frustrate.isServed(alpha.frustrateBridge), isTrue);
-      expect(Frustrate.isServed(beta.frustrateBridge), isFalse);
-      expect(() => Frustrate.of(beta.frustrateBridge), throwsStateError);
+      await FrustrateWeb.initFromUrl(alpha.composeAlphaBridge, _module);
+      expect(Frustrate.isServed(alpha.composeAlphaBridge), isTrue);
+      expect(Frustrate.isServed(beta.composeBetaBridge), isFalse);
+      expect(() => Frustrate.of(beta.composeBetaBridge), throwsStateError);
 
-      await FrustrateWeb.initFromUrl(beta.frustrateBridge, _module);
-      expect(Frustrate.isServed(beta.frustrateBridge), isTrue);
+      await FrustrateWeb.initFromUrl(beta.composeBetaBridge, _module);
+      expect(Frustrate.isServed(beta.composeBetaBridge), isTrue);
     });
 
     test('a bridge the module does not carry cannot attach', () async {
@@ -97,8 +97,8 @@ void main() {
     setUpAll(_initBoth);
 
     test('one module serves both bridges through one transport', () {
-      final a = Frustrate.of(alpha.frustrateBridge);
-      final b = Frustrate.of(beta.frustrateBridge);
+      final a = Frustrate.of(alpha.composeAlphaBridge);
+      final b = Frustrate.of(beta.composeBetaBridge);
       expect(identical(a, b), isFalse, reason: 'each bridge has its runtime');
       expect(identical(a.bridgeIdentity, b.bridgeIdentity), isTrue);
       expect(() => Frustrate.instance, throwsStateError);
@@ -143,7 +143,7 @@ void main() {
         try {
           expect(box.value, throwsStateError);
         } finally {
-          Frustrate.reset(beta.frustrateBridge);
+          Frustrate.reset(beta.composeBetaBridge);
         }
         expect(box.value(), 4);
         box.dispose();
@@ -156,12 +156,12 @@ void main() {
       await alpha.alphaHold(sink: held);
       alpha.alphaCloseGate();
       final waiting = alpha.alphaWait();
-      expect(Frustrate.of(alpha.frustrateBridge).inFlightCallCount, 1);
-      expect(Frustrate.of(alpha.frustrateBridge).openChannelCount, 1);
+      expect(Frustrate.of(alpha.composeAlphaBridge).inFlightCallCount, 1);
+      expect(Frustrate.of(alpha.composeAlphaBridge).openChannelCount, 1);
 
       Frustrate.activate(_fakeBeta());
       expect(beta.betaGet(), 99);
-      Frustrate.reset(beta.frustrateBridge);
+      Frustrate.reset(beta.composeBetaBridge);
 
       alpha.alphaOpenGate();
       expect(await waiting, 1);
