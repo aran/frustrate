@@ -2397,7 +2397,7 @@ fn main() -> ExitCode {
                         "wasm_block_check: every claim in {} is settled by \
                          placement, so {} can prove nothing.\n\
                          \n\
-                         Build no artifact for it: drop `crate` from the check \
+                         Build no artifact for it: drop `library` from the check \
                          target and it checks the census alone, which needs no \
                          toolchain at all.",
                         claims.who(),

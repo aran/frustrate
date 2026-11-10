@@ -22,7 +22,7 @@ frustrate_bridge(
 )
 
 # Every `#[bridge(no_block)]` claim in src/api.rs is settled by placement, so
-# this target builds nothing — no `crate`, no +atomics std. Two kinds of
+# this target builds nothing — no `library`, no +atomics std. Two kinds of
 # placement: the `Node` actor's methods run on the actor's own
 # Worker, and `peer_id_for` is a free function whose body is handed to the pool,
 # which puts it off the main thread wherever a wait instruction exists.

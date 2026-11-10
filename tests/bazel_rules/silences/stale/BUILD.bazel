@@ -29,7 +29,7 @@ rust_shared_library(
 frustrate_no_block_check(
     name = "stale_check",
     bridge = ":bridge",
-    crate = ":stale_shared",
+    library = ":stale_shared",
     tags = ["manual"],
     targets = [
         "macos",

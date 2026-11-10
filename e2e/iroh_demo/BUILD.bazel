@@ -173,7 +173,7 @@ frustrate_wasm_module(
     # crate hub. frustrate deliberately does not ship one: the required
     # version is a property of *this* crate graph, not of frustrate.
     bindgen = "@wasm_bindgen_crates//:wasm-bindgen-cli__wasm-bindgen",
-    crate = "//bridge:iroh_rust",
+    library = "//bridge:iroh_rust",
     # Waived after reading every call site, not to quiet the build. QUIC's
     # `ServerConfig` defaults its `TimeSource` to `noq::StdSystemTime`
     # (noq-proto config/mod.rs:258, :679), whose `now()` is

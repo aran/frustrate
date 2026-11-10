@@ -19,7 +19,7 @@ frustrate_shared_library(
 # (compose_web_test.dart).
 frustrate_wasm_module(
     name = "composed.wasm",
-    crate = ":composed",
+    library = ":composed",
     visibility = ["//tests:__subpackages__"],
 )
 

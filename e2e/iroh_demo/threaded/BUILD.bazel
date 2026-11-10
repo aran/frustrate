@@ -35,7 +35,7 @@ frustrate_wasm_module(
     # memory is shared. //bazel/wasm_import_check's `--post-pass` mode is the
     # gate on what that transform left behind.
     bindgen = "@wasm_bindgen_crates//:wasm-bindgen-cli__wasm-bindgen",
-    crate = "//bridge:iroh_rust",
+    library = "//bridge:iroh_rust",
     platform = "@frustrate//bazel:wasm32_threads",
     # The same waiver //:iroh_rust.wasm carries, for the same four unreachable
     # call sites; read the long note there rather than duplicating it. Threads

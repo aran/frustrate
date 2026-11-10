@@ -51,8 +51,8 @@ frustrate_bridge_library(
 
 frustrate_wasm_module(
     name = "host_imports_api.wasm",
-    crate = ":host_imports_api",
     host_imports = ["frustrate_test_host"],
+    library = ":host_imports_api",
     platform = "//bazel:wasm32_wasi",
     visibility = ["//tests:__subpackages__"],
 )

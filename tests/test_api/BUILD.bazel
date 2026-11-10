@@ -43,7 +43,7 @@ frustrate_no_block_check(
         "log::__private_api::GlobalLogger::log",
     ],
     bridge = ":bridge",
-    crate = ":test_api_shared",
+    library = ":test_api_shared",
     targets = [
         "android",
         "ios",
@@ -147,7 +147,7 @@ frustrate_code_asset(
 # `bazel run //tests/dart_integration:web_test` serves it.
 frustrate_wasm_module(
     name = "test_api.wasm",
-    crate = ":test_api_shared",
+    library = ":test_api_shared",
     visibility = ["//tests:__subpackages__"],
 )
 
@@ -156,7 +156,7 @@ frustrate_wasm_module(
 # stay green without the local artifacts.
 frustrate_wasm_module(
     name = "test_api_threaded.wasm",
-    crate = ":test_api_shared",
+    library = ":test_api_shared",
     platform = "//bazel:wasm32_threads",
     tags = ["manual"],
     visibility = ["//tests:__subpackages__"],
@@ -169,7 +169,7 @@ frustrate_wasm_module(
 # reason as the threaded one.
 frustrate_wasm_module(
     name = "test_api_facilities.wasm",
-    crate = ":test_api_shared",
+    library = ":test_api_shared",
     platform = "//bazel:wasm32_custom",
     tags = ["manual"],
     visibility = ["//tests:__subpackages__"],

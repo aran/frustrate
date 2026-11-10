@@ -30,7 +30,7 @@ rust_shared_library(
 no_block_check_artifacts(
     name = "artifacts",
     bridge = ":bridge",
-    crate = ":hashmap_shared",
+    library = ":hashmap_shared",
     platforms = [
         "//bazel:android_aarch64",
         "//bazel:android_x86_64",

@@ -81,7 +81,7 @@ frustrate_bridge_library(
 # //bazel:wasm32.
 frustrate_wasm_module(
     name = "fixture.wasm",
-    crate = ":fixture_shared",
+    library = ":fixture_shared",
 )
 
 # The wasip1 platform: the same crate, built against a std that works.
@@ -91,7 +91,7 @@ frustrate_wasm_module(
 # `bazel test //...` rather than discovered by an app.
 frustrate_wasm_module(
     name = "fixture_wasi.wasm",
-    crate = ":fixture_shared",
+    library = ":fixture_shared",
     platform = "//bazel:wasm32_wasi",
 )
 
@@ -101,7 +101,7 @@ frustrate_wasm_module(
 # _module` able to attribute a size change to it.
 frustrate_wasm_module(
     name = "fixture_opt.wasm",
-    crate = ":fixture_shared",
+    library = ":fixture_shared",
     wasm_opt = "@binaryen//:wasm-opt",
 )
 
@@ -293,7 +293,7 @@ dart_test(
 # the `bazel test //...` wildcard.
 frustrate_wasm_module(
     name = "fixture_threaded.wasm",
-    crate = ":fixture_shared",
+    library = ":fixture_shared",
     platform = "//bazel:wasm32_threads",
     tags = ["manual"],
 )
@@ -317,7 +317,7 @@ build_test(
 # would build against the wrong std and fail to link.
 frustrate_wasm_module(
     name = "fixture_custom.wasm",
-    crate = ":fixture_shared",
+    library = ":fixture_shared",
     platform = "//bazel:wasm32_custom",
     tags = ["manual"],
 )
@@ -352,12 +352,12 @@ build_test(
 frustrate_no_block_check(
     name = "fixture_block_check",
     bridge = ":bridge",
-    crate = ":fixture_shared",
     io = [
         "files",
         "network",
         "process",
     ],
+    library = ":fixture_shared",
     slow = ["rule_test_fixture::api::slow"],
     targets = [
         "android",
@@ -393,7 +393,7 @@ rust_shared_library(
 # scanner must name both.
 frustrate_wasm_module(
     name = "probe.wasm",
-    crate = ":probe_shared",
+    library = ":probe_shared",
     std_check = "off",
 )
 
@@ -403,7 +403,7 @@ frustrate_wasm_module(
 # platform, `bazel build //...` would go red here rather than in an app.
 frustrate_wasm_module(
     name = "probe_wasi.wasm",
-    crate = ":probe_shared",
+    library = ":probe_shared",
     platform = "//bazel:wasm32_wasi",
 )
 
@@ -426,7 +426,7 @@ rust_shared_library(
 
 frustrate_wasm_module(
     name = "probe_v0.wasm",
-    crate = ":probe_v0_shared",
+    library = ":probe_v0_shared",
     std_check = "off",
 )
 
@@ -440,7 +440,7 @@ rust_shared_library(
 
 frustrate_wasm_module(
     name = "probe_stripped.wasm",
-    crate = ":probe_stripped_shared",
+    library = ":probe_stripped_shared",
     std_check = "off",
 )
 
@@ -488,7 +488,7 @@ rust_shared_library(
 
 frustrate_wasm_module(
     name = "select_probe.wasm",
-    crate = ":select_probe_shared",
+    library = ":select_probe_shared",
     std_check = "off",
 )
 
@@ -569,14 +569,14 @@ rust_shared_library(
 
 frustrate_wasm_module(
     name = "flag_probe_present.wasm",
-    crate = ":flag_probe_present_shared",
+    library = ":flag_probe_present_shared",
     platform = "//ext/getrandom:wasm32",
     std_check = "off",
 )
 
 frustrate_wasm_module(
     name = "flag_probe_absent.wasm",
-    crate = ":flag_probe_absent_shared",
+    library = ":flag_probe_absent_shared",
     std_check = "off",
 )
 
@@ -606,7 +606,7 @@ rust_shared_library(
 
 frustrate_wasm_module(
     name = "getrandom_probe.wasm",
-    crate = ":getrandom_probe_shared",
+    library = ":getrandom_probe_shared",
     platform = "//ext/getrandom:wasm32",
     # `getrandom::fill` is reached from a symbol nothing calls, so the module
     # carries no clock or stdio; the facility check has nothing to say and its

@@ -59,7 +59,7 @@ build_test(
 # items the emitters produced, which does not vary with the wasm std flavour.
 frustrate_wasm_module(
     name = "native_only.wasm",
-    crate = ":native_only_shared",
+    library = ":native_only_shared",
 )
 
 build_test(

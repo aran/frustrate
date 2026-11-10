@@ -31,7 +31,7 @@ no_block_check_artifacts(
     bridge = ":bridge",
     # Compiles runtime/rust/src/bounded.rs's sleeping fixture section.
     cfgs = ["frustrate_dirty_section_fixture"],
-    crate = ":dirty_shared",
+    library = ":dirty_shared",
     platforms = [
         "//bazel:android_aarch64",
         "//bazel:android_x86_64",

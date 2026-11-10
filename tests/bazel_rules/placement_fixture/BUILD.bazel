@@ -29,7 +29,7 @@ rust_shared_library(
     deps = ["//runtime/rust:frustrate"],
 )
 
-# No `crate`, and that is the assertion: every claim is placed, so there is
+# No `library`, and that is the assertion: every claim is placed, so there is
 # nothing to build and nothing to scan. The census is a codegen output, and the
 # scanner reads it.
 frustrate_no_block_check(

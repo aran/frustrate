@@ -266,7 +266,7 @@ def frustrate_bridge_library(name, crate_name = None, shared_library = True, vis
     declares two targets over **the same sources and the same attributes**:
 
     * `<name>` — `rust_shared_library` (crate-type `cdylib`), the target
-      consumers name: `frustrate_wasm_module(crate = ":<name>")`,
+      consumers name: `frustrate_wasm_module(library = ":<name>")`,
       `frustrate_code_asset(library = ":<name>")`, which binds the shared
       library to the bindings' code-asset id; the app bundler ships it in each
       platform's form. Absent under `shared_library = False`.
@@ -401,7 +401,7 @@ def frustrate_shared_library(name, bridges, crate_name = None, visibility = None
     * `<name>` — `rust_shared_library` whose crate root is a generated
       `extern crate` for each bridge's Rust library. Each one's exports reach
       the library without anything referencing them: rustc forces in every
-      symbol an upstream crate exports. Name it in `frustrate_wasm_module(crate = …)` for
+      symbol an upstream crate exports. Name it in `frustrate_wasm_module(library = …)` for
       the web.
     * `<name>.<library>` — per bridge, where `<library>` is its Rust library's
       target name, a `frustrate_code_asset` binding that bridge's code-asset
@@ -525,11 +525,11 @@ def _run_wasm_opt(ctx, module, out):
     return out
 
 def _frustrate_wasm_module_impl(ctx):
-    files = ctx.attr.crate[0][DefaultInfo].files.to_list()
+    files = ctx.attr.library[0][DefaultInfo].files.to_list()
     wasm = [f for f in files if f.extension == "wasm"]
     if len(wasm) != 1:
         fail("frustrate_wasm_module: expected exactly one .wasm output from %s, got [%s]" % (
-            ctx.attr.crate[0].label,
+            ctx.attr.library[0].label,
             ", ".join([f.basename for f in files]),
         ))
     module = wasm[0]
@@ -749,7 +749,7 @@ frustrate_wasm_module = rule(
           "target serve the native tests, the wasm module and the threaded " +
           "wasm module at once.",
     attrs = {
-        "crate": attr.label(
+        "library": attr.label(
             mandatory = True,
             cfg = _wasm_platform_transition,
             doc = "The bridge rust_shared_library target.",

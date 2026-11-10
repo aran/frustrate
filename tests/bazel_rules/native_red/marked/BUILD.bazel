@@ -30,7 +30,7 @@ rust_shared_library(
 no_block_check_artifacts(
     name = "artifacts",
     bridge = ":bridge",
-    crate = ":marked_shared",
+    library = ":marked_shared",
     platforms = ["//bazel:macos_aarch64"],
     visibility = ["//tests/bazel_rules/native_red:__pkg__"],
 )

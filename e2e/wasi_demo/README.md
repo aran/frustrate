@@ -17,7 +17,7 @@ bazel test //...                                                   # both, plus 
 ```python
 frustrate_wasm_module(
     name = "wasi_rust.wasm",
-    crate = "//bridge:wasi_rust",
+    library = "//bridge:wasi_rust",
     platform = "@frustrate//bazel:wasm32_wasi",   # <-- the whole choice
 )
 ```

@@ -62,7 +62,7 @@ flutter_macos_app(
 # Flutter-under-Bazel; this attribute is the whole platform choice.
 frustrate_wasm_module(
     name = "wasi_rust.wasm",
-    crate = "//bridge:wasi_rust",
+    library = "//bridge:wasi_rust",
     platform = "@frustrate//bazel:wasm32_wasi",
 )
 

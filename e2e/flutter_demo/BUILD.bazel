@@ -141,7 +141,7 @@ flutter_linux_app(
 # matching the URL initBridge() fetches on web.
 frustrate_wasm_module(
     name = "demo_rust.wasm",
-    crate = "//bridge:demo_rust",
+    library = "//bridge:demo_rust",
     # The web bundle is the one artifact here that crosses a network, so the
     # optimizer earns its fetch. Size only — see the wasm_opt attribute's docs
     # before reading it as a speed change.

@@ -36,7 +36,7 @@ rust_shared_library(
 frustrate_no_block_check(
     name = "getrandom_block_check",
     bridge = ":bridge",
-    crate = ":getrandom_check_fixture_shared",
+    library = ":getrandom_check_fixture_shared",
     targets = ["web_threads"],
     web_threads_platform = "//ext/getrandom:wasm32_threads",
 )

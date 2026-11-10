@@ -66,7 +66,7 @@ frustrate_bridge_library(
 frustrate_wasm_module(
     name = "bindgen_api.wasm",
     bindgen = "@wasm_bindgen_crates//:wasm-bindgen-cli__wasm-bindgen",
-    crate = ":bindgen_api",
+    library = ":bindgen_api",
     visibility = ["//tests:__subpackages__"],
 )
 

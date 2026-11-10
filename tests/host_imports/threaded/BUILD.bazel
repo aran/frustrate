@@ -10,8 +10,8 @@ load("//bazel:defs.bzl", "frustrate_wasm_module")
 
 frustrate_wasm_module(
     name = "host_imports_api.wasm",
-    crate = "//tests/host_imports:host_imports_api",
     host_imports = ["frustrate_test_host"],
+    library = "//tests/host_imports:host_imports_api",
     platform = "//bazel:wasm32_threads",
     tags = ["manual"],
 )

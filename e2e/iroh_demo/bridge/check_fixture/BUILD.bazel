@@ -85,6 +85,6 @@ rust_shared_library(
 frustrate_no_block_check(
     name = "block_check",
     bridge = ":codegen",
-    crate = ":check_fixture",
+    library = ":check_fixture",
     targets = ["web_threads"],
 )

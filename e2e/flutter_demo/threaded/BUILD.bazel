@@ -15,7 +15,7 @@ load("//:web_csp.bzl", "strict_csp_index_html")
 
 frustrate_wasm_module(
     name = "demo_rust.wasm",
-    crate = "//bridge:demo_rust",
+    library = "//bridge:demo_rust",
     platform = "@frustrate//bazel:wasm32_threads",
     tags = ["manual"],
 )

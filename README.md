@@ -291,7 +291,7 @@ dart_binary(
 
 `FrustrateNative.init` each bridge's library: the first builds the transport,
 the rest attach to it. A library built separately is refused. On web,
-`frustrate_wasm_module(name = "app_rust.wasm", crate = ":app_rust")` builds the
+`frustrate_wasm_module(name = "app_rust.wasm", library = ":app_rust")` builds the
 one module, and
 `FrustrateWeb.initFromUrl(main.mainRustBridge, 'app_rust.wasm')` serves a
 bridge from it, once per bridge, the same way. Generated code reaches its
@@ -640,7 +640,7 @@ any namespace that is not the runtime's or declared fails the build):
 ```starlark
 frustrate_wasm_module(
     name = "app.wasm",
-    crate = ":app_rust",
+    library = ":app_rust",
     host_imports = ["my_files"],
 )
 ```
@@ -811,7 +811,7 @@ load("@frustrate//bazel:defs.bzl", "frustrate_no_block_check")
 frustrate_no_block_check(
     name = "block_check",
     bridge = ":codegen",
-    crate = ":my_bridge",
+    library = ":my_bridge",
     targets = ["android", "ios", "web_threads"],
     slow = ["my_core::index::rebuild"],
     io = ["files", "network"],

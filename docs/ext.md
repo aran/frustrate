@@ -56,14 +56,14 @@ write `use frustrate_getrandom as _;` in the bridge crate, and build on
 ```starlark
 frustrate_wasm_module(
     name = "my_rust.wasm",
-    crate = ":my_rust",
+    library = ":my_rust",
     platform = "@frustrate//ext/getrandom:wasm32_threads",
 )
 
 frustrate_no_block_check(
     name = "block_check",
     bridge = ":codegen",
-    crate = ":my_rust",
+    library = ":my_rust",
     targets = ["web_threads"],
     web_threads_platform = "@frustrate//ext/getrandom:wasm32_threads",
 )

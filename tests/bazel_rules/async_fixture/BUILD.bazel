@@ -66,7 +66,7 @@ rust_shared_library(
 frustrate_no_block_check(
     name = "async_block_check",
     bridge = ":bridge",
-    crate = ":async_fixture_shared",
+    library = ":async_fixture_shared",
     targets = [
         "android",
         "ios",

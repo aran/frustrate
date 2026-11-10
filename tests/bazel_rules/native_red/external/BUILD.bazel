@@ -35,7 +35,7 @@ rust_shared_library(
 no_block_check_artifacts(
     name = "artifacts",
     bridge = ":bridge",
-    crate = ":external_shared",
+    library = ":external_shared",
     platforms = [
         "//bazel:linux_aarch64",
         "//bazel:linux_x86_64",

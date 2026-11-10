@@ -70,7 +70,7 @@ build_test(
 # re-assert the same fact at the cost of another build.
 frustrate_wasm_module(
     name = "actor_only.wasm",
-    crate = ":actor_only_shared",
+    library = ":actor_only_shared",
 )
 
 build_test(

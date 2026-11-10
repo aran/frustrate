@@ -368,11 +368,11 @@ _census_test = rule(
 
 def _wasm_test_impl(ctx):
     censuses = _censuses(ctx)
-    files = ctx.attr.crate[0][DefaultInfo].files.to_list()
+    files = ctx.attr.library[0][DefaultInfo].files.to_list()
     wasm = [f for f in files if f.extension == "wasm"]
     if len(wasm) != 1:
         fail("frustrate_no_block_check: expected exactly one .wasm output from %s, got [%s]" % (
-            ctx.attr.crate[0].label,
+            ctx.attr.library[0].label,
             ", ".join([f.basename for f in files]),
         ))
 
@@ -394,7 +394,7 @@ _wasm_test = rule(
     implementation = _wasm_test_impl,
     test = True,
     attrs = _SCANNER_ATTRS | _SINK_ATTRS | {
-        "crate": attr.label(mandatory = True, cfg = _wasm_check_transition),
+        "library": attr.label(mandatory = True, cfg = _wasm_check_transition),
         "platform": attr.label(mandatory = True),
         # The scanner treats `poll_oneoff` as a wait.
         "wasi": attr.bool(),
@@ -406,7 +406,7 @@ _wasm_test = rule(
 
 def _native_test_impl(ctx):
     censuses = _censuses(ctx)
-    ir = ctx.attr.crate[0][OutputGroupInfo].frustrate_native_ir.to_list()[0]
+    ir = ctx.attr.library[0][OutputGroupInfo].frustrate_native_ir.to_list()[0]
     return _verdict_test(
         ctx,
         [ir] + censuses,
@@ -419,7 +419,7 @@ _native_test = rule(
     implementation = _native_test_impl,
     test = True,
     attrs = _SCANNER_ATTRS | _SINK_ATTRS | {
-        "crate": attr.label(
+        "library": attr.label(
             mandatory = True,
             cfg = _native_check_transition,
             aspects = [_native_ir_aspect],
@@ -476,9 +476,9 @@ _native_fixture_transition = transition(
 
 def _native_artifacts_impl(ctx):
     files = _censuses(ctx)
-    for platform, crate in ctx.split_attr.crate.items():
+    for platform, library in ctx.split_attr.library.items():
         ir = ctx.actions.declare_file("%s/%s.ll" % (ctx.label.name, platform))
-        ctx.actions.symlink(output = ir, target_file = crate[OutputGroupInfo].frustrate_native_ir.to_list()[0])
+        ctx.actions.symlink(output = ir, target_file = library[OutputGroupInfo].frustrate_native_ir.to_list()[0])
         files.append(ir)
     return [DefaultInfo(files = depset(files))]
 
@@ -490,7 +490,7 @@ _no_block_check_artifacts = rule(
     implementation = _native_artifacts_impl,
     attrs = {
         "bridges": attr.label_list(mandatory = True, allow_empty = False, providers = [OutputGroupInfo]),
-        "crate": attr.label(
+        "library": attr.label(
             mandatory = True,
             cfg = _native_fixture_transition,
             aspects = [_native_ir_aspect],
@@ -519,7 +519,7 @@ def no_block_check_artifacts(name, bridge, **kwargs):
 def frustrate_no_block_check(
         name,
         bridge,
-        crate = None,
+        library = None,
         targets = None,
         slow = [],
         io = [],
@@ -532,7 +532,7 @@ def frustrate_no_block_check(
     the member cannot be stalled: it reaches no wait, no function named in
     `slow`, and no IO in an `io` class. Codegen settles what placement
     settles (an actor member's body, a dispatched member's body) and writes a
-    claim census; the rest is settled here, over a throwaway build of `crate`
+    claim census; the rest is settled here, over a throwaway build of `library`
     with one root per claim. Nothing this builds
     ships.
 
@@ -580,10 +580,10 @@ def frustrate_no_block_check(
     it is in every `bazel test` summary, and naming the skipped test directly
     is an error that says why.
 
-    Without `crate`, the target declares that every claim is settled by
+    Without `library`, the target declares that every claim is settled by
     placement: it builds nothing, and is one test, `name`, that reads the
     census and fails naming any claim that wants an artifact. A crate whose
-    claims are all placed is refused with `crate`, for the same reason.
+    claims are all placed is refused with `library`, for the same reason.
 
     Each root takes its member's request bytes as parameters, so no
     optimizer can delete a body behind a decode it proved fails, and a
@@ -647,10 +647,10 @@ def frustrate_no_block_check(
         one build, and attributes each root to its bridge by the crate name the
         root carries. A root that no listed bridge claims fails the check, so a
         bridge the library links and the list lacks is not skipped.
-      crate: The bridge's `rust_shared_library`. Omit it when every claim is
+      library: The bridge's `rust_shared_library`. Omit it when every claim is
         settled by placement.
       targets: Where the bridge ships: any of `android`, `ios`, `linux`,
-        `macos`, `web`, `web_threads`, `wasi`. Required with `crate`.
+        `macos`, `web`, `web_threads`, `wasi`. Required with `library`.
       slow: Rust paths a claimed body may not reach, checked by every
         analysis: a slow-work marker (`my_crate::main_thread::slow`), or a
         third-party function. Each matches every function whose demangled
@@ -693,16 +693,16 @@ def frustrate_no_block_check(
         every test and the suite.
     """
     bridges = _bridges(bridge)
-    if not crate:
+    if not library:
         if slow or io or allow or targets != None:
-            fail("frustrate_no_block_check: %s has no `crate`, so it builds " % name +
+            fail("frustrate_no_block_check: %s has no `library`, so it builds " % name +
                  "nothing and `slow`, `io`, `allow` and `targets` would check nothing. " +
-                 "Name the crate, or drop them.")
+                 "Name the library, or drop them.")
         _census_test(name = name, bridges = bridges, **kwargs)
         return
 
     if not targets:
-        fail("frustrate_no_block_check: %s names a `crate` but no `targets`. " % name +
+        fail("frustrate_no_block_check: %s names a `library` but no `targets`. " % name +
              "Say where the bridge ships (%s): each runs the analysis " % ", ".join(_TARGETS) +
              "that proves its claims there.")
     for t in targets:
@@ -713,7 +713,7 @@ def frustrate_no_block_check(
         fail("frustrate_no_block_check: %s ships only on single-threaded web, " % name +
              "which has no wait instruction, so no analysis proves anything " +
              "there. Add a native target to check `slow` over its portable " +
-             "code, or drop `crate` if every claim is placed.")
+             "code, or drop `library` if every claim is placed.")
     if web_threads_platform and "web_threads" not in analyses:
         fail("frustrate_no_block_check: %s names `web_threads_platform` but " % name +
              "`targets` has no `web_threads`, so nothing would build under it.")
@@ -733,7 +733,7 @@ def frustrate_no_block_check(
             _native_test(
                 name = test,
                 bridges = bridges,
-                crate = crate,
+                library = library,
                 platform = Label("//bazel:%s_%s" % (os, cpu)),
                 slow = slow,
                 io = io,
@@ -747,7 +747,7 @@ def frustrate_no_block_check(
         _wasm_test(
             name = name + ".web_threads",
             bridges = bridges,
-            crate = crate,
+            library = library,
             slow = slow,
             allow = allow,
             platform = web_threads_platform or Label("//bazel:wasm32_threads"),
@@ -762,7 +762,7 @@ def frustrate_no_block_check(
         _wasm_test(
             name = name + ".wasi",
             bridges = bridges,
-            crate = crate,
+            library = library,
             slow = slow,
             io = io,
             allow = allow,

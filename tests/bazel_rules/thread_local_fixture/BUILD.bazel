@@ -37,7 +37,7 @@ rust_shared_library(
 frustrate_no_block_check(
     name = "thread_local_block_check",
     bridge = ":bridge",
-    crate = ":thread_local_fixture_shared",
+    library = ":thread_local_fixture_shared",
     targets = [
         "android",
         "ios",
@@ -48,7 +48,7 @@ frustrate_no_block_check(
 no_block_check_artifacts(
     name = "artifacts",
     bridge = ":bridge",
-    crate = ":thread_local_fixture_shared",
+    library = ":thread_local_fixture_shared",
     platforms = [
         "//bazel:linux_aarch64",
         "//bazel:linux_x86_64",

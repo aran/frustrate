@@ -29,7 +29,7 @@ rust_shared_library(
 no_block_check_artifacts(
     name = "artifacts",
     bridge = ":bridge",
-    crate = ":asm_shared",
+    library = ":asm_shared",
     platforms = ["//bazel:macos_aarch64"],
     visibility = [
         "//bazel/wasm_block_check:__pkg__",

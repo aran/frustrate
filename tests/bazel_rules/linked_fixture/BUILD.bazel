@@ -23,7 +23,7 @@ frustrate_shared_library(
 frustrate_no_block_check(
     name = "linked_block_check",
     bridge = BRIDGES,
-    crate = ":linked",
+    library = ":linked",
     slow = [
         "linked_app::api::slow",
         "linked_example::api::slow",
@@ -43,7 +43,7 @@ frustrate_no_block_check(
 no_block_check_artifacts(
     name = "artifacts",
     bridge = BRIDGES,
-    crate = ":linked",
+    library = ":linked",
     platforms = ["//bazel:macos_aarch64"],
     visibility = ["//tests/bazel_rules/native_red:__pkg__"],
 )
