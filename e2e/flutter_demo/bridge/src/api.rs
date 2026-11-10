@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 pub fn greet(name: String) -> String {
     // The first of the `log::info!` calls scattered through this file. They are
     // ordinary `log` — no frustrate type appears — and they reach Dart because
-    // `install_logging` below put a `StreamSink` behind `log`'s facade. See
+    // `set_log_sink` below put a `StreamSink` behind `log`'s facade. See
     // "watching the bridge" at the foot of this file.
     log::info!("greeting {name}");
     format!("Hello, {name} — from Rust \u{1F980}")
@@ -814,14 +814,14 @@ pub struct LogLine {
 /// Sync, because installing is a registration and not work — the same reason
 /// `TextDoc::watch` is. Dart calls it once from `main()`, and a Flutter hot
 /// restart runs `main()` again in the same process: that lands on the designed
-/// re-install path, which drops the displaced sink and so ends the dead
+/// set-again path, which drops the displaced sink and so ends the dead
 /// isolate's stream rather than leaving records going nowhere.
 ///
 /// `Result<(), String>` so a refusal arrives in Dart as a `BridgeException`
 /// carrying the runtime's own message; the demo has no `anyhow`.
 #[bridge(sync)]
-pub fn install_logging(sink: StreamSink<LogLine>) -> Result<(), String> {
-    frustrate::logging::install(log::LevelFilter::Info, sink, |record| LogLine {
+pub fn set_log_sink(sink: StreamSink<LogLine>) -> Result<(), String> {
+    frustrate::logging::set_sink(log::LevelFilter::Info, sink, |record| LogLine {
         level: record.level().to_string(),
         target: record.target().to_string(),
         message: record.args().to_string(),

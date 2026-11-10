@@ -88,7 +88,7 @@ use_repo(flutter_pub, "deps", "dev_tool_deps")
 
 # The bridge crate's one cargo dependency: the `log` facade its `log::info!`
 # calls expand against, and therefore the one whose logger slot
-# `frustrate::logging::install` has to fill.
+# `frustrate::logging::set_sink` has to fill.
 #
 # It is resolved *here*, in the app's own hub, rather than borrowed from
 # frustrate. That is what makes the facility work: `log`'s logger is a `static`

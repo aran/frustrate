@@ -32,7 +32,7 @@
 //!     abstracted); tests record what a delivery would have carried.
 //!   - the **runtime context**: [`crate::runtime::enter`] wraps each
 //!     `Runnable::run`, so an embedder-supplied tokio/async-std runtime can
-//!     drive the leaves a task awaits. Not a per-config branch but a per-*process* one — unregistered, it is one
+//!     drive the leaves a task awaits. Not a per-config branch but a per-*process* one — with no context set, it is one
 //!     acquire load and a direct call; on wasm it is the identity.
 //!
 //! The generated glue for an `async fn` is therefore byte-identical on every
@@ -1539,7 +1539,7 @@ mod tests {
             panic!("panicked with the answer already claimed");
         });
         exec.drain_all();
-        crate::panic::unregister();
+        crate::panic::clear_listener();
 
         assert!(
             log.lock().unwrap().is_empty(),
@@ -1648,7 +1648,7 @@ mod tests {
         let (exec, log) = recording();
         exec.spawn_detached(async { panic!("boom in a detached task") });
         exec.drain_all();
-        crate::panic::unregister();
+        crate::panic::clear_listener();
 
         assert!(
             log.lock().unwrap().is_empty(),

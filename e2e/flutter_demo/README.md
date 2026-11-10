@@ -44,7 +44,7 @@ injected.
 cannot replace a library it has `dlopen`ed, so instead the edit is compiled into
 a patch — a second library holding the functions that changed — and the running
 library's entry points are redirected into it. State is kept: a `Counter` handle
-goes on counting from where it was, and the statics behind `install_logging`
+goes on counting from where it was, and the statics behind `set_log_sink`
 keep their sinks. `bridge/BUILD.bazel` asks for this by wrapping the library in
 `frustrate_hot_patchable`, binding the result as the bindings' code asset with
 `frustrate_code_asset`, and wrapping that in `flutter_native_library` with the

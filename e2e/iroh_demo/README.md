@@ -27,9 +27,9 @@ call spins the page's only thread at 100% CPU forever, with no error and no way
 to recover. That silent form is the worse one; a std from `toolchain/custom_std`
 makes the park panic instead. A
 `#[bridge] async fn` is not automatically better: frustrate's cooperative
-executor has no reactor of its own, so an unregistered tokio leaf panics at
+executor has no reactor of its own, so a tokio leaf with no runtime set panics at
 construction ("there is no reactor running"). On native you can lend it one —
-`frustrate_tokio::register` from `ext/tokio` — and then
+`frustrate_tokio::set_runtime` from `ext/tokio` — and then
 an `async fn` does `.await` tokio leaves without parking a thread; but that is
 native-only, and this app is one binary across five platforms. The actor still
 wins here for the reason above: it *owns* the runtime, on every platform.

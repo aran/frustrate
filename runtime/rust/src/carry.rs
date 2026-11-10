@@ -1,7 +1,7 @@
 //! A value of the embedder's that follows bridge work from the thread that
 //! queues it to every thread that runs it.
 //!
-//! [`register`] names the value by two functions over the embedder's own
+//! [`set`] names the value by two functions over the embedder's own
 //! per-thread state: `current` reads it, and `swap` makes a value current and
 //! returns the one it replaced. Where frustrate queues work, it captures
 //! `current()`. Around each run of that work, wherever it runs, it swaps the
@@ -23,7 +23,7 @@
 //! instance, so a call from Dart into it captures that instance's value,
 //! not the caller's.
 //!
-//! With nothing registered, capturing is one atomic load, and running is a
+//! With nothing set, capturing is one atomic load, and running is a
 //! branch.
 
 use crate::hook::Hook;
@@ -64,19 +64,19 @@ static CARRIER: Hook<dyn Carrier> = Hook::new();
 /// it runs (see the module docs).
 ///
 /// `swap(v)` makes `v` current on the calling thread and returns the value it
-/// replaced; it must not panic. Register at init, before the first bridge
-/// call: work queued before then carries nothing. A second registration
+/// replaced; it must not panic. Set it at init, before the first bridge
+/// call: work queued before then carries nothing. A second `set`
 /// replaces the first, for work queued after it.
-pub fn register<T: Send + 'static>(current: fn() -> T, swap: fn(T) -> T) {
+pub fn set<T: Send + 'static>(current: fn() -> T, swap: fn(T) -> T) {
     CARRIER.set(Arc::new(Typed { current, swap }));
 }
 
 /// Stop carrying. Work already queued still carries what it captured.
-pub fn unregister() {
+pub fn clear() {
     CARRIER.clear();
 }
 
-/// The registered value as it is where work is being queued.
+/// The carried value as it is where work is being queued.
 pub(crate) struct Captured(Option<(Arc<dyn Carrier>, Box<dyn Any + Send>)>);
 
 impl Captured {
@@ -163,21 +163,21 @@ mod tests {
 
     /// Registers the test carrier for one test's span: the slot is process
     /// global.
-    fn registered() -> impl Drop {
-        struct Unregister(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
-        impl Drop for Unregister {
+    fn carrying() -> impl Drop {
+        struct Clear(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
+        impl Drop for Clear {
             fn drop(&mut self) {
-                unregister();
+                clear();
             }
         }
         let guard = crate::serialize_globals();
-        register(current, swap);
-        Unregister(guard)
+        super::set(current, swap);
+        Clear(guard)
     }
 
     #[test]
     fn a_job_runs_under_the_value_captured_where_it_was_made() {
-        let _r = registered();
+        let _r = carrying();
         set(7);
         let mut captured = Captured::here();
         set(0);
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn the_thread_gets_its_own_value_back_after_a_panic() {
-        let _r = registered();
+        let _r = carrying();
         set(7);
         let mut captured = Captured::here();
         set(3);
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn a_task_keeps_a_change_it_makes_across_polls() {
-        let _r = registered();
+        let _r = carrying();
         set(7);
         let mut polls = 0;
         let mut task = Box::pin(Carried::new(std::future::poll_fn(move |_| {
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn a_task_is_dropped_under_its_value() {
-        let _r = registered();
+        let _r = carrying();
         struct Probe(std::sync::Arc<std::sync::atomic::AtomicU32>);
         impl Drop for Probe {
             fn drop(&mut self) {
@@ -259,7 +259,7 @@ mod tests {
         use crate::executor::Executor;
         use std::sync::{Arc, Mutex};
 
-        let _r = registered();
+        let _r = carrying();
         let exec = Arc::new(Executor::new(|| {}, |_, _| {}));
         let seen = Arc::new(Mutex::new(Vec::new()));
         set(7);
@@ -303,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    fn nothing_registered_carries_nothing() {
+    fn nothing_set_carries_nothing() {
         let _guard = crate::serialize_globals();
         set(7);
         let mut captured = Captured::here();

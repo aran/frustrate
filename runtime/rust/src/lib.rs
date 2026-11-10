@@ -85,14 +85,14 @@ pub mod hot_patch;
 /// The idle barrier's count of queued and running work. Its exports exist
 /// only under `--cfg=frustrate_idle_barrier` (`frustrate_idle_barrier_library`).
 mod idle;
-/// The one slot an embedder registers a value into, shared by every hook that
-/// offers one. Private: a bridge sees each hook's own `register`, never the
+/// The one slot an embedder sets a value into, shared by every hook that
+/// offers one. Private: a bridge sees each hook's own `set_*`, never the
 /// primitive underneath.
 mod hook;
 /// The table of objects an actor's executor hosts, keyed by slot id. Private:
 /// generated glue reaches it through `handle::actor_*`.
 mod objects;
-/// Rust's `log` facade → a Dart `Stream`: register a sink and every
+/// Rust's `log` facade → a Dart `Stream`: set a sink and every
 /// `log::info!` in the crate graph becomes an item on it.
 pub mod logging;
 pub mod callback;

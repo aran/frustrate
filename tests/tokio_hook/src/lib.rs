@@ -11,7 +11,7 @@
 //! `enter`, and the fact that tokio's own leaf drops fine without a context).
 //!
 //! **The recipe** (`mod recipe`) is the same question one layer up: the
-//! `Handle::enter` wrapper, and `frustrate_tokio::register` (`ext/tokio`),
+//! `Handle::enter` wrapper, and `frustrate_tokio::set_runtime` (`ext/tokio`),
 //! driving a real `tokio::time::sleep` on a real
 //! [`frustrate::executor::Executor`]. The `ext_*` tests pin what the latter
 //! adds: a `block_on` or `blocking_recv` in a bridged `async fn` panics into
@@ -24,7 +24,7 @@
 //! mismatch.
 //!
 //! What is *not* here is the hook's own contract — the un-run-poll leak,
-//! re-registration, cancel-drops-under-the-context, panic attribution. That is
+//! setting it again, cancel-drops-under-the-context, panic attribution. That is
 //! in `runtime/rust/src/runtime.rs`'s unit tests, over a hand-rolled reactor,
 //! because those properties are frustrate's and testing them must not put
 //! tokio in the crate hub (see Cargo.toml).
@@ -205,7 +205,7 @@ mod gate {
 
     /// The control for the gate: without `enter()`, a tokio leaf fails at
     /// **construction**, loudly. So the passing gate above is `enter()` doing
-    /// the work, and an app that forgets to register gets an attributable
+    /// the work, and an app that forgets to set one gets an attributable
     /// panic on its own call rather than a hang.
     #[test]
     fn without_enter_a_tokio_leaf_panics_at_construction() {
@@ -224,7 +224,7 @@ mod gate {
         drop(task);
     }
 
-    /// The hazard `frustrate::runtime::register`'s docs name, pinned so it
+    /// The hazard `frustrate::runtime::set_context`'s docs name, pinned so it
     /// stays true rather than remembered: a `Handle` to a `current_thread`
     /// runtime nobody drives registers the leaf and **never wakes it**. No
     /// panic, no error, no timeout — which is exactly why the contract is
@@ -257,7 +257,7 @@ mod gate {
         assert!(
             !done.load(Ordering::SeqCst),
             "an undriven current_thread runtime fired a timer — if tokio grew \
-             a way to make this work, `register`'s documented contract is \
+             a way to make this work, `set_context`'s documented contract is \
              stricter than it needs to be and should be relaxed on purpose"
         );
         assert_eq!(
@@ -267,7 +267,7 @@ mod gate {
         );
     }
 
-    /// **What decides `register`'s re-registration rule.** A `Handle` outlives
+    /// **What decides `set_context`'s setting-again rule.** A `Handle` outlives
     /// the `Runtime` it came from, and hot restart is exactly the case where
     /// an app rebuilds its runtime and the old one is dropped. So: is a stale
     /// handle loud or silent?
@@ -280,12 +280,12 @@ mod gate {
     /// from the tokio source and is recorded so the claim is not overstated.
     /// Two consequences, and they point the same way:
     ///
-    ///   - It is not a hang, so "the runtime must outlive the registration" is
-    ///     enforced by tokio rather than resting on `register`'s documentation.
+    ///   - It is not a hang, so "the runtime must outlive the context" is
+    ///     enforced by tokio rather than resting on `set_context`'s documentation.
     ///   - It is why the slot is **last-wins**. A keep-first slot would pin
     ///     the dead handle for the life of the process, so every async call
     ///     after a hot restart would panic — with the app's fresh, correct
-    ///     registration sitting there ignored. Last-wins makes the restart
+    ///     context sitting there ignored. Last-wins makes the restart
     ///     work; keep-first would make this loud panic the normal dev loop.
     #[test]
     fn a_handle_to_a_dropped_runtime_panics_loudly() {
@@ -317,10 +317,10 @@ mod gate {
         // up here rather than in an app.
         let msg = panic_message(outcome.expect_err(
             "a stale handle stopped failing. If tokio now keeps the driver \
-             alive behind a `Handle`, `register` need not say the runtime must \
-             outlive the registration; if it went quiet instead, that \
+             alive behind a `Handle`, `set_context` need not say the runtime must \
+             outlive the context; if it went quiet instead, that \
              requirement became a *silent* hazard and belongs in the table on \
-             `register` beside the undriven current_thread case",
+             `set_context` beside the undriven current_thread case",
         ));
         assert!(
             msg.contains("being shutdown"),
@@ -332,7 +332,7 @@ mod gate {
         );
     }
 
-    /// Does registering a context break the **existing**
+    /// Does setting a context break the **existing**
     /// bring-your-own-`block_on` pattern? Only the cooperative executor's
     /// polls are wrapped, so a plain `#[bridge] fn` on `pool::spawn_call` is
     /// untouched by construction. The question this settles is the other one:
@@ -346,7 +346,7 @@ mod gate {
     /// neither for a second runtime nor for the entered one itself. The
     /// `block_on` simply blocks the drain thread until it finishes, which is
     /// the parked-thread cost the hook exists to avoid, arrived at silently.
-    /// Documented on `register` rather than guarded, because it is a body the
+    /// Documented on `set_context` rather than guarded, because it is a body the
     /// user wrote and frustrate never sees.
     #[test]
     fn block_on_inside_an_entered_context_silently_blocks_the_drain() {
@@ -362,7 +362,7 @@ mod gate {
         assert!(
             nested.is_ok(),
             "tokio grew a guard against this ({:?}) — good news, and \
-             `register`'s Scope note should now say it fails loudly instead of \
+             `set_context`'s Scope note should now say it fails loudly instead of \
              blocking silently",
             nested.err().map(panic_message)
         );
@@ -416,30 +416,30 @@ mod recipe {
         (exec, log)
     }
 
-    /// Exactly what [`frustrate::runtime::register`]'s rustdoc tells an app to
+    /// Exactly what [`frustrate::runtime::set_context`]'s rustdoc tells an app to
     /// write — plus the serialization these tests need and an app does not.
     ///
-    /// Registration is **process-global** by design (one runtime per process,
+    /// The context is **process-global** by design (one runtime per process,
     /// no per-`fn` selection), and `cargo test` runs these in one process in
     /// parallel. So a test holds the slot for its whole body and hands it back
-    /// on the way out, panic or not. An app registers once and never
-    /// unregisters; the guard is a property of the harness, not of the API.
+    /// on the way out, panic or not. An app sets it once and never
+    /// clears it; the guard is a property of the harness, not of the API.
     #[must_use]
-    fn register_tokio(handle: tokio::runtime::Handle) -> Registered {
+    fn set_tokio(handle: tokio::runtime::Handle) -> ContextSet {
         let held = hold_the_slot();
-        frustrate::runtime::register(move |poll| {
+        frustrate::runtime::set_context(move |poll| {
             let _guard = handle.enter();
             poll.run();
         });
-        Registered(held)
+        ContextSet(held)
     }
 
-    /// The same, through `frustrate_tokio::register` (ext/tokio).
+    /// The same, through `frustrate_tokio::set_runtime` (ext/tokio).
     #[must_use]
-    fn register_ext(handle: tokio::runtime::Handle) -> Registered {
+    fn set_ext(handle: tokio::runtime::Handle) -> ContextSet {
         let held = hold_the_slot();
-        frustrate_tokio::register(handle);
-        Registered(held)
+        frustrate_tokio::set_runtime(handle);
+        ContextSet(held)
     }
 
     fn hold_the_slot() -> std::sync::MutexGuard<'static, ()> {
@@ -449,10 +449,10 @@ mod recipe {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    struct Registered(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
-    impl Drop for Registered {
+    struct ContextSet(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
+    impl Drop for ContextSet {
         fn drop(&mut self) {
-            frustrate::runtime::unregister();
+            frustrate::runtime::clear_context();
         }
     }
 
@@ -463,7 +463,7 @@ mod recipe {
     #[test]
     fn an_async_fn_awaits_a_real_tokio_leaf_on_the_cooperative_executor() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let _registration = register_tokio(rt.handle().clone());
+        let _context = set_tokio(rt.handle().clone());
         let (exec, log) = recording();
 
         exec.spawn(1, async {
@@ -499,12 +499,12 @@ mod recipe {
     /// The cancellation the hook exists to give, over `block_on`: a suspended
     /// tokio leaf is dropped by dropping *our* registry entry. tokio never
     /// owned the future, so there is no `JoinHandle::abort` lifecycle to
-    /// mirror — and the drop lands under the registered context, so the timer
+    /// mirror — and the drop lands under the context that is set, so the timer
     /// wheel deregistration succeeds.
     #[test]
     fn cancelling_a_call_drops_a_live_tokio_leaf() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let _registration = register_tokio(rt.handle().clone());
+        let _context = set_tokio(rt.handle().clone());
         let (exec, log) = recording();
 
         struct DropFlag(Arc<AtomicBool>);
@@ -533,7 +533,7 @@ mod recipe {
         assert!(log.lock().unwrap().is_empty(), "a cancelled call never completes");
         assert_eq!(exec.task_count(), 0);
 
-        // The runtime survives having a registration torn out from under it.
+        // The runtime survives having its context torn out from under it.
         rt.block_on(async { tokio::time::sleep(Duration::from_millis(1)).await });
     }
 
@@ -558,7 +558,7 @@ mod recipe {
     #[test]
     fn a_cancelled_calls_teardown_still_has_the_runtime() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let _registration = register_tokio(rt.handle().clone());
+        let _context = set_tokio(rt.handle().clone());
         let (exec, log) = recording();
 
         static TORN_DOWN: AtomicBool = AtomicBool::new(false);
@@ -596,7 +596,7 @@ mod recipe {
     #[test]
     fn two_hundred_tokio_sleeps_multiplex_on_one_thread() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let _registration = register_tokio(rt.handle().clone());
+        let _context = set_tokio(rt.handle().clone());
         let (exec, log) = recording();
 
         for id in 0..200 {
@@ -654,7 +654,7 @@ mod recipe {
     }
 
     /// `block_on` inside a bridged `async fn` panics under
-    /// `frustrate_tokio::register`, and the panic is the call's answer. Under
+    /// `frustrate_tokio::set_runtime`, and the panic is the call's answer. Under
     /// `Handle::enter` the same body blocks and succeeds
     /// (`gate::block_on_inside_an_entered_context_silently_blocks_the_drain`).
     #[test]
@@ -662,7 +662,7 @@ mod recipe {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let other = Arc::new(tokio::runtime::Runtime::new().unwrap());
         let handle = rt.handle().clone();
-        let _registration = register_ext(handle.clone());
+        let _context = set_ext(handle.clone());
 
         let (status, message) = answer_of(21, async move {
             handle.block_on(async { tokio::time::sleep(Duration::from_millis(1)).await });
@@ -686,7 +686,7 @@ mod recipe {
     #[test]
     fn ext_blocking_recv_is_a_panic_answered_to_the_call() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let _registration = register_ext(rt.handle().clone());
+        let _context = set_ext(rt.handle().clone());
 
         let (status, message) = answer_of(23, async {
             let (tx, mut rx) = tokio::sync::mpsc::channel::<u8>(1);
@@ -706,7 +706,7 @@ mod recipe {
     #[test]
     fn ext_leaves_and_spawns_still_work() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let _registration = register_ext(rt.handle().clone());
+        let _context = set_ext(rt.handle().clone());
 
         let started = Instant::now();
         let (status, message) = answer_of(24, async {
@@ -719,12 +719,12 @@ mod recipe {
         assert!(started.elapsed() >= Duration::from_millis(70));
     }
 
-    /// The registered wrapper covers a cancelled call's teardown too, as the
+    /// The wrapper that is set covers a cancelled call's teardown too, as the
     /// `enter` recipe does.
     #[test]
     fn ext_cancelled_teardown_still_has_the_runtime() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let _registration = register_ext(rt.handle().clone());
+        let _context = set_ext(rt.handle().clone());
         let (exec, _log) = recording();
 
         static TORN_DOWN: AtomicBool = AtomicBool::new(false);

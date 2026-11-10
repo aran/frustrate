@@ -2,7 +2,7 @@
 ///
 /// The runtime has no clock: the executor is a poll loop with no reactor, and a
 /// stock wasm32 module has no host to ask. So `sleep` is a slot the app fills,
-/// exactly as `logging::install` and `panic::register` are, and this drives the
+/// exactly as `logging::set_sink` and `panic::set_listener` are, and this drives the
 /// filling an app actually writes — a Dart `Future.delayed` behind a
 /// `DartFunction`.
 ///
@@ -24,11 +24,11 @@ import 'init_native.dart' if (dart.library.js_interop) 'init_web.dart';
 void main() {
   setUpAll(() async {
     await initBridge();
-    // The install an app writes once at startup. Two one-way trips: a request
+    // The timer an app sets once at startup. Two one-way trips: a request
     // out, `fireTimer` back in. Not a DartFunction — the closure behind one
     // answers synchronously, so it cannot wait, which is the whole reason this
     // shape exists.
-    installTimer(
+    setTimer(
       requests: (r) {
         final (id, millis) = r;
         Timer(Duration(milliseconds: millis), () => fireTimer(id: id));
@@ -36,12 +36,12 @@ void main() {
     );
   });
 
-  // The installed callback holds a StreamSink, and an open stream pins the
+  // The callback that is set holds a StreamSink, and an open stream pins the
   // isolate — an app wants exactly that for its whole
   // life, and a suite that never released it would pass every test and then
   // hang instead of exiting. `dart test` force-exits and hides this; the Bazel
   // runner waits, and is how it was found.
-  tearDownAll(uninstallTimer);
+  tearDownAll(clearTimer);
 
   test('sleep waits, then answers', () async {
     final watch = Stopwatch()..start();

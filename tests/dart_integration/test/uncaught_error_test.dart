@@ -185,7 +185,7 @@ void main() {
   }, testOn: 'vm');
 
   test('an uncaught Rust panic names the member it came out of', () async {
-    // A panic is not an `Err`, and `frustrate::panic::register` is what
+    // A panic is not an `Err`, and `frustrate::panic::set_listener` is what
     // carries its location and backtrace on the Rust side. What this row
     // holds is the other half: the Dart-side report is attributable too,
     // rather than a bare message.

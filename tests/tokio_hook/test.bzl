@@ -30,7 +30,7 @@ with_dev_tokio_test = rule(
     attrs = {
         # The whole test graph is built under the transition, not only the ext
         # crate: a transitioned edge to `//ext/tokio:frustrate_tokio` alone would
-        # pull in a second copy of the runtime, with its own registration slot.
+        # pull in a second copy of the runtime, with its own context slot.
         "test": attr.label(cfg = _set_tokio, executable = True, mandatory = True),
     },
     test = True,

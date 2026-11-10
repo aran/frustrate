@@ -459,8 +459,8 @@ trait's interface cannot cross.
 frustrate's executor has no reactor, so a tokio leaf (`sleep`, a socket)
 panics unless the executor is lent tokio's context. Two ways, both native-only:
 
-- Register the runtime with `frustrate_tokio::register(handle)` (`ext/tokio`),
-  or `frustrate::runtime::register` for another runtime, and `.await` the leaf
+- Set the runtime with `frustrate_tokio::set_runtime(handle)` (`ext/tokio`),
+  or `frustrate::runtime::set_context` for another runtime, and `.await` the leaf
   in a bridged `async fn`. Cancelling the call drops the future.
 - Call your runtime's `block_on` inside a plain `#[bridge]` fn, which Dart
   still sees as a `Future`. Each call in flight parks a pool thread, and
@@ -473,7 +473,7 @@ fail there at run time.
 ### Reporting failures
 
 A Rust panic's location and backtrace reach only a Rust-side listener,
-`frustrate::panic::register`. Anything Dart did not catch goes to the zone that
+`frustrate::panic::set_listener`. Anything Dart did not catch goes to the zone that
 issued the call (or, for a panic no call waits on, the zone its actor was built
 in or frustrate was installed in), which is what `runZonedGuarded` and
 Flutter's `PlatformDispatcher.onError` see. A returned `Err` is a declared
@@ -481,7 +481,7 @@ outcome, not a failure to report. Generated bindings rethrow with their own
 stack; a `DelegatingRuntime` (`package:frustrate/intercept.dart`) that captures
 the stack when a call is issued gives reports the app's call site.
 
-`frustrate::carry::register` carries a per-thread value of yours (the cause a
+`frustrate::carry::set` carries a per-thread value of yours (the cause a
 write is attributed to, say) from the thread that queues bridge work to every
 thread that runs it (`runtime/rust/src/carry.rs`).
 
@@ -854,8 +854,8 @@ check covers, these stalls are not caught:
 - **`thread::park` waiting for an `unpark` on single-threaded web**, an actor's
   Worker included, spins forever under stock std, and panics under a custom std
   without `atomics`.
-- **A registered async-runtime context that blocks** stalls the executor
-  silently when the registration only enters the context; `ext/tokio`'s makes
+- **An async-runtime context that blocks** stalls the executor
+  silently when the context that is set only enters it; `ext/tokio`'s makes
   tokio panic instead.
 - **`send_wrapper::SendWrapper`** in a dependency turns the compile error that
   keeps JS state off the threaded-web pool into a run-time panic.

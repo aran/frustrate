@@ -25,7 +25,7 @@
 //! OS-specific code in the runtime (`getentropy`, `BCryptGenRandom`), to
 //! reimplement what the caller's existing crate already does correctly. So
 //! this module is compile-absent off wasm, in the same spirit as
-//! [`crate::runtime::register`] being absent *on* it: the gap is where the
+//! [`crate::runtime::set_context`] being absent *on* it: the gap is where the
 //! platform actually differs.
 //!
 //! A caller who wants `getrandom` (and so `rand`, `uuid`, `ahash`, `ring`)

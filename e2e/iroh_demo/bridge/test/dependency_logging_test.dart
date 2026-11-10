@@ -54,7 +54,7 @@ Future<void> main() async {
   final logSubscription = logs.stream.listen(records.add);
   // `debug` and not `info`: iroh's bind path is instrumented at debug, and an
   // `info`-only run would assert nothing while looking like it passed.
-  installLogging(maxLevel: 'debug', sink: logs);
+  setLogSink(maxLevel: 'debug', sink: logs);
 
   // Bind an endpoint, which is the loudest thing this app can do without a
   // peer. `Preset.minimal` with no relay is the honestly-offline cell of
@@ -108,9 +108,9 @@ Future<void> main() async {
       '${example.message}');
 
   // Release in the order the runtime documents: the logger outlives the node
-  // that provoked it, so uninstalling is what ends the stream.
+  // that provoked it, so clearing the sink is what ends the stream.
   node.dispose();
-  uninstallLogging();
+  clearLogSink();
   await eventSubscription.cancel();
   await logSubscription.cancel();
   await events.close();

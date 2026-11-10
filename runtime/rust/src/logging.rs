@@ -1,7 +1,7 @@
 //! Rust's `log` facade → a Dart `Stream`.
 //!
 //! One `log::Log` implementation, whose sink is a [`Hook`] an embedder
-//! registers into. A `log::info!` becomes an item on a `StreamController<T>`
+//! sets. A `log::info!` becomes an item on a `StreamController<T>`
 //! the Dart caller owns — including one raised by a dependency that has never
 //! heard of frustrate, which is the case this module exists for.
 //!
@@ -13,7 +13,7 @@
 //! dependency — at the hub its own crates use, and this runtime compiles
 //! against that one. Nothing here is nameable as a `log` dependency, so a
 //! bridge crate takes `log` from its own hub, and a mismatch between that one
-//! and this runtime's makes [`install`]'s signature unsatisfiable, naming both
+//! and this runtime's makes [`set_sink`]'s signature unsatisfiable, naming both
 //! hubs. What that error does *not* cover is a **second** hub linked into the
 //! same bridge: its crates log into a `log` this never installed into, so
 //! their records go nowhere and [`dropped`] does not count them.
@@ -26,11 +26,11 @@
 //! #[bridge]
 //! pub struct LogRecord { pub level: String, pub target: String, pub message: String }
 //!
-//! // Sync, because installing is a registration and not work — an async
+//! // Sync, because setting the sink is a store and not work — an async
 //! // member would be dispatched to a pool worker to do the same two stores.
 //! #[bridge(sync)]
-//! pub fn install_logging(sink: StreamSink<LogRecord>) -> Result<(), String> {
-//!     frustrate::logging::install(log::LevelFilter::Info, sink, |r| LogRecord {
+//! pub fn set_log_sink(sink: StreamSink<LogRecord>) -> Result<(), String> {
+//!     frustrate::logging::set_sink(log::LevelFilter::Info, sink, |r| LogRecord {
 //!         level: r.level().to_string(),
 //!         target: r.target().to_string(),
 //!         message: r.args().to_string(),
@@ -42,7 +42,7 @@
 //! ```dart
 //! final logs = StreamController<LogRecord>();
 //! logs.stream.listen((r) => debugPrint('[${r.level}] ${r.target}: ${r.message}'));
-//! installLogging(logs);
+//! setLogSink(logs);
 //! ```
 //!
 //! # Why this is in the runtime and not twenty lines in the user's crate
@@ -51,8 +51,8 @@
 //! the short version is wrong in one specific way that only shows up on the
 //! second run. `log::set_logger` succeeds **once per process** and takes a
 //! `&'static dyn Log`, but a Flutter hot restart re-runs Dart `main()` in the
-//! same native process — the same fact [`crate::runtime::register`] exists to
-//! accommodate. So the naive version either panics on the second install or
+//! same native process — the same fact [`crate::runtime::set_context`] exists to
+//! accommodate. So the naive version either panics on the second call or
 //! keeps its first sink, which now points at a dead isolate, and every record
 //! after the restart vanishes. The correct version needs a *replaceable* slot
 //! behind a non-parking lock, with the displaced sink dropped outside the
@@ -71,7 +71,7 @@
 //!   unwind through here; a leaked `true` would make that thread go dark for
 //!   the life of the process.
 //! * **No lock is held while user code runs.** [`Hook::get`] clones the
-//!   registration *out* of its critical section (hook.rs), and
+//!   sink *out* of its critical section (hook.rs), and
 //!   [`StreamSink::add`]'s path takes no lock at all: two atomic loads, the
 //!   generated encoder, and `post::deliver` — a registry read and
 //!   `Dart_PostCObject` natively, a direct import call on web.
@@ -106,7 +106,7 @@ use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
-/// The registered forwarder: map one record and post it, reporting whether the
+/// The forwarder that is set: map one record and post it, reporting whether the
 /// Dart side took it.
 ///
 /// Type-erased over the item type on purpose. The record type is the *user's*
@@ -126,11 +126,11 @@ static HOOK: Hook<Emit> = Hook::new();
 /// distinct addresses for distinct ZST statics, so that comparison can report
 /// "ours" when nothing is installed at all.
 ///
-/// Two concurrent *first* [`install`]s are not a supported sequence — the loser
+/// Two concurrent *first* [`set_sink`]s are not a supported sequence — the loser
 /// would be told a foreign logger holds the slot, which is misleading rather
 /// than unsound. Only the first is restricted: once this is `true`, an
-/// [`install`] from any thread is safe, which is what the per-actor recipe
-/// relies on natively (the actor's install runs on the actor's own thread).
+/// [`set_sink`] from any thread is safe, which is what the per-actor recipe
+/// relies on natively (the actor's `set_sink` runs on the actor's own thread).
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 
 /// Records accepted and not delivered. Monotonic for the life of the process,
@@ -186,18 +186,18 @@ impl Log for Forwarder {
 
     fn log(&self, record: &Record) {
         // Declared first, so it is dropped **last**. `emit` below drops before
-        // it, and dropping the last clone of the registration runs the user's
+        // it, and dropping the last clone of the sink's closure runs the user's
         // closure destructor — which drops the `StreamSink`, which posts the
         // stream's end event. That must happen while this thread is still
         // marked in-logger: a `Drop` that logs would otherwise recurse into a
-        // registration that is halfway gone.
+        // sink that is halfway gone.
         let Some(_guard) = Reentrancy::enter() else {
             DROPPED.fetch_add(1, Ordering::Relaxed);
             return;
         };
         let Some(emit) = HOOK.get() else {
-            // No registration. Reachable in two ways, both worth counting: a
-            // record racing an `uninstall`, and every record after the logger
+            // No sink. Reachable in two ways, both worth counting: a
+            // record racing a `clear_sink`, and every record after the logger
             // retired itself below — which is exactly how "the consumer went
             // away and you have been logging into nothing since" becomes a
             // number instead of silence.
@@ -210,8 +210,8 @@ impl Log for Forwarder {
             // every later record pays `map` and a full encode to be refused.
             //
             // `clear_if`, not `clear`: this thread may have been holding
-            // `emit` across a hot restart that already installed a live
-            // registration, and clearing *that* would take the app's logging
+            // `emit` across a hot restart that already set a live
+            // sink, and clearing *that* would take the app's logging
             // away for good. The max level is deliberately left alone for the
             // same reason — a `set_max_level(Off)` here would land after the
             // restart's `set_max_level(Info)` and silently filter everything.
@@ -236,7 +236,7 @@ pub struct ForeignLogger;
 impl std::fmt::Display for ForeignLogger {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(
-            "frustrate::logging::install: another logger (env_logger, \
+            "frustrate::logging::set_sink: another logger (env_logger, \
              fern, …) already called log::set_logger, and log allows that \
              exactly once per process. Remove the other logger's init, or \
              forward to this sink from inside it",
@@ -248,7 +248,7 @@ impl std::error::Error for ForeignLogger {}
 
 /// Take `log`'s global slot, unless somebody else already has it.
 ///
-/// Split out from [`install`] so the decision can be tested: the real
+/// Split out from [`set_sink`] so the decision can be tested: the real
 /// `log::set_logger` succeeds once per *process*, and `cargo test` is one
 /// process, so a test of the foreign-logger branch cannot use it without
 /// wrecking every other test in the binary.
@@ -270,40 +270,40 @@ fn claim(installed: &AtomicBool, set: impl FnOnce() -> bool) -> Result<(), Forei
 /// the `log!` macros check it before they build a `Record` at all, so a level
 /// this call excludes costs nothing anywhere. It is a parameter rather than
 /// something this function picks because `log`'s default is
-/// [`LevelFilter::Off`] — an install that did not set it would deliver
-/// nothing, and an install that set it unconditionally to `Trace` would
+/// [`LevelFilter::Off`] — a call that did not set it would deliver
+/// nothing, and a call that set it unconditionally to `Trace` would
 /// silently undo a caller's earlier `set_max_level`.
 ///
 /// # Calling it again
 ///
 /// Legal and load-bearing. Flutter hot restart re-runs Dart `main()` in the
 /// same native process, so the second call arrives with the first sink
-/// pointing at an isolate that no longer exists. The old registration is
+/// pointing at an isolate that no longer exists. The old sink is
 /// displaced and dropped (outside the slot's critical section — see [`Hook`]),
 /// which drops the old sink, which posts its stream's end event: the previous
 /// Dart `StreamController` sees `onDone` and the new one starts receiving.
 ///
-/// # Where it is installed
+/// # Where it applies
 ///
 /// The logger is a process global on native and an **instance** global on
 /// web, because `log`'s slot is a `static` and a web actor is a separate wasm
-/// instance with its own memory. So one install covers every thread — pool
+/// instance with its own memory. So one call covers every thread — pool
 /// workers, actor threads — on native, and covers only the page instance on
-/// web. An actor whose code logs needs its own install, reached through a
+/// web. An actor whose code logs needs its own `set_sink`, reached through a
 /// method on the actor.
 ///
-/// The same source therefore behaves differently. Natively, installing from an
+/// The same source therefore behaves differently. Natively, setting it from an
 /// actor replaces the process logger and closes the previous stream, and
-/// disposing the actor leaves its stream open until [`uninstall`]. On web the
-/// installs are independent, and disposing the actor fails its stream with a
+/// disposing the actor leaves its stream open until [`clear_sink`]. On web the
+/// calls are independent, and disposing the actor fails its stream with a
 /// `StateError`. A portable app feeds every logging stream into one handler,
 /// treats `onDone` as benign, and cancels an actor's subscription before
 /// disposing it.
 ///
-/// A registration holds its sink, so on native it pins the isolate the way every
+/// A set sink is held, so on native it pins the isolate the way every
 /// open stream does — for an app that is the point, and for anything with an
-/// end it is why [`uninstall`] exists. A test suite that installs and never
-/// releases passes and then does not exit; under Bazel that is a TIMEOUT with
+/// end it is why [`clear_sink`] exists. A test suite that sets one and never
+/// clears it passes and then does not exit; under Bazel that is a TIMEOUT with
 /// an empty log, which looks like a hang in the code under test and is not.
 ///
 /// # Errors
@@ -312,7 +312,7 @@ fn claim(installed: &AtomicBool, set: impl FnOnce() -> bool) -> Result<(), Forei
 /// Nothing is installed in that case and `max_level` is not touched, so the
 /// sink is dropped on the way out and the Dart stream closes cleanly rather
 /// than hanging open on a logger that will never write to it.
-pub fn install<T, F>(
+pub fn set_sink<T, F>(
     max_level: LevelFilter,
     sink: StreamSink<T>,
     map: F,
@@ -331,7 +331,7 @@ where
     Ok(())
 }
 
-/// Stop forwarding: drop the registration and set `log`'s max level to
+/// Stop forwarding: drop the sink and set `log`'s max level to
 /// [`LevelFilter::Off`], so the macros stop building records.
 ///
 /// The Rust-side release lever. Dart's is cancelling the subscription, which
@@ -339,15 +339,15 @@ where
 /// returns false and the logger retires itself — so a cancelled stream leaves
 /// exactly one record's worth of work behind, and one counted drop.
 ///
-/// Dropping the registration drops the sink, which posts the stream's end
+/// Dropping it drops the sink, which posts the stream's end
 /// event, so the Dart consumer sees `onDone`. `log::set_logger` is not undone
-/// (there is no such call): a later [`install`] re-registers into the same slot
+/// (there is no such call): a later [`set_sink`] sets the same slot again
 /// and works.
 ///
-/// Not concurrent-safe against [`install`]: the two are lifecycle calls, made
-/// in order. (Two *installs* racing is fine after the first one; see
+/// Not concurrent-safe against [`set_sink`]: the two are lifecycle calls, made
+/// in order. (Two `set_sink`s racing is fine after the first one; see
 /// [`INSTALLED`].)
-pub fn uninstall() {
+pub fn clear_sink() {
     log::set_max_level(LevelFilter::Off);
     HOOK.clear();
 }
@@ -368,11 +368,11 @@ mod tests {
 
     /// `log`'s logger, this module's `HOOK`, and `DROPPED` are all process
     /// globals, and `cargo test` runs this binary's tests in parallel threads.
-    /// Every test that installs takes this first.
+    /// Every test that sets a sink takes this first.
     ///
     /// Crate-wide ([`crate::serialize_globals`]) rather than local to this
     /// module, because the interference is not only between logging tests: any
-    /// module that logs writes into whichever sink is installed, and
+    /// module that logs writes into whichever sink is set, and
     /// `crate::resident` does.
     fn serialize() -> std::sync::MutexGuard<'static, ()> {
         crate::serialize_globals()
@@ -398,7 +398,7 @@ mod tests {
     fn records_reach_the_sink_and_the_level_filter_applies() {
         let _guard = serialize();
         let (sink, probe) = testing::stream::<(String, String)>();
-        install(LevelFilter::Info, sink, level_and_message).expect("no foreign logger");
+        set_sink(LevelFilter::Info, sink, level_and_message).expect("no foreign logger");
 
         log::info!("hello");
         log::debug!("filtered out by max_level");
@@ -411,7 +411,7 @@ mod tests {
                 ("ERROR".to_string(), "boom".to_string()),
             ]
         );
-        uninstall();
+        clear_sink();
     }
 
     /// The property the whole re-entrancy guard exists for, asked by *doing*
@@ -421,7 +421,7 @@ mod tests {
     fn a_record_logged_from_inside_the_mapper_is_dropped_not_recursed() {
         let _guard = serialize();
         let (sink, probe) = testing::stream::<(String, String)>();
-        install(LevelFilter::Trace, sink, |record| {
+        set_sink(LevelFilter::Trace, sink, |record| {
             // Exactly what a `Display` impl that logs does to its formatter.
             log::warn!("from inside the mapper");
             level_and_message(record)
@@ -441,7 +441,7 @@ mod tests {
             1,
             "the re-entrant record must be counted, not delivered and not recursed"
         );
-        uninstall();
+        clear_sink();
     }
 
     /// A panic out of `map` must not leave the thread permanently marked
@@ -458,7 +458,7 @@ mod tests {
         // a `PanicReport::location` sees `None` and fails.
         let _hook = crate::post::test_lock();
         let (sink, probe) = testing::stream::<(String, String)>();
-        install(LevelFilter::Trace, sink, |record| {
+        set_sink(LevelFilter::Trace, sink, |record| {
             if record.args().to_string() == "explode" {
                 panic!("the mapper panicked");
             }
@@ -478,21 +478,21 @@ mod tests {
             vec![("INFO".to_string(), "after".to_string())],
             "the thread must still be delivering after a mapper panic"
         );
-        uninstall();
+        clear_sink();
     }
 
     /// The hot-restart contract, at the level this module owns it: a second
-    /// install replaces the first, and the first stream is closed rather than
+    /// `set_sink` replaces the first, and the first stream is closed rather than
     /// abandoned open.
     #[test]
-    fn re_installing_closes_the_previous_stream_and_redirects() {
+    fn setting_again_closes_the_previous_stream_and_redirects() {
         let _guard = serialize();
         let (first_sink, first) = testing::stream::<(String, String)>();
-        install(LevelFilter::Trace, first_sink, level_and_message).expect("no foreign logger");
+        set_sink(LevelFilter::Trace, first_sink, level_and_message).expect("no foreign logger");
         log::info!("before");
 
         let (second_sink, second) = testing::stream::<(String, String)>();
-        install(LevelFilter::Trace, second_sink, level_and_message).expect("still ours");
+        set_sink(LevelFilter::Trace, second_sink, level_and_message).expect("still ours");
         log::info!("after");
 
         assert_eq!(drain(&first), vec![("INFO".to_string(), "before".to_string())]);
@@ -502,7 +502,7 @@ mod tests {
             "the displaced sink must be dropped, which ends its Dart stream"
         );
         assert_eq!(drain(&second), vec![("INFO".to_string(), "after".to_string())]);
-        uninstall();
+        clear_sink();
     }
 
     /// A cancelled subscription costs one more record, then nothing: `add`
@@ -512,7 +512,7 @@ mod tests {
     fn a_cancelled_stream_retires_the_logger() {
         let _guard = serialize();
         let (sink, probe) = testing::stream::<(String, String)>();
-        install(LevelFilter::Trace, sink, level_and_message).expect("no foreign logger");
+        set_sink(LevelFilter::Trace, sink, level_and_message).expect("no foreign logger");
         probe.cancel();
 
         let before = dropped();
@@ -521,23 +521,23 @@ mod tests {
         assert_eq!(dropped() - before, 2);
         assert!(drain(&probe).is_empty());
 
-        // Retired, not merely refusing: a fresh install works, which it would
-        // not if the slot still held the dead registration.
+        // Retired, not merely refusing: a fresh `set_sink` works, which it would
+        // not if the slot still held the dead sink.
         let (next_sink, next) = testing::stream::<(String, String)>();
-        install(LevelFilter::Trace, next_sink, level_and_message).expect("still ours");
+        set_sink(LevelFilter::Trace, next_sink, level_and_message).expect("still ours");
         log::info!("live again");
         assert_eq!(drain(&next), vec![("INFO".to_string(), "live again".to_string())]);
-        uninstall();
+        clear_sink();
     }
 
-    /// After `uninstall`, `log`'s max level is `Off`, so the macros short
+    /// After `clear_sink`, `log`'s max level is `Off`, so the macros short
     /// circuit before a record is even built.
     #[test]
-    fn uninstall_closes_the_stream_and_stops_the_macros() {
+    fn clear_sink_closes_the_stream_and_stops_the_macros() {
         let _guard = serialize();
         let (sink, probe) = testing::stream::<(String, String)>();
-        install(LevelFilter::Trace, sink, level_and_message).expect("no foreign logger");
-        uninstall();
+        set_sink(LevelFilter::Trace, sink, level_and_message).expect("no foreign logger");
+        clear_sink();
 
         assert_eq!(probe.terminal(), Some(Terminal::Closed));
         assert_eq!(log::max_level(), LevelFilter::Off);
@@ -570,7 +570,7 @@ mod tests {
         assert_eq!(
             claim(&installed, || panic!("set_logger must not be called twice")),
             Ok(()),
-            "once it is ours, a re-install skips log::set_logger entirely"
+            "once it is ours, a second set_sink skips log::set_logger entirely"
         );
     }
 }

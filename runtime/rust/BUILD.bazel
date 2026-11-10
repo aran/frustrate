@@ -132,7 +132,7 @@ cc_library(name = "no_unwinder")
 # dependencies raise — the silent failure the charter forbids. With nothing to
 # name, a bridge crate must take `log` from its own hub, and then a missing (or
 # wrong) flag is rustc's E0308: "two different versions of crate `log` are being
-# used", naming both hubs' paths, at the `frustrate::logging::install` call.
+# used", naming both hubs' paths, at the `frustrate::logging::set_sink` call.
 # Setting a build setting from the command line does not consult visibility, so
 # a dependent module can still steer it.
 #

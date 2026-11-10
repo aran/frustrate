@@ -4,26 +4,26 @@
 //!
 //! The cooperative executor ([`crate::executor`]) has no reactor: it re-polls
 //! a task only when something arranged a wake, and nothing here connects that
-//! to a foreign runtime's reactor. A registration is what does.
+//! to a foreign runtime's reactor. Setting a context is what does.
 //!
 //! ```ignore
-//! // once, at init — see `register` for the hot-restart contract
-//! frustrate::runtime::register(|poll| {
+//! // once, at init — see `set_context` for the hot-restart contract
+//! frustrate::runtime::set_context(|poll| {
 //!     // enter your runtime's thread-local context...
 //!     poll.run();   // ...for the duration of one poll
 //! });
 //! ```
 //!
-//! For tokio, use `ext/tokio` (`frustrate_tokio::register`) rather than
-//! writing the wrapper: see "The tokio way" on [`register`].
+//! For tokio, use `ext/tokio` (`frustrate_tokio::set_runtime`) rather than
+//! writing the wrapper: see "The tokio way" on [`set_context`].
 //!
-//! [`register`] is compile-absent on wasm; `enter` is the identity there, so
+//! [`set_context`] is compile-absent on wasm; `enter` is the identity there, so
 //! the executor's drive loop stays one source line on every config.
 
 #[cfg(not(target_family = "wasm"))]
 pub use native::PollOnce;
 
-/// The registered wrapper. `Fn`, not `FnOnce`: it runs around **every** poll.
+/// The wrapper that is set. `Fn`, not `FnOnce`: it runs around **every** poll.
 #[cfg(not(target_family = "wasm"))]
 type Context = dyn for<'a> Fn(PollOnce<'a>) + Send + Sync + 'static;
 
@@ -33,14 +33,14 @@ mod native {
     use crate::hook::Hook;
     use std::sync::Arc;
 
-    /// The poll a registered context is asked to wrap. Call [`run`](Self::run)
+    /// The poll a context that is set is asked to wrap. Call [`run`](Self::run)
     /// inside your runtime's guard.
     ///
     /// It consumes `self`, so "polled twice" is a **compile** error rather
     /// than a contract you could break at runtime:
     ///
     /// ```compile_fail,E0382
-    /// frustrate::runtime::register(|poll| {
+    /// frustrate::runtime::set_context(|poll| {
     ///     poll.run();
     ///     poll.run();   // error[E0382]: use of moved value
     /// });
@@ -53,7 +53,7 @@ mod native {
     ///
     /// The other half — dropping it without running it — cannot be made a
     /// compile error (a `Drop` type can always be dropped), so it is a loud
-    /// panic; see [`register`](super::register).
+    /// panic; see [`set_context`](super::set_context).
     pub struct PollOnce<'a>(&'a mut dyn FnMut());
 
     impl PollOnce<'_> {
@@ -66,26 +66,25 @@ mod native {
     /// The one slot.
     ///
     /// A [`Hook`] rather than a slot spelled out here, and that module carries
-    /// the mechanism this shares with every other hook an embedder registers
-    /// into: the presence flag that keeps the empty case to one acquire load
+    /// the mechanism this shares with every other hook an embedder sets: the presence flag that keeps the empty case to one acquire load
     /// per poll rather than a lock, and the rule that a displaced value —
     /// here, the caller's closure and whatever it captured — dies outside the
     /// critical section.
     ///
-    /// What is this hook's own, and stated on [`register`] under
-    /// "Re-registration", is *why* the slot must be replaceable at all rather
+    /// What is this hook's own, and stated on [`set_context`] under
+    /// "Setting it again", is *why* the slot must be replaceable at all rather
     /// than a `OnceLock`: Flutter hot restart re-runs Dart `main()` in this
     /// same native process.
     static CONTEXT: Hook<Context> = Hook::new();
 
-    /// Register the process's async-runtime context: a wrapper that installs
+    /// Set the process's async-runtime context: a wrapper that installs
     /// the runtime's thread-local context, calls `poll`, and restores it.
     ///
     /// ```ignore
-    /// // Native only — `register` does not exist on wasm, so a bridge that
+    /// // Native only — `set_context` does not exist on wasm, so a bridge that
     /// // also builds for web gates both this call and the runtime dependency.
     /// #[cfg(not(target_family = "wasm"))]
-    /// frustrate::runtime::register(|poll| {
+    /// frustrate::runtime::set_context(|poll| {
     ///     let _guard = enter_my_runtime();
     ///     poll.run();
     /// });
@@ -93,7 +92,7 @@ mod native {
     ///
     /// # The tokio way
     ///
-    /// For tokio, call `frustrate_tokio::register(handle)` from `ext/tokio`
+    /// For tokio, call `frustrate_tokio::set_runtime(handle)` from `ext/tokio`
     /// instead of writing this wrapper. `Handle::enter()` sets tokio's context
     /// but does not mark the thread as inside a runtime, so a `block_on` or
     /// `blocking_recv` in a bridged `async fn` blocks the executor's drain
@@ -132,7 +131,7 @@ mod native {
     ///
     /// | mistake | what happens |
     /// |---|---|
-    /// | nothing registered | panic at leaf construction, "there is no reactor running" — attributed to the call |
+    /// | nothing set | panic at leaf construction, "there is no reactor running" — attributed to the call |
     /// | handle to a dropped `Runtime` | panic, "A Tokio 1.x context was found, but it is being shutdown" |
     /// | wrapper never runs the poll | panic naming the wrapper (above) |
     /// | wrapper runs the poll twice | compile error — `PollOnce::run` consumes |
@@ -144,7 +143,7 @@ mod native {
     /// has not been woken", which is exactly what a task legitimately awaiting
     /// Dart looks like, and asking tokio would mean depending on tokio. For
     /// `block_on`, frustrate cannot see the body, but tokio can: `ext/tokio`
-    /// registers a wrapper that makes tokio refuse it. Both are pinned by
+    /// sets a wrapper that makes tokio refuse it. Both are pinned by
     /// tests (`tests/tokio_hook`), in the same spirit as pool.rs's note on what worker
     /// replenishment cannot make loud.
     ///
@@ -154,7 +153,7 @@ mod native {
     /// `async fn` bodies and actor [`Deferred`](crate::Deferred) completions.
     /// It does *not* wrap a plain `#[bridge] fn` body running on the pool
     /// (`pool::spawn_call`), so the bring-your-own-`block_on` pattern is
-    /// untouched by a registration.
+    /// untouched by setting a context.
     ///
     /// The corollary is a trap worth naming: calling your runtime's own
     /// `block_on` *inside a bridged `async fn`* is not rejected by a wrapper
@@ -166,30 +165,30 @@ mod native {
     /// arrived at silently. `.await` the leaf; do not `block_on` it. (See "The
     /// tokio way": `ext/tokio` makes tokio refuse it.)
     ///
-    /// # Re-registration
+    /// # Setting it again
     ///
-    /// Last registration wins. Flutter hot restart re-runs Dart `main()` in
-    /// this same native process while Rust statics persist, so `register`
+    /// The last one set wins. Flutter hot restart re-runs Dart `main()` in
+    /// this same native process while Rust statics persist, so `set_context`
     /// *will* be called again in a live process. And a
     /// handle to the dropped previous `Runtime` does not go quiet — it panics
     /// "A Tokio 1.x context was found, but it is being shutdown" on every
     /// poll. So:
     ///
-    /// - **Panic on re-registration** would break the hot-restart loop
+    /// - **Panic on a second call** would break the hot-restart loop
     ///   outright, and this project's Dart side already refuses that stance
     ///   (`runtime_core.dart`: init is an *ensure*; throwing "buys nothing and
     ///   breaks working code").
     /// - **Keep-first** would pin the *dead* handle for the life of the
     ///   process, turning every async call after a restart into that shutdown
-    ///   panic — with the app's fresh, correct registration sitting there
+    ///   panic — with the app's fresh, correct context sitting there
     ///   ignored.
     /// - **Last-wins** makes the restart simply work, and nothing is lost
     ///   silently: a poll already inside the old wrapper keeps it (the slot
     ///   holds an `Arc`), and the wrapper being replaced is the one the caller
     ///   is deliberately replacing.
     ///
-    /// Registration is process-global and has no per-`fn` selection.
-    pub fn register(context: impl for<'a> Fn(PollOnce<'a>) + Send + Sync + 'static) {
+    /// The context is process-global and has no per-`fn` selection.
+    pub fn set_context(context: impl for<'a> Fn(PollOnce<'a>) + Send + Sync + 'static) {
         // The wrapper being replaced is dropped outside the slot's critical
         // section, by `Hook::set`. That matters most on exactly the path this
         // last-wins slot exists for: on a hot restart the displaced closure's
@@ -198,11 +197,11 @@ mod native {
         CONTEXT.set(Arc::new(context));
     }
 
-    /// Drop the registration; polls revert to plain cooperative behaviour.
+    /// Clear the context; polls revert to plain cooperative behaviour.
     ///
-    /// The counterpart of [`register`] for a runtime being torn down. Leaving
-    /// a handle to a dropped `Runtime` registered is not silent — tokio panics
-    /// "…being shutdown" on every poll (see the table on `register`) — so this
+    /// The counterpart of [`set_context`] for a runtime being torn down. Leaving
+    /// a handle to a dropped `Runtime` set is not silent — tokio panics
+    /// "…being shutdown" on every poll (see the table on `set_context`) — so this
     /// is about choosing *which* loud failure a task that outlives the runtime
     /// gets: "there is no reactor running" at its own construction, rather
     /// than a shutdown panic from a handle nobody meant to keep.
@@ -210,11 +209,11 @@ mod native {
     /// A poll already running under the old wrapper keeps it (`Arc`), and the
     /// slot's lock is never held across a poll, so this is safe to call from
     /// anywhere — including a task's own body.
-    pub fn unregister() {
+    pub fn clear_context() {
         CONTEXT.clear();
     }
 
-    /// Run `poll` under the registered context, if there is one.
+    /// Run `poll` under the context that is set, if there is one.
     ///
     /// The caller wraps the whole of `Runnable::run()`, not "the poll", and
     /// the difference is load-bearing. `run()` is also where async-task drops
@@ -228,7 +227,7 @@ mod native {
     /// it owns its `scheduler::Handle` — so this is about user teardown, not
     /// about tokio's internals).
     pub(crate) fn enter<R>(poll: impl FnOnce() -> R) -> R {
-        // One acquire load when nothing is registered, which is the common
+        // One acquire load when nothing is set, which is the common
         // case on every drain of every pool worker; the `Arc` is cloned out of
         // the slot's section, so the poll below runs with no lock held. Both
         // properties belong to `Hook`, and are tested there.
@@ -258,7 +257,7 @@ mod native {
         // and blaming it for "not polling" sends the reader to the wrong line.
         if pending.0.is_none() {
             panic!(
-                "frustrate: the registered async-runtime context ran the poll \
+                "frustrate: the async-runtime context ran the poll \
                  and then swallowed its result — it caught the unwind from a \
                  panicking future (a `catch_unwind` inside the wrapper?) and \
                  returned normally. The panic that was swallowed is gone; this \
@@ -268,7 +267,7 @@ mod native {
             );
         }
         panic!(
-            "frustrate: the registered async-runtime context returned without \
+            "frustrate: the async-runtime context returned without \
              calling `PollOnce::run`. The task's call would never be answered \
              and its Dart future never settle. The task is leaked rather than \
              dropped — see runtime.rs — so this panic is the whole cost; fix \
@@ -279,7 +278,7 @@ mod native {
     /// A poll that has not been run yet, which must **never be dropped**.
     ///
     /// It owns the task's `Runnable`, and dropping that drops the future — on
-    /// a thread where the registered wrapper has already returned or unwound,
+    /// a thread where the wrapper that is set has already returned or unwound,
     /// so the runtime's context is gone. A teardown that reaches for the
     /// runtime then panics inside a destructor, and async-task wraps the
     /// future's drop in `abort_on_panic` (async-task 4.7.1 `raw.rs:447-449`):
@@ -311,7 +310,7 @@ mod native {
 }
 
 #[cfg(not(target_family = "wasm"))]
-pub use native::{register, unregister};
+pub use native::{set_context, clear_context};
 
 #[cfg(not(target_family = "wasm"))]
 pub(crate) use native::enter;
@@ -319,7 +318,7 @@ pub(crate) use native::enter;
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) use native::test_lock;
 
-/// No context to lend on wasm: [`register`](self) is compile-absent there
+/// No context to lend on wasm: [`set_context`](self) is compile-absent there
 /// (there is no tokio reactor to enter), so this is the identity and the
 /// executor's core stays one source line on every config — the same
 /// injected-seam discipline as `executor::arrange_drain`, not a `cfg` inside
@@ -390,13 +389,13 @@ pub(crate) fn enter<R>(poll: impl FnOnce() -> R) -> R {
 ///   long as Dart can *compute* the answer; a `locked` acquisition; a stream
 ///   send;
 /// - on **native only**, a tokio/async-std leaf, once the embedder has lent
-///   its context with [`register`](self);
+///   its context with [`set_context`](self);
 /// - any future woken by a waker your own code holds, from any thread.
 pub fn spawn(future: impl std::future::Future<Output = ()> + Send + 'static) {
     crate::executor::spawn_detached(future);
 }
 
-/// The installed timer: what [`sleep`] awaits.
+/// The timer that is set: what [`sleep`] awaits.
 type Timer = dyn Fn(std::time::Duration) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = ()> + Send>,
     > + Send
@@ -405,13 +404,13 @@ type Timer = dyn Fn(std::time::Duration) -> std::pin::Pin<
 
 static TIMER: crate::hook::Hook<Timer> = crate::hook::Hook::new();
 
-/// Install the process's timer — what [`sleep`] is.
+/// Set the process's timer — what [`sleep`] is.
 ///
 /// A timer is a **clock**, and frustrate has none: the executor is a poll loop
 /// with no reactor, and on `wasm32-unknown-unknown` the module has no host to
 /// ask. So this is a slot rather than an implementation, filled from wherever
 /// the answer actually lives — the same shape as
-/// [`crate::logging::install`] and [`crate::panic::register`], and installed
+/// [`crate::logging::set_sink`] and [`crate::panic::set_listener`], and set
 /// the same way, from a `#[bridge(sync)]` member your app calls once at
 /// startup.
 ///
@@ -422,8 +421,8 @@ static TIMER: crate::hook::Hook<Timer> = crate::hook::Hook::new();
 ///
 /// ```ignore
 /// #[bridge(sync)]
-/// pub fn install_timer(f: DartFunction<i64, i64>) {
-///     frustrate::runtime::install_timer(move |d| {
+/// pub fn set_timer(f: DartFunction<i64, i64>) {
+///     frustrate::runtime::set_timer(move |d| {
 ///         let f = f.clone();
 ///         Box::pin(async move {
 ///             f.call_async(d.as_millis() as i64).await;
@@ -432,7 +431,7 @@ static TIMER: crate::hook::Hook<Timer> = crate::hook::Hook::new();
 /// }
 /// ```
 /// ```dart
-/// installTimer(f: (ms) async {
+/// setTimer(f: (ms) async {
 ///   await Future.delayed(Duration(milliseconds: ms));
 ///   return ms;
 /// });
@@ -451,11 +450,11 @@ static TIMER: crate::hook::Hook<Timer> = crate::hook::Hook::new();
 ///   throttle background tabs hard — for a backoff loop that is arguably
 ///   correct, and for a deadline it is not. Choose accordingly, per platform;
 ///   this slot is where that choice goes.
-/// - **Re-installing replaces.** Flutter hot restart re-runs Dart `main()` in
-///   the same native process, so the install runs again against a fresh
+/// - **Setting it again replaces.** Flutter hot restart re-runs Dart `main()` in
+///   the same native process, so the call runs again against a fresh
 ///   isolate; the displaced closure is dropped outside the slot's critical
-///   section, exactly as [`crate::panic::register`]'s is.
-pub fn install_timer(
+///   section, exactly as [`crate::panic::set_listener`]'s is.
+pub fn set_timer(
     timer: impl Fn(std::time::Duration) -> std::pin::Pin<
             Box<dyn std::future::Future<Output = ()> + Send>,
         > + Send
@@ -465,8 +464,8 @@ pub fn install_timer(
     TIMER.set(std::sync::Arc::new(timer));
 }
 
-/// Drop the timer registration. [`sleep`] panics again until one is installed.
-pub fn uninstall_timer() {
+/// Clear the timer. [`sleep`] panics again until one is set.
+pub fn clear_timer() {
     TIMER.clear();
 }
 
@@ -485,8 +484,8 @@ pub fn uninstall_timer() {
 ///
 /// ```ignore
 /// #[bridge(sync)]
-/// pub fn install_timer(requests: DartCallback<(i64, i64)>) {
-///     frustrate::runtime::install_dart_timer(requests);
+/// pub fn set_timer(requests: DartCallback<(i64, i64)>) {
+///     frustrate::runtime::set_dart_timer(requests);
 /// }
 ///
 /// #[bridge(sync)]
@@ -495,7 +494,7 @@ pub fn uninstall_timer() {
 /// }
 /// ```
 /// ```dart
-/// installTimer(requests: (r) {
+/// setTimer(requests: (r) {
 ///   final (id, millis) = r;
 ///   Timer(Duration(milliseconds: millis), () => fireTimer(id: id));
 /// });
@@ -509,10 +508,10 @@ pub fn uninstall_timer() {
 /// **This pins the isolate**, and for an app that is the point: the callback
 /// holds a `StreamSink`, an open stream keeps its isolate alive, and a process that can still be asked to sleep
 /// should not be exiting. Anything with an end — a test suite, a worker
-/// isolate you mean to retire — calls [`uninstall_timer`] when it is done, or
+/// isolate you mean to retire — calls [`clear_timer`] when it is done, or
 /// it runs to completion and then does not exit.
-pub fn install_dart_timer(requests: crate::DartCallback<(i64, i64)>) {
-    install_timer(move |d| {
+pub fn set_dart_timer(requests: crate::DartCallback<(i64, i64)>) {
+    set_timer(move |d| {
         let millis = i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
         let id = NEXT_TIMER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let slot = std::sync::Arc::new(crate::bounded::Lock::new(TimerSlot {
@@ -580,7 +579,7 @@ impl TimerRegistry {
 // here is a map of `Arc<Lock<TimerSlot>>`, whose own `Waker` is `Send`.
 unsafe impl Sync for TimerRegistry {}
 
-/// The future [`install_dart_timer`] hands back: pending until the host fires.
+/// The future [`set_dart_timer`] hands back: pending until the host fires.
 ///
 /// Dropping it takes the registration with it, so a cancelled sleep leaves
 /// nothing for a later `fire_timer` to find — and the host firing an id nobody
@@ -617,7 +616,7 @@ impl Drop for TimerFuture {
     }
 }
 
-/// Sleep for `duration` on the installed timer, yielding the thread.
+/// Sleep for `duration` on the timer that is set, yielding the thread.
 ///
 /// The portable "wait a bit" a retry loop wants, on every platform frustrate
 /// targets, and a *future* rather than a parked thread — so a thousand of them
@@ -635,19 +634,19 @@ impl Drop for TimerFuture {
 ///
 /// # Panics
 ///
-/// If no timer is installed — [`install_timer`] is not optional, and this is
+/// If no timer is set — [`set_timer`] is not optional, and this is
 /// deliberately loud rather than a sleep that silently never wakes. Uniform
 /// across platforms: a native default would make the *native* build work and
 /// leave web to discover the gap at run time, which is the divergence worth
 /// avoiding more than the convenience is worth having.
 pub async fn sleep(duration: std::time::Duration) {
     let timer = TIMER.get().expect(
-        "frustrate: no timer installed — frustrate::runtime::sleep needs \
-         frustrate::runtime::install_timer, called once at startup. The \
+        "frustrate: no timer set — frustrate::runtime::sleep needs \
+         frustrate::runtime::set_timer, called once at startup. The \
          runtime has no clock of its own: on wasm32-unknown-unknown there is \
          no host to ask, so the answer comes from Dart (Future.delayed through \
          a DartFunction) or from a native runtime you already have. See \
-         install_timer's docs.",
+         set_timer's docs.",
     );
     timer(duration).await
 }
@@ -714,20 +713,20 @@ mod tests {
     use std::task::{Context as TaskContext, Poll};
     use std::time::Duration;
 
-    /// Unregisters on drop, so a panicking test cannot leave a wrapper
-    /// installed for every other test in the process.
-    struct Registered(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
-    impl Drop for Registered {
+    /// Clears on drop, so a panicking test cannot leave a wrapper
+    /// set for every other test in the process.
+    struct ContextSet(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
+    impl Drop for ContextSet {
         fn drop(&mut self) {
             MISBEHAVE.with(|m| m.set(false));
-            unregister();
+            clear_context();
         }
     }
 
-    fn registered(context: impl for<'a> Fn(PollOnce<'a>) + Send + Sync + 'static) -> Registered {
+    fn context_set(context: impl for<'a> Fn(PollOnce<'a>) + Send + Sync + 'static) -> ContextSet {
         let guard = test_lock();
-        register(context);
-        Registered(guard)
+        set_context(context);
+        ContextSet(guard)
     }
 
     thread_local! {
@@ -747,13 +746,13 @@ mod tests {
     /// another test's envelope.) `test_lock` cannot fix that; the tests it
     /// would have to serialize against are every test that drains anything.
     ///
-    /// Confining the misbehaviour to the registering thread does fix it: these
+    /// Confining the misbehaviour to the setting thread does fix it: these
     /// tests drive their own drains synchronously, so every other thread —
     /// pool workers included — gets a plain pass-through.
-    fn registered_broken(
+    fn context_set_broken(
         context: impl for<'a> Fn(PollOnce<'a>) + Send + Sync + 'static,
-    ) -> Registered {
-        let guard = registered(move |poll| {
+    ) -> ContextSet {
+        let guard = context_set(move |poll| {
             if MISBEHAVE.with(|m| m.get()) {
                 context(poll);
             } else {
@@ -805,8 +804,8 @@ mod tests {
 
     impl Reactor {
         /// Leaked because a real runtime's `Handle` is `'static`-ish in
-        /// practice (a process-lived `Runtime`), and it lets the registered
-        /// wrapper — which must be `'static` — name it directly.
+        /// practice (a process-lived `Runtime`), and it lets the wrapper
+        /// — which must be `'static` — name it directly.
         fn new() -> &'static Reactor {
             Box::leak(Box::new(Reactor {
                 live: AtomicU32::new(0),
@@ -820,7 +819,7 @@ mod tests {
             EnterGuard(previous)
         }
 
-        /// tokio's `Handle::enter`-shaped wrapper, ready to `register`.
+        /// tokio's `Handle::enter`-shaped wrapper, ready to `set_context`.
         fn context(&'static self) -> impl for<'a> Fn(PollOnce<'a>) + Send + Sync + 'static {
             move |poll| {
                 let _guard = self.enter();
@@ -910,9 +909,9 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn nothing_registered_runs_the_poll_untouched() {
+    fn nothing_set_runs_the_poll_untouched() {
         let _serial = test_lock();
-        unregister();
+        clear_context();
         let ran = Cell::new(0);
         let value = enter(|| {
             ran.set(ran.get() + 1);
@@ -923,9 +922,9 @@ mod tests {
     }
 
     #[test]
-    fn a_registered_context_wraps_the_poll_and_returns_its_value() {
+    fn a_set_context_wraps_the_poll_and_returns_its_value() {
         let reactor = Reactor::new();
-        let _reg = registered(reactor.context());
+        let _reg = context_set(reactor.context());
         let seen = enter(|| REACTOR.with(|r| r.get().is_some()));
         assert!(seen, "the poll ran with the runtime's context installed");
         assert!(
@@ -952,7 +951,7 @@ mod tests {
         // web funnel as the process hook for the length of its window, so a
         // panic raised anywhere while that stands is reported into its log.
         let _hook = crate::post::test_lock();
-        let _reg = registered_broken(|_poll| { /* forgets to call it */ });
+        let _reg = context_set_broken(|_poll| { /* forgets to call it */ });
         let err = std::panic::catch_unwind(|| enter(|| 1)).unwrap_err();
         let msg = panic_message(err);
         assert!(
@@ -972,7 +971,7 @@ mod tests {
     #[test]
     fn a_context_that_swallows_the_polls_panic_is_told_so() {
         let _hook = crate::post::test_lock();
-        let _reg = registered_broken(|poll| {
+        let _reg = context_set_broken(|poll| {
             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| poll.run()));
         });
         let previous = std::panic::take_hook();
@@ -1003,7 +1002,7 @@ mod tests {
                 panic!("dropped outside the runtime context");
             }
         }
-        let _reg = registered_broken(|_poll| panic!("the wrapper itself failed"));
+        let _reg = context_set_broken(|_poll| panic!("the wrapper itself failed"));
         let doomed = AbortsIfDropped;
         let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             enter(move || {
@@ -1024,7 +1023,7 @@ mod tests {
     // doctest inside this `cfg(test)` module would verify nothing).
 
     /// The un-run poll must be **leaked, not dropped**. Dropping it would drop
-    /// the task's future outside the registered context, and async-task wraps
+    /// the task's future outside the context that is set, and async-task wraps
     /// a future's destructor in `abort_on_panic` (4.7.1 `raw.rs:447-449`) — so
     /// a teardown that reaches for the runtime would abort the process on the
     /// very path whose job is to report the broken wrapper. This test would
@@ -1045,7 +1044,7 @@ mod tests {
                 panic!("dropped outside the runtime context");
             }
         }
-        let _reg = registered_broken(|_poll| { /* never runs it */ });
+        let _reg = context_set_broken(|_poll| { /* never runs it */ });
         let doomed = AbortsIfDropped;
         let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             enter(move || {
@@ -1061,22 +1060,22 @@ mod tests {
     }
 
     #[test]
-    fn re_registering_replaces_the_wrapper() {
+    fn setting_again_replaces_the_wrapper() {
         // The hot-restart contract: Dart `main()` re-runs in this same
-        // process, the app rebuilds its runtime, and the second registration
+        // process, the app rebuilds its runtime, and the second call
         // must take. Keep-first would pin the *first* handle — whose runtime
         // the restart just dropped — and tokio panics "…being shutdown" on
         // every poll through it (measured, tests/tokio_hook), so every async
-        // call after a restart would fail with the correct registration
+        // call after a restart would fail with the correct context
         // sitting right there, ignored.
         let first = Reactor::new();
         let second = Reactor::new();
-        let _reg = registered(first.context());
-        register(second.context());
+        let _reg = context_set(first.context());
+        set_context(second.context());
         let which = enter(|| REACTOR.with(|r| r.get().unwrap() as *const Reactor));
         assert!(
             std::ptr::eq(which, second),
-            "the last registration wins, so a hot restart can replace a \
+            "the last one set wins, so a hot restart can replace a \
              handle to a dead runtime"
         );
     }
@@ -1087,8 +1086,8 @@ mod tests {
     /// `a_displaced_value_drops_outside_the_critical_section`, through this
     /// hook's own API: the value being replaced is user code — their closure
     /// and its captures — so its `Drop` can do anything, including re-enter
-    /// `register`/`unregister`. Dropped inside the critical section, a capture
-    /// whose `Drop` unregisters spins forever against the non-reentrant slot
+    /// `set_context`/`clear_context`. Dropped inside the critical section, a capture
+    /// whose `Drop` clears the context spins forever against the non-reentrant slot
     /// lock, on this thread, with no second thread involved. The realistic
     /// version is milder and worse to diagnose: a captured `Arc<Runtime>` whose
     /// last reference lands here blocks every drain in the process for the
@@ -1100,30 +1099,30 @@ mod tests {
     /// timeout rather than wedging the suite.
     #[test]
     fn a_displaced_context_drops_outside_the_slot_lock() {
-        struct UnregistersOnDrop;
-        impl Drop for UnregistersOnDrop {
+        struct ClearsOnDrop;
+        impl Drop for ClearsOnDrop {
             fn drop(&mut self) {
-                unregister();
+                clear_context();
             }
         }
 
         let (tx, rx) = std::sync::mpsc::channel();
         let handle = std::thread::spawn(move || {
             let _serial = test_lock();
-            let captured = UnregistersOnDrop;
-            register(move |poll| {
+            let captured = ClearsOnDrop;
+            set_context(move |poll| {
                 let _keep = &captured;
                 poll.run();
             });
             // Replacing it drops `captured`, whose `Drop` re-enters the slot.
-            register(|poll| poll.run());
-            unregister();
+            set_context(|poll| poll.run());
+            clear_context();
             let _ = tx.send(());
         });
         let arrived = rx.recv_timeout(std::time::Duration::from_secs(5));
         assert!(
             arrived.is_ok(),
-            "re-registration never returned: the displaced wrapper was dropped \
+            "setting it again never returned: the displaced wrapper was dropped \
              inside the slot's critical section, and its capture's Drop \
              re-entered the same non-reentrant lock"
         );
@@ -1131,16 +1130,16 @@ mod tests {
     }
 
     #[test]
-    fn unregister_reverts_to_plain_cooperative_behaviour() {
+    fn clear_context_reverts_to_plain_cooperative_behaviour() {
         let reactor = Reactor::new();
         {
-            let _reg = registered(reactor.context());
+            let _reg = context_set(reactor.context());
             assert!(enter(|| REACTOR.with(|r| r.get().is_some())));
         }
         let _serial = test_lock();
         assert!(
             enter(|| REACTOR.with(|r| r.get().is_none())),
-            "after unregister the poll runs with no context at all"
+            "after clear_context the poll runs with no context at all"
         );
     }
 
@@ -1173,13 +1172,13 @@ mod tests {
     }
 
     /// The payoff, end to end on the cooperative executor: a task that awaits
-    /// a leaf which *only* the registered runtime can drive suspends as heap
+    /// a leaf which *only* the runtime that is set can drive suspends as heap
     /// data, is woken from a foreign thread, and completes — with no pool
     /// thread parked on it.
     #[test]
-    fn a_task_awaiting_a_reactor_leaf_completes_under_a_registered_context() {
+    fn a_task_awaiting_a_reactor_leaf_completes_under_a_set_context() {
         let reactor = Reactor::new();
-        let _reg = registered(reactor.context());
+        let _reg = context_set(reactor.context());
         let (exec, log) = recording();
 
         exec.spawn(1, async {
@@ -1214,7 +1213,7 @@ mod tests {
     #[test]
     fn cancelling_a_suspended_leaf_drops_it_under_the_context() {
         let reactor = Reactor::new();
-        let _reg = registered(reactor.context());
+        let _reg = context_set(reactor.context());
         let (exec, log) = recording();
 
         exec.spawn(2, async {
@@ -1268,10 +1267,10 @@ mod tests {
     }
 
     /// The control, and the reason the hook is not merely cosmetic: with
-    /// nothing registered the same task fails loudly at leaf construction and
+    /// nothing set the same task fails loudly at leaf construction and
     /// the panic is attributed to its own call — it does not hang.
     #[test]
-    fn without_a_registration_the_leaf_panics_into_its_own_call() {
+    fn without_a_context_the_leaf_panics_into_its_own_call() {
         // `post::test_lock` as well, and not because this test posts: it swaps
         // the **global** panic hook, and so does
         // `executor::tests::a_displaced_task_drops_outside_the_registry_lock`
@@ -1281,7 +1280,7 @@ mod tests {
         // both, in the one order anything here takes them (post, then runtime).
         let _hook = crate::post::test_lock();
         let _serial = test_lock();
-        unregister();
+        clear_context();
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let (exec, log) = recording();
@@ -1306,10 +1305,10 @@ mod tests {
     #[test]
     fn a_broken_context_answers_the_call_it_broke() {
         // Both locks, post first — see the note on
-        // `without_a_registration_the_leaf_panics_into_its_own_call`: the
+        // `without_a_context_the_leaf_panics_into_its_own_call`: the
         // global panic hook is guarded by `post::test_lock` elsewhere.
         let _hook = crate::post::test_lock();
-        let _reg = registered_broken(|_poll| {});
+        let _reg = context_set_broken(|_poll| {});
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let (exec, log) = recording();
@@ -1328,7 +1327,7 @@ mod tests {
 
     /// The global native seam, not a test-built executor: a task spawned
     /// through `executor::spawn` drains on a **pool worker**, which is the
-    /// thread that must carry the registered context.
+    /// thread that must carry the context that is set.
     ///
     /// Two test locks, and **`post` before `runtime`** — the order every test
     /// in this file that takes both uses (there are four now, so this is a
@@ -1344,7 +1343,7 @@ mod tests {
     fn the_global_executor_enters_the_context_on_its_pool_workers() {
         let _serial = crate::post::test_lock();
         let reactor = Reactor::new();
-        let _reg = registered(reactor.context());
+        let _reg = context_set(reactor.context());
 
         static DONE: Mutex<Vec<(u64, Vec<u8>)>> = Mutex::new(Vec::new());
         extern "C" fn record(call_id: u64, ptr: *mut u8, len: u64, cap: u64) {
@@ -1364,7 +1363,7 @@ mod tests {
             assert!(
                 std::time::Instant::now() < deadline,
                 "the pool-worker drain never completed the task: the global \
-                 executor is not entering the registered context"
+                 executor is not entering the context that is set"
             );
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -1375,7 +1374,7 @@ mod tests {
 
     // ------------------------------------------------------------ the timer --
 
-    /// A timer of the shape an embedder installs: a foreign thread that fires
+    /// A timer of the shape an embedder sets: a foreign thread that fires
     /// the waker, exactly like a real one (tokio's wheel, Dart's event loop).
     fn thread_timer(
     ) -> impl Fn(Duration) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync
@@ -1407,12 +1406,12 @@ mod tests {
     }
 
     #[test]
-    fn sleep_resolves_on_the_installed_timer() {
+    fn sleep_resolves_on_the_timer_that_is_set() {
         let _serial = test_lock();
-        super::install_timer(thread_timer());
+        super::set_timer(thread_timer());
         let start = std::time::Instant::now();
         crate::pool::block_on(super::sleep(Duration::from_millis(40)));
-        super::uninstall_timer();
+        super::clear_timer();
         assert!(
             start.elapsed() >= Duration::from_millis(40),
             "sleep returned before its duration: {:?}",
@@ -1420,14 +1419,14 @@ mod tests {
         );
     }
 
-    /// Not installed is loud. The alternative — a `sleep` that returns
+    /// Not set is loud. The alternative — a `sleep` that returns
     /// `Pending` forever — is indistinguishable from a task legitimately
     /// waiting on Dart, which is the one failure nothing downstream can
     /// diagnose.
     #[test]
-    fn sleeping_with_no_timer_installed_names_the_installer() {
+    fn sleeping_with_no_timer_set_names_the_setter() {
         let _serial = test_lock();
-        super::uninstall_timer();
+        super::clear_timer();
         let panicked = std::panic::catch_unwind(|| {
             crate::pool::block_on(super::sleep(Duration::from_millis(1)))
         })
@@ -1437,25 +1436,25 @@ mod tests {
             .map(String::as_str)
             .or_else(|| panicked.downcast_ref::<&str>().copied())
             .unwrap_or("");
-        assert!(msg.contains("install_timer"), "{msg}");
+        assert!(msg.contains("set_timer"), "{msg}");
     }
 
-    /// Hot restart re-runs Dart `main()` in this same process, so the install
+    /// Hot restart re-runs Dart `main()` in this same process, so the call
     /// runs again against a fresh isolate and the second one must win.
     #[test]
-    fn re_installing_replaces_the_timer() {
+    fn setting_again_replaces_the_timer() {
         let _serial = test_lock();
         static WHICH: AtomicU32 = AtomicU32::new(0);
-        super::install_timer(|_| {
+        super::set_timer(|_| {
             WHICH.store(1, Ordering::SeqCst);
             Box::pin(std::future::ready(()))
         });
-        super::install_timer(|_| {
+        super::set_timer(|_| {
             WHICH.store(2, Ordering::SeqCst);
             Box::pin(std::future::ready(()))
         });
         crate::pool::block_on(super::sleep(Duration::from_millis(1)));
-        super::uninstall_timer();
+        super::clear_timer();
         assert_eq!(WHICH.load(Ordering::SeqCst), 2, "the first timer answered");
     }
 }

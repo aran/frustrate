@@ -1,6 +1,6 @@
 /// Rust's `log` facade reaching Dart as a stream, on both transports.
 ///
-/// The facility is a runtime pair — `frustrate::logging::install` plus a
+/// The facility is a runtime pair — `frustrate::logging::set_sink` plus a
 /// `StreamSink` — with no codegen involvement at all, so what this file
 /// exercises is deliberately ordinary bridge surface: a bridged struct, a sink
 /// parameter, a `Result`. The properties that are *not* ordinary and that this
@@ -10,11 +10,11 @@
 ///     recursed and not deadlocked — the sharpest correctness question in the
 ///     design, asked here by actually doing it (a `Display` impl that logs
 ///     while the mapper formats it);
-///   * a second install replaces the first and closes its stream, which is the
+///   * a second `setLogSink` replaces the first and closes its stream, which is the
 ///     Flutter hot-restart path;
 ///   * a cancelled subscription retires the logger, and the records that pass
 ///     while it does are counted rather than lost silently;
-///   * an actor's records reach the logger installed *in the actor's own
+///   * an actor's records reach the sink set *in the actor's own
 ///     instance* — and the platforms differ here, deliberately, because on web
 ///     an actor is a separate wasm instance with its own `static`s while
 ///     natively there is one process-global logger. Both are asserted by name.
@@ -81,15 +81,15 @@ void main() {
   setUpAll(initBridge);
 
   tearDown(() async {
-    // The Rust-side release lever. Natively this covers an actor's install too
+    // The Rust-side release lever. Natively this covers an actor's sink too
     // — `log`'s slot is process-global there — so no test can leave a logger
     // holding a sink into the next one.
-    uninstallLogging();
+    clearLogSink();
   });
 
   test('a record carries its level, its target, and its message', () async {
     final logs = _Consumer();
-    installLogging(maxLevel: 'trace', sink: logs.controller);
+    setLogSink(maxLevel: 'trace', sink: logs.controller);
 
     emitLog(level: 'info', message: 'hello');
     emitLog(level: 'error', message: 'boom');
@@ -109,7 +109,7 @@ void main() {
   test("the filter is log's own, so an excluded record never reaches the "
       'bridge and is not a drop', () async {
     final logs = _Consumer();
-    installLogging(maxLevel: 'warn', sink: logs.controller);
+    setLogSink(maxLevel: 'warn', sink: logs.controller);
 
     final before = loggingDropped();
     emitLog(level: 'debug', message: 'below the filter');
@@ -136,7 +136,7 @@ void main() {
 
   test('an async body reaches the same logger, wherever it runs', () async {
     final logs = _Consumer();
-    installLogging(maxLevel: 'trace', sink: logs.controller);
+    setLogSink(maxLevel: 'trace', sink: logs.controller);
 
     // A pool worker natively; the calling thread on single-threaded web. One
     // process-global (instance-global, on web) logger is what makes those the
@@ -152,7 +152,7 @@ void main() {
   test('a record logged from inside the logger is dropped and counted, '
       'not recursed', () async {
     final logs = _Consumer();
-    installLogging(maxLevel: 'trace', sink: logs.controller);
+    setLogSink(maxLevel: 'trace', sink: logs.controller);
 
     final before = loggingDropped();
     // `emitReentrantLog` logs a value whose `Display` impl logs. The mapper
@@ -179,10 +179,10 @@ void main() {
   });
 
   test(
-    'installing again redirects, and closes the stream it displaced',
+    'setting it again redirects, and closes the stream it displaced',
     () async {
       final first = _Consumer();
-      installLogging(maxLevel: 'trace', sink: first.controller);
+      setLogSink(maxLevel: 'trace', sink: first.controller);
       emitLog(level: 'info', message: 'before the restart');
       await until(
         () => first.received.isNotEmpty,
@@ -192,7 +192,7 @@ void main() {
       // What a Flutter hot restart does: Dart `main()` runs again in the same
       // process, with a new controller, while the old isolate's is dead.
       final second = _Consumer();
-      installLogging(maxLevel: 'trace', sink: second.controller);
+      setLogSink(maxLevel: 'trace', sink: second.controller);
       await until(
         () => first.closed,
         'the displaced sink drops, which ends its Dart stream',
@@ -215,7 +215,7 @@ void main() {
   test('cancelling the subscription retires the logger, and the records that '
       'pass while it does are counted', () async {
     final logs = _Consumer();
-    installLogging(maxLevel: 'trace', sink: logs.controller);
+    setLogSink(maxLevel: 'trace', sink: logs.controller);
     await logs.subscription.cancel();
 
     final before = loggingDropped();
@@ -232,10 +232,10 @@ void main() {
           'is every one after it',
     );
 
-    // Retired, not merely refusing: a fresh install works, which it would not
-    // if the dead registration were still in the slot.
+    // Retired, not merely refusing: a fresh `setLogSink` works, which it would not
+    // if the dead sink were still in the slot.
     final next = _Consumer();
-    installLogging(maxLevel: 'trace', sink: next.controller);
+    setLogSink(maxLevel: 'trace', sink: next.controller);
     emitLog(level: 'info', message: 'live again');
     await until(() => next.received.isNotEmpty, 'the new logger must deliver');
     expect(next.messages, ['live again']);
@@ -243,14 +243,14 @@ void main() {
     if (!logs.controller.isClosed) await logs.controller.close();
   });
 
-  test("an actor's records reach the logger installed in the actor's own "
+  test("an actor's records reach the sink set in the actor's own "
       'instance', () async {
     final page = _Consumer();
-    installLogging(maxLevel: 'trace', sink: page.controller);
+    setLogSink(maxLevel: 'trace', sink: page.controller);
 
     final miner = await Miner.new_(label: 'logging');
     final actor = _Consumer();
-    await miner.installLogging(maxLevel: 'trace', sink: actor.controller);
+    await miner.setLogSink(maxLevel: 'trace', sink: actor.controller);
     await miner.emitLog(message: 'from the actor');
     await until(
       () => actor.received.isNotEmpty,
@@ -268,12 +268,12 @@ void main() {
         isTrue,
         reason:
             "natively log's slot is process-global, so the actor's "
-            'install displaced the free function\'s and closed its stream',
+            'set displaced the free function\'s and closed its stream',
       );
       emitLog(level: 'info', message: 'from the page');
       await until(
         () => actor.received.length == 2,
-        'natively every record now goes to the most recent install',
+        'natively every record now goes to the most recent sink',
       );
       expect(actor.messages, ['from the actor', 'from the page']);
     } else {
@@ -281,7 +281,7 @@ void main() {
         page.closed,
         isFalse,
         reason:
-            'on web the two installs are in different wasm instances, so '
+            'on web the two sinks are in different wasm instances, so '
             'neither can displace the other',
       );
       emitLog(level: 'info', message: 'from the page');

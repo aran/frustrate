@@ -113,7 +113,7 @@ rust_shared_library(
         # compiles against this rlib too. `log`'s logger is a `static` per
         # rlib and every crate in this graph that logs — iroh, rustls, quinn,
         # through `tracing` — linked this one, so this is the only wiring in
-        # which `install_logging` hears anything but itself.
+        # which `set_log_sink` hears anything but itself.
         "@iroh_crates//:log",
     ] + select({
         "@platforms//os:macos": _NATIVE_CRATES,

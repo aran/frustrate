@@ -1,13 +1,13 @@
-//! The user-registration slot: one process-global `Arc<T>` an embedder may
-//! install, replace, or drop, read from a hot path whose answer is almost
-//! always "nobody registered anything".
+//! The user-set slot: one process-global `Arc<T>` an embedder may
+//! set, replace, or clear, read from a hot path whose answer is almost
+//! always "nobody set anything".
 //!
 //! It is the shape of every hook this runtime hands an embedder — the
 //! async-runtime context ([`crate::runtime`]), the panic listener
 //! ([`crate::panic`]) and the `log` forwarder ([`crate::logging`]) are three —
 //! and the parts that are easy to get subtly wrong are the same every time:
 //! the ordering that lets a reader skip the lock, dropping displaced **user
-//! code** outside the critical section, and letting a second registration
+//! code** outside the critical section, and letting a second `set`
 //! replace the first.
 //!
 //! # Why it is one type
@@ -19,7 +19,7 @@
 //! # The fast path
 //!
 //! [`Hook::get`] reads a presence flag before it goes near the lock, so a
-//! reader that finds nothing registered pays one acquire load — not a lock
+//! reader that finds nothing set pays one acquire load — not a lock
 //! acquisition per read, across every pool worker reading in parallel. That is
 //! the whole reason the flag exists; it holds no information the slot does not.
 //!
@@ -29,7 +29,7 @@
 //! are both benign and neither is silent:
 //!
 //! * a stale `false`, while a [`set`](Hook::set) is in flight — the reader
-//!   behaves as it would have a moment earlier, which is why registration
+//!   behaves as it would have a moment earlier, which is why setting it
 //!   belongs at init, before the first call that reads the hook;
 //! * a stale `true`, after a [`clear`](Hook::clear) — the reader takes the lock
 //!   and finds `None`, so `get` answers `None` either way.
@@ -42,12 +42,12 @@
 //! its `Drop` can do anything:
 //!
 //! * The realistic capture is an `Arc<tokio::runtime::Runtime>` — the natural
-//!   way to keep a runtime alive for a registered context. On a Flutter hot
+//!   way to keep a runtime alive for the context that is set. On a Flutter hot
 //!   restart this can be its last reference, and `Runtime::drop` **blocks**
 //!   until the runtime has shut down. Dropped inside the section, every reader
 //!   in the process spins for the length of that shutdown.
 //! * A capture whose `Drop` calls back into the same hook — plausible for a
-//!   teardown that unregisters itself — would spin forever against a
+//!   teardown that clears itself — would spin forever against a
 //!   non-reentrant lock, on one thread, with no second thread involved.
 //!
 //! Hence `Option::replace`/`Option::take` rather than assigning over the slot:
@@ -84,7 +84,7 @@ use crate::bounded::Lock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// A slot holding at most one embedder-registered `Arc<T>`.
+/// A slot holding at most one embedder-set `Arc<T>`.
 ///
 /// `const`-constructible, so a `static` has no initialiser to get stuck in —
 /// the property `spin.rs` explains at length and `pool::QUEUE` paid for.
@@ -110,11 +110,11 @@ impl<T: ?Sized> Hook<T> {
         }
     }
 
-    /// The registered value, or `None`.
+    /// The value that is set, or `None`.
     ///
     /// The empty case is one acquire load and no lock — the fast path the
     /// module docs describe. The `Arc` is cloned **out** of the section, so a
-    /// caller runs the registered value with no lock held: user code is
+    /// caller runs the value that is set with no lock held: user code is
     /// arbitrarily long, and a value that re-enters this hook while it runs
     /// must not find a lock its own thread is holding.
     pub(crate) fn get(&self) -> Option<Arc<T>> {
@@ -127,9 +127,9 @@ impl<T: ?Sized> Hook<T> {
     /// Register `value`, replacing whatever was there.
     ///
     /// Last-wins rather than first-wins or a panic; which of those a caller
-    /// wants is the caller's argument to make, and [`crate::runtime::register`]
+    /// wants is the caller's argument to make, and [`crate::runtime::set_context`]
     /// makes it (Flutter hot restart re-runs Dart `main()` in a live process,
-    /// so a second registration is a legitimate call and refusing it would pin
+    /// so a second `set` is a legitimate call and refusing it would pin
     /// a handle the restart has already invalidated).
     pub(crate) fn set(&self, value: Arc<T>) {
         let displaced = self.slot.with(|slot| {
@@ -148,7 +148,7 @@ impl<T: ?Sized> Hook<T> {
         drop(displaced);
     }
 
-    /// Drop the registration; [`get`](Self::get) answers `None` again.
+    /// Clear the value; [`get`](Self::get) answers `None` again.
     ///
     /// A caller already holding an `Arc` from an earlier `get` keeps it, so a
     /// value being used right now is not yanked out from under its user.
@@ -313,7 +313,7 @@ mod tests {
     /// The displaced value must drop **outside** the critical section.
     ///
     /// The value is the embedder's, so its `Drop` can re-enter this hook — a
-    /// teardown that unregisters itself is the ordinary way to write one.
+    /// teardown that clears itself is the ordinary way to write one.
     /// Dropped inside the section, that re-entry spins forever against a
     /// non-reentrant lock, on this one thread, with no second thread involved.
     ///

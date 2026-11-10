@@ -267,7 +267,7 @@ pub fn peer_id_for(ticket: String) -> Result<String, String> {
 // so `@iroh_crates//:log` exists, `BUILD.bazel` depends on it, and `.bazelrc`
 // points frustrate's `log` build setting at the same alias. Then iroh's records
 // and this crate's logger share one slot. Get it wrong and rustc says so at the
-// `install` call below, because the two `log`s are two types.
+// `set_sink` call below, because the two `log`s are two types.
 
 /// One `log` record, in the shape this app chose for it.
 ///
@@ -303,7 +303,7 @@ pub struct LogRecord {
 ///
 /// `debug` and `trace` are firehoses — iroh logs per packet.
 #[bridge(sync)]
-pub fn install_logging(max_level: String, sink: StreamSink<LogRecord>) -> Result<(), String> {
+pub fn set_log_sink(max_level: String, sink: StreamSink<LogRecord>) -> Result<(), String> {
     let max_level = match max_level.to_ascii_lowercase().as_str() {
         "off" => log::LevelFilter::Off,
         "error" => log::LevelFilter::Error,
@@ -313,7 +313,7 @@ pub fn install_logging(max_level: String, sink: StreamSink<LogRecord>) -> Result
         "trace" => log::LevelFilter::Trace,
         other => return Err(format!("{other:?} is not a log level")),
     };
-    frustrate::logging::install(max_level, sink, |record| LogRecord {
+    frustrate::logging::set_sink(max_level, sink, |record| LogRecord {
         level: record.level().to_string(),
         target: record.target().to_string(),
         message: record.args().to_string(),
@@ -328,6 +328,6 @@ pub fn install_logging(max_level: String, sink: StreamSink<LogRecord>) -> Result
 /// a logger installed — the two lifetimes are unrelated — so this is how the
 /// stream ends deterministically.
 #[bridge(sync)]
-pub fn uninstall_logging() {
-    frustrate::logging::uninstall();
+pub fn clear_log_sink() {
+    frustrate::logging::clear_sink();
 }

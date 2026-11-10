@@ -1,4 +1,4 @@
-//! The panic listener: one embedder-registered callback told about every Rust
+//! The panic listener: one embedder-set callback told about every Rust
 //! panic this runtime observes, so a crash reporter can live on the Rust side
 //! of the bridge.
 //!
@@ -9,8 +9,8 @@
 //! frustrate does not own reaches no Dart at all.
 //!
 //! ```
-//! // once, at init — re-registrable; see `register`
-//! frustrate::panic::register(|report| {
+//! // once, at init — settable again; see `set_listener`
+//! frustrate::panic::set_listener(|report| {
 //!     let at = match report.location() {
 //!         Some(l) => l.to_string(),
 //!         None => "<no location>".to_string(),
@@ -58,7 +58,7 @@
 //!
 //! For those, a `std::panic::set_hook` of the embedder's own still fires: the
 //! recording hook below **chains** to whatever was installed when the first
-//! [`register`] ran, rather than replacing it.
+//! [`set_listener`] ran, rather than replacing it.
 //!
 //! # Why this is not just `std::panic::set_hook`
 //!
@@ -88,16 +88,16 @@
 //! installed — to **record**, never to call user code. See
 //! [`install_recorder`].
 //!
-//! # What registering nothing costs
+//! # What setting no listener costs
 //!
 //! Nothing here sits on a path a non-panicking call takes. [`observed`] is
 //! reached only from code that already has a panic in hand, and its first act
 //! is [`Hook::get`], which for an empty slot is one acquire load and no lock
 //! (`hook.rs`, `an_empty_hook_answers_without_the_lock`). No `std` panic hook
-//! is installed until the first [`register`], so a process that never
-//! registers pays nothing at all, not even a hook call.
+//! is installed until the first [`set_listener`], so a process that never
+//! sets one pays nothing at all, not even a hook call.
 //!
-//! After an [`unregister`] the recorder stays installed — restoring the
+//! After a [`clear_listener`] the recorder stays installed — restoring the
 //! previous hook would restore it over whatever the embedder has set since —
 //! so a panic then pays one acquire load and one chained call, and captures
 //! nothing.
@@ -106,7 +106,7 @@ use crate::hook::Hook;
 use std::any::Any;
 use std::sync::Arc;
 
-/// The registered listener. `Fn`, not `FnOnce`: it runs for every panic.
+/// The listener that is set. `Fn`, not `FnOnce`: it runs for every panic.
 type Listener = dyn Fn(&PanicReport) + Send + Sync + 'static;
 
 /// The one slot.
@@ -183,8 +183,8 @@ impl PanicReport {
     /// Where the panic was raised, when a recording hook was installed in time
     /// to see it.
     ///
-    /// `None` in exactly two cases, both stated on [`register`]: the panic
-    /// happened before the first `register`, or the embedder installed their
+    /// `None` in exactly two cases, both stated on [`set_listener`]: the panic
+    /// happened before the first `set_listener`, or the embedder installed their
     /// own `std::panic::set_hook` *after* it and displaced the recorder.
     pub fn location(&self) -> Option<&PanicLocation> {
         self.location.as_ref()
@@ -222,38 +222,38 @@ impl PanicReport {
 ///
 /// # Location and the `std` hook
 ///
-/// The first `register` on an unwinding target installs a `std` panic hook
+/// The first `set_listener` on an unwinding target installs a `std` panic hook
 /// that records the panic's location and backtrace into a thread-local, then
 /// calls the hook that was installed before it. It never calls the listener —
 /// see the module docs, reason 2.
 ///
 /// The consequence is an ordering the embedder controls: a
-/// `std::panic::set_hook` of your own **after** `register` displaces the
+/// `std::panic::set_hook` of your own **after** `set_listener` displaces the
 /// recorder, and [`PanicReport::location`] goes `None` from then on. Chain to
 /// the previous hook yourself if you want both, or install yours first.
 ///
-/// # Re-registration
+/// # Setting it again
 ///
-/// Last-wins, for the reason [`crate::runtime::register`] sets out at length:
+/// Last-wins, for the reason [`crate::runtime::set_context`] sets out at length:
 /// Flutter hot restart re-runs Dart `main()` in this same native process while
-/// Rust statics persist, so a second `register` is an ordinary call from a
+/// Rust statics persist, so a second `set_listener` is an ordinary call from a
 /// working app. Refusing it would pin the first run's listener — and its
 /// captures, which may reference an isolate that no longer exists — for the
 /// life of the process. The recorder is installed once regardless.
-pub fn register(listener: impl Fn(&PanicReport) + Send + Sync + 'static) {
+pub fn set_listener(listener: impl Fn(&PanicReport) + Send + Sync + 'static) {
     // The displaced listener is dropped outside the slot's critical section by
     // `Hook::set`; it is the embedder's closure, and its `Drop` is theirs too.
     LISTENER.set(Arc::new(listener));
     install_recorder();
 }
 
-/// Drop the registration; panics stop being reported.
+/// Clear the listener; panics stop being reported.
 ///
 /// A listener already running keeps running — the slot holds an `Arc` and
 /// [`observed`] clones it out before calling — so this never yanks a report
 /// out from under itself. The recording hook stays installed; the module docs
 /// say what that costs.
-pub fn unregister() {
+pub fn clear_listener() {
     LISTENER.clear();
 }
 
@@ -367,7 +367,7 @@ fn owned_location(l: &std::panic::Location<'_>) -> PanicLocation {
 /// shim, which is where the listener is called from on today's web build.
 ///
 /// It records and chains; it never calls the listener. The presence check
-/// comes first, so a process that registered and then unregistered pays one
+/// comes first, so a process that set a listener and then cleared it pays one
 /// acquire load per panic and captures nothing.
 #[cfg(panic = "unwind")]
 fn install_recorder() {
@@ -408,7 +408,7 @@ fn install_recorder() {}
 pub(crate) fn record_for_tests() -> Arc<std::sync::Mutex<Vec<String>>> {
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::default();
     let sink = log.clone();
-    register(move |report| {
+    set_listener(move |report| {
         sink.lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(report.message().to_string())
@@ -435,7 +435,7 @@ mod tests {
     fn recording() -> Arc<Mutex<Recorded>> {
         let log: Arc<Mutex<Recorded>> = Arc::default();
         let sink = log.clone();
-        register(move |report| {
+        set_listener(move |report| {
             let mut r = sink.lock().unwrap_or_else(|e| e.into_inner());
             r.messages.push(report.message().to_string());
             r.locations.push(report.location().map(|l| l.to_string()));
@@ -447,7 +447,7 @@ mod tests {
     /// Serializes every test here against each other **and** against the
     /// other tests in this crate that swap the process `std` panic hook
     /// (`stream`, `executor`, `runtime`) or raise a panic that reaches a
-    /// funnel. Registering installs the recorder for the whole binary, and a
+    /// funnel. Setting a listener installs the recorder for the whole binary, and a
     /// sibling swapping a hook over it while one of these asserts on a
     /// location would make it flaky.
     fn serial() -> std::sync::MutexGuard<'static, ()> {
@@ -461,7 +461,7 @@ mod tests {
         let log = recording();
         let at = line!() + 1;
         let bytes = crate::envelope::delivered_run(|| panic!("sync body exploded"));
-        unregister();
+        clear_listener();
 
         assert_eq!(bytes[0], crate::envelope::STATUS_PANIC);
         let r = log.lock().unwrap();
@@ -487,7 +487,7 @@ mod tests {
         let _serial = serial();
         let log = recording();
         let bytes = crate::envelope::delivered_run(|| panic!("{} {}", "formatted", 7));
-        unregister();
+        clear_listener();
 
         let mut r = crate::codec::ByteReader::new(&bytes[1..]);
         let on_the_wire = r.read_string();
@@ -501,7 +501,7 @@ mod tests {
         let _serial = serial();
         let log = recording();
         let bytes = crate::envelope::delivered_run(|| std::panic::panic_any(7u32));
-        unregister();
+        clear_listener();
 
         assert_eq!(bytes[0], crate::envelope::STATUS_PANIC);
         assert_eq!(log.lock().unwrap().messages, ["non-string panic payload"]);
@@ -514,12 +514,12 @@ mod tests {
         let _serial = serial();
         let calls = Arc::new(AtomicUsize::new(0));
         let seen = calls.clone();
-        register(move |_| {
+        set_listener(move |_| {
             seen.fetch_add(1, Ordering::SeqCst);
             panic!("the listener itself is broken");
         });
         let bytes = crate::envelope::delivered_run(|| panic!("the real failure"));
-        unregister();
+        clear_listener();
 
         assert_eq!(calls.load(Ordering::SeqCst), 1, "the listener ran");
         assert_eq!(bytes[0], crate::envelope::STATUS_PANIC);
@@ -546,7 +546,7 @@ mod tests {
             escaping_at = line!() + 1;
             panic!("the one that escapes")
         });
-        unregister();
+        clear_listener();
 
         assert_eq!(bytes[0], crate::envelope::STATUS_PANIC);
         let r = log.lock().unwrap();
@@ -565,18 +565,18 @@ mod tests {
         );
     }
 
-    /// Nothing registered is the ordinary case and must reach no user code.
+    /// No listener is the ordinary case and must reach no user code.
     /// The empty read's cost is `hook.rs`'s to prove; what is this module's is
     /// that a cleared slot really does stop the reports.
     #[test]
-    fn unregistering_stops_the_reports() {
+    fn clearing_stops_the_reports() {
         let _serial = serial();
         let log = recording();
-        let _ = crate::envelope::delivered_run(|| panic!("while registered"));
-        unregister();
-        let _ = crate::envelope::delivered_run(|| panic!("after unregistering"));
+        let _ = crate::envelope::delivered_run(|| panic!("while set"));
+        clear_listener();
+        let _ = crate::envelope::delivered_run(|| panic!("after clearing"));
 
-        assert_eq!(log.lock().unwrap().messages, ["while registered"]);
+        assert_eq!(log.lock().unwrap().messages, ["while set"]);
     }
 
     /// The web arm, driven directly: on `panic=abort` the hook *is* the
@@ -596,7 +596,7 @@ mod tests {
         let at = line!() + 1;
         let _ = std::panic::catch_unwind(|| panic!("web-shaped panic"));
         std::panic::set_hook(previous);
-        unregister();
+        clear_listener();
 
         // **Presence, not exclusivity**, and that is the difference between a
         // claim this test can own and one it cannot. For the length of the

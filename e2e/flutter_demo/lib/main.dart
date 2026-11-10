@@ -1469,7 +1469,7 @@ class _RustLog {
   /// The most recent records, oldest first.
   final ValueNotifier<List<LogLine>> lines = ValueNotifier(const []);
 
-  /// What went wrong installing, if anything. `install_logging` refuses when
+  /// What went wrong setting the sink, if anything. `set_log_sink` refuses when
   /// something else already claimed `log`'s one process-wide logger slot.
   final ValueNotifier<String?> failure = ValueNotifier(null);
 
@@ -1487,7 +1487,7 @@ class _RustLog {
           next.length > _capacity ? next.sublist(next.length - _capacity) : next);
     });
     try {
-      installLogging(sink: sink);
+      setLogSink(sink: sink);
     } catch (e) {
       failure.value = '$e';
     }
@@ -1504,7 +1504,7 @@ class _RustLogCard extends StatelessWidget {
     return _SectionCard(
       title: "log::info! — Rust's log crate, arriving as a Dart stream",
       subtitle: 'The bridge crate logs through the ordinary `log` facade, with '
-          'no frustrate type in sight; frustrate::logging::install puts a '
+          'no frustrate type in sight; frustrate::logging::set_sink puts a '
           'StreamSink behind that facade, so the records land on a Dart Stream '
           'this app owns. The entries below come from other cards doing their '
           'job, and from the button. A dependency that has never heard of '

@@ -49,7 +49,7 @@ tokio-stream = { version = "0.1", default-features = false }
 # `tracing`, `rustls` and `reqwest` all want it — but a crate_universe hub
 # exposes an alias only for a manifest's direct dependencies, so
 # `@iroh_crates//:log` does not exist until this line does. `api.rs` needs it
-# for `install_logging`, and `.bazelrc` points frustrate's `log` build setting
+# for `set_log_sink`, and `.bazelrc` points frustrate's `log` build setting
 # at the same alias, which is what puts iroh's records and this app's logger in
 # one slot.
 log = { version = "0.4", default-features = false }

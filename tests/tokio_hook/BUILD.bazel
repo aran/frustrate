@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_test")
 load(":test.bzl", "with_dev_tokio_test")
 
-# The async-runtime hook (`frustrate::runtime::register`) against a real tokio,
+# The async-runtime hook (`frustrate::runtime::set_context`) against a real tokio,
 # and `//ext/tokio` on top of it. See src/lib.rs.
 #
 # tokio comes from `@tokio_test_crates`, a dev-only hub (//:MODULE.bazel), and

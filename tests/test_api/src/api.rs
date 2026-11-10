@@ -1394,14 +1394,14 @@ pub fn always_panics() -> i32 {
 static PANICS_SEEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static LAST_PANIC: Mutex<String> = Mutex::new(String::new());
 
-/// Register the panic listener this fixture reports through.
+/// Set the panic listener this fixture reports through.
 ///
-/// Idempotent by construction — `frustrate::panic::register` is last-wins — so
+/// Idempotent by construction — `frustrate::panic::set_listener` is last-wins — so
 /// a test file that calls it in `setUpAll` and the hostile driver that reaches
 /// it as just another sync member can both do so freely.
 #[bridge(sync)]
 pub fn watch_panics() {
-    frustrate::panic::register(|report| {
+    frustrate::panic::set_listener(|report| {
         PANICS_SEEN.fetch_add(1, Ordering::Relaxed);
         // Rendered here rather than in Dart so the location's presence is
         // observable across the wire: a report with nowhere to group it is the
@@ -2778,13 +2778,13 @@ pub async fn spawn_detached_echo(x: i64, f: DartFunction<i64, i64>, sink: Stream
 
 // ------------------------------------------------------------- the timer --
 
-/// The timer install an app writes: a fire-and-forget request channel out, and
+/// The timer an app sets: a fire-and-forget request channel out, and
 /// `fire_timer` back in. Two one-way trips and not a `DartFunction`, because
 /// the Dart closure behind one answers synchronously — it can compute, it
 /// cannot wait.
 #[bridge(sync)]
-pub fn install_timer(requests: DartCallback<(i64, i64)>) {
-    frustrate::runtime::install_dart_timer(requests);
+pub fn set_timer(requests: DartCallback<(i64, i64)>) {
+    frustrate::runtime::set_dart_timer(requests);
 }
 
 /// The host's half of the round trip.
@@ -2793,19 +2793,19 @@ pub fn fire_timer(id: i64) {
     frustrate::runtime::fire_timer(id);
 }
 
-/// Drop the timer registration, and with it the request channel.
+/// Clear the timer, and with it the request channel.
 ///
-/// Not ceremony: the installed callback holds a `StreamSink`, and an open
+/// Not ceremony: the callback that is set holds a `StreamSink`, and an open
 /// stream pins the isolate. An app wants that for its
 /// whole life; a test suite that never released it would leave a process that
 /// runs every test, passes, and does not exit.
 #[bridge(sync)]
-pub fn uninstall_timer() {
-    frustrate::runtime::uninstall_timer();
+pub fn clear_timer() {
+    frustrate::runtime::clear_timer();
 }
 
 /// Sleep, then answer `x`. The elapsed time is Dart's to measure: there is no
-/// clock in a stock wasm32 module, which is the same absence `install_timer`
+/// clock in a stock wasm32 module, which is the same absence `set_timer`
 /// exists for.
 #[bridge]
 pub async fn sleep_then(ms: i64, x: i64) -> i64 {
@@ -3002,7 +3002,7 @@ pub fn actor_host_count() -> i64 {
 ///
 /// Hand-rolled (a mutex and a waker list) on purpose: a `Deferred` body runs
 /// on frustrate's cooperative executor, which provides no async runtime unless
-/// the app registered one (`frustrate::runtime::register`, native-only) — so
+/// the app registered one (`frustrate::runtime::set_context`, native-only) — so
 /// the fixture models exactly what the docs tell a *portable* app to do:
 /// capture an explicitly shared value in the prefix, await a plain future.
 /// This fixture runs on web too, so it stays in the portable form.
@@ -3181,12 +3181,12 @@ impl Miner {
     ///
     /// The same source is two different things on the two platforms, which is
     /// exactly what the cross-language test pins: natively this is the *process*
-    /// logger, so it displaces whatever a free-function install registered and
+    /// logger, so it displaces whatever the free function set and
     /// that stream is closed; on web it is a second, independent logger and both
     /// streams stay open.
-    pub fn install_logging(&mut self, max_level: String, sink: StreamSink<LogLine>) -> Result<()> {
+    pub fn set_log_sink(&mut self, max_level: String, sink: StreamSink<LogLine>) -> Result<()> {
         self.calls += 1;
-        frustrate::logging::install(level_filter(&max_level)?, sink, log_line)?;
+        frustrate::logging::set_sink(level_filter(&max_level)?, sink, log_line)?;
         Ok(())
     }
 
@@ -4688,17 +4688,17 @@ fn level_filter(name: &str) -> Result<log::LevelFilter> {
         .map_err(|_| anyhow::anyhow!("not a log level: {name}"))
 }
 
-/// Send every record `log` accepts to `sink`. Sync, because installing is a
-/// registration and not work — the same reason `TextDoc::watch` is.
+/// Send every record `log` accepts to `sink`. Sync, because setting the sink
+/// is a store and not work — the same reason `TextDoc::watch` is.
 #[bridge(sync)]
-pub fn install_logging(max_level: String, sink: StreamSink<LogLine>) -> Result<()> {
-    frustrate::logging::install(level_filter(&max_level)?, sink, log_line)?;
+pub fn set_log_sink(max_level: String, sink: StreamSink<LogLine>) -> Result<()> {
+    frustrate::logging::set_sink(level_filter(&max_level)?, sink, log_line)?;
     Ok(())
 }
 
 #[bridge(sync)]
-pub fn uninstall_logging() {
-    frustrate::logging::uninstall();
+pub fn clear_log_sink() {
+    frustrate::logging::clear_sink();
 }
 
 /// Records accepted and not delivered, process-wide and monotonic. Read twice

@@ -993,11 +993,11 @@ mod native {
             mark_gone(iso as u32);
             let call = (iso << ISOLATE_SHIFT) | 9;
 
-            crate::panic::register(note_report);
+            crate::panic::set_listener(note_report);
             let mut w = crate::codec::FramedWriter::status(crate::envelope::STATUS_OK);
             unsafe { w.write_minted(0xD1E, explode) };
             respond(call, w);
-            crate::panic::unregister();
+            crate::panic::clear_listener();
 
             let reports = REPORTS.lock().unwrap();
             assert_eq!(reports.len(), 1, "the panic must not vanish: {reports:?}");

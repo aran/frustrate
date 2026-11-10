@@ -45,7 +45,7 @@ once_cell = { version = "1.21", default-features = false, features = ["race", "a
 # producer can drive it through `forward`/`send_all` with backpressure. The
 # `Sink`/`EventSink` mirrors have no pause seam and get no impl.
 futures-sink = { version = "0.3", default-features = false }
-# The `log` facade itself, for `logging::install`. A dependency this crate
+# The `log` facade itself, for `logging::set_sink`. A dependency this crate
 # would not take to *reuse* something — but the whole
 # point of the module is that a bridge's dependencies, which have never heard
 # of frustrate, log through `log`, and that only works if this is the same

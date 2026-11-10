@@ -20,7 +20,7 @@ rust_library(
 )
 
 # Which `tokio` this crate is compiled against: the consumer's own, so the
-# `Handle` they pass to `register` is the same type as the one in the
+# `Handle` they pass to `set_runtime` is the same type as the one in the
 # signature. frustrate's `@frustrate_crates` hub has no tokio (it would join
 # every triple's lockfile), so unlike `//ext/getrandom` there is no default that
 # works. Unset, it points at `:unset`, whose analysis failure says what to set:

@@ -801,7 +801,7 @@ mod tests {
         reap_via_backstop(&host);
         assert_eq!(host_count(), before - 1, "a reap must count at once");
         EXITS.wait_for(1, "the host thread never exited");
-        crate::panic::unregister();
+        crate::panic::clear_listener();
 
         assert_eq!(DROPS.get(), 1, "the drain stopped at the panic");
         assert_eq!(

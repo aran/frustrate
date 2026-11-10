@@ -17,17 +17,17 @@
 //! runs serialized on the executor; everything after runs detached, touching
 //! only values it owns or explicitly shares (an `Arc`, a channel, a handle).
 //!
-//! # Runtime context: only if you registered one
+//! # Runtime context: only if you set one
 //!
 //! The future runs on frustrate's cooperative executor, which provides no
 //! tokio (or other runtime) context **by default**: a tokio timer or IO type
 //! constructed inside it panics with "there is no reactor running". Two ways
 //! out, and the second is native-only.
 //!
-//! **Without a registration**, spawn the work **on the runtime** and await the
+//! **Without a context set**, spawn the work **on the runtime** and await the
 //! result through a plain future — a `JoinHandle`, a oneshot receiver. This is
 //! portable (it is what a web actor does too, where there is no runtime to
-//! register):
+//! set):
 //!
 //! ```ignore
 //! pub fn connect(&self, ticket: String) -> Deferred<Result<PeerInfo, String>> {
@@ -38,9 +38,9 @@
 //! }
 //! ```
 //!
-//! **With [`frustrate::runtime::register`](crate::runtime::register)** (native
+//! **With [`frustrate::runtime::set_context`](crate::runtime::set_context)** (native
 //! only), deferred bodies drain on the same global executor as every other
-//! task, so they get the registered context and can `.await` the leaf
+//! task, so they get the context that is set and can `.await` the leaf
 //! directly — no `spawn`, no `JoinHandle`, and the work is cancelled by the
 //! same `dispose()`/reap path that already cancels the `Deferred`:
 //!
@@ -51,9 +51,9 @@
 //! **Construct the leaf inside the `async` block, not as an argument.** The
 //! prefix — everything up to and including the expression handed to
 //! `Deferred::new` — runs on the **actor's own thread**, not on the executor,
-//! so it gets no registered context. tokio builds a leaf eagerly, so
+//! so it gets no context that is set. tokio builds a leaf eagerly, so
 //! `Deferred::new(tokio::time::sleep(d))` panics "there is no reactor running"
-//! even in a process that registered one, while
+//! even in a process that set one, while
 //! `Deferred::new(async move { tokio::time::sleep(d).await })` is fine: the
 //! construction moves inside the future and happens on the first poll, under
 //! the context. The example above is the safe shape for this reason and not

@@ -70,7 +70,7 @@
 //! The width is fixed once the pool is built; a request to change it is
 //! refused with the value it is fixed at.
 //!
-//! Unlike [`crate::runtime::register`], which is compile-absent on wasm, this
+//! Unlike [`crate::runtime::set_context`], which is compile-absent on wasm, this
 //! exists on every target, so app code stays identical across platforms
 //! (charter §3). The target that cannot honour it (single-threaded wasm)
 //! refuses at runtime rather than by absence.
@@ -300,7 +300,7 @@ pub fn spawn_call(
 /// The [async-runtime hook](crate::runtime) does **not** change this, and the
 /// asymmetry is deliberate: it wraps the *cooperative executor's* polls, not
 /// this function, which is a utility a caller invokes explicitly rather than a
-/// path the generated glue takes. A registration therefore leaves the
+/// path the generated glue takes. Setting a context therefore leaves the
 /// bring-your-own-`block_on` pattern exactly as it was, and a tokio leaf
 /// reached through `block_on` with no context of its own still fails loudly at
 /// construction ("there is no reactor running") rather than hanging. To get
