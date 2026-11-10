@@ -3,6 +3,7 @@ load("@frustrate//bazel:defs.bzl", "frustrate_wasm_module", "frustrate_web_glue"
 load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options", "dart_binary", "dart_package_metadata")
 load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
 load("@rules_flutter//flutter:defs.bzl", "flutter_application", "flutter_native_library")
+load("@rules_flutter//flutter:integration_test.bzl", "flutter_application_variant")
 load("@rules_flutter//flutter:ios.bzl", "flutter_ios_app", "flutter_ios_simulator_build_test")
 load("@rules_flutter//flutter:linux.bzl", "flutter_linux_app")
 load("@rules_flutter//flutter:macos.bzl", "flutter_macos_app")
@@ -10,10 +11,6 @@ load("@rules_flutter//flutter:web.bzl", "flutter_web_bundle", "flutter_web_manif
 load("//:web_csp.bzl", "strict_csp_index_html")
 
 exports_files(["pubspec.lock"])
-
-# The threaded variant app (//threaded) reuses this exact file — the
-# portability story is that one main.dart serves every platform and web build.
-exports_files(["lib/main.dart"])
 
 # Every `analysis_options.yaml` here, for the `dart_analyze` aspect `.bazelrc`
 # enables under `bazel test`.
@@ -36,6 +33,11 @@ flutter_application(
     name = "app_flutter",
     main = "lib/main.dart",
     package = ":pubspec-metadata",
+    # The threaded and custom-std web bundles build this same program.
+    visibility = [
+        "//custom_std:__pkg__",
+        "//threaded:__pkg__",
+    ],
     deps = [
         "//bridge:demo_bridge",
         # Direct dep: main.dart imports the ActorPool convenience layer
@@ -133,7 +135,7 @@ flutter_android_app(
 flutter_linux_app(
     name = "app_linux",
     application = ":app_flutter",
-    gtk_app_id = "dev.frustrate.demo",
+    application_id = "dev.frustrate.demo",
     target_compatible_with = ["@platforms//os:linux"],
 )
 
@@ -189,24 +191,17 @@ flutter_web_manifest_gen(
 # covered).
 flutter_web_bundle(
     name = "app_web",
+    application = ":app_flutter",
     index_html = ":index_html",
-    main = "lib/main.dart",
     manifest_json = ":manifest_json",
     # Served exactly as a web_assets entry is, so it must not be named in
     # both — declaring it here is what gets the contract watched.
     native_modules = [":demo_rust_wasm_module"],
-    package = ":pubspec-metadata",
     # Required by the bundle's `script-src 'self'`: the renderer must load
     # from the bundled canvaskit/, not the gstatic CDN.
     use_local_canvaskit = True,
     # web/ holds only index.html, which arrives via index_html above.
     web_assets = [":frustrate.js"],
-    deps = [
-        "//bridge:demo_bridge",
-        "@deps//:flutter",
-        "@frustrate//runtime/dart:frustrate",
-        "@rules_flutter//flutter:material_icons",
-    ],
 )
 
 # The same app with Chrome left out of the WebAssembly allow-list, so Chrome
@@ -215,26 +210,25 @@ flutter_web_bundle(
 # app owns its 53-bit `int`, which `defines` does for this build only.
 # `WEB_DIR=../bazel-bin/app_web_js_fallback_web npx
 # playwright test web.spec.js` runs the gallery against it.
+flutter_application_variant(
+    name = "app_flutter_js_numbers",
+    application = ":app_flutter",
+    defines = ["frustrate.allowJsNumbers=true"],
+    main = "lib/main.dart",
+)
+
 flutter_web_bundle(
     name = "app_web_js_fallback",
-    defines = ["frustrate.allowJsNumbers=true"],
+    application = ":app_flutter_js_numbers",
     index_html = ":index_html",
-    main = "lib/main.dart",
     manifest_json = ":manifest_json",
     native_modules = [":demo_rust_wasm_module"],
-    package = ":pubspec-metadata",
     use_local_canvaskit = True,
     wasm_browsers = [
         "gecko",
         "webkit",
     ],
     web_assets = [":frustrate.js"],
-    deps = [
-        "//bridge:demo_bridge",
-        "@deps//:flutter",
-        "@frustrate//runtime/dart:frustrate",
-        "@rules_flutter//flutter:material_icons",
-    ],
 )
 
 build_test(

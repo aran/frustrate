@@ -1,7 +1,7 @@
 load("@frustrate//bazel:defs.bzl", "frustrate_bridge", "frustrate_code_asset", "frustrate_no_block_check")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata", "dart_test")
-load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
+load("@rules_flutter//flutter:defs.bzl", "flutter_native_library")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library", "rust_test")
 
 # Cargo.toml/Cargo.lock exist for the crate hub (//:MODULE.bazel's
@@ -151,20 +151,6 @@ frustrate_code_asset(
     library = ":iroh_rust",
 )
 
-# The generated bindings as a plain Dart library, for the VM test below.
-#
-# The same package name and the same generated source as :iroh_bridge, minus
-# the `lib/init.dart` seam. Not a `flutter_plugin` because nothing here is
-# Flutter: `dart_test` runs the plain VM, which is the whole reason this is
-# cheap enough to be an ordinary `bazel test` target. The test replaces the
-# package's hot-patchable native library with the asset built for the host.
-dart_library(
-    name = "bindings",
-    srcs = [":codegen.dart"],
-    package = ":pubspec-metadata",
-    deps = ["@frustrate//runtime/dart:frustrate"],
-)
-
 # A dependency's `log` records arriving on a Dart stream — the property
 # `frustrate::logging` exists for, asserted from a module that is not
 # frustrate. See the test's own header for why it cannot be asserted in
@@ -172,6 +158,8 @@ dart_library(
 #
 # Hermetic on the same terms as :iroh_rust_test: `Preset::Minimal` with no
 # relay contacts nothing. Hosts only, because it loads a macOS/Linux library.
+# `code_assets` replaces the package's hot-patchable library with the asset
+# built for the host.
 dart_test(
     name = "dependency_logging_test",
     size = "small",
@@ -183,7 +171,7 @@ dart_test(
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [
-        ":bindings",
+        ":iroh_bridge",
         "@frustrate//runtime/dart:frustrate",
     ],
 )
@@ -222,7 +210,7 @@ dart_package_metadata(
     code_assets = [":iroh_rust_native"],
 )
 
-flutter_plugin(
+dart_library(
     name = "iroh_bridge",
     srcs = [
         "lib/init.dart",
@@ -231,13 +219,6 @@ flutter_plugin(
         ":codegen.dart",
     ],
     package = ":pubspec-metadata",
-    platforms = [
-        "macos",
-        "ios",
-        "android",
-        "linux",
-        "web",
-    ],
     visibility = [
         "//:__pkg__",
         "//threaded:__pkg__",

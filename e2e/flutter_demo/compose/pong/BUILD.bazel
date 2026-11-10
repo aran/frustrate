@@ -1,6 +1,5 @@
 load("@frustrate//bazel:defs.bzl", "frustrate_bridge", "frustrate_bridge_library")
-load("@rules_dart//dart:defs.bzl", "dart_package_metadata")
-load("@rules_flutter//flutter:defs.bzl", "flutter_plugin")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
 
 frustrate_bridge(
     name = "codegen",
@@ -32,15 +31,10 @@ dart_package_metadata(
 
 # The bindings alone: the app names the library that serves them in its
 # `code_assets` (//compose:BUILD.bazel).
-flutter_plugin(
+dart_library(
     name = "bindings",
     srcs = [":codegen.dart"],
     package = ":pubspec-metadata",
-    platforms = [
-        "macos",
-        "ios",
-        "android",
-    ],
     visibility = ["//compose:__pkg__"],
     deps = ["@frustrate//runtime/dart:frustrate"],
 )

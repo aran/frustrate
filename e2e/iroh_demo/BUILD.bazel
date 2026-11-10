@@ -3,6 +3,7 @@ load("@frustrate//bazel:defs.bzl", "frustrate_wasm_module", "frustrate_web_glue"
 load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options", "dart_package_metadata")
 load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
 load("@rules_flutter//flutter:defs.bzl", "flutter_application")
+load("@rules_flutter//flutter:integration_test.bzl", "flutter_application_variant")
 load("@rules_flutter//flutter:ios.bzl", "flutter_ios_app", "flutter_ios_simulator_build_test")
 load("@rules_flutter//flutter:linux.bzl", "flutter_linux_app")
 load("@rules_flutter//flutter:macos.bzl", "flutter_macos_app")
@@ -32,6 +33,8 @@ flutter_application(
     name = "app_flutter",
     main = "lib/main.dart",
     package = ":pubspec-metadata",
+    # //threaded's web app is a variant of this one.
+    visibility = ["//threaded:__pkg__"],
     deps = APP_DEPS,
 )
 
@@ -153,7 +156,7 @@ flutter_linux_app(
     name = "app_linux",
     app_name = "Tin Can",
     application = ":app_flutter",
-    gtk_app_id = "dev.frustrate.irohdemo",
+    application_id = "dev.frustrate.irohdemo",
     target_compatible_with = ["@platforms//os:linux"],
 )
 
@@ -282,27 +285,25 @@ frustrate_web_glue(
 #
 # The browser test does not use this target. It builds //:app_web_hermetic
 # below, which is `minimal` plus a relay the harness starts.
+flutter_application_variant(
+    name = "app_flutter_n0",
+    application = ":app_flutter",
+    defines = ["PRESET=n0"],
+    main = "lib/main.dart",
+)
+
 flutter_web_app(
     name = "app_web",
-    defines = ["PRESET=n0"],
+    application = ":app_flutter_n0",
     extra_web_assets = [
         ":iroh_rust.wasm",
         ":iroh_rust_bg_js",
         ":frustrate.js",
     ],
-    main = "lib/main.dart",
-    package = ":pubspec-metadata",
     # The index.html CSP allows scripts from 'self' only: the renderer must
     # load from the bundled canvaskit/, not the gstatic CDN.
     use_local_canvaskit = True,
     web_defines = csp_web_defines(),
-    deps = [
-        "//bridge:iroh_bridge",
-        "@deps//:flutter",
-        "@deps//:qr",
-        "@frustrate//runtime/dart:frustrate",
-        "@rules_flutter//flutter:material_icons",
-    ],
 )
 
 # The bundle playwright/web.spec.js runs: no third party anywhere.
@@ -323,28 +324,26 @@ flutter_web_app(
 # tell it afterwards. web.spec.js must agree with this number; if it does not,
 # the run fails loudly as an unreachable relay rather than falling back to
 # anything.
-flutter_web_app(
-    name = "app_web_hermetic",
+flutter_application_variant(
+    name = "app_flutter_hermetic",
+    application = ":app_flutter",
     defines = [
         "PRESET=minimal",
         "RELAY_URL=http://127.0.0.1:3341",
     ],
+    main = "lib/main.dart",
+)
+
+flutter_web_app(
+    name = "app_web_hermetic",
+    application = ":app_flutter_hermetic",
     extra_web_assets = [
         ":iroh_rust.wasm",
         ":iroh_rust_bg_js",
         ":frustrate.js",
     ],
-    main = "lib/main.dart",
-    package = ":pubspec-metadata",
     use_local_canvaskit = True,
     web_defines = csp_web_defines(),
-    deps = [
-        "//bridge:iroh_bridge",
-        "@deps//:flutter",
-        "@deps//:qr",
-        "@frustrate//runtime/dart:frustrate",
-        "@rules_flutter//flutter:material_icons",
-    ],
 )
 
 # One build_test per platform. These are also the guard for MODULE.bazel's

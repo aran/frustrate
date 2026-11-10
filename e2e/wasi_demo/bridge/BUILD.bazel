@@ -1,6 +1,5 @@
 load("@frustrate//bazel:defs.bzl", "frustrate_bridge", "frustrate_bridge_library", "frustrate_code_asset")
-load("@rules_dart//dart:defs.bzl", "dart_package_metadata")
-load("@rules_flutter//flutter:defs.bzl", "flutter_plugin")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
 
 exports_files([
     "Cargo.toml",
@@ -50,7 +49,7 @@ dart_package_metadata(
 )
 
 # The bindings package: generated Dart plus the platform-neutral init seam.
-flutter_plugin(
+dart_library(
     name = "wasi_bridge",
     srcs = [
         "lib/init.dart",
@@ -59,10 +58,6 @@ flutter_plugin(
         ":codegen.dart",
     ],
     package = ":pubspec-metadata",
-    platforms = [
-        "macos",
-        "web",
-    ],
     visibility = ["//:__pkg__"],
     deps = ["@frustrate//runtime/dart:frustrate"],
 )

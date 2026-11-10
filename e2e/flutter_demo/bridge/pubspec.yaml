@@ -1,6 +1,6 @@
 # The bindings package, as pub sees it.
 #
-# Bazel builds this directory through //bridge:demo_bridge (a flutter_plugin),
+# Bazel builds this directory through //bridge:demo_bridge (a dart_library),
 # which needs no pubspec at all — it takes its sources and its dependency on
 # package:frustrate from BUILD.bazel. This file exists so the same directory is
 # *also* a resolvable pub package, which is what lets `flutter run` and

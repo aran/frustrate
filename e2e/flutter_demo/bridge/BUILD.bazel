@@ -1,7 +1,7 @@
 load("@frustrate//bazel:defs.bzl", "frustrate_bridge", "frustrate_code_asset")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
-load("@rules_dart//dart:defs.bzl", "dart_package_metadata")
-load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
+load("@rules_flutter//flutter:defs.bzl", "flutter_native_library")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 
 # Capability enforcement is structural: codegen always checks native and web
@@ -106,7 +106,7 @@ dart_package_metadata(
 # The bindings package: generated Dart plus the platform-neutral init seam.
 # App code imports package:demo_bridge/... and never touches a platform
 # transport directly.
-flutter_plugin(
+dart_library(
     name = "demo_bridge",
     srcs = [
         "lib/fake_plan.dart",
@@ -119,13 +119,6 @@ flutter_plugin(
         ":codegen.dart",
     ],
     package = ":pubspec-metadata",
-    platforms = [
-        "macos",
-        "ios",
-        "android",
-        "linux",
-        "web",
-    ],
     visibility = [
         "//:__pkg__",
         "//custom_std:__pkg__",
