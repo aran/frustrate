@@ -95,7 +95,7 @@ class GalleryPage extends StatelessWidget {
           _MineProgressCard(),
           _AwaitedCallbackCard(),
           _NativeCallbackCard(),
-          _RuntimeFailCard(),
+          _WebStubCard(),
           _SectionHeader('Traits'),
           _GreeterCard(),
           _SectionHeader('External types'),
@@ -1145,13 +1145,13 @@ class _NativeCallbackCardState extends State<_NativeCallbackCard> {
   }
 }
 
-class _RuntimeFailCard extends StatefulWidget {
-  const _RuntimeFailCard();
+class _WebStubCard extends StatefulWidget {
+  const _WebStubCard();
   @override
-  State<_RuntimeFailCard> createState() => _RuntimeFailCardState();
+  State<_WebStubCard> createState() => _WebStubCardState();
 }
 
-class _RuntimeFailCardState extends State<_RuntimeFailCard> {
+class _WebStubCardState extends State<_WebStubCard> {
   final Ledger _ledger = Ledger.new_();
   String _result = 'tap to read';
 
@@ -1162,7 +1162,7 @@ class _RuntimeFailCardState extends State<_RuntimeFailCard> {
   }
 
   void _read() {
-    // blockingRead is opted onto the web surface with web="runtime_fail": it
+    // blockingRead is opted onto the web surface with web_stub: it
     // compiles everywhere, returns the balance on native, and throws a loud
     // UnsupportedError on web — caught and shown here.
     try {
@@ -1178,12 +1178,12 @@ class _RuntimeFailCardState extends State<_RuntimeFailCard> {
     return _SectionCard(
       title: 'blockingRead — opt-in runtime-fail on web',
       subtitle: 'A blocking read is native-only, but opted onto the web '
-          'surface with web="runtime_fail": present so portable code compiles, '
+          'surface with web_stub: present so portable code compiles, '
           'throwing an attributable UnsupportedError if called on web. Native '
           'returns the balance.',
       child: Row(
         children: [
-          Expanded(child: Text(_result, key: const Key('runtimeFail'))),
+          Expanded(child: Text(_result, key: const Key('webStub'))),
           const SizedBox(width: 12),
           FilledButton.tonal(
               onPressed: _read, child: const Text('read now')),

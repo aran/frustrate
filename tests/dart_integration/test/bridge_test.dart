@@ -1788,7 +1788,7 @@ void main() {
     }, testOn: 'browser');
 
     test('web: the opt-in member is present but throws UnsupportedError', () {
-      // `blockingRead` carries #[bridge(web = "runtime_fail")]: the informed
+      // `blockingRead` carries #[bridge(web_stub)]: the informed
       // opt-in that INCLUDES this native-only member in the web build so
       // portable code naming it compiles for web (this test referencing it IS
       // that proof — the file would not compile for a browser platform
@@ -1803,7 +1803,7 @@ void main() {
           isA<UnsupportedError>().having(
             (e) => e.message,
             'message',
-            allOf(contains('blockingRead'), contains('runtime_fail')),
+            allOf(contains('blockingRead'), contains('web_stub')),
           ),
         ),
       );

@@ -7852,7 +7852,7 @@ mod tests {
     }
 
     #[test]
-    fn web_runtime_fail_opt_in_does_not_change_rust_gating() {
+    fn web_stub_opt_in_does_not_change_rust_gating() {
         // The opt-in is a Dart-surface concern (a throwing web stub); the Rust
         // module is byte-identical whether or not it is set — the throw happens
         // on the Dart side, before the boundary, so the wasm dispatch arm stays
@@ -7861,7 +7861,7 @@ mod tests {
             r#"
             #[bridge(locked)] pub struct Cache { x: i32 }
             #[bridge] impl Cache {
-                #[bridge(sync, on_contention = "block", web = "runtime_fail")]
+                #[bridge(sync, on_contention = "block", web_stub)]
                 pub fn blocking_get(&self) -> i32 { 0 }
             }
             "#,

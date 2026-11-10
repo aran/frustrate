@@ -1852,11 +1852,11 @@ impl Counter {
     }
 
     /// The same blocking read, but opted INTO the web surface with
-    /// `#[bridge(web = "runtime_fail")]`: present on web so portable code
+    /// `#[bridge(web_stub)]`: present on web so portable code
     /// referencing it compiles, and its web body throws a loud `UnsupportedError`
     /// at runtime if actually called there (native behaves exactly like
     /// `blocking_get`). Proves the informed opt-in against the default absence.
-    #[bridge(sync, on_contention = "block", web = "runtime_fail")]
+    #[bridge(sync, on_contention = "block", web_stub)]
     pub fn blocking_read(&self) -> i64 {
         self.value
     }
@@ -2724,10 +2724,10 @@ pub fn tally(items: Vec<i64>, cb: DartCallback<i64>) -> i64 {
 /// Value-returning callback (native-only by derivation): a plain pool member
 /// cannot `.await`, so it uses the blocking `call` — the pool worker blocks
 /// per item while the Dart closure maps it. Opted INTO the web surface with
-/// `#[bridge(web = "runtime_fail")]` — the async/DartFunction shape of the
+/// `#[bridge(web_stub)]` — the async/DartFunction shape of the
 /// runtime-throwing stub (`Miner::refine` below stays un-opted, so an actor's
 /// DartFunction member still proves the default absence on web).
-#[bridge(web = "runtime_fail")]
+#[bridge(web_stub)]
 pub fn transform_sum(values: Vec<i64>, f: DartFunction<i64, i64>) -> i64 {
     values.into_iter().map(|v| f.call(v)).sum()
 }

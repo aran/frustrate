@@ -64,13 +64,13 @@ fn emit_entry(iface: &Interface, entry_stem: &str) -> String {
 }
 
 /// How a native-only member appears on the surface being emitted — the single
-/// place the `web = "runtime_fail"` opt-in gates omission-vs-stub, consulted by
+/// place the `web_stub` opt-in gates omission-vs-stub, consulted by
 /// every emission site (free functions, opaque methods, trait interface +
 /// implementors, actor methods) so the rule lives once.
 ///
 /// On the native surface every member is `Emit`. On the web surface a
 /// native-only member is `Omit` by default (compile-time absent — app code
-/// naming it fails to compile for web) or, with `#[bridge(web = "runtime_fail")]`,
+/// naming it fails to compile for web) or, with `#[bridge(web_stub)]`,
 /// `Stub` (present, but its body throws a loud `UnsupportedError` at runtime).
 pub(crate) enum WebFate {
     Emit,
@@ -81,7 +81,7 @@ pub(crate) enum WebFate {
 pub(crate) fn web_fate(f: &Function, web: bool) -> WebFate {
     if !(web && f.requires_native) {
         WebFate::Emit
-    } else if f.web_runtime_fail {
+    } else if f.web_stub {
         WebFate::Stub
     } else {
         WebFate::Omit
@@ -442,14 +442,14 @@ fn emit_omission_note(out: &mut String, iface: &Interface, f: &Function, depth: 
             let _ = write!(
                 out,
                 "{pad}// Use it from native-only code via the native variant, or opt it into\n\
-                 {pad}// this surface as a runtime-throwing stub with #[bridge(web = \"runtime_fail\")].\n\n"
+                 {pad}// this surface as a runtime-throwing stub with #[bridge(web_stub)].\n\n"
             );
         }
     }
 }
 
 /// A native-only member opted into the web surface with
-/// `#[bridge(web = "runtime_fail")]` (`WebFate::Stub`): emit the member's real
+/// `#[bridge(web_stub)]` (`WebFate::Stub`): emit the member's real
 /// Dart signature — so portable app code naming it compiles for web — with a
 /// body that throws a loud, attributable `UnsupportedError` naming the member
 /// and why it cannot run here. The throw is on the Dart side, before any attempt
@@ -467,7 +467,7 @@ fn emit_web_stub(out: &mut String, iface: &Interface, f: &Function, depth: usize
     let static_kw = if is_static { "static " } else { "" };
     let throw = format!(
         "throw UnsupportedError('{name} is not available on web: {reason}. It was \
-         compiled into the web build with #[bridge(web = \"runtime_fail\")]; call it \
+         compiled into the web build with #[bridge(web_stub)]; call it \
          on native only.')",
         reason = native_only_reason(iface, f)
     );
@@ -6303,7 +6303,7 @@ mod tests {
             #[bridge] impl Vault {
                 #[bridge(sync)] pub fn new() -> Self { todo!() }
                 /// Blocks, but is opted onto web.
-                #[bridge(sync, on_contention = "block", web = "runtime_fail")]
+                #[bridge(sync, on_contention = "block", web_stub)]
                 pub fn blocking_read(&self) -> i32 { 0 }
             }
 
@@ -6424,7 +6424,7 @@ mod tests {
     #[test]
     fn the_breadcrumb_never_advises_a_stub_the_checker_would_reject() {
         // A free function *naming* a native-only type is omitted from the web
-        // surface, and FR0032 rejects `web = "runtime_fail"` on it — the stub
+        // surface, and FR0032 rejects `web_stub` on it — the stub
         // would be a real Dart signature referencing a class that is not
         // emitted. So the breadcrumb must not suggest it.
         let b = emit_all(
@@ -6444,7 +6444,7 @@ mod tests {
             .next()
             .unwrap();
         assert!(
-            !describe_note.contains("runtime_fail"),
+            !describe_note.contains("web_stub"),
             "must not advise an opt-in FR0032 rejects: {describe_note}"
         );
         assert!(describe_note.contains("names `Disk`"), "{describe_note}");
@@ -6457,7 +6457,7 @@ mod tests {
             .split("\n\n")
             .next()
             .unwrap();
-        assert!(blocking_note.contains("runtime_fail"), "{blocking_note}");
+        assert!(blocking_note.contains("web_stub"), "{blocking_note}");
     }
 
     #[test]
@@ -6821,8 +6821,8 @@ mod tests {
     }
 
     #[test]
-    fn web_runtime_fail_opt_in_emits_a_throwing_web_stub() {
-        // The opt-in (`web = "runtime_fail"`) puts a native-only member ONTO the
+    fn web_stub_opt_in_emits_a_throwing_web_stub() {
+        // The opt-in (`web_stub`) puts a native-only member ONTO the
         // web surface as a runtime-throwing stub, while the un-opted sibling
         // stays compile-time absent — the default. Native is unchanged for both.
         let b = emit_all(
@@ -6831,7 +6831,7 @@ mod tests {
             #[bridge] impl Cache {
                 #[bridge(sync)]
                 pub fn new() -> Self { todo!() }
-                #[bridge(sync, on_contention = "block", web = "runtime_fail")]
+                #[bridge(sync, on_contention = "block", web_stub)]
                 pub fn blocking_read(&self) -> i32 { 0 }
                 #[bridge(sync, on_contention = "block")]
                 pub fn blocking_get(&self) -> i32 { 0 }
@@ -6851,7 +6851,7 @@ mod tests {
             b.web
         );
         assert!(
-            b.web.contains("#[bridge(web = \"runtime_fail\")]"),
+            b.web.contains("#[bridge(web_stub)]"),
             "the stub names the opt-in it was built with: {}",
             b.web
         );
@@ -6873,12 +6873,12 @@ mod tests {
     }
 
     #[test]
-    fn web_runtime_fail_stub_is_async_for_an_async_member() {
+    fn web_stub_stub_is_async_for_an_async_member() {
         // A value-returning DartFunction member is Exec::Async; its stub is a
         // `Future`-returning `async` method (matching the native signature), so
         // an awaiting caller still type-checks — it just throws when awaited.
         let b = emit_all(
-            "#[bridge(web = \"runtime_fail\")] pub fn transform(f: DartFunction<i64, i64>) -> i64 { 0 }",
+            "#[bridge(web_stub)] pub fn transform(f: DartFunction<i64, i64>) -> i64 { 0 }",
         );
         assert!(
             b.web.contains("Future<int> transform({required int Function(int) f}) async {"),

@@ -71,11 +71,11 @@ pub struct BridgeAttr {
     /// a method inside an annotated `impl`/`trait` block stops inheriting the
     /// block's options (see `parse_impl`).
     pub skip: bool,
-    /// `#[bridge(web = "runtime_fail")]`: opt a genuinely native-only member
+    /// `#[bridge(web_stub)]`: opt a genuinely native-only member
     /// INTO the web Dart surface as a runtime-throwing stub (an
     /// `UnsupportedError`), instead of the default compile-time absence. The
     /// checker rejects it (FR0030) on any member that is not native-only.
-    pub web_runtime_fail: bool,
+    pub web_stub: bool,
     /// `#[bridge(native_only)]`: declare that this member cannot exist on web,
     /// because its implementation (or a crate it reaches) does not build for
     /// wasm32. An explicit input to the checker's `requires_native`.
@@ -1405,6 +1405,7 @@ fn parse_bridge_option(meta: &syn::Meta, out: &mut BridgeAttr) -> Result<()> {
         syn::Meta::Path(p) if p.is_ident("inbound") => out.inbound = true,
         syn::Meta::Path(p) if p.is_ident("skip") => out.skip = true,
         syn::Meta::Path(p) if p.is_ident("native_only") => out.native_only = true,
+        syn::Meta::Path(p) if p.is_ident("web_stub") => out.web_stub = true,
         syn::Meta::Path(p) if p.is_ident("no_block") => out.no_block = true,
         syn::Meta::List(l) if l.path.is_ident("no_block") => {
             out.no_block = true;
@@ -1494,27 +1495,6 @@ fn parse_bridge_option(meta: &syn::Meta, out: &mut BridgeAttr) -> Result<()> {
                 bail!("dart_identifier expects a string: dart_identifier = \"wordCount\"");
             };
             out.dart_identifier = Some(lit.value());
-        }
-        syn::Meta::NameValue(nv) if nv.path.is_ident("web") => {
-            let syn::Expr::Lit(syn::ExprLit {
-                lit: syn::Lit::Str(s),
-                ..
-            }) = &nv.value
-            else {
-                bail!("web expects a string: web = \"runtime_fail\"");
-            };
-            match s.value().as_str() {
-                // The only web policy today. Absent = the default (a native-only
-                // member is compile-time absent from the web surface); this
-                // value opts it back in as a runtime-throwing stub.
-                "runtime_fail" => out.web_runtime_fail = true,
-                other => bail!(
-                    "unknown web policy `{other}`; the only value is \"runtime_fail\" \
-                     (include a native-only member in the web build, failing loudly at \
-                     runtime if it is actually called). Omit `web` for the default: the \
-                     member is compile-time absent from the web surface"
-                ),
-            }
         }
         syn::Meta::NameValue(nv) if nv.path.is_ident("on_contention") => {
             let syn::Expr::Lit(syn::ExprLit {
@@ -2499,7 +2479,7 @@ fn parse_impl(
             // one: `reject_inbound` refuses it on the block above.
             inbound: false,
             skip: false,
-            web_runtime_fail: impl_attr.web_runtime_fail,
+            web_stub: impl_attr.web_stub,
             native_only: false,
             no_block: false,
             allow: Vec::new(),
@@ -2693,7 +2673,7 @@ fn parse_trait(
             // one: `reject_inbound` refuses it on the block above.
             inbound: false,
             skip: false,
-            web_runtime_fail: attr.web_runtime_fail,
+            web_stub: attr.web_stub,
             native_only: false,
             no_block: false,
             allow: Vec::new(),
@@ -2982,7 +2962,7 @@ fn parse_fn(
         no_block: attr.no_block,
         no_block_allow: attr.allow.clone(),
         cfg_gated: attr.cfg_gated,
-        web_runtime_fail: attr.web_runtime_fail,
+        web_stub: attr.web_stub,
         rust_async,
         deferred,
         ret_borrow,
@@ -5463,38 +5443,38 @@ mod tests {
     }
 
     #[test]
-    fn parses_web_runtime_fail_opt_in() {
+    fn parses_web_stub_opt_in() {
         let iface = parse(
             r#"
             #[bridge(locked)] pub struct Cache { x: i32 }
             #[bridge] impl Cache {
-                #[bridge(sync, on_contention = "block", web = "runtime_fail")]
+                #[bridge(sync, on_contention = "block", web_stub)]
                 pub fn blocking_read(&self) -> i32 { 0 }
             }
             "#,
         );
         let f = iface.functions.iter().find(|f| f.name == "blocking_read").unwrap();
-        assert!(f.web_runtime_fail);
+        assert!(f.web_stub);
         assert_eq!(f.on_contention, Some(OnContention::Block));
         // Default: absent attribute leaves the flag off.
         let iface = parse("#[bridge(sync)] pub fn g() {}");
-        assert!(!iface.functions[0].web_runtime_fail);
+        assert!(!iface.functions[0].web_stub);
     }
 
     #[test]
-    fn impl_level_web_policy_is_inherited_by_methods() {
-        // Like `sync`/`on_contention`, an impl-level `web` propagates to
+    fn impl_level_web_stub_is_inherited_by_methods() {
+        // Like `sync`/`on_contention`, an impl-level `web_stub` propagates to
         // methods that carry no own #[bridge].
         let iface = parse(
             r#"
             #[bridge(locked)] pub struct Cache { x: i32 }
-            #[bridge(web = "runtime_fail")]
+            #[bridge(web_stub)]
             impl Cache {
                 pub fn refine(&self, f: DartFunction<i64, i64>) -> i64 { 0 }
             }
             "#,
         );
-        assert!(iface.functions.iter().find(|f| f.name == "refine").unwrap().web_runtime_fail);
+        assert!(iface.functions.iter().find(|f| f.name == "refine").unwrap().web_stub);
     }
 
     /// A representation keyword on a function or an impl block described
@@ -5519,14 +5499,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_web_policy() {
-        let err =
-            parse_source("#[bridge(web = \"omit\")] pub fn f() {}", "crate").unwrap_err();
-        assert!(err.to_string().contains("unknown web policy"), "{err}");
-        // A non-string value is also loud.
-        let err =
-            parse_source("#[bridge(web = 1)] pub fn f() {}", "crate").unwrap_err();
-        assert!(err.to_string().contains("web expects a string"), "{err}");
+    fn rejects_the_web_key() {
+        // `web_stub` is a flag; a `web = ...` key is not an option at all.
+        assert!(parse_source("#[bridge(web = \"runtime_fail\")] pub fn f() {}", "crate").is_err());
     }
 
     #[test]

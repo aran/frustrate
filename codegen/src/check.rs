@@ -231,7 +231,7 @@ pub fn check(iface: Interface) -> Result<Interface, Vec<Diagnostic>> {
         f.native_only = d;
     }
 
-    // The `#[bridge(web = "runtime_fail")]` opt-in only means something on a
+    // The `#[bridge(web_stub)]` opt-in only means something on a
     // native-only member: it trades that member's compile-time absence for a
     // runtime-throwing web stub. On a member that
     // already runs everywhere it is a no-op the author expected to matter — so
@@ -244,11 +244,11 @@ pub fn check(iface: Interface) -> Result<Interface, Vec<Diagnostic>> {
                 Some(p) => format!("`{}::{}`", p, f.name),
                 None => format!("`{}`", f.name),
             };
-            if f.web_runtime_fail && !f.requires_native {
+            if f.web_stub && !f.requires_native {
                 diags.push(Diagnostic {
                     code: "FR0030",
                     message: format!(
-                        "{ctx}: `#[bridge(web = \"runtime_fail\")]` is only meaningful on a \
+                        "{ctx}: `#[bridge(web_stub)]` is only meaningful on a \
                          native-only member — one that cannot run on web: \
                          `on_contention = \"block\"`, a value-returning DartFunction on a \
                          non-async member, or a `#[bridge(native_only)]` declaration. \
@@ -261,7 +261,7 @@ pub fn check(iface: Interface) -> Result<Interface, Vec<Diagnostic>> {
             }
             // A stub cannot reference a class the web surface does not emit —
             // and a member of a native-only type has nowhere to be declared.
-            if f.web_runtime_fail && f.requires_native {
+            if f.web_stub && f.requires_native {
                 if let Some(ty) = native_only_type_in_scope(&iface, f) {
                     let how = if f.parent.as_deref() == Some(ty.as_str()) {
                         "it is a member of"
@@ -271,7 +271,7 @@ pub fn check(iface: Interface) -> Result<Interface, Vec<Diagnostic>> {
                     diags.push(Diagnostic {
                         code: "FR0032",
                         message: format!(
-                            "{ctx}: `#[bridge(web = \"runtime_fail\")]` cannot stub this \
+                            "{ctx}: `#[bridge(web_stub)]` cannot stub this \
                              member on web — {how} `{ty}`, which is declared with a \
                              concurrency model and `native_only` (e.g. \
                              `#[bridge(confined, native_only)]`) and has no class on the \
@@ -2850,7 +2850,7 @@ fn finalize(mut iface: Interface) -> Result<Interface, Vec<Diagnostic>> {
                 no_block: false,
                 no_block_allow: Vec::new(),
                 cfg_gated: false,
-                web_runtime_fail: false,
+                web_stub: false,
                 rust_async: false,
                 deferred: false,
                 docs: vec![],
@@ -8311,16 +8311,16 @@ mod tests {
     }
 
     #[test]
-    fn native_only_and_the_runtime_fail_opt_in_compose() {
+    fn native_only_and_the_web_stub_opt_in_compose() {
         // FR0030's condition is `!requires_native`, and a declared member now
         // satisfies it — so the opt-in is finally usable for the reason it was
         // written: a member absent on web that portable Dart still names.
         let iface = check_src(
-            "#[bridge(sync, native_only, web = \"runtime_fail\")] pub fn dial() -> i64 { 0 }",
+            "#[bridge(sync, native_only, web_stub)] pub fn dial() -> i64 { 0 }",
         )
         .unwrap();
         let f = &iface.functions[0];
-        assert!(f.requires_native && f.native_only && f.web_runtime_fail);
+        assert!(f.requires_native && f.native_only && f.web_stub);
     }
 
     #[test]
@@ -8331,7 +8331,7 @@ mod tests {
             r#"
             #[bridge(frozen, native_only)] pub struct Node { x: i32 }
             #[bridge] impl Node {
-                #[bridge(sync, web = "runtime_fail")] pub fn id(&self) -> i64 { 0 }
+                #[bridge(sync, web_stub)] pub fn id(&self) -> i64 { 0 }
             }
             "#,
         ));
@@ -8339,7 +8339,7 @@ mod tests {
         let ds = codes(check_src(
             r#"
             #[bridge(frozen, native_only)] pub struct Node { x: i32 }
-            #[bridge(sync, web = "runtime_fail")] pub fn describe(n: &Node) -> String { String::new() }
+            #[bridge(sync, web_stub)] pub fn describe(n: &Node) -> String { String::new() }
             "#,
         ));
         assert_eq!(ds, vec!["FR0032"]);
@@ -8459,7 +8459,7 @@ mod tests {
     }
 
     #[test]
-    fn web_runtime_fail_opt_in_accepted_on_native_only_members() {
+    fn web_stub_opt_in_accepted_on_native_only_members() {
         // The opt-in rides the same requires_native derivation: an opted member
         // is still native-only (omitted from the web *capability* check pass),
         // it just carries the flag the emitter reads to make a throwing web stub
@@ -8470,47 +8470,47 @@ mod tests {
             r#"
             #[bridge(locked)] pub struct Cache { x: i32 }
             #[bridge] impl Cache {
-                #[bridge(sync, on_contention = "block", web = "runtime_fail")]
+                #[bridge(sync, on_contention = "block", web_stub)]
                 pub fn blocking_read(&self) -> i32 { 0 }
                 #[bridge(sync, on_contention = "block")]
                 pub fn blocking_get(&self) -> i32 { 0 }
             }
-            #[bridge(web = "runtime_fail")]
+            #[bridge(web_stub)]
             pub fn transform(f: DartFunction<i64, i64>) -> i64 { 0 }
             "#,
         )
         .unwrap();
         let br = iface.functions.iter().find(|f| f.name == "blocking_read").unwrap();
-        assert!(br.requires_native && br.web_runtime_fail);
+        assert!(br.requires_native && br.web_stub);
         let bg = iface.functions.iter().find(|f| f.name == "blocking_get").unwrap();
-        assert!(bg.requires_native && !bg.web_runtime_fail, "un-opted stays default");
+        assert!(bg.requires_native && !bg.web_stub, "un-opted stays default");
         let tr = iface.functions.iter().find(|f| f.name == "transform").unwrap();
-        assert!(tr.requires_native && tr.web_runtime_fail);
+        assert!(tr.requires_native && tr.web_stub);
     }
 
     #[test]
-    fn web_runtime_fail_on_a_portable_member_is_rejected() {
+    fn web_stub_on_a_portable_member_is_rejected() {
         // FR0030: the opt-in is meaningless on a member that already runs on
         // web (nothing to fail at runtime). A plain free function:
         let ds = codes(check_src(
-            "#[bridge(sync, web = \"runtime_fail\")] pub fn f() {}",
+            "#[bridge(sync, web_stub)] pub fn f() {}",
         ));
         assert_eq!(ds, vec!["FR0030"]);
         // A void (fire-and-forget) DartCallback is portable too — still rejected.
         let ds = codes(check_src(
-            "#[bridge(web = \"runtime_fail\")] pub fn g(cb: DartCallback<i64>) {}",
+            "#[bridge(web_stub)] pub fn g(cb: DartCallback<i64>) {}",
         ));
         assert_eq!(ds, vec!["FR0030"]);
         // A genuinely native-only returning callback (a plain pool member,
         // which must use the blocking `call`) accepts it.
         assert!(check_src(
-            "#[bridge(web = \"runtime_fail\")] pub fn t(f: DartFunction<i64, i64>) -> i64 { 0 }"
+            "#[bridge(web_stub)] pub fn t(f: DartFunction<i64, i64>) -> i64 { 0 }"
         )
         .is_ok());
         // But an `async fn` returning callback is portable (awaits call_async),
         // so the opt-in is meaningless on it — FR0030 rejects it.
         let ds = codes(check_src(
-            "#[bridge(web = \"runtime_fail\")] pub async fn transform(f: DartFunction<i64, i64>) -> i64 { 0 }"
+            "#[bridge(web_stub)] pub async fn transform(f: DartFunction<i64, i64>) -> i64 { 0 }"
         ));
         assert_eq!(ds, vec!["FR0030"]);
     }

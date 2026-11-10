@@ -108,7 +108,7 @@ non-`async fn`) are native-only without the annotation. Either way, calling a
 native-only member from portable code is a **compile error on the web build**,
 the same way importing `dart:io` is. A surface that compiled everywhere and
 threw on web would turn a build-time fact into a runtime failure and ship API
-that can never work. Where you want that trade anyway, `web = "runtime_fail"`
+that can never work. Where you want that trade anyway, `#[bridge(web_stub)]`
 puts one member back on the web surface as a stub that throws
 `UnsupportedError`.
 
@@ -224,7 +224,7 @@ The six representation keywords (`data`, `confined`, `resident`, `frozen`,
 `locked`, `actor`) carry no unchecked claim: rustc proves each model's thread
 bound, an `actor`'s object never leaves its executor, and `resident`'s rule is
 checked on every access. The same holds for `sync`, `getter`,
-`dart_identifier`, `web = "runtime_fail"`, `inbound`, `no_eq`,
+`dart_identifier`, `web_stub`, `inbound`, `no_eq`,
 `dart_interface`, `skip` and the use-site markers (`Locked<T>` and friends).
 
 One non-obvious refusal: a type declaring both `data` and a handle model gets

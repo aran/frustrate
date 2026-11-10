@@ -30,7 +30,7 @@ void main() {
   });
 
   test('web-opt-in member behaves exactly like the un-opted one on native', () async {
-    // `blockingRead` carries #[bridge(web = "runtime_fail")] — present on the
+    // `blockingRead` carries #[bridge(web_stub)] — present on the
     // web surface as a throwing stub — but on native it is an ordinary blocking
     // read, identical to `blockingGet`. The opt-in changes nothing here.
     final c = Counter.new_();

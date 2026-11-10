@@ -829,7 +829,7 @@ fn emit_handle_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
 // --------------------------------------------------------- fake classes --
 
 /// Whether a member is answered by the fake at all on this surface. An omitted
-/// member has no client to send it; a `web = "runtime_fail"` stub throws in the
+/// member has no client to send it; a `web_stub` stub throws in the
 /// client before anything crosses. Either way nothing reaches the harness, so
 /// neither gets a fake method or a dispatch arm.
 fn answered(f: &Function, web: bool) -> bool {
@@ -1685,7 +1685,7 @@ mod tests {
     }
 
     /// A member the web surface omits has no client to send it, and a
-    /// `web = "runtime_fail"` stub throws before anything crosses. Neither gets
+    /// `web_stub` stub throws before anything crosses. Neither gets
     /// a fake method or an arm, and the default arm distinguishes "not on this
     /// surface" from "not a member of this interface at all".
     #[test]

@@ -236,7 +236,7 @@ test('gallery: bridge init, every feature family, CSP + real workers', async ({
     await scrollUntil(page, /compile-time absent from the web surface/);
 
     // --- Streams & callbacks: blockingRead opts onto the web surface with
-    // web="runtime_fail" — present so this call compiles, but throwing a loud,
+    // web_stub — present so this call compiles, but throwing a loud,
     // attributable UnsupportedError when actually invoked on web. ---
     await scrollUntil(page, /blockingRead — opt-in runtime-fail/);
     await clickButton(page, 'read now');

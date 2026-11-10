@@ -88,7 +88,7 @@
 //!                                   FR0002, naming both, and this says which
 //!                                   moves. Dart-surface only: the wire keys on
 //!                                   fn_id and field order, never a name
-//!   #[bridge(web = "runtime_fail")] opt a native-only member back INTO the web
+//!   #[bridge(web_stub)]             opt a native-only member back INTO the web
 //!                                   surface as a stub that throws loudly if it
 //!                                   is actually called, so portable code that
 //!                                   names it still compiles

@@ -775,10 +775,10 @@ pub struct Function {
     /// unless the member also declares `native_only`.
     ///
     /// Diagnostic-only — it changes no emitted byte, so like
-    /// [`Function::web_runtime_fail`] it stays out of the schema fingerprint.
+    /// [`Function::web_stub`] it stays out of the schema fingerprint.
     #[serde(skip, default)]
     pub cfg_gated: bool,
-    /// `#[bridge(web = "runtime_fail")]`: the informed opt-in that INCLUDES an
+    /// `#[bridge(web_stub)]`: the informed opt-in that INCLUDES an
     /// otherwise-native-only member (`requires_native`) in the web Dart surface
     /// so portable app code naming it still compiles for web — but its web body
     /// throws a loud, attributable `UnsupportedError` (naming the member and
@@ -790,7 +790,7 @@ pub struct Function {
     /// `#[serde(skip)]` keeps it out of the schema fingerprint, like
     /// [`StructDecl::docs`].
     #[serde(skip, default)]
-    pub web_runtime_fail: bool,
+    pub web_stub: bool,
     /// True when the user wrote a Rust `async fn`: the body evaluates to a
     /// `Future`, which the generated glue hands to the cooperative executor
     /// (`frustrate::__private::executor::spawn`). That

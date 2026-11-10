@@ -8,7 +8,7 @@
 //! is compile-time absent from the wasm surface — the shared `main.dart`
 //! reaches it only through the `native_features.dart` conditional-export seam,
 //! so the web build still compiles. `Ledger::blocking_read` instead opts INTO
-//! the web surface with `#[bridge(web = "runtime_fail")]`: present so portable
+//! the web surface with `#[bridge(web_stub)]`: present so portable
 //! code compiles, but throwing a loud `UnsupportedError` if actually called
 //! there. `Ledger::blocking_get` is the un-opted default (compile-time absent).
 
@@ -313,12 +313,12 @@ impl Ledger {
     }
 
     /// The same blocking read, opted INTO the web surface with
-    /// `#[bridge(web = "runtime_fail")]`: present on web so portable code that
+    /// `#[bridge(web_stub)]`: present on web so portable code that
     /// names it still compiles, its web body throwing a loud, attributable
     /// `UnsupportedError` if actually called there. On native it returns the
     /// balance like `blocking_get`. The informed opt-in against the default
     /// compile-time absence above.
-    #[bridge(sync, on_contention = "block", web = "runtime_fail")]
+    #[bridge(sync, on_contention = "block", web_stub)]
     pub fn blocking_read(&self) -> i64 {
         self.balance
     }

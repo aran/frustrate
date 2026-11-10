@@ -210,7 +210,7 @@ test('threaded: served COOP/COEP, pool parallelism, actors intact', async ({
 
     // Streams & callbacks: the portable awaited callback resolves on the
     // threaded module too (async fn awaiting call_async), and blockingRead's
-    // web="runtime_fail" body still throws its attributable UnsupportedError.
+    // web_stub body still throws its attributable UnsupportedError.
     await scrollUntil(page, /transform\(9\) = 81/);
     await scrollUntil(page, /blockingRead — opt-in runtime-fail/);
     await clickButton(page, 'read now');
