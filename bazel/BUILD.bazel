@@ -180,7 +180,7 @@ bool_flag(
 )
 
 config_setting(
-    name = "hot_patch_apple",
+    name = "hot_patch_macos",
     constraint_values = ["@platforms//os:macos"],
     flag_values = {":hot_patch": "True"},
     visibility = ["//visibility:public"],

@@ -62,7 +62,7 @@ rust_library(
     }),
     edition = "2021",
     link_deps = select({
-        "//bazel:hot_patch_apple": [":hot_patch_link_macho"],
+        "//bazel:hot_patch_macos": [":hot_patch_link_macho"],
         "//bazel:hot_patch_ios": [":hot_patch_link_macho"],
         "//bazel:hot_patch_android": [":hot_patch_link_elf"],
         "//bazel:hot_patch_linux": [":hot_patch_link_elf_rust_lld"],
