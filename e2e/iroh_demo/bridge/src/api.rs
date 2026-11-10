@@ -149,7 +149,7 @@ pub struct Node {
 /// So the claim is settled by placement, and `frustrate_no_block_check` proves it
 /// without building anything — which is the only way it could be proved here.
 /// This graph pulls wasm-bindgen structurally, and a check artifact of it would
-/// carry 2393 exports the check `cfg` cannot suppress. See //bridge:block_check.
+/// carry 2393 exports the check `cfg` cannot suppress. See //bridge:no_block_check.
 #[bridge(no_block)]
 impl Node {
     /// Bind an endpoint and start listening.

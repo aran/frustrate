@@ -9,13 +9,13 @@
 
 use frustrate::bridge;
 
-/// `no_block` is here for `//tests/bazel_rules:fixture_block_check`, and the
+/// `no_block` is here for `//tests/bazel_rules:fixture_no_block_check`, and the
 /// claim is true rather than convenient: `wrapping_add` reaches no
 /// synchronisation primitive on any platform.
 ///
 /// It costs the other fixtures nothing. The field is `#[serde(skip)]` in the
 /// IR, so the wire fingerprint does not move, and the root it emits is
-/// `#[cfg(frustrate_block_check)]`, which no shipped build sets — measured:
+/// `#[cfg(frustrate_no_block_check)]`, which no shipped build sets — measured:
 /// `fixture.wasm`, `fixture_wasi.wasm` and `fixture_threaded.wasm` are
 /// byte-identical across adding it.
 #[bridge(sync, no_block)]
@@ -24,7 +24,7 @@ pub fn add(a: i32, b: i32) -> i32 {
 }
 
 /// Not claimed, and the one caller of [`slow`], so that the marker
-/// `//tests/bazel_rules:fixture_block_check` names exists in the native
+/// `//tests/bazel_rules:fixture_no_block_check` names exists in the native
 /// program: the native check refuses a `slow` path that names no function.
 #[bridge(sync)]
 pub fn sub(a: i32, b: i32) -> i32 {
@@ -32,7 +32,7 @@ pub fn sub(a: i32, b: i32) -> i32 {
     a.wrapping_sub(b)
 }
 
-/// `//tests/bazel_rules:fixture_block_check`'s `slow` marker.
+/// `//tests/bazel_rules:fixture_no_block_check`'s `slow` marker.
 #[bridge(skip)]
 #[inline(never)]
 pub fn slow() {}

@@ -809,7 +809,7 @@ target the bridge ships on:
 load("@frustrate//bazel:defs.bzl", "frustrate_no_block_check")
 
 frustrate_no_block_check(
-    name = "block_check",
+    name = "no_block_check",
     bridge = ":codegen",
     library = ":my_bridge",
     targets = ["android", "ios", "web_threads"],
@@ -825,7 +825,7 @@ names it with `web_threads_platform`, so the check scans what the app ships.
 When the target is a `frustrate_shared_library` that links several bridges, `bridge` takes a
 list, one `frustrate_bridge` per linked bridge.
 
-`bazel test :block_check` runs one analysis per target and CPU, from any
+`bazel test :no_block_check` runs one analysis per target and CPU, from any
 host: natively over the whole linked program, on the web over the wasm
 module. Members whose bodies
 run off the calling thread, such as an actor's methods, pass without their

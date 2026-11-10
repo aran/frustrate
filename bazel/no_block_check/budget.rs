@@ -38,7 +38,7 @@ pub(crate) fn set(path: &str, label: &str) {
     let limit = budget_for(len);
     let mb = |n: u64| n.div_ceil(1 << 20);
     let _ = MESSAGE.set(format!(
-        "wasm_block_check: cannot verify {label}: the scanner passed its memory \
+        "no_block_check: cannot verify {label}: the scanner passed its memory \
          budget of {} MB on this input ({} MB), so it stopped. Its analyses are \
          meant to need memory linear in the input, so this is a bug in the \
          scanner, not in the code it checks: report it to frustrate with the input.\n",
@@ -54,7 +54,7 @@ fn over() -> ! {
     // thread's first use of it, and would come back here.
     use std::os::fd::FromRawFd;
     let msg = MESSAGE.get().map(String::as_str).unwrap_or(
-        "wasm_block_check: cannot verify: the scanner passed its memory budget, so it stopped.\n",
+        "no_block_check: cannot verify: the scanner passed its memory budget, so it stopped.\n",
     );
     let mut err = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(2) });
     let _ = err.write_all(msg.as_bytes());

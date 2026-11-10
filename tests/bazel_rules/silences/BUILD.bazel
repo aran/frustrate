@@ -19,7 +19,7 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 dart_test(
     name = "silences_test",
     data = [
-        "//bazel/wasm_block_check",
+        "//bazel/no_block_check",
         "//tests/bazel_rules/linked_fixture:applied",
         "//tests/bazel_rules/linked_fixture:census",
         "//tests/bazel_rules/silences/stale:applied",

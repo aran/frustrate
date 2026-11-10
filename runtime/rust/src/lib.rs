@@ -21,7 +21,7 @@ pub use frustrate_macros::no_block;
 /// knows this function by its export name; a wasm check module exports only
 /// its roots, so there the scanner knows it by its path.
 #[doc(hidden)]
-#[cfg(frustrate_block_check)]
+#[cfg(frustrate_no_block_check)]
 #[inline(never)]
 #[cfg_attr(not(target_family = "wasm"), unsafe(export_name = "frustrate_no_block_allow"))]
 pub fn __no_block_allow() {
@@ -177,11 +177,11 @@ pub fn actor_host_count() -> usize {
     }
 }
 
-// --- block-check export gating ---------------------------------------------
+// --- no-block-check export gating ---------------------------------------------
 //
 // Every `#[unsafe(no_mangle)]` in this crate that a wasm build would emit carries
-// `#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]` — the same
-// gate codegen puts on the exports it emits. Under `--cfg frustrate_block_check`
+// `#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]` — the same
+// gate codegen puts on the exports it emits. Under `--cfg frustrate_no_block_check`
 // a wasm module's only surviving exports are the generated
 // `frustrate_check_block_*` roots, so lld's dead-code elimination, rather than a
 // hand-written call graph, decides what a `#[bridge(no_block)]` body can reach.
@@ -222,7 +222,7 @@ pub fn actor_host_count() -> usize {
 /// `unsafe` states a contract the host has always had to honour; it changes
 /// neither the exported symbol nor the calling convention, so the JS and Dart
 /// callers are unaffected.
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn frustrate_buffer_free(ptr: *mut u8, len: u64, cap: u64) {
     if ptr.is_null() {
@@ -287,7 +287,7 @@ pub const RUNTIME_ABI: u64 = 7;
 /// response capacity now goes and writing the response over the request. That
 /// is precisely the silent corruption this constant exists to turn into a
 /// named error.
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_runtime_abi() -> u64 {
     RUNTIME_ABI
@@ -359,7 +359,7 @@ pub extern "C" fn frustrate_exit_port() -> *mut std::ffi::c_void {
 /// request here, so there is no caller in a position to do anything else. The
 /// change is that the failure says what it was.
 #[cfg(target_family = "wasm")]
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_alloc(len: u64) -> *mut u8 {
     let len = len as usize;
@@ -408,7 +408,7 @@ pub extern "C" fn frustrate_alloc(len: u64) -> *mut u8 {
 /// export becomes an inert no-op there. The host may keep calling it
 /// unconditionally.
 #[cfg(target_family = "wasm")]
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_web_init() {
     // Settle the cooperative executor here — on the main thread, before any

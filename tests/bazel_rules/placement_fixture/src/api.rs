@@ -1,4 +1,4 @@
-//! The **placement** half of the block-check surface: a bridge whose every
+//! The **placement** half of the no-block-check surface: a bridge whose every
 //! `#[bridge(no_block)]` claim is settled by where the body runs, so the check
 //! builds no wasm module at all.
 //!
@@ -9,18 +9,18 @@
 //! crates cannot share a Bazel package, because `frustrate_bridge` declares its
 //! glue at exactly `src/frustrate_generated.rs` (bazel/defs.bzl).
 //!
-//! # Why it is the only block-check fixture in `bazel test //...`
+//! # Why it is the only no-block-check fixture in `bazel test //...`
 //!
 //! The other two need the locally built +atomics std and are `manual`. This one
 //! needs no wasm toolchain, because the shape it exercises is exactly the one
 //! that builds nothing: the census says every claim is placed, and
-//! `wasm_block_check --claims-only` says so back. That makes the claims-only
+//! `no_block_check --claims-only` says so back. That makes the claims-only
 //! path the *only* part of this gate a wildcard-only machine ever runs — which
 //! is the point, since it is also the path a bridge like `e2e/iroh_demo` (whose
 //! check artifact cannot be built at all) depends on entirely.
 //!
 //! The red direction cannot be a Bazel target — Bazel has no way to assert that
-//! an action fails — so it is covered by //bazel/wasm_block_check's own unit
+//! an action fails — so it is covered by //bazel/no_block_check's own unit
 //! tests: a claims-only target handed a claim that needs a root refuses by
 //! name, telling the author to add `crate =`.
 

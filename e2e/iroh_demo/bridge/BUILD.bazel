@@ -36,7 +36,7 @@ frustrate_bridge(
 # //bridge/check_fixture is the other half: a claim whose body really is scanned
 # over this same wasm dependency set, which does build a module.
 frustrate_no_block_check(
-    name = "block_check",
+    name = "no_block_check",
     bridge = ":codegen",
 )
 

@@ -1,9 +1,9 @@
-//! The **async** half of the block-check fixture surface: one
+//! The **async** half of the no-block-check fixture surface: one
 //! `#[bridge(no_block)]` `async fn`, and nothing else.
 //!
 //! # Why this is a crate of its own rather than a second member next door
 //!
-//! `//tests/bazel_rules:fixture_block_check` proves the claim on a *sync*
+//! `//tests/bazel_rules:fixture_no_block_check` proves the claim on a *sync*
 //! member, and its crate cannot simply grow an async one. `fixture_shared`'s
 //! shape — sync-only, handle-free — is half of //tests/lint_clean's contract,
 //! and the half nothing else covers: it is the only fixture in which

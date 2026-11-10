@@ -1,7 +1,7 @@
 """`frustrate_no_block_check`: every `#[bridge(no_block)]` claim, settled once per target.
 
 Re-exported from //bazel:defs.bzl. The scanner every analysis here runs, and
-its decision procedure, is //bazel/wasm_block_check (main.rs for wasm, ir.rs
+its decision procedure, is //bazel/no_block_check (main.rs for wasm, ir.rs
 for native IR, io.rs for the IO categories).
 """
 
@@ -33,7 +33,7 @@ load(
 # own repo mapping. A transition's `outputs` and its returned dict take plain
 # strings, and these must be the same string in both places; the `Label()`
 # round-trip makes them name these packages unambiguously, from any module.
-_BLOCK_CHECK_FLAG = str(Label("//bazel:block_check"))
+_NO_BLOCK_CHECK_FLAG = str(Label("//bazel:no_block_check"))
 _EXTRA_RUSTC_FLAGS = str(Label("@rules_rust//rust/settings:extra_rustc_flags"))
 _EXTRA_RUSTC_FLAG = str(Label("@rules_rust//rust/settings:extra_rustc_flag"))
 _LTO = str(Label("@rules_rust//rust/settings:lto"))
@@ -72,7 +72,7 @@ def _wasm_check_transition_impl(settings, attr):
         # The cfg that inverts the module's export surface: codegen emits one
         # `frustrate_check_block_*` root per claimed member under it and gates
         # every other `#[no_mangle]` — in the generated glue and in the runtime —
-        # on `#[cfg(not(frustrate_block_check))]`. lld then GCs everything the
+        # on `#[cfg(not(frustrate_no_block_check))]`. lld then GCs everything the
         # roots cannot reach, which is what makes a surviving wait mean
         # something.
         #
@@ -104,11 +104,11 @@ def _wasm_check_transition_impl(settings, attr):
         # The export filter, which cuts dependency rlibs' `#[wasm_bindgen]`
         # exports off the link line, is not here: frustrate's custom-std
         # toolchains, which carry it in their sysroot, add its `-Clinker=`
-        # under //bazel:block_check themselves (custom_std.bzl). A stock
+        # under //bazel:no_block_check themselves (custom_std.bzl). A stock
         # toolchain links with rust-lld, and the scanner refuses any export
         # that is not a check root.
         _EXTRA_RUSTC_FLAG: settings[_EXTRA_RUSTC_FLAG] + [
-            "--cfg=frustrate_block_check",
+            "--cfg=frustrate_no_block_check",
             "-Adead_code",
             "-Copt-level=0",
         ],
@@ -116,7 +116,7 @@ def _wasm_check_transition_impl(settings, attr):
         # platform keeps the +atomics std on. //bazel:BUILD.bazel has the full
         # argument; the short version is that this is what saves the design a
         # second platform, a second toolchain and a second custom_std flavour.
-        _BLOCK_CHECK_FLAG: True,
+        _NO_BLOCK_CHECK_FLAG: True,
     }
 
 _wasm_check_transition = transition(
@@ -126,7 +126,7 @@ _wasm_check_transition = transition(
         "//command_line_option:platforms",
         "//command_line_option:compilation_mode",
         _EXTRA_RUSTC_FLAG,
-        _BLOCK_CHECK_FLAG,
+        _NO_BLOCK_CHECK_FLAG,
     ],
 )
 
@@ -245,7 +245,7 @@ def _native_check_transition_impl(settings, attr):
         # from the roots itself, and it needs the whole program to check
         # every bounded-lock section.
         _EXTRA_RUSTC_FLAGS: [
-            "--cfg=frustrate_block_check",
+            "--cfg=frustrate_no_block_check",
             "-Adead_code",
         ],
         # For readable witness paths only: the roots take their inputs as
@@ -315,7 +315,7 @@ def _verdict_test(ctx, inputs, arguments, mnemonic, extra_outputs = {}, applied 
         arguments = ["--applied", applied_file.path] + arguments
         extra_outputs = extra_outputs | {"silences": depset([applied_file])}
     ctx.actions.run(
-        executable = ctx.executable._block_check,
+        executable = ctx.executable._no_block_check,
         inputs = inputs,
         outputs = outputs,
         arguments = arguments + [str(ctx.label), verdict.path],
@@ -338,13 +338,13 @@ _SCANNER_ATTRS = {
     # The frustrate_bridge of every bridge the crate links: one, or each of a
     # `frustrate_shared_library`'s.
     "bridges": attr.label_list(mandatory = True, allow_empty = False, providers = [OutputGroupInfo]),
-    "_block_check": attr.label(
-        default = Label("//bazel/wasm_block_check"),
+    "_no_block_check": attr.label(
+        default = Label("//bazel/no_block_check"),
         executable = True,
         cfg = "exec",
     ),
     "_runner": attr.label(
-        default = Label("//bazel/wasm_block_check"),
+        default = Label("//bazel/no_block_check"),
         executable = True,
         cfg = "target",
     ),
@@ -591,7 +591,7 @@ def frustrate_no_block_check(
     function as "cannot verify". The analyses append `-Copt-level=0` to
     `--@rules_rust//rust/settings:extra_rustc_flag` for readable witness
     paths; a crate's own `rustc_flags` reach rustc after it. The
-    configurations also set `--cfg=frustrate_block_check -Adead_code`; on
+    configurations also set `--cfg=frustrate_no_block_check -Adead_code`; on
     `web_threads` they are appended to the platform's own flags, and on the
     native analyses they replace `extra_rustc_flags`.
 
@@ -636,7 +636,7 @@ def frustrate_no_block_check(
 
     The `web_threads` module links through `frustrate-link-filter`, which
     the custom-std toolchains carry, so a graph containing wasm-bindgen still
-    has only the roots as exports; //bazel/wasm_block_check/link_filter.rs
+    has only the roots as exports; //bazel/no_block_check/link_filter.rs
     says what it can and cannot break.
 
     Args:
@@ -670,7 +670,7 @@ def frustrate_no_block_check(
         names it; `wasi` finds the calls only through a class. Sleeping needs no class:
         it is a wait everywhere.
         Writes to an open descriptor are in no class, because stdout, stderr
-        and the panic report are such writes. //bazel/wasm_block_check/io.rs
+        and the panic report are such writes. //bazel/no_block_check/io.rs
         has the maps and what each covers.
       web_threads_platform: The platform `web_threads` builds under, when the
         app ships on one other than the default `//bazel:wasm32_threads`: a

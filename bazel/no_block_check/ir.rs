@@ -4,7 +4,7 @@
 //! The input is one module: the bridge crate built for one platform as a
 //! `staticlib` with fat LTO and `--emit=llvm-ir`, so std and every Rust
 //! dependency are merged in from their bitcode, under
-//! `--cfg frustrate_block_check`, which adds one root per
+//! `--cfg frustrate_no_block_check`, which adds one root per
 //! claimed member and natively keeps every production export, so the whole
 //! program is present. On the native target a wait is a call into the OS, and
 //! the IR keeps every call out of the Rust program as a call to an external
@@ -621,11 +621,11 @@ pub(crate) fn run_ir(
 ) -> Result<Green, String> {
     super::budget::set(path, label);
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    let mut ir = parse(&text).map_err(|e| format!("wasm_block_check: {label}: {e}"))?;
+    let mut ir = parse(&text).map_err(|e| format!("no_block_check: {label}: {e}"))?;
 
     let Some(libc) = libc::for_triple(&ir.triple) else {
         return Err(format!(
-            "wasm_block_check: {label} targets `{}`, and this check knows which \
+            "no_block_check: {label} targets `{}`, and this check knows which \
              C library calls do not wait only for {}. A list for another C \
              library has to be drawn from its implementation before it can be \
              trusted.",
@@ -644,7 +644,7 @@ pub(crate) fn run_ir(
         .collect();
     if !missing.is_empty() {
         return Err(format!(
-            "wasm_block_check: cannot verify {label}: Rust functions are declared \
+            "no_block_check: cannot verify {label}: Rust functions are declared \
              here without a body, so this is not the whole program:\n\n{}\n\n\
              The IR must come from a fat-LTO build of a final crate type \
              (`-Clto=fat`, `link` among the emits), which merges std and every \
@@ -679,7 +679,7 @@ pub(crate) fn run_ir(
         .collect();
     if !unmatched.is_empty() {
         return Err(format!(
-            "wasm_block_check: {label}: {} `slow` path(s) name no function in \
+            "no_block_check: {label}: {} `slow` path(s) name no function in \
              this program:\n\n{}\n\n\
              This build keeps every production export, so the path is misspelt \
              (it starts with the crate's name as rustc sees it, hyphens as \
@@ -1013,7 +1013,7 @@ pub(crate) fn run_ir(
 
     if findings.is_empty() {
         let text = format!(
-            "wasm_block_check: {label} is clean — {} `no_block` root(s) on `{}` reach \
+            "no_block_check: {label} is clean — {} `no_block` root(s) on `{}` reach \
              only externals known not to wait{sink_note}; {}{}.{silence_note}",
             roots.len(),
             ir.triple,
@@ -1030,7 +1030,7 @@ pub(crate) fn run_ir(
     findings.sort_by_key(|f| f.verdict);
     let red = findings.iter().filter(|f| f.verdict == Verdict::Red).count();
     let mut msg = format!(
-        "wasm_block_check: {label}: on `{}`, {red} `#[bridge(no_block)]` member(s) \
+        "no_block_check: {label}: on `{}`, {red} `#[bridge(no_block)]` member(s) \
          reach a wait{} and {} cannot be verified.\n\n",
         ir.triple,
         if sinks.is_empty() { "" } else { " or a function named slow or IO" },
@@ -1155,7 +1155,7 @@ mod tests {
     fn run_green(text: &str, claims: Option<&Claims>, sinks: &Sinks) -> Result<Green, String> {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let dir = std::env::temp_dir().join(format!("ir_block_check_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ir_no_block_check_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join(format!("m{}.ll", NEXT.fetch_add(1, Ordering::Relaxed)));
         std::fs::write(&p, text).unwrap();

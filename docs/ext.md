@@ -61,7 +61,7 @@ frustrate_wasm_module(
 )
 
 frustrate_no_block_check(
-    name = "block_check",
+    name = "no_block_check",
     bridge = ":codegen",
     library = ":my_rust",
     targets = ["web_threads"],

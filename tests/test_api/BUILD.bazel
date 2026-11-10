@@ -33,7 +33,7 @@ frustrate_bridge(
 # Every `no_block` claim here, over the native build: test_api ships native,
 # and its web build is single-threaded.
 frustrate_no_block_check(
-    name = "test_api_block_check",
+    name = "test_api_no_block_check",
     # A probe logs through the logger the logging fixture installs, and a
     # callback probe drops a waker an awaiting task left in the invocation
     # registry: both callbacks installed elsewhere, and this fixture's to
@@ -55,9 +55,9 @@ frustrate_no_block_check(
 )
 
 dart_test(
-    name = "block_check_coverage_test",
+    name = "no_block_check_coverage_test",
     data = [":bridge.claims"],
-    main = "block_check_coverage_test.dart",
+    main = "no_block_check_coverage_test.dart",
     deps = [
         "@pub_deps//:test",
         "@rules_dart//dart/runfiles",

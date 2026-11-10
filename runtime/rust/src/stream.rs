@@ -640,9 +640,9 @@ fn lookup(id: u64) -> Option<Arc<Inner>> {
 
 /// Cooperative cancel from the Dart side. Safe for any id: unknown or
 /// already-ended streams are a no-op (the cancel/end race is legal).
-// `frustrate_block_check` gating, here and on the two signal exports below:
-// see the "block-check export gating" note in lib.rs.
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+// `frustrate_no_block_check` gating, here and on the two signal exports below:
+// see the "no-block-check export gating" note in lib.rs.
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_stream_cancel(id: u64) {
     if let Some(inner) = lookup(id) {
@@ -656,7 +656,7 @@ pub extern "C" fn frustrate_stream_cancel(id: u64) {
 /// (`StreamController.onPause`). A producer awaiting [`StreamSink::send`] parks
 /// until resume. `add` is unaffected — it never blocks. Store only; nothing to
 /// wake on a pause. Safe for any id.
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_stream_pause(id: u64) {
     if let Some(inner) = lookup(id) {
@@ -668,7 +668,7 @@ pub extern "C" fn frustrate_stream_pause(id: u64) {
 /// wake every producer parked in `send()`. The store precedes the wake so a
 /// re-polling parked task observes `paused == false` (see `Ready::poll`). Safe
 /// for any id.
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_stream_resume(id: u64) {
     if let Some(inner) = lookup(id) {

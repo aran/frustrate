@@ -4,7 +4,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 # the check roots, so "the only exports are the roots" survives a crate graph
 # whose dependency rlibs carry `#[wasm_bindgen]` exports. The custom-std
 # toolchains put it in their sysroot, built for each execution host, and each
-# names it with `-Clinker=` under //bazel:block_check.
+# names it with `-Clinker=` under //bazel:no_block_check.
 rust_binary(
     name = "link_filter",
     srcs = ["link_filter.rs"],
@@ -28,7 +28,7 @@ rust_test(
 # that every consumer already resolves for the runtime; the scanner is built
 # once, in the exec configuration.
 rust_binary(
-    name = "wasm_block_check",
+    name = "no_block_check",
     srcs = [
         "budget.rs",
         "io.rs",
@@ -49,8 +49,8 @@ rust_binary(
 )
 
 rust_test(
-    name = "wasm_block_check_test",
-    crate = ":wasm_block_check",
+    name = "no_block_check_test",
+    crate = ":no_block_check",
     edition = "2021",
 )
 
@@ -67,10 +67,10 @@ _MODULES = [
 
 rust_test(
     name = "callgraph_test",
-    # Only the cross-check: the unit tests run in :wasm_block_check_test.
+    # Only the cross-check: the unit tests run in :no_block_check_test.
     args = ["callgraph_check::"],
     compile_data = ["callgraph_check.rs"],
-    crate = ":wasm_block_check",
+    crate = ":no_block_check",
     data = [":opt"] + _MODULES,
     edition = "2021",
     env = {

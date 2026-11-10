@@ -217,7 +217,7 @@ rust_stdlib_filegroup(
 {linkers}"""
 
 # Each toolchain's linker under `frustrate_no_block_check`: rust-lld, with the
-# block check's link filter beside it in the sysroot, where the check's
+# no_block check's link filter beside it in the sysroot, where the check's
 # `-Clinker=` finds it. Every other build links with rust-lld alone and never
 # builds the filter. Here rather than in //impl because a file's place in the
 # sysroot is its path below this repository's root.
@@ -252,16 +252,16 @@ rust_toolchain(
     # flavour's std was built with, read from its own manifest: a +atomics
     # std requires +atomics app code, so the flags are a toolchain property
     # and must come from the same place the std did.
-    # The block check's link filter, named here rather than by the check's
+    # The no_block check's link filter, named here rather than by the check's
     # transition because this toolchain's sysroot is where it lives: a stock
     # toolchain building a check artifact links with plain rust-lld.
     extra_rustc_flags = {rustflags} + select({{
-        "{block_check_build}": ["-Clinker=frustrate-link-filter"],
+        "{no_block_check_build}": ["-Clinker=frustrate-link-filter"],
         "//conditions:default": [],
     }}),
     iso_date = "{iso_date}",
     linker = select({{
-        "{block_check_build}": "//:linker_{exec_triple}",
+        "{no_block_check_build}": "//:linker_{exec_triple}",
         "//conditions:default": "{tools}//:rust-lld",
     }}),
     linker_type = "direct",
@@ -416,7 +416,7 @@ def _custom_std_repo_impl(rctx):
         linkers = "".join([_ROOT_LINKER.format(
             triple = triple,
             tools = _tools(triple),
-            link_filter = _label("//bazel/wasm_block_check:link_filter"),
+            link_filter = _label("//bazel/no_block_check:link_filter"),
         ) for triple in rctx.attr.hosts]),
     )))
     rctx.file("impl/BUILD.bazel", _IMPL_BUILD.format(
@@ -430,7 +430,7 @@ def _custom_std_repo_impl(rctx):
             rustflags = json.encode(m["rustflags"]),
             iso_date = rctx.attr.iso_date,
             wasm_triple = _WASM_TRIPLE,
-            block_check_build = _label("//bazel:block_check_build"),
+            no_block_check_build = _label("//bazel:no_block_check_build"),
         ) for triple in rctx.attr.hosts]),
     ))
 

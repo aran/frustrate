@@ -1,7 +1,7 @@
 //! The check configuration's linker: `rust-lld` with the export list cut back
 //! to the check roots.
 //!
-//! Reached only through `-Clinker=`, in the `--cfg frustrate_block_check`
+//! Reached only through `-Clinker=`, in the `--cfg frustrate_no_block_check`
 //! configuration `frustrate_no_block_check`'s wasm transition sets. Nothing that
 //! ships is linked through it.
 //!
@@ -17,7 +17,7 @@
 //! # What this can and cannot break
 //!
 //! It only ever *removes* `--export` arguments, so an export it fails to remove
-//! survives into the module, where `wasm_block_check` refuses it by name
+//! survives into the module, where `no_block_check` refuses it by name
 //! ("every function export must be a check root"). This can fail to help; it
 //! cannot make a scan mean less than it says.
 //!
@@ -81,7 +81,7 @@ const LINKER: &str = "rust-lld";
 /// How deep `@file` nesting may go before this calls it a cycle.
 const MAX_RESPONSE_DEPTH: usize = 8;
 
-const PROG: &str = "wasm_block_check link filter";
+const PROG: &str = "no_block_check link filter";
 
 /// `args` with every `@file` replaced by the arguments it holds. `read` is
 /// injected so the tests need no disk.

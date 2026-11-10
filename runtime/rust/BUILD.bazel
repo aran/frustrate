@@ -55,7 +55,7 @@ rust_library(
     # instruction to find) with the feature OFF (so the artifact's only exports
     # are the check roots and the only waits are ones a claimed body reaches).
     # //bazel:BUILD.bazel states the split; production configurations are
-    # unchanged, since //bazel:block_check defaults False.
+    # unchanged, since //bazel:no_block_check defaults False.
     crate_features = select({
         "//bazel:wasm_threads_feature_build": ["wasm-threads"],
         "//conditions:default": [],

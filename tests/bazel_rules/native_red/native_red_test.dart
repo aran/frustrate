@@ -23,7 +23,7 @@ const _bionic = ['android_aarch64', 'android_x86_64'];
 const _glibc = ['linux_aarch64', 'linux_x86_64'];
 
 void main() {
-  final scanner = _rlocation('bazel/wasm_block_check/wasm_block_check');
+  final scanner = _rlocation('bazel/no_block_check/no_block_check');
 
   /// The scanner's exit code and output over one fixture's IR for a platform.
   (int, String) check(
@@ -186,7 +186,7 @@ void main() {
         censuses.first,
         for (final c in censuses.skip(1)) ...['--also-claims', c],
         ir,
-        '//$dir:linked_block_check',
+        '//$dir:linked_no_block_check',
       ]);
       return (r.exitCode, '${r.stderr}${r.stdout}');
     }

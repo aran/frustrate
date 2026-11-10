@@ -277,7 +277,7 @@ pub(crate) const CATEGORIES: &[Category] = &[
 pub(crate) fn parse(name: &str) -> Result<&'static Category, String> {
     CATEGORIES.iter().find(|c| c.name == name).ok_or_else(|| {
         format!(
-            "wasm_block_check: `--io {name}` is not an IO category. The categories \
+            "no_block_check: `--io {name}` is not an IO category. The categories \
              are {}.",
             names()
         )

@@ -168,7 +168,7 @@ pub fn bridge(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// order — one line, at the top, binding the file.
 ///
 /// **Why a file and not a build rule.** The claim is not surface-neutral: it
-/// makes codegen emit `#[cfg(frustrate_block_check)]` check roots. A claim
+/// makes codegen emit `#[cfg(frustrate_no_block_check)]` check roots. A claim
 /// carried in `BUILD.bazel` would therefore make the same sources generate
 /// different Rust under cargo and under Bazel; the generated surface stays a
 /// pure function of the source. What the build *does* choose is which check
@@ -188,7 +188,7 @@ pub fn bridge_file(_input: TokenStream) -> TokenStream {
 ///
 /// Accepts exactly `(allow)`, on a free function, a method or a generic
 /// function. In an ordinary build the function is emitted unchanged. Under
-/// `--cfg frustrate_block_check` (the no_block check's build) it is
+/// `--cfg frustrate_no_block_check` (the no_block check's build) it is
 /// `#[inline(never)]`, and its body begins with a call to
 /// `frustrate::__no_block_allow`, which every analysis reads as a stop
 /// point. A call in the body survives every generic instantiation, which a
@@ -233,10 +233,10 @@ pub fn no_block(attr: TokenStream, item: TokenStream) -> TokenStream {
     new_body.set_span(body.span());
     marked.extend([TokenTree::Group(new_body)]);
 
-    let mut out: TokenStream = "#[cfg(not(frustrate_block_check))]".parse().unwrap();
+    let mut out: TokenStream = "#[cfg(not(frustrate_no_block_check))]".parse().unwrap();
     out.extend(item);
     out.extend(
-        "#[cfg(frustrate_block_check)] #[inline(never)]"
+        "#[cfg(frustrate_no_block_check)] #[inline(never)]"
             .parse::<TokenStream>()
             .unwrap(),
     );

@@ -4,7 +4,7 @@ members = [
     # A workspace member so its dependencies (wasmparser, rustc-demangle) reach
     # the @frustrate_crates hub, which its Bazel-only siblings
     # `bazel/wasm_std_check` and `bazel/wasm_import_check` also draw on.
-    "bazel/wasm_block_check",
+    "bazel/no_block_check",
     "codegen",
     # ext/: glue for a third-party crate that cannot be expected to know about
     # frustrate, kept out of the runtime so nobody pays for it who does not

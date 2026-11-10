@@ -80,10 +80,10 @@ rust_shared_library(
 # The way out is placement, and //bridge takes it twice over: its connection
 # work is inside `Node` actor methods, and its ticket parse is `peer_id_for`, a
 # dispatched member whose body is handed to the pool. Both bodies reach the
-# `OnceLock` above and both claims are true, which is why //bridge:block_check
+# `OnceLock` above and both claims are true, which is why //bridge:no_block_check
 # settles that whole surface without building anything.
 frustrate_no_block_check(
-    name = "block_check",
+    name = "no_block_check",
     bridge = ":codegen",
     library = ":check_fixture",
     targets = ["web_threads"],

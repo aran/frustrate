@@ -365,7 +365,7 @@ mod web {
 
     /// Run the oldest waiting closure: one per token. Called by the actor
     /// worker for each token on its `posted` channel.
-    #[cfg(not(frustrate_block_check))]
+    #[cfg(not(frustrate_no_block_check))]
     #[unsafe(no_mangle)]
     pub extern "C" fn frustrate_run_posted() {
         let job = WAITING.with(|q| q.borrow_mut().pop_front());
@@ -389,7 +389,7 @@ mod web {
     /// run no user code and so cannot have trapped while held. It does not
     /// touch the queue. Waking the waiter is ordinary executor work, the same
     /// any later call on the instance does.
-    #[cfg(not(frustrate_block_check))]
+    #[cfg(not(frustrate_no_block_check))]
     #[unsafe(no_mangle)]
     pub extern "C" fn frustrate_posted_trapped() {
         if let Some(waiter) = RUNNING.take() {

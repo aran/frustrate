@@ -7,7 +7,7 @@ publish = false
 description = "Reports member shapes the checker accepts and the repo's bridge sources never instantiate"
 
 # The source sits at the package root rather than in `src/`, matching
-# `bazel/wasm_block_check`. Unlike that one this has dependencies: it runs
+# `bazel/no_block_check`. Unlike that one this has dependencies: it runs
 # under cargo, and under Bazel only as a test (`:shape_coverage_test`), never in
 # an exec configuration, so the `@frustrate_crates` hub argument for zero
 # dependencies does not apply.

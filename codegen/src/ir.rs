@@ -753,11 +753,11 @@ pub struct Function {
     /// the author's claim that this body, and everything it transitively
     /// reaches, never waits on a synchronization primitive
     /// primitive. FR0048/FR0049 reject the contradictions
-    /// codegen can see from a signature; `bazel/wasm_block_check` settles what
+    /// codegen can see from a signature; `bazel/no_block_check` settles what
     /// the body actually calls, at link time.
     ///
     /// Changes no emitted byte on any shipped target: the check roots it
-    /// produces are `#[cfg(frustrate_block_check)]`, a cfg no production build
+    /// produces are `#[cfg(frustrate_no_block_check)]`, a cfg no production build
     /// sets. So like [`Function::cfg_gated`] it stays out of the schema
     /// fingerprint — two halves that disagree about a claim still interoperate.
     #[serde(skip, default)]

@@ -82,7 +82,7 @@ pub enum Terminal {
 /// stream-emitting member could carry the claim, in any crate, for a reason
 /// that had nothing to do with the user's code.
 ///
-/// Gating the branch out under `cfg(frustrate_block_check)` would also have
+/// Gating the branch out under `cfg(frustrate_no_block_check)` would also have
 /// been green, and would have made the artifact a worse witness: the scanned
 /// module would no longer contain the `add` the shipped one does. Spinning
 /// keeps the whole path in the artifact and removes the wait instead.

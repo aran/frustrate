@@ -337,7 +337,7 @@ build_test(
 # - `.<os>_<cpu>`: each native platform's whole-program IR, built from this
 #   host.
 # - `.web_threads`: //bazel:wasm32_threads' +atomics std with frustrate's
-#   `wasm-threads` feature off (//bazel:block_check). Needs the locally built
+#   `wasm-threads` feature off (//bazel:no_block_check). Needs the locally built
 #   std; SKIPPED until `bazel run //toolchain/custom_std:build` stages it.
 # - `.wasi`: wasip1 with the stock std, where IO is `wasi_snapshot_preview1`
 #   imports.
@@ -347,10 +347,10 @@ build_test(
 # native and wasi. The red direction cannot be
 # a target, because Bazel cannot assert that an action fails: put a
 # `Mutex::lock` in `add`'s body and every analysis that runs goes red, naming
-# `add` and its path. The scanner's unit tests in //bazel/wasm_block_check cover
+# `add` and its path. The scanner's unit tests in //bazel/no_block_check cover
 # the decision procedure against hand-built modules.
 frustrate_no_block_check(
-    name = "fixture_block_check",
+    name = "fixture_no_block_check",
     bridge = ":bridge",
     io = [
         "files",

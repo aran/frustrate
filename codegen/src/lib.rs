@@ -138,7 +138,7 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
 /// The one build-mode cfg the generated Rust names, declared to cargo so that
 /// no consumer has to.
 ///
-/// Every generated `#[unsafe(no_mangle)]` export is gated on `frustrate_block_check`
+/// Every generated `#[unsafe(no_mangle)]` export is gated on `frustrate_no_block_check`
 /// (`emit_rust`'s `BLOCK_CHECK_SUPPRESS`), and the check roots of a `no_block`
 /// claim are gated on its negation. Nothing that ships sets it. Cargo passes
 /// `--check-cfg` by default, so absent this line every gate is an
@@ -150,7 +150,7 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
 /// `cargo::` (double colon) is the right prefix, not the older `cargo:`: cargo
 /// has honoured `rustc-check-cfg` only since 1.80 and has understood `cargo::`
 /// since 1.77, so no cargo reads one form and not the other.
-const CHECK_CFG_DIRECTIVE: &str = "cargo::rustc-check-cfg=cfg(frustrate_block_check, frustrate_hot_patch)";
+const CHECK_CFG_DIRECTIVE: &str = "cargo::rustc-check-cfg=cfg(frustrate_no_block_check, frustrate_hot_patch)";
 
 fn declare_check_cfg() {
     if in_build_script() {
@@ -362,7 +362,7 @@ mod tests {
             .collect();
         assert_eq!(
             private,
-            BTreeSet::from(["frustrate_block_check".to_string(), "frustrate_hot_patch".to_string()]),
+            BTreeSet::from(["frustrate_no_block_check".to_string(), "frustrate_hot_patch".to_string()]),
             "{code}"
         );
         assert_eq!(

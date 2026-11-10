@@ -5,7 +5,7 @@ load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_no_block_check")
 # `#[bridge(no_block)]` `async fn`s whose bodies are settled by *placement*, one
 # with a caller-side residue and one without — so this package's census carries
 # both `placement-dispatch` and `artifact-residue`, and its root set is neither
-# empty nor a body. The parent package's `:fixture_block_check` proves the
+# empty nor a body. The parent package's `:fixture_no_block_check` proves the
 # caller-run half, where a root reaches a whole body. src/api.rs has why this is
 # a crate of its own rather than one more member in //tests/bazel_rules.
 
@@ -35,7 +35,7 @@ rust_shared_library(
         ":bridge.rs",
     ],
     # Spelled the same as frustrate_bridge was told above: it is the name
-    # the block check's witness chain prints.
+    # the no_block check's witness chain prints.
     crate_name = "async_claim_fixture",
     edition = "2021",
     proc_macro_deps = ["//macros:frustrate_macros"],
@@ -64,7 +64,7 @@ rust_shared_library(
 # caller is scanned, the body is not — is the whole assertion of this package,
 # and either half alone would pass a rule that had collapsed into the other.
 frustrate_no_block_check(
-    name = "async_block_check",
+    name = "async_no_block_check",
     bridge = ":bridge",
     library = ":async_fixture_shared",
     targets = [

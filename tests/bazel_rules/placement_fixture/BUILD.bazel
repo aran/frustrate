@@ -3,7 +3,7 @@ load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_no_block_check")
 
 # The claims-only half of frustrate_no_block_check's contract: a bridge whose every
 # `#[bridge(no_block)]` claim is settled by placement. src/api.rs says why it is
-# a crate of its own and why it is the one block-check target in the wildcard.
+# a crate of its own and why it is the one no-block-check target in the wildcard.
 
 frustrate_bridge(
     name = "bridge",
@@ -14,7 +14,7 @@ frustrate_bridge(
 )
 
 # Native, like the async fixture's crate: it keeps the generated glue compiling
-# without pulling any wasm configuration in behind it. The block check below
+# without pulling any wasm configuration in behind it. The no_block check below
 # does not name it at all.
 rust_shared_library(
     name = "placement_fixture_shared",
@@ -33,6 +33,6 @@ rust_shared_library(
 # nothing to build and nothing to scan. The census is a codegen output, and the
 # scanner reads it.
 frustrate_no_block_check(
-    name = "placement_block_check",
+    name = "placement_no_block_check",
     bridge = ":bridge",
 )

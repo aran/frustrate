@@ -1,16 +1,16 @@
 [package]
-name = "wasm-block-check"
+name = "no-block-check"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
-default-run = "wasm_block_check"
-description = "Scans a --cfg frustrate_block_check build for what a no_block member can reach: waits, slow functions, IO"
+default-run = "no_block_check"
+description = "Scans a --cfg frustrate_no_block_check build for what a no_block member can reach: waits, slow functions, IO"
 
 # The source sits at the package root rather than in `src/`, so the Bazel
 # `rust_binary` and this manifest name the same file.
 [[bin]]
-name = "wasm_block_check"
+name = "no_block_check"
 path = "main.rs"
 
 [[bin]]

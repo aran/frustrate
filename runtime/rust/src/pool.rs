@@ -24,7 +24,7 @@
 //! is one — `library/std/src/sys/alloc/wasm.rs` locks an `AtomicI32` in a spin
 //! loop and carries a long comment saying it deliberately does *not* execute
 //! `i32.atomic.wait`, because the main thread cannot block. The `+atomics`
-//! block-check artifact links that allocator and contains exactly one
+//! no-block-check artifact links that allocator and contains exactly one
 //! wait-containing function, `std::sys::pal::wasm::futex::futex_wait`, which no
 //! allocation path reaches.
 //!
@@ -91,7 +91,7 @@
 // green for a reason that is not true. Nothing about the platform prevents that
 // pairing, so this does.
 //
-// The one legitimate instance of it is the block-check artifact, which is built
+// The one legitimate instance of it is the no-block-check artifact, which is built
 // exactly this way — the feature off so a claimed body is not boxed out of the
 // direct-call graph, +atomics so std's futex backends are present to find. That
 // module is scanned and thrown away, never instantiated, so no body ever runs on
@@ -100,7 +100,7 @@
     target_family = "wasm",
     target_feature = "atomics",
     not(feature = "wasm-threads"),
-    not(frustrate_block_check)
+    not(frustrate_no_block_check)
 ))]
 compile_error!(
     "frustrate: this is a +atomics wasm build with the `wasm-threads` feature off. \

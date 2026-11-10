@@ -60,7 +60,7 @@ impl Applied {
         let mut lines = text.lines();
         if lines.next() != Some(HEADER) {
             return Err(format!(
-                "wasm_block_check: {path} is not an applied-silences file this tool \
+                "no_block_check: {path} is not an applied-silences file this tool \
                  reads; expected `{HEADER}` first."
             ));
         }
@@ -83,10 +83,10 @@ impl Applied {
                     let (id, w) = rest.split_once(' ').unwrap();
                     a.silences.insert(Silence::Member(id.to_string(), w.to_string()));
                 }
-                _ => return Err(format!("wasm_block_check: {path}: cannot read `{line}`.")),
+                _ => return Err(format!("no_block_check: {path}: cannot read `{line}`.")),
             }
         }
-        let label = label.ok_or_else(|| format!("wasm_block_check: {path} names no check."))?;
+        let label = label.ok_or_else(|| format!("no_block_check: {path} names no check."))?;
         Ok((label, a))
     }
 }
@@ -160,7 +160,7 @@ pub(crate) fn judge(
     let names: Vec<&str> = checks.iter().map(|(l, _)| l.as_str()).collect();
     if !stale.is_empty() {
         return Err(format!(
-            "wasm_block_check: {label}: {} silence(s) silence nothing on any of \
+            "no_block_check: {label}: {} silence(s) silence nothing on any of \
              {}:\n\n{}\n\n\
              A silence that matches nothing would hide whatever later comes to \
              match it, so it is an error rather than a no-op. Remove it, or \
@@ -174,12 +174,12 @@ pub(crate) fn judge(
     }
     if applied.is_empty() {
         return Ok(format!(
-            "wasm_block_check: {label}: no silences across {}.",
+            "no_block_check: {label}: no silences across {}.",
             names.join(", ")
         ));
     }
     Ok(format!(
-        "wasm_block_check: {label}: every silence silences something:\n{}",
+        "no_block_check: {label}: every silence silences something:\n{}",
         applied.join("\n")
     ))
 }

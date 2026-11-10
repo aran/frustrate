@@ -161,7 +161,7 @@ config_setting(
 # consumer's own select() usually wants. frustrate's own two selects moved off
 # it to :wasm_threads_feature_build below, which asks the *other* question
 # ("is frustrate's threaded runtime compiled in"); the two differ only in the
-# block-check configuration. Kept public and unchanged: a consumer whose
+# no-block-check configuration. Kept public and unchanged: a consumer whose
 # dependency differs because the target is +atomics is asking this one.
 config_setting(
     name = "wasm_threads_build",
@@ -208,22 +208,22 @@ config_setting(
 )
 
 # Set only under frustrate_no_block_check's wasm transition (no_block_check.bzl): this
-# build is the throwaway `--cfg frustrate_block_check` artifact whose only
+# build is the throwaway `--cfg frustrate_no_block_check` artifact whose only
 # exports are the `#[bridge(no_block)]` check roots, never something that ships.
 #
 # It has exactly two readers, :wasm_threads_feature_build below and
-# :block_check_build, which hands the custom-std toolchains the check's link
+# :no_block_check_build, which hands the custom-std toolchains the check's link
 # filter. It defaults False, so no production configuration sees it. Nothing else should read it:
 # it is not a "diagnostic build" knob in general.
 bool_flag(
-    name = "block_check",
+    name = "no_block_check",
     build_setting_default = False,
     visibility = ["//visibility:public"],
 )
 
 config_setting(
-    name = "block_check_build",
-    flag_values = {":block_check": "True"},
+    name = "no_block_check_build",
+    flag_values = {":no_block_check": "True"},
     visibility = ["//visibility:public"],
 )
 
@@ -269,9 +269,9 @@ config_setting(
 
 # "frustrate's `wasm-threads` cargo feature is on" — which is *not* the same
 # question as :wasm_threads_build above, and the difference is the whole reason
-# the block-check flow needs no platform of its own.
+# the no-block-check flow needs no platform of its own.
 #
-# A block-check artifact must be built on //bazel:wasm32_threads, because only
+# A no-block-check artifact must be built on //bazel:wasm32_threads, because only
 # that platform resolves the +atomics std whose `Mutex`/`Once`/`park` lower to
 # the `memory.atomic.wait32` this is all looking for. So it carries
 # :wasm_threads_enabled, and :wasm_threads_build matches it.
@@ -280,7 +280,7 @@ config_setting(
 # feature off, `pool::spawn_call` is the inline implementation and `mod threaded`
 # emits no exports, so the artifact's export whitelist stays exactly the check
 # roots and the only wait sites left are ones a claimed body genuinely reaches
-# (bazel/wasm_block_check/main.rs). That is the split: +atomics from the
+# (bazel/no_block_check/main.rs). That is the split: +atomics from the
 # platform, feature from the flag.
 #
 # Keying the runtime's feature select here rather than on :wasm_threads_build
@@ -290,7 +290,7 @@ config_setting(
 config_setting(
     name = "wasm_threads_feature_build",
     constraint_values = [":wasm_threads_enabled"],
-    flag_values = {":block_check": "False"},
+    flag_values = {":no_block_check": "False"},
     visibility = ["//visibility:public"],
 )
 

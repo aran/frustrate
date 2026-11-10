@@ -1,4 +1,4 @@
-/// `test_api_block_check` covers the claim shapes it was built to cover.
+/// `test_api_no_block_check` covers the claim shapes it was built to cover.
 ///
 /// The check's roots come from whatever this fixture claims, so deleting a
 /// `#[bridge(no_block)]` here does not turn the check red: it shrinks what the

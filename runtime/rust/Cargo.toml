@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 [lints.rust]
 # These are build-mode cfgs, not features, and all default off.
-# `frustrate_block_check` is set only by the `frustrate_no_block_check` Bazel
+# `frustrate_no_block_check` is set only by the `frustrate_no_block_check` Bazel
 # rule, which builds a module to scan and throw away. `frustrate_manual_scheduler` is set only by `--//bazel:manual_scheduler`
 # and makes the executor's Scheduler enqueue-only so a host drives the drains
 # (executor.rs, `arrange_drain`); it is native-only and a wasm build carrying it
@@ -26,7 +26,7 @@ path = "src/lib.rs"
 # the same declaration from its build script, which `frustrate_codegen::generate`
 # prints as `cargo::rustc-check-cfg=…` — see `CHECK_CFG_DIRECTIVE` in
 # codegen/src/lib.rs. The runtime has no build script to print it from.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frustrate_block_check)', 'cfg(frustrate_manual_scheduler)', 'cfg(frustrate_hot_patch)', 'cfg(frustrate_idle_barrier)', 'cfg(frustrate_dirty_section_fixture)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frustrate_no_block_check)', 'cfg(frustrate_manual_scheduler)', 'cfg(frustrate_hot_patch)', 'cfg(frustrate_idle_barrier)', 'cfg(frustrate_dirty_section_fixture)'] }
 
 [features]
 # Threaded web: real worker threads on one shared linear memory. Requires a

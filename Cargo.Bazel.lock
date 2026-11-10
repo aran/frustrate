@@ -1,5 +1,5 @@
 {
-  "checksum": "54c708ee785febe87e2c72166288afae061882fc585ee0eeef3b192a9969a438",
+  "checksum": "d1fcccdb6282a7f67f2355718b5c88484b1e9b04585997c734265c6c1e84670d",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -790,6 +790,29 @@
       ],
       "version": "2.8.2"
     },
+    "no-block-check 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "rustc-demangle 0.1.28",
+            "target": "rustc_demangle"
+          },
+          {
+            "id": "wasmparser 0.244.0",
+            "target": "wasmparser"
+          }
+        ],
+        "edition": "2021"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "no-block-check",
+      "repository": null,
+      "targets": [],
+      "version": "0.1.0"
+    },
     "object 0.37.3": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -1509,29 +1532,6 @@
       ],
       "version": "1.0.4+wasi-0.2.12"
     },
-    "wasm-block-check 0.1.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "rustc-demangle 0.1.28",
-            "target": "rustc_demangle"
-          },
-          {
-            "id": "wasmparser 0.244.0",
-            "target": "wasmparser"
-          }
-        ],
-        "edition": "2021"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "name": "wasm-block-check",
-      "repository": null,
-      "targets": [],
-      "version": "0.1.0"
-    },
     "wasmparser 0.244.0": {
       "common_attrs": {
         "crate_features": [
@@ -1708,8 +1708,8 @@
     "frustrate-getrandom 0.1.0": "ext/getrandom",
     "frustrate-hotpatch 0.1.0": "hotpatch",
     "frustrate-macros 0.1.0": "macros",
+    "no-block-check 0.1.0": "bazel/no_block_check",
     "shape-coverage 0.1.0": "tools/shape_coverage",
-    "test_api 0.1.0": "tests/test_api",
-    "wasm-block-check 0.1.0": "bazel/wasm_block_check"
+    "test_api 0.1.0": "tests/test_api"
   }
 }

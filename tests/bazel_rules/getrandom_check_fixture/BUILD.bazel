@@ -34,7 +34,7 @@ rust_shared_library(
 )
 
 frustrate_no_block_check(
-    name = "getrandom_block_check",
+    name = "getrandom_no_block_check",
     bridge = ":bridge",
     library = ":getrandom_check_fixture_shared",
     targets = ["web_threads"],

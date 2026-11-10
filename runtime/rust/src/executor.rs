@@ -583,10 +583,10 @@ static ACTOR_INSTANCE: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 
 /// Mark this wasm instance as an actor's executor. Called once by the worker
 /// pump, between instantiation and the first dispatched call.
-// `frustrate_block_check` gating, here and on the three exports below: see the
-// "block-check export gating" note in lib.rs.
+// `frustrate_no_block_check` gating, here and on the three exports below: see the
+// "no-block-check export gating" note in lib.rs.
 #[cfg(target_family = "wasm")]
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_mark_actor_instance() {
     ACTOR_INSTANCE.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -739,7 +739,7 @@ pub fn cancel(call_id: u64) -> bool {
 /// is enqueued (actor.rs). A plain `#[bridge]` fn dispatched async is neither —
 /// it runs to completion on a pool worker — so codegen emits no cancel surface
 /// for one and this export would simply answer `0`.
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_call_cancel(call_id: u64) -> u8 {
     cancel(call_id) as u8
@@ -753,7 +753,7 @@ pub extern "C" fn frustrate_call_cancel(call_id: u64) -> u8 {
 /// again once its waker has re-enqueued it. Present on every build so the
 /// export table is uniform; on native / threaded web the pool drives drains
 /// and nothing calls this.
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_drain() {
     global().drain_all();
@@ -812,7 +812,7 @@ pub(crate) fn draining() -> bool {
 /// pool's `frustrate_current_call` (pool.rs). Present on every build so the
 /// export table is uniform; native / threaded web unwind in-band and never call
 /// it.
-#[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+#[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_current_drain_call() -> u64 {
     CURRENT_DRAIN_CALL.with(|c| c.get())

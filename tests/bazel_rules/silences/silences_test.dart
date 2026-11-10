@@ -20,7 +20,7 @@ void main() {
     const dir = 'tests/bazel_rules/silences/stale';
     final out = Directory.systemTemp.createTempSync('silences');
     final r = Process.runSync(
-      _rlocation('bazel/wasm_block_check/wasm_block_check'),
+      _rlocation('bazel/no_block_check/no_block_check'),
       [
         '--silences',
         _rlocation('$dir/bridge/no_block.claims'),
@@ -52,15 +52,15 @@ void main() {
     (int, String) silences(List<String> applied) {
       final out = Directory.systemTemp.createTempSync('silences');
       final r = Process.runSync(
-        _rlocation('bazel/wasm_block_check/wasm_block_check'),
+        _rlocation('bazel/no_block_check/no_block_check'),
         [
           '--silences',
           _rlocation('$dir/example/bridge/no_block.claims'),
           '--also-claims',
           _rlocation('$dir/app/bridge/no_block.claims'),
           for (final a in applied)
-            _rlocation('$dir/linked_block_check.$a.applied'),
-          '//$dir:linked_block_check.silences',
+            _rlocation('$dir/linked_no_block_check.$a.applied'),
+          '//$dir:linked_no_block_check.silences',
           '${out.path}/verdict',
         ],
       );

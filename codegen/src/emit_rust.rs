@@ -17,7 +17,7 @@
 //!     frustrate_<crate>_finalize_<Type> per opaque type. Every export carries
 //!     the crate name ([`Interface::export_symbol`]) so several bridges link
 //!     into one library; comments below name them without it.
-//!   - block-check roots, under `--cfg frustrate_block_check` only
+//!   - no-block-check roots, under `--cfg frustrate_no_block_check` only
 
 use crate::ir::*;
 use std::fmt::Write;
@@ -82,7 +82,7 @@ pub fn emit(iface: &Interface) -> String {
          pub extern \"C\" fn {schema_hash}() -> u64 {{\n\
          {route}    {hash:#018x}\n\
          }}\n\n",
-        gate = BLOCK_CHECK_SUPPRESS,
+        gate = NO_BLOCK_CHECK_SUPPRESS,
         route = route,
         schema_hash = schema_hash,
         hash = crate::hash::schema_hash(iface)
@@ -109,7 +109,7 @@ pub fn emit(iface: &Interface) -> String {
     }
     emit_dispatch(&mut out, iface);
     emit_drops(&mut out, iface);
-    emit_block_checks(&mut out, iface);
+    emit_no_block_checks(&mut out, iface);
     out
 }
 
@@ -159,7 +159,7 @@ fn dispatch(iface: &Interface, f: &Function) -> Dispatch {
 /// member. There are several ways that can be true,
 /// and only two of them want a check artifact — which is why the classification
 /// exists as a value rather than as an `if` inside the emitter. [`claims`] is
-/// the single place it is decided; [`emit_block_checks`] and [`claim_census`]
+/// the single place it is decided; [`emit_no_block_checks`] and [`claim_census`]
 /// both read it, so a claim cannot be rooted one way and reported another.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Settlement {
@@ -184,7 +184,7 @@ pub enum Settlement {
     /// native body being placed off the caller for the same reason as the wasm
     /// one — natively it is, but by the pool rather than by the actor.
     PlacementDispatch,
-    /// [`Dispatch::Caller`] — settled by `bazel/wasm_block_check` over a module
+    /// [`Dispatch::Caller`] — settled by `bazel/no_block_check` over a module
     /// linked from a root that reaches the member's whole body.
     Artifact,
     /// [`Dispatch::Dispatched`] with a non-empty [`residue`]: scanned like
@@ -216,7 +216,7 @@ pub enum Settlement {
 
 impl Settlement {
     /// The census token. Also the wire between codegen and
-    /// `bazel/wasm_block_check`, so it is spelled once, here.
+    /// `bazel/no_block_check`, so it is spelled once, here.
     pub fn token(self) -> &'static str {
         match self {
             Settlement::Placement => "placement",
@@ -284,7 +284,7 @@ pub fn claims(iface: &Interface) -> Vec<(Settlement, &Function)> {
 ///   main-thread export runs whatever thread ran the body ([`returned_opaques`]).
 ///
 /// Empty for most members, which is the common case worth having: nothing is
-/// built and nothing is scanned. Non-empty, and [`emit_block_checks`] emits a
+/// built and nothing is scanned. Non-empty, and [`emit_no_block_checks`] emits a
 /// root containing exactly these two edge sets and nothing else.
 ///
 /// **Parameters only, for `decoded`.** An extern in the *return* type crosses by
@@ -370,7 +370,7 @@ impl Residue<'_> {
 /// move every schema hash.
 ///
 /// Line-oriented rather than JSON so the scanner can read it without a
-/// dependency (`bazel/wasm_block_check` has none, deliberately). A member is
+/// dependency (`bazel/no_block_check` has none, deliberately). A member is
 /// named `Parent::name` where it has a parent; the check root's symbol is
 /// `frustrate_check_block_{crate}_{fn_id}_{name}`, so the `crate` row and the
 /// last `::` segment are what a reader matches an export against.
@@ -418,8 +418,8 @@ fn member_path(f: &Function) -> String {
     path
 }
 
-/// One `#[cfg(frustrate_block_check)]` export per claim that wants a root: the
-/// root a block-check artifact is linked from.
+/// One `#[cfg(frustrate_no_block_check)]` export per claim that wants a root: the
+/// root a no-block-check artifact is linked from.
 ///
 /// Appended after every other emission on purpose. The async-spawn tests assert
 /// on the *first* occurrence of `pool::spawn_call` and on text ordering within
@@ -470,11 +470,11 @@ fn member_path(f: &Function) -> String {
 /// handle the main isolate holds is the main thread (`dispose()` calls the
 /// export inline; the GC path is a Dart `Finalizer` on the attaching isolate).
 /// The exports themselves stay suppressed — "every function export is a check
-/// root" is a control `wasm_block_check` depends on — so the edge goes to the
+/// root" is a control `no_block_check` depends on — so the edge goes to the
 /// inner glue instead ([`emit_drops`]), which is what the export runs and
 /// cannot drift from it. See [`returned_opaques`] for why the return type is
 /// the whole of the egress surface.
-fn emit_block_checks(out: &mut String, iface: &Interface) {
+fn emit_no_block_checks(out: &mut String, iface: &Interface) {
     let rooted: Vec<(Settlement, &Function)> = claims(iface)
         .into_iter()
         .filter(|(s, _)| s.wants_root())
@@ -483,13 +483,13 @@ fn emit_block_checks(out: &mut String, iface: &Interface) {
         return;
     }
     out.push_str(
-        "// --- block-check roots -------------------------------------------\n\
-         // Present only under `--cfg frustrate_block_check`, which no shipped\n\
+        "// --- no-block-check roots -------------------------------------------\n\
+         // Present only under `--cfg frustrate_no_block_check`, which no shipped\n\
          // build sets. Each root is the single export of a throwaway module\n\
-         // that `bazel/wasm_block_check` scans for `memory.atomic.wait`.\n\n",
+         // that `bazel/no_block_check` scans for `memory.atomic.wait`.\n\n",
     );
     for (s, f) in rooted {
-        out.push_str("#[cfg(frustrate_block_check)]\n");
+        out.push_str("#[cfg(frustrate_no_block_check)]\n");
         out.push_str(ALLOW);
         let _ = write!(
             out,
@@ -607,7 +607,7 @@ fn returned_opaques<'a>(iface: &'a Interface, f: &'a Function) -> Vec<&'a str> {
 
 /// The drop half of a check root: one direct edge per opaque the member can
 /// hand to Dart, into the inner glue the `frustrate_drop_*` /
-/// `frustrate_finalize_*` exports run. See [`emit_block_checks`].
+/// `frustrate_finalize_*` exports run. See [`emit_no_block_checks`].
 ///
 /// The handle is the root's own `handle` parameter, so no optimizer can decide the call
 /// dereferences null, prove the block unreachable, and delete the very edge the
@@ -617,7 +617,7 @@ fn returned_opaques<'a>(iface: &'a Interface, f: &'a Function) -> Vec<&'a str> {
 ///
 /// **Residual: a `dyn` opaque crosses a vtable.** Its inner glue drops
 /// `Box<dyn Trait>`, so a concrete implementor's `Drop` is reached by
-/// `call_indirect`, which `wasm_block_check`'s direct-call graph does not
+/// `call_indirect`, which `no_block_check`'s direct-call graph does not
 /// follow. That is loud rather than silent: lld keeps an address-taken function,
 /// so a wait inside one survives with no direct path from any root — the
 /// scanner's rule 2, a named "cannot decide" error. Emitting edges to the
@@ -4806,7 +4806,7 @@ fn emit_actor_call(out: &mut String, iface: &Interface, f: &Function) {
 const NATIVE_ONLY_CFG: &str = "#[cfg(not(target_family = \"wasm\"))]\n";
 
 /// Gate on every generated `#[unsafe(no_mangle)]` export, so that a wasm
-/// **block-check** build exports only its check roots and lld's dead-code
+/// **no-block-check** build exports only its check roots and lld's dead-code
 /// elimination decides everything else.
 ///
 /// Wasm only. The native check reads the whole program's IR and walks it from
@@ -4814,7 +4814,7 @@ const NATIVE_ONLY_CFG: &str = "#[cfg(not(target_family = \"wasm\"))]\n";
 /// wait is exempt only if every section of it in the program is checked, and
 /// sections reached only from a production export would otherwise be absent.
 ///
-/// `frustrate_block_check` is set by nothing that ships — only by the
+/// `frustrate_no_block_check` is set by nothing that ships — only by the
 /// `frustrate_no_block_check` Bazel rule, which builds an artifact that is
 /// scanned and thrown away. With the cfg off
 /// this constant contributes no bytes, so production output is unchanged.
@@ -4825,8 +4825,8 @@ const NATIVE_ONLY_CFG: &str = "#[cfg(not(target_family = \"wasm\"))]\n";
 /// reachable through its rlibs. Measured both ways: 13264 functions survived,
 /// nothing collected. Suppressing the symbol at the source is the only lever
 /// that makes the linker's GC do the reachability work.
-const BLOCK_CHECK_SUPPRESS: &str =
-    "#[cfg(not(all(frustrate_block_check, target_family = \"wasm\")))]\n";
+const NO_BLOCK_CHECK_SUPPRESS: &str =
+    "#[cfg(not(all(frustrate_no_block_check, target_family = \"wasm\")))]\n";
 
 /// Gate on hot patch routing. `--cfg=frustrate_hot_patch` is set only by
 /// `frustrate_hot_patchable`, only for `-c dbg`, and only for native libraries;
@@ -4992,7 +4992,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     out.push_str("        _ => None,\n    }\n}\n\n");
     out.push_str(&slot);
     out.push_str(ALLOW);
-    out.push_str(BLOCK_CHECK_SUPPRESS);
+    out.push_str(NO_BLOCK_CHECK_SUPPRESS);
     out.push_str(
         "/// Dispatch one sync call and answer into the caller's buffer.\n///\n/// `out` is `out_cap` bytes the transport owns for the duration of this call\n/// and frees itself. The response envelope is written there when it fits, and\n/// the return is its length; otherwise it is leased and the `(ptr, len, cap)`\n/// triple lands in the first 24 bytes of `out` with -1 returned. See\n/// `frustrate::envelope::respond_out` for why the common case avoids the\n/// lease at all.\n///\n/// `owner` owns what the body queues (`frustrate::envelope::run_sync`).\n///\n/// # Safety\n/// Called from generated Dart with a valid request buffer and a response\n/// buffer of at least 24 bytes.\n#[unsafe(no_mangle)]\n",
     );
@@ -5068,7 +5068,7 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     out.push_str("        _ => None,\n    }\n}\n\n");
     out.push_str(&slot);
     out.push_str(ALLOW);
-    out.push_str(BLOCK_CHECK_SUPPRESS);
+    out.push_str(NO_BLOCK_CHECK_SUPPRESS);
     out.push_str(
         "/// # Safety\n/// Called from generated Dart with a valid request buffer.\n#[unsafe(no_mangle)]\n",
     );
@@ -5226,21 +5226,21 @@ fn emit_model_asserts(out: &mut String, iface: &Interface) {
 /// The drop path for every opaque model but Actor: two private *inner* fns per
 /// type, and the two `#[unsafe(no_mangle)]` exports that call them.
 ///
-/// The split exists so a block-check root can reach this code. The exports are
+/// The split exists so a no-block-check root can reach this code. The exports are
 /// Dart `NativeFinalizer` / `Finalizer` callbacks, and they carry
-/// [`BLOCK_CHECK_SUPPRESS`] like every other generated export, so a check
+/// [`NO_BLOCK_CHECK_SUPPRESS`] like every other generated export, so a check
 /// artifact contains neither them nor anything only they reach, and without
 /// the split that would include the **user's `Drop` impl**. That body runs on whatever thread frees
 /// the handle, and for a handle the main isolate holds that is the main thread:
 /// `dispose()` calls the export inline, and the GC path is a Dart `Finalizer`
 /// whose callback runs on the isolate that attached it. A `Drop` that takes a
 /// contended lock therefore stalls the page exactly as a blocking member body
-/// would — one step later in the object's life. See [`emit_block_checks`],
+/// would — one step later in the object's life. See [`emit_no_block_checks`],
 /// which roots these inner fns from the claimed member that can hand the
 /// handle out.
 ///
 /// The inner fns carry the native-only gate (they name the Rust type) but
-/// **never** `BLOCK_CHECK_SUPPRESS`: they have to exist in the check
+/// **never** `NO_BLOCK_CHECK_SUPPRESS`: they have to exist in the check
 /// configuration, since that is the only configuration that calls them from a
 /// root.
 fn emit_drops(out: &mut String, iface: &Interface) {
@@ -5268,7 +5268,7 @@ fn emit_drops(out: &mut String, iface: &Interface) {
         // type has no class on the web Dart surface, so no handle of it exists
         // there to drop.
         let native = if o.native_only { NATIVE_ONLY_CFG } else { "" };
-        let gate = format!("{native}{BLOCK_CHECK_SUPPRESS}");
+        let gate = format!("{native}{NO_BLOCK_CHECK_SUPPRESS}");
         // The inner pair takes the handle as a `u64` — the representation the
         // `handle::*_drop` helpers speak, and the one a check root can pass a
         // placeholder for without a cast.
@@ -5339,7 +5339,7 @@ mod tests {
 
     /// Every symbol the glue exports carries the crate name, so two bridges
     /// link into one library without defining one symbol twice — the
-    /// block-check roots included, which a check build of that library
+    /// no-block-check roots included, which a check build of that library
     /// compiles for every bridge in it. Read from the parsed items, so an
     /// export spelled any way at all is counted.
     #[test]
@@ -5950,7 +5950,7 @@ mod tests {
         );
         // Every root is behind the cfg, so a production build emits none of it.
         assert_eq!(
-            code.matches("#[cfg(frustrate_block_check)]").count(),
+            code.matches("#[cfg(frustrate_no_block_check)]").count(),
             1,
             "{code}"
         );
@@ -5979,7 +5979,7 @@ mod tests {
         assert!(!code.contains("Future::poll"), "{code}");
         assert!(!code.contains("core::pin::pin!"), "{code}");
         assert!(!code.contains("Waker::noop"), "{code}");
-        assert_eq!(code.matches("#[cfg(frustrate_block_check)]").count(), 1, "{code}");
+        assert_eq!(code.matches("#[cfg(frustrate_no_block_check)]").count(), 1, "{code}");
     }
 
     /// A dispatched member whose parameters carry a bridge-external type is not
@@ -6054,8 +6054,8 @@ mod tests {
     #[test]
     fn an_unclaimed_interface_emits_no_block_check_section() {
         let code = emit_src("#[bridge(sync)] pub fn f(x: i64) -> i64 { x }");
-        assert!(!code.contains("frustrate_block_check)]"), "{code}");
-        assert!(!code.contains("block-check roots"), "{code}");
+        assert!(!code.contains("frustrate_no_block_check)]"), "{code}");
+        assert!(!code.contains("no-block-check roots"), "{code}");
     }
 
     /// The census with each row's dispatch id masked to `#`. A row is
@@ -6102,7 +6102,7 @@ mod tests {
         assert!(code.contains("frustrate_check_block_test_api_#_kept(request"), "{code}");
         assert!(!code.contains("frustrate_check_block_test_api_#_park"), "{code}");
         // One root, so exactly one cfg gate in the whole section.
-        assert_eq!(code.matches("#[cfg(frustrate_block_check)]").count(), 1, "{code}");
+        assert_eq!(code.matches("#[cfg(frustrate_no_block_check)]").count(), 1, "{code}");
     }
 
     /// A bridge whose every claim is placement-settled builds no check
@@ -6118,8 +6118,8 @@ mod tests {
              \x20 pub fn park(&mut self) {{}}\n\
              }}"
         ));
-        assert!(!code.contains("frustrate_block_check)]"), "{code}");
-        assert!(!code.contains("block-check roots"), "{code}");
+        assert!(!code.contains("frustrate_no_block_check)]"), "{code}");
+        assert!(!code.contains("no-block-check roots"), "{code}");
     }
 
     /// The census and the roots are two renderings of one classification, so a
@@ -6158,7 +6158,7 @@ mod tests {
             );
         }
         assert_eq!(
-            code.matches("#[cfg(frustrate_block_check)]").count(),
+            code.matches("#[cfg(frustrate_no_block_check)]").count(),
             rows.len(),
             "a root with no census row:\n{census}\n{code}"
         );
@@ -6245,12 +6245,12 @@ mod tests {
         // which is the whole reason the inner split exists.
         assert!(
             code.contains(&format!(
-                "{}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_test_api_drop_Doc", super::BLOCK_CHECK_SUPPRESS
+                "{}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_test_api_drop_Doc", super::NO_BLOCK_CHECK_SUPPRESS
             )),
             "{code}"
         );
         assert!(
-            !code.contains(&format!("{}{}unsafe fn drop_inner_Doc", super::BLOCK_CHECK_SUPPRESS, super::ALLOW)),
+            !code.contains(&format!("{}{}unsafe fn drop_inner_Doc", super::NO_BLOCK_CHECK_SUPPRESS, super::ALLOW)),
             "the inner glue must exist in the check configuration: {code}"
         );
     }
@@ -7796,13 +7796,13 @@ mod tests {
             "#,
         );
         // Both drop exports name the Rust type, so both carry the native-only
-        // gate. They also carry the block-check suppression every generated
+        // gate. They also carry the no-block-check suppression every generated
         // export carries; the order is native-only first, and asserting both
         // together keeps this test pinning the *conjunction* rather than
         // silently passing if one were dropped.
         let gate = concat!(
             "#[cfg(not(target_family = \"wasm\"))]\n",
-            "#[cfg(not(all(frustrate_block_check, target_family = \"wasm\")))]"
+            "#[cfg(not(all(frustrate_no_block_check, target_family = \"wasm\")))]"
         );
         assert!(
             code.contains(&format!(

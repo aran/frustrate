@@ -148,6 +148,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
+name = "no-block-check"
+version = "0.1.0"
+dependencies = [
+ "rustc-demangle",
+ "wasmparser",
+]
+
+[[package]]
 name = "object"
 version = "0.37.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -294,14 +302,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b67efb37e106e55ce722a510d6b5f9c17f083e5fc79afc2badeb12cc313d9487"
 dependencies = [
  "wit-bindgen",
-]
-
-[[package]]
-name = "wasm-block-check"
-version = "0.1.0"
-dependencies = [
- "rustc-demangle",
- "wasmparser",
 ]
 
 [[package]]

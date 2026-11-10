@@ -21,7 +21,7 @@ frustrate_shared_library(
 )
 
 frustrate_no_block_check(
-    name = "linked_block_check",
+    name = "linked_no_block_check",
     bridge = BRIDGES,
     library = ":linked",
     slow = [
@@ -48,7 +48,7 @@ no_block_check_artifacts(
     visibility = ["//tests/bazel_rules/native_red:__pkg__"],
 )
 
-# What `linked_block_check.silences` is handed, for
+# What `linked_no_block_check.silences` is handed, for
 # //tests/bazel_rules/silences:silences_test: that test's host may not run every
 # analysis (`web_threads` needs a staged std), so it runs the scanner's
 # `--silences` over these analyses' files itself.
@@ -56,9 +56,9 @@ filegroup(
     name = "applied",
     testonly = True,
     srcs = [
-        ":linked_block_check.linux_x86_64",
-        ":linked_block_check.macos_aarch64",
-        ":linked_block_check.wasi",
+        ":linked_no_block_check.linux_x86_64",
+        ":linked_no_block_check.macos_aarch64",
+        ":linked_no_block_check.wasi",
     ],
     output_group = "silences",
     visibility = ["//tests/bazel_rules/silences:__pkg__"],

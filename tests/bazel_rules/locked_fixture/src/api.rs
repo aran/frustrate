@@ -1,4 +1,4 @@
-//! The **synchronous locked** half of the block-check surface: a
+//! The **synchronous locked** half of the no-block-check surface: a
 //! `#[bridge(no_block)]` claim whose body takes and releases a lock guard in
 //! the caller's own frame, so the check must scan that release.
 //!
@@ -13,7 +13,7 @@
 //!
 //! # What it proves that the others do not
 //!
-//! `fixture_block_check` roots a body that reaches no synchronisation at all;
+//! `fixture_no_block_check` roots a body that reaches no synchronisation at all;
 //! `async_fixture` roots what a *dispatched* member leaves on the caller;
 //! `placement_fixture` roots nothing. None of them scans a lock.
 //!

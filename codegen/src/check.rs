@@ -5300,14 +5300,14 @@ fn check_function(
     // **Only `block`.** The claim's own words are contradicted by an
     // acquisition that waits, on every target, and this is the only check such
     // a member gets: it is `requires_native`, so it is cfg'd out of the wasm
-    // build and `emit_block_checks` emits no root for it. Not hypothetical —
-    // before this rule existed, `bazel/wasm_block_check` reported the guard
+    // build and `emit_no_block_checks` emits no root for it. Not hypothetical —
+    // before this rule existed, `bazel/no_block_check` reported the guard
     // release reaching `futex_wait` from a claimed sync locked member, a true
     // finding delivered as a wasm call trace.
     //
     // The try-lock is **not** refused, and the reason is what `no_block`
     // actually means in this tree. There is one operative definition, not two:
-    // it is what `bazel/wasm_block_check` verifies on wasm — no wait
+    // it is what `bazel/no_block_check` verifies on wasm — no wait
     // instruction reachable from what the caller runs — and what placement
     // settles everywhere else. Members whose `executor::spawn` and
     // `pool::spawn` take an internal `std::sync::Mutex` in the caller's own

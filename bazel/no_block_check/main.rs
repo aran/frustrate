@@ -6,7 +6,7 @@
 //! `no_block` is the author's claim that main-thread Dart calling a member
 //! cannot be stalled. Codegen cannot see through a
 //! call into a dependency, so the claim is settled at *artifact* time: a throwaway
-//! module is built with `--cfg frustrate_block_check`, where the **only**
+//! module is built with `--cfg frustrate_no_block_check`, where the **only**
 //! exports are one root per claimed member. lld's GC deletes everything those
 //! roots cannot reach, and this tool asks whether a wait instruction survived.
 //!
@@ -137,10 +137,10 @@ static ALLOC: budget::Budgeted = budget::Budgeted;
 
 /// Every function export of a check artifact must start with this.
 ///
-/// Codegen emits one `#[cfg(frustrate_block_check)] #[no_mangle] pub extern "C"
+/// Codegen emits one `#[cfg(frustrate_no_block_check)] #[no_mangle] pub extern "C"
 /// fn frustrate_check_block_{crate}_{fn_id}_{name}()` per claimed member, and gates
 /// every other `#[no_mangle]` in the generated bindings and in the runtime on
-/// `#[cfg(not(frustrate_block_check))]`. So an artifact with any other function
+/// `#[cfg(not(frustrate_no_block_check))]`. So an artifact with any other function
 /// export is either the production module (scan the wrong file and everything
 /// is reachable, so the result means nothing) or a `#[no_mangle]` that escaped
 /// the gate (its own reachable set is folded into the answer). Both are named
@@ -352,14 +352,14 @@ impl SlowPath {
         };
         if !segs.iter().all(ident) {
             return Err(format!(
-                "wasm_block_check: `--slow {text}` is not a Rust path. Write the \
+                "no_block_check: `--slow {text}` is not a Rust path. Write the \
                  path to a module or function, segments joined by `::`, with no \
                  generics or leading `::` — `std::fs`, `my_crate::io::save`."
             ));
         }
         if matches!(segs[0].as_str(), "crate" | "self" | "super") {
             return Err(format!(
-                "wasm_block_check: `--slow {text}` starts with `{}`, which no \
+                "no_block_check: `--slow {text}` starts with `{}`, which no \
                  symbol carries. Start it with the crate's name as rustc sees it \
                  (hyphens become underscores).",
                 segs[0]
@@ -801,7 +801,7 @@ impl Claims {
         let head = lines.next().unwrap_or("");
         if head != CENSUS_HEADER {
             return Err(format!(
-                "wasm_block_check: {path} is not a claim census this tool reads.\n\
+                "no_block_check: {path} is not a claim census this tool reads.\n\
                  \n\
                  Expected the first non-comment line to be `{CENSUS_HEADER}`; found \
                  `{head}`.\n\
@@ -823,7 +823,7 @@ impl Claims {
                 let mut f = rest.split(' ');
                 let (Some(id), Some(what), None) = (f.next(), f.next(), f.next()) else {
                     return Err(format!(
-                        "wasm_block_check: {path}: cannot read `{line}`.\n\
+                        "no_block_check: {path}: cannot read `{line}`.\n\
                          An allow row is `allow <fn_id> <name>`."
                     ));
                 };
@@ -835,19 +835,19 @@ impl Claims {
                 (f.next(), f.next(), f.next(), f.next(), f.next())
             else {
                 return Err(format!(
-                    "wasm_block_check: {path}: cannot read `{line}`.\n\
+                    "no_block_check: {path}: cannot read `{line}`.\n\
                      A census row is `<settlement> <fn_id> <name>`, and an \
                      `artifact` row adds the member's own function path."
                 ));
             };
             if id.parse::<u32>().is_err() {
                 return Err(format!(
-                    "wasm_block_check: {path}: `{line}` has no numeric fn id."
+                    "no_block_check: {path}: `{line}` has no numeric fn id."
                 ));
             }
             if member.is_some() != (kind == "artifact") {
                 return Err(format!(
-                    "wasm_block_check: {path}: `{line}`: an `artifact` row, and \
+                    "no_block_check: {path}: `{line}`: an `artifact` row, and \
                      only an `artifact` row, carries the member's function path."
                 ));
             }
@@ -858,7 +858,7 @@ impl Claims {
             let root = format!("{ROOT_PREFIX}{crate_name}_{id}_{bare}");
             if (kind == "artifact" || kind == "artifact-residue") && crate_name.is_empty() {
                 return Err(format!(
-                    "wasm_block_check: {path}: `{line}` comes before a `crate` row, \
+                    "no_block_check: {path}: `{line}` comes before a `crate` row, \
                      so its check root cannot be named."
                 ));
             }
@@ -882,7 +882,7 @@ impl Claims {
                 "artifact-residue" => c.residue.push((root, name.to_string())),
                 _ => {
                     return Err(format!(
-                        "wasm_block_check: {path}: `{kind}` is not a settlement this \
+                        "no_block_check: {path}: `{kind}` is not a settlement this \
                          tool knows (`placement`, `placement-dispatch`, `artifact`, \
                          `artifact-residue`, `declared`).\n\
                          The census was written by a newer codegen than this scanner."
@@ -914,13 +914,13 @@ impl Claims {
         for (path, c) in parts {
             let Some(krate) = c.crates.first().cloned() else {
                 return Err(format!(
-                    "wasm_block_check: {path} names no `crate`, so with more than one \
+                    "no_block_check: {path} names no `crate`, so with more than one \
                      census its roots cannot be attributed to a bridge."
                 ));
             };
             if let Some(other) = seen.insert(krate.clone(), path.clone()) {
                 return Err(format!(
-                    "wasm_block_check: {other} and {path} are both censuses of crate \
+                    "no_block_check: {other} and {path} are both censuses of crate \
                      `{krate}`. Each linked bridge is named once, and its crate's \
                      name is what tells its roots from another bridge's."
                 ));
@@ -951,7 +951,7 @@ impl Claims {
             .iter()
             .map(|p| {
                 std::fs::read_to_string(p)
-                    .map_err(|e| format!("wasm_block_check: {p}: {e}"))
+                    .map_err(|e| format!("no_block_check: {p}: {e}"))
                     .and_then(|t| Claims::parse(&t, p))
                     .map(|c| (p.clone(), c))
             })
@@ -1083,7 +1083,7 @@ impl Claims {
              has no work to do. Claim a portable member, or drop this target."
         };
         Err(format!(
-            "wasm_block_check: {} claims nothing this check can settle, so \
+            "no_block_check: {} claims nothing this check can settle, so \
              {label} covers nothing and its silence means nothing.\n\
              \n\
              {tail}",
@@ -1108,7 +1108,7 @@ fn claims_only(label: &str, c: &Claims) -> Result<String, String> {
         .collect();
     if !silences.is_empty() {
         return Err(format!(
-            "wasm_block_check: {label}: {} silence(s) silence nothing:\n\n{}\n\n\
+            "no_block_check: {label}: {} silence(s) silence nothing:\n\n{}\n\n\
              Every claim here is settled by placement, so nothing it reaches is \
              scanned and a silence on it has nothing to silence. Remove it.",
             silences.len(),
@@ -1121,7 +1121,7 @@ fn claims_only(label: &str, c: &Claims) -> Result<String, String> {
             .map(|(_, display)| format!("  {display}"))
             .collect();
         return Err(format!(
-            "wasm_block_check: {} has {} claim(s) that need artifact evidence, \
+            "no_block_check: {} has {} claim(s) that need artifact evidence, \
              and this target builds none:\n\n{}\n\n\
              A claims-only target settles claims by *placement* — on an actor's \
              own executor, or by dispatch onto the pool with nothing left on the \
@@ -1136,7 +1136,7 @@ fn claims_only(label: &str, c: &Claims) -> Result<String, String> {
         ));
     }
     Ok(format!(
-        "wasm_block_check: {label} is clean — {} `no_block` claim(s), none \
+        "no_block_check: {label} is clean — {} `no_block` claim(s), none \
          needing an artifact{}.",
         c.placement.len() + c.placement_dispatch.len() + c.declared.len(),
         c.accounting()
@@ -1163,7 +1163,7 @@ fn run_with(
     // Control 1: the parse worked and the names are there to read.
     if !m.names.values().any(|n| n.contains(SENTINEL)) {
         return Err(format!(
-            "wasm_block_check: cannot verify {label}.\n\
+            "no_block_check: cannot verify {label}.\n\
              \n\
              This module's wasm name section is missing, empty, or carries no \
              mangled Rust symbols (built with `-C strip=symbols`, or run through \
@@ -1196,11 +1196,11 @@ fn run_with(
     }
     if !strays.is_empty() {
         return Err(format!(
-            "wasm_block_check: {label} exports {} function(s) that are not \
+            "no_block_check: {label} exports {} function(s) that are not \
              `{ROOT_PREFIX}*`:\n\n{}\n\n\
              A check artifact's only function exports are the roots codegen \
-             emits under `--cfg frustrate_block_check`; everything else is \
-             `#[cfg(not(frustrate_block_check))]`. So this is either the \
+             emits under `--cfg frustrate_no_block_check`; everything else is \
+             `#[cfg(not(frustrate_no_block_check))]`. So this is either the \
              production module — in which case every finding below would be \
              about code no claimed body reaches — or a `#[no_mangle]` that \
              escaped the gate, whose own reachable set would be folded into the \
@@ -1222,7 +1222,7 @@ fn run_with(
     // would be vacuous.
     if m.atomics == Some(false) && !sinks.wasi && sinks.is_empty() {
         return Err(format!(
-            "wasm_block_check: {label} was built without `+atomics` and not for \
+            "no_block_check: {label} was built without `+atomics` and not for \
              wasip1, so it can hold no wait, and no slow names were given: this \
              check covers nothing and its silence means nothing.\n\
              \n\
@@ -1275,7 +1275,7 @@ fn run_with(
             .collect();
         if !folded.is_empty() {
             return Err(format!(
-                "wasm_block_check: cannot verify {label}: these roots no longer \
+                "no_block_check: cannot verify {label}: these roots no longer \
                  reach their member's glue:\n\n{}\n\n\
                  The check artifact was optimized: a flag outside the check's \
                  configuration (a crate's own `rustc_flags`, say) raised its \
@@ -1383,7 +1383,7 @@ fn run_with(
                 )
             };
             return Err(format!(
-                "wasm_block_check: cannot verify {label}.\n\
+                "no_block_check: cannot verify {label}.\n\
                  \n\
                  `{}` ({}) is in the module but no `call` path reaches it — not \
                  from a check root, not from the start function, not from a fatal \
@@ -1408,7 +1408,7 @@ fn run_with(
         let leaks = side_condition(&m, &rev, w.func, &cut);
         if !leaks.is_empty() {
             return Err(format!(
-                "wasm_block_check: cannot verify {label}.\n\
+                "no_block_check: cannot verify {label}.\n\
                  \n\
                  `{}` is only reachable through {}, which is why it would be \
                  exempt. But the exemption assumes the direct call edges are \
@@ -1586,7 +1586,7 @@ fn run_with(
             format!("\nSilenced:\n{}", listed.join("\n"))
         };
         let text = format!(
-            "wasm_block_check: {label} is clean — {} `no_block` root(s){slow_note}, \
+            "no_block_check: {label} is clean — {} `no_block` root(s){slow_note}, \
              {} site(s) exempt on the fatal-path rule, {} on the start function{}.{no_waits}{silence_note}",
             roots.len(),
             exempt_fatal,
@@ -1605,7 +1605,7 @@ fn run_with(
         format!("{kinds} (silence it as `{}`)", key_of(f))
     };
     let mut msg = format!(
-        "wasm_block_check: {label}: {} `#[bridge(no_block)]` member(s) reach {}.\n\n",
+        "no_block_check: {label}: {} `#[bridge(no_block)]` member(s) reach {}.\n\n",
         members.len(),
         match (m.atomics == Some(false), sinks.is_empty()) {
             (true, _) if sinks.wasi => "a wait or a function named slow",
@@ -1688,11 +1688,11 @@ fn match_census(root_names: &[String], claims: Option<&Claims>, label: &str) -> 
                 .collect();
             if !missing.is_empty() {
                 return Err(format!(
-                    "wasm_block_check: {label} is missing the check root of {} \
+                    "no_block_check: {label} is missing the check root of {} \
                      claim(s) the census lists:\n\n{}\n\n\
                      A root is emitted for every artifact-settled \
                      `#[bridge(no_block)]` member, so either `--cfg \
-                     frustrate_block_check` never reached rustc — in which case \
+                     frustrate_no_block_check` never reached rustc — in which case \
                      the module's real exports were suppressed by something else \
                      and nothing below would mean anything — or the module and \
                      the census were generated from different sources. Rebuild \
@@ -1718,7 +1718,7 @@ fn match_census(root_names: &[String], claims: Option<&Claims>, label: &str) -> 
                     ),
                 };
                 return Err(format!(
-                    "wasm_block_check: {label} exports check root(s) no linked \
+                    "no_block_check: {label} exports check root(s) no linked \
                      bridge's census claims:\n\n{}\n\n\
                      The module and the censuses disagree about what is claimed, \
                      so a scan over these roots answers a question nobody asked. \
@@ -1735,12 +1735,12 @@ fn match_census(root_names: &[String], claims: Option<&Claims>, label: &str) -> 
         None => {
             if root_names.is_empty() {
                 return Err(format!(
-                    "wasm_block_check: {label} exports no `{ROOT_PREFIX}*` function, so \
+                    "no_block_check: {label} exports no `{ROOT_PREFIX}*` function, so \
                      this check covers nothing and its silence means nothing.\n\
                      \n\
                      Either no member in this module is `#[bridge(no_block)]` — claim \
                      one, or drop the check target — or the artifact was built without \
-                     `--cfg frustrate_block_check`, in which case the roots were never \
+                     `--cfg frustrate_no_block_check`, in which case the roots were never \
                      emitted and the module's real exports were suppressed by something \
                      else."
                 ));
@@ -1806,7 +1806,7 @@ fn witness(
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum ExportKind {
     /// `frustrate_check_block_*` — a claimed member's check root. Only a
-    /// `--cfg frustrate_block_check` artifact has these.
+    /// `--cfg frustrate_no_block_check` artifact has these.
     CheckRoot,
     /// `frustrate_<crate>_call_sync` / `_call_async` / `_schema_hash`
     /// — the production module's dispatch entries. Every bridged member is
@@ -2005,7 +2005,7 @@ fn report(path: &str, label: &str) -> Result<String, String> {
         .map(|(n, _, i)| (n.as_str(), *i))
         .collect();
 
-    let mut out = format!("wasm_block_check --report: {label}\n\n");
+    let mut out = format!("no_block_check --report: {label}\n\n");
     out.push_str(&format!(
         "  {} function(s): {} imported, {} defined\n",
         m.func_imports as usize + m.bodies.len(),
@@ -2272,7 +2272,7 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(e) => {
-                eprintln!("wasm_block_check: {}: {e}", path.to_string_lossy());
+                eprintln!("no_block_check: {}: {e}", path.to_string_lossy());
                 ExitCode::FAILURE
             }
         };
@@ -2304,7 +2304,7 @@ fn main() -> ExitCode {
             match raw.next() {
                 Some(v) => applied_out = Some(v),
                 None => {
-                    eprintln!("wasm_block_check: `--applied` wants a value");
+                    eprintln!("no_block_check: `--applied` wants a value");
                     return ExitCode::FAILURE;
                 }
             }
@@ -2314,7 +2314,7 @@ fn main() -> ExitCode {
             match raw.next() {
                 Some(v) => also_claims.push(v),
                 None => {
-                    eprintln!("wasm_block_check: `--also-claims` wants a value");
+                    eprintln!("no_block_check: `--also-claims` wants a value");
                     return ExitCode::FAILURE;
                 }
             }
@@ -2326,7 +2326,7 @@ fn main() -> ExitCode {
         }
         let parsed = raw
             .next()
-            .ok_or_else(|| format!("wasm_block_check: `{a}` wants a value"))
+            .ok_or_else(|| format!("no_block_check: `{a}` wants a value"))
             .and_then(|v| {
                 match a.as_str() {
                     "--slow" => slow.paths.push(SlowPath::parse(&v)?),
@@ -2341,7 +2341,7 @@ fn main() -> ExitCode {
         }
     }
     if let Err(e) = self_test() {
-        eprintln!("wasm_block_check: {e}");
+        eprintln!("no_block_check: {e}");
         return ExitCode::FAILURE;
     }
     // `--report` is diagnostic and additive: it reaches no verdict, applies none
@@ -2349,7 +2349,7 @@ fn main() -> ExitCode {
     // for the modules those controls reject — a production cdylib above all.
     if args.get(1).map(String::as_str) == Some("--report") {
         let Some(path) = args.get(2) else {
-            eprintln!("usage: wasm_block_check --report <module.wasm> [label]");
+            eprintln!("usage: no_block_check --report <module.wasm> [label]");
             return ExitCode::FAILURE;
         };
         let label = args.get(3).map(String::as_str).unwrap_or(path);
@@ -2359,7 +2359,7 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(e) => {
-                eprintln!("wasm_block_check --report: {e}");
+                eprintln!("no_block_check --report: {e}");
                 ExitCode::FAILURE
             }
         };
@@ -2367,16 +2367,16 @@ fn main() -> ExitCode {
     // The three gate shapes. `--claims` is what both real drivers pass; the
     // bare positional form is kept because it is what a hand run reaches for,
     // and it is the only one whose verdict rests on the module alone.
-    let usage = "usage: wasm_block_check [--wasi] [--slow <path> | --io <category> | --allow <name>]... \
+    let usage = "usage: no_block_check [--wasi] [--slow <path> | --io <category> | --allow <name>]... \
          [--applied <file>] <module.wasm> <label> [marker-out]\n\
          \x20      (every mode that takes a census takes more, one `--also-claims <census>` per further linked bridge)\n\
-         \x20      wasm_block_check [--wasi] [--slow ... | --io ... | --allow ...] [--applied <file>] \
+         \x20      no_block_check [--wasi] [--slow ... | --io ... | --allow ...] [--applied <file>] \
          --claims <census> <module.wasm> <label> [marker-out]\n\
-         \x20      wasm_block_check --ir [--slow ... | --io ... | --allow ...] [--applied <file>] \
+         \x20      no_block_check --ir [--slow ... | --io ... | --allow ...] [--applied <file>] \
          [--claims <census>] <module.ll> <label> [marker-out]\n\
-         \x20      wasm_block_check --claims-only <census> <label> [marker-out]\n\
-         \x20      wasm_block_check [--allow <name>]... --silences <census> <applied>... <label> <marker-out>\n\
-         \x20      wasm_block_check --report <module.wasm> [label]";
+         \x20      no_block_check --claims-only <census> <label> [marker-out]\n\
+         \x20      no_block_check [--allow <name>]... --silences <census> <applied>... <label> <marker-out>\n\
+         \x20      no_block_check --report <module.wasm> [label]";
     let censuses = |first: &String| -> Vec<String> {
         std::iter::once(first.clone()).chain(also_claims.iter().cloned()).collect()
     };
@@ -2394,7 +2394,7 @@ fn main() -> ExitCode {
             let v = claims.refuse_empty(&args[4]).and_then(|()| {
                 if claims.root_count() == 0 {
                     Err(format!(
-                        "wasm_block_check: every claim in {} is settled by \
+                        "no_block_check: every claim in {} is settled by \
                          placement, so {} can prove nothing.\n\
                          \n\
                          Build no artifact for it: drop `library` from the check \
@@ -2423,7 +2423,7 @@ fn main() -> ExitCode {
                         .iter()
                         .map(|p| {
                             std::fs::read_to_string(p)
-                                .map_err(|e| format!("wasm_block_check: {p}: {e}"))
+                                .map_err(|e| format!("no_block_check: {p}: {e}"))
                                 .and_then(|t| silences::Applied::parse(&t, p))
                         })
                         .collect::<Result<Vec<_>, _>>()?;
@@ -2455,7 +2455,7 @@ fn main() -> ExitCode {
             println!("{report}");
             if let (Some(out), Some(label)) = (&applied_out, label) {
                 if let Err(e) = std::fs::write(out, applied.text(label)) {
-                    eprintln!("wasm_block_check: writing {out}: {e}");
+                    eprintln!("no_block_check: writing {out}: {e}");
                     return ExitCode::FAILURE;
                 }
             }
@@ -2463,7 +2463,7 @@ fn main() -> ExitCode {
                 // Bazel's declared output for the check action; writing it is
                 // what lets a pass be cached. The test runner prints it.
                 if let Err(e) = std::fs::write(marker, format!("{report}\n")) {
-                    eprintln!("wasm_block_check: writing {marker}: {e}");
+                    eprintln!("no_block_check: writing {marker}: {e}");
                     return ExitCode::FAILURE;
                 }
             }
@@ -2671,7 +2671,7 @@ mod tests {
             // same module, which content-addressing would make share a path
             // that `fs::write` truncates before it fills. `wasm_std_check`'s
             // suite learned this the intermittent way.
-            let dir = std::env::temp_dir().join(format!("wasm_block_check_{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("no_block_check_{}", std::process::id()));
             std::fs::create_dir_all(&dir).unwrap();
             let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
             std::fs::write(&p, self.wasm()).unwrap();
@@ -2757,7 +2757,7 @@ mod tests {
             c.refuse_empty("//pkg:target.wasm")?;
             if c.root_count() == 0 {
                 return Err(format!(
-                    "wasm_block_check: every claim in {} is settled by placement, \
+                    "no_block_check: every claim in {} is settled by placement, \
                      so this artifact can prove nothing.",
                     c.who()
                 ));
@@ -3215,7 +3215,7 @@ mod tests {
         };
         let e = b.check().unwrap_err();
         assert!(e.contains("covers nothing"), "{e}");
-        assert!(e.contains("frustrate_block_check"), "{e}");
+        assert!(e.contains("frustrate_no_block_check"), "{e}");
     }
 
     // ---- the decoder ---------------------------------------------------
@@ -3320,7 +3320,7 @@ mod tests {
             .position(|w| w == [0x0a, 0x09])
             .expect("code section header");
         b[at + 2] += 1;
-        let dir = std::env::temp_dir().join(format!("wasm_block_check_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("no_block_check_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("desync.wasm");
         std::fs::write(&p, &b).unwrap();
@@ -3337,7 +3337,7 @@ mod tests {
         }
         .wasm();
         b.truncate(b.len() - 12);
-        let dir = std::env::temp_dir().join(format!("wasm_block_check_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("no_block_check_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("short.wasm");
         std::fs::write(&p, &b).unwrap();
@@ -3347,7 +3347,7 @@ mod tests {
 
     #[test]
     fn a_file_that_is_not_wasm_is_rejected() {
-        let dir = std::env::temp_dir().join(format!("wasm_block_check_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("no_block_check_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("junk.wasm");
         std::fs::write(&p, b"not a wasm file at all").unwrap();

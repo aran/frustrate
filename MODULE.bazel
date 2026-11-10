@@ -63,7 +63,7 @@ rust.toolchain(
 use_repo(rust, "rust_toolchains")
 
 # `opt` from the llvm-tools archive rules_rust unpacks into each host
-# toolchain's tools repo, for //bazel/wasm_block_check:callgraph_test, which
+# toolchain's tools repo, for //bazel/no_block_check:callgraph_test, which
 # checks the native IR reader against LLVM's own call graph. Dev-only.
 rust_dev = use_extension(
     "@rules_rust//rust:extensions.bzl",
@@ -78,7 +78,7 @@ use_repo(
 )
 
 llvm_opt = use_extension(
-    "//bazel/wasm_block_check:llvm_opt.bzl",
+    "//bazel/no_block_check:llvm_opt.bzl",
     "llvm_opt",
     dev_dependency = True,
 )

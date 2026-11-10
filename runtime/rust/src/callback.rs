@@ -623,10 +623,10 @@ mod returning {
     ///
     /// # Safety
     /// `ptr` must be valid for `len` bytes.
-    // `frustrate_block_check` gating: see the "block-check export gating" note
+    // `frustrate_no_block_check` gating: see the "no-block-check export gating" note
     // in lib.rs. `mod returning` is not cfg'd, so this export is present on
     // wasm even though the blocking `call` path beside it is not.
-    #[cfg(not(all(frustrate_block_check, target_family = "wasm")))]
+    #[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn frustrate_callback_respond(
         invocation: u64,

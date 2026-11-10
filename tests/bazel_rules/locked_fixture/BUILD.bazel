@@ -34,7 +34,7 @@ rust_shared_library(
 # The gate. Its `web_threads` analysis is SKIPPED where the atomics std is not
 # staged.
 #
-# What it decides that no other block-check target does: whether releasing a
+# What it decides that no other no-block-check target does: whether releasing a
 # lock guard on the calling thread reaches a wait instruction. It is the
 # mechanical form of `runtime/rust/src/rwlock.rs`'s central claim, and a
 # regression there — a waiter list that parks, a wake moved inside the critical
@@ -51,7 +51,7 @@ rust_shared_library(
 # reaches its body and a wait there would stay green. That pair is the same one
 # `async_fixture` makes, over a lock instead of a `static`.
 frustrate_no_block_check(
-    name = "locked_block_check",
+    name = "locked_no_block_check",
     bridge = ":bridge",
     library = ":locked_fixture_shared",
     targets = [
