@@ -260,11 +260,7 @@ pub unsafe fn respond_out(reply: FramedWriter, out: *mut u8, out_cap: u64) -> i3
     // alignment guarantee this could rely on, and an unaligned store is free
     // on every target that runs this.
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            triple.as_ptr() as *const u8,
-            out,
-            RESP_OUT_MIN_CAP as usize,
-        )
+        std::ptr::copy_nonoverlapping(triple.as_ptr() as *const u8, out, RESP_OUT_MIN_CAP as usize)
     };
     std::mem::forget(payload);
     RESP_LEASED
@@ -304,7 +300,13 @@ mod tests {
     #[test]
     fn a_fitting_payload_lands_in_the_callers_slab() {
         let mut slab = [0u8; 64];
-        let n = unsafe { respond_out(FramedWriter::from_bytes(vec![1, 2, 3, 4, 5]), slab.as_mut_ptr(), 64) };
+        let n = unsafe {
+            respond_out(
+                FramedWriter::from_bytes(vec![1, 2, 3, 4, 5]),
+                slab.as_mut_ptr(),
+                64,
+            )
+        };
         assert_eq!(n, 5);
         assert_eq!(&slab[..5], &[1, 2, 3, 4, 5]);
     }
@@ -316,7 +318,13 @@ mod tests {
     fn a_payload_exactly_the_size_of_the_slab_fits() {
         let mut slab = [0u8; 32];
         let payload: Vec<u8> = (0..32u8).collect();
-        let n = unsafe { respond_out(FramedWriter::from_bytes(payload.clone()), slab.as_mut_ptr(), 32) };
+        let n = unsafe {
+            respond_out(
+                FramedWriter::from_bytes(payload.clone()),
+                slab.as_mut_ptr(),
+                32,
+            )
+        };
         assert_eq!(n, 32);
         assert_eq!(&slab[..], &payload[..]);
     }
@@ -328,7 +336,13 @@ mod tests {
     fn a_payload_one_byte_too_large_is_leased() {
         let mut slab = [0u8; 32];
         let payload: Vec<u8> = (0..33u8).collect();
-        let n = unsafe { respond_out(FramedWriter::from_bytes(payload.clone()), slab.as_mut_ptr(), 32) };
+        let n = unsafe {
+            respond_out(
+                FramedWriter::from_bytes(payload.clone()),
+                slab.as_mut_ptr(),
+                32,
+            )
+        };
         assert_eq!(n, RESP_LEASED);
 
         // Read the triple back the way the transports do: three little-endian

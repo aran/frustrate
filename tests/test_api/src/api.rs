@@ -24,7 +24,7 @@
 //! usage: a Confined text document, a Frozen snapshot, a Locked counter).
 
 use anyhow::{bail, Result};
-use frustrate::{bridge, Addr, Data, DartCallback, DartFunction, Deferred, Locked, StreamSink};
+use frustrate::{bridge, Addr, DartCallback, DartFunction, Data, Deferred, Locked, StreamSink};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -283,7 +283,11 @@ pub fn earliest_after(
 /// supported by default"), which would take the default web fixture with it.
 #[bridge(sync)]
 pub fn std_clock_micros() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
+    #[cfg(any(
+        not(target_family = "wasm"),
+        target_os = "wasi",
+        feature = "wasm-browser-std"
+    ))]
     {
         use std::time::{SystemTime, UNIX_EPOCH};
         SystemTime::now()
@@ -291,7 +295,11 @@ pub fn std_clock_micros() -> i64 {
             .map(|d| d.as_micros() as i64)
             .unwrap_or(-1)
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
+    #[cfg(all(
+        target_family = "wasm",
+        not(target_os = "wasi"),
+        not(feature = "wasm-browser-std")
+    ))]
     {
         -1
     }
@@ -302,13 +310,21 @@ pub fn std_clock_micros() -> i64 {
 /// different clock id, so this catches a shim that wired only one of them.
 #[bridge(sync)]
 pub fn std_monotonic_nanos() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
+    #[cfg(any(
+        not(target_family = "wasm"),
+        target_os = "wasi",
+        feature = "wasm-browser-std"
+    ))]
     {
         let a = std::time::Instant::now();
         let b = std::time::Instant::now();
         b.duration_since(a).as_nanos() as i64
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
+    #[cfg(all(
+        target_family = "wasm",
+        not(target_os = "wasi"),
+        not(feature = "wasm-browser-std")
+    ))]
     {
         -1
     }
@@ -318,12 +334,20 @@ pub fn std_monotonic_nanos() -> i64 {
 /// `fd_write` is wired; on a target with no stdout this is 0.
 #[bridge(sync)]
 pub fn std_println(msg: String) -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
+    #[cfg(any(
+        not(target_family = "wasm"),
+        target_os = "wasi",
+        feature = "wasm-browser-std"
+    ))]
     {
         println!("{msg}");
         msg.len() as i64 + 1
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
+    #[cfg(all(
+        target_family = "wasm",
+        not(target_os = "wasi"),
+        not(feature = "wasm-browser-std")
+    ))]
     {
         let _ = msg;
         0
@@ -345,7 +369,11 @@ pub fn std_println(msg: String) -> i64 {
 /// `RandomState` nor a worker is a discriminator here.
 #[bridge(sync)]
 pub fn std_hash_seed() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
+    #[cfg(any(
+        not(target_family = "wasm"),
+        target_os = "wasi",
+        feature = "wasm-browser-std"
+    ))]
     {
         use std::collections::hash_map::RandomState;
         use std::hash::{BuildHasher, Hasher};
@@ -355,7 +383,11 @@ pub fn std_hash_seed() -> i64 {
         // never be able to produce it.
         (h.finish() >> 1) as i64
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
+    #[cfg(all(
+        target_family = "wasm",
+        not(target_os = "wasi"),
+        not(feature = "wasm-browser-std")
+    ))]
     {
         -1
     }
@@ -368,13 +400,21 @@ pub fn std_hash_seed() -> i64 {
 /// still fails. See toolchain/custom_std/pal/thread.rs.
 #[bridge(sync)]
 pub fn std_parallelism() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
+    #[cfg(any(
+        not(target_family = "wasm"),
+        target_os = "wasi",
+        feature = "wasm-browser-std"
+    ))]
     {
         std::thread::available_parallelism()
             .map(|n| n.get() as i64)
             .unwrap_or(-1)
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
+    #[cfg(all(
+        target_family = "wasm",
+        not(target_os = "wasi"),
+        not(feature = "wasm-browser-std")
+    ))]
     {
         -1
     }
@@ -391,13 +431,21 @@ pub fn std_parallelism() -> i64 {
 /// [`Miner::sleep_on_executor`] is the other half, where waiting is legal.
 #[bridge(sync)]
 pub fn std_sleep_millis(millis: i64) -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
+    #[cfg(any(
+        not(target_family = "wasm"),
+        target_os = "wasi",
+        feature = "wasm-browser-std"
+    ))]
     {
         let start = std::time::Instant::now();
         std::thread::sleep(std::time::Duration::from_millis(millis.max(0) as u64));
         start.elapsed().as_millis() as i64
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
+    #[cfg(all(
+        target_family = "wasm",
+        not(target_os = "wasi"),
+        not(feature = "wasm-browser-std")
+    ))]
     {
         let _ = millis;
         -1
@@ -781,7 +829,9 @@ pub fn echo_nested(n: Nested) -> Nested {
 #[bridge(data)]
 pub enum NestedEnum {
     Rows(Vec<Vec<i64>>),
-    Named { entries: HashMap<String, Vec<String>> },
+    Named {
+        entries: HashMap<String, Vec<String>>,
+    },
 }
 
 #[bridge(sync)]
@@ -1030,14 +1080,22 @@ impl Point {
     /// thread with the rest of the request.
     #[bridge]
     pub fn scaled(&self, k: f64) -> Point {
-        Point { x: self.x * k, y: self.y * k, label: self.label.clone() }
+        Point {
+            x: self.x * k,
+            y: self.y * k,
+            label: self.label.clone(),
+        }
     }
 
     /// Receiverless: a **static** on the generated class, not a constructor.
     /// A data class already has its own `const Point({...})`.
     #[bridge(sync)]
     pub fn origin() -> Point {
-        Point { x: 0.0, y: 0.0, label: None }
+        Point {
+            x: 0.0,
+            y: 0.0,
+            label: None,
+        }
     }
 
     /// `Self` in a parameter names the impl type, exactly as it does in a
@@ -1311,7 +1369,9 @@ pub fn parse_port_async(
 pub enum WithdrawError {
     /// Carries the shortfall, so the payload half is exercised too and not
     /// just the discriminant.
-    Insufficient { short_by: i64 },
+    Insufficient {
+        short_by: i64,
+    },
     AccountFrozen,
 }
 
@@ -1423,10 +1483,7 @@ pub fn panics_seen() -> i64 {
 /// The most recent report, as `message @ file:line:column`.
 #[bridge(sync)]
 pub fn last_panic_report() -> String {
-    LAST_PANIC
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone()
+    LAST_PANIC.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 /// Rust `async fn` that yields once (Pending, self-waking) and then panics on
@@ -1558,7 +1615,12 @@ impl TextDoc {
         self.content.chars().count()
     }
 
-    pub fn splice(&mut self, index: usize, delete: usize, insert: String) -> Result<Vec<TextPatch>> {
+    pub fn splice(
+        &mut self,
+        index: usize,
+        delete: usize,
+        insert: String,
+    ) -> Result<Vec<TextPatch>> {
         let chars: Vec<char> = self.content.chars().collect();
         if index + delete > chars.len() {
             bail!(
@@ -2047,7 +2109,10 @@ impl Data<Note> {
     #[bridge(sync)]
     pub fn total_words(&self, rest: Vec<&Self>) -> i64 {
         self.body.split_whitespace().count() as i64
-            + rest.iter().map(|n| n.body.split_whitespace().count() as i64).sum::<i64>()
+            + rest
+                .iter()
+                .map(|n| n.body.split_whitespace().count() as i64)
+                .sum::<i64>()
     }
 }
 
@@ -2351,8 +2416,7 @@ pub fn stream_until_cancelled(sink: StreamSink<i64>) {
 /// Parking the sink separates the two halves: the owning isolate is provably
 /// gone (its exit listener fired) before a single post is attempted, and the
 /// pushing isolate chooses the moment.
-static PARKED_SINKS: std::sync::Mutex<Vec<StreamSink<i64>>> =
-    std::sync::Mutex::new(Vec::new());
+static PARKED_SINKS: std::sync::Mutex<Vec<StreamSink<i64>>> = std::sync::Mutex::new(Vec::new());
 
 /// Hand a sink to the global slot and return; the stream outlives this call and
 /// its isolate.
@@ -2615,7 +2679,10 @@ pub fn ticker_posted() -> i64 {
 /// bytes via user codecs on both sides. Wire
 /// form here: 8-byte LE revision, then the UTF-8 title — mirrored by
 /// FakePlan in tests/dart_integration/lib/fake_plan.dart.
-#[bridge(bytes(dart = "FakePlan", import = "package:frustrate_integration/fake_plan.dart"))]
+#[bridge(bytes(
+    dart = "FakePlan",
+    import = "package:frustrate_integration/fake_plan.dart"
+))]
 pub struct FakePlanMsg {
     pub title: String,
     pub revision: i64,
@@ -2868,7 +2935,9 @@ pub fn host_random_bytes(n: i64) -> Vec<u8> {
 #[bridge(data)]
 pub enum RefusalError {
     /// Carries a payload, so the value half is exercised and not just the tag.
-    Busy { retry_in_ms: i64 },
+    Busy {
+        retry_in_ms: i64,
+    },
     NotAllowed,
 }
 
@@ -3068,7 +3137,12 @@ pub struct Miner {
 #[bridge]
 impl Miner {
     pub fn new(label: String) -> Self {
-        Miner { label, calls: 0, watchers: Vec::new(), gate: Arc::default() }
+        Miner {
+            label,
+            calls: 0,
+            watchers: Vec::new(),
+            gate: Arc::default(),
+        }
     }
 
     /// `thread::sleep` on this actor's executor, returning the elapsed millis.
@@ -3090,13 +3164,21 @@ impl Miner {
     #[bridge(no_block)]
     pub fn sleep_on_executor(&mut self, millis: i64) -> i64 {
         self.calls += 1;
-        #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
+        #[cfg(any(
+            not(target_family = "wasm"),
+            target_os = "wasi",
+            feature = "wasm-browser-std"
+        ))]
         {
             let start = std::time::Instant::now();
             std::thread::sleep(std::time::Duration::from_millis(millis.max(0) as u64));
             start.elapsed().as_millis() as i64
         }
-        #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
+        #[cfg(all(
+            target_family = "wasm",
+            not(target_os = "wasi"),
+            not(feature = "wasm-browser-std")
+        ))]
         {
             let _ = millis;
             -1
@@ -3263,7 +3345,11 @@ impl Miner {
             let snapshot = BenchSnapshot {
                 version,
                 rows: (0..rows)
-                    .map(|id| BenchRow { id, rev: version, title: format!("document title {id:>16}") })
+                    .map(|id| BenchRow {
+                        id,
+                        rev: version,
+                        title: format!("document title {id:>16}"),
+                    })
                     .collect(),
             };
             if !sink.add(snapshot) {
@@ -3923,7 +4009,12 @@ pub fn snapshot_and_counter(words: Vec<String>) -> (Snapshot, Counter) {
 /// A handle beside a plain value in the same tuple.
 #[bridge(sync)]
 pub fn labelled_snapshot(label: String) -> (String, Snapshot) {
-    (label, Snapshot { words: vec!["w".into()] })
+    (
+        label,
+        Snapshot {
+            words: vec!["w".into()],
+        },
+    )
 }
 
 /// A frozen handle with the `Hash`/`Ord` a set element or a map key needs.
@@ -3982,7 +4073,9 @@ pub struct Boxed {
 #[bridge(sync)]
 pub fn boxed_tag(label: String) -> Boxed {
     Boxed {
-        tag: Box::new(Tag { name: label.clone() }),
+        tag: Box::new(Tag {
+            name: label.clone(),
+        }),
         label,
     }
 }
@@ -4020,7 +4113,9 @@ pub fn slots(counts: Vec<i64>) -> Vec<Slot> {
             } else {
                 Slot::Filled {
                     at: c,
-                    snapshot: Snapshot { words: (0..c).map(|i| format!("w{i}")).collect() },
+                    snapshot: Snapshot {
+                        words: (0..c).map(|i| format!("w{i}")).collect(),
+                    },
                 }
             }
         })
@@ -4193,7 +4288,8 @@ pub struct Auditor {
 pub async fn audit(amount: i64, currency: String, a: Auditor) -> String {
     a.note.call(format!("reviewing {amount} {currency}"));
     let ok = a.approve.call_async((amount, currency)).await;
-    a.note.call(if ok { "approved" } else { "denied" }.to_string());
+    a.note
+        .call(if ok { "approved" } else { "denied" }.to_string());
     match a.reserve.call_async(amount).await {
         Ok(left) => format!("{ok}/{left}"),
         Err(RefusalError::Busy { retry_in_ms }) => format!("{ok}/busy {retry_in_ms}"),
@@ -5845,7 +5941,11 @@ pub fn chit_batches(batches: i64, per: i64, sink: StreamSink<Vec<Chit>>) {
 #[bridge(sync)]
 pub fn chits_or_none(n: i64, sink: StreamSink<Option<Chit>>) {
     for i in 0..n {
-        let item = if i % 2 == 0 { Some(Chit::mint(i)) } else { None };
+        let item = if i % 2 == 0 {
+            Some(Chit::mint(i))
+        } else {
+            None
+        };
         if !sink.add(item) {
             break;
         }
@@ -5990,7 +6090,10 @@ fn core_clock_ns() -> i64 {
     #[cfg(any(not(target_family = "wasm"), target_os = "wasi"))]
     {
         static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-        EPOCH.get_or_init(std::time::Instant::now).elapsed().as_nanos() as i64
+        EPOCH
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_nanos() as i64
     }
     #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
     {
@@ -6085,7 +6188,11 @@ impl NoteCore {
 
     /// One self-posted slice, which posts the next one.
     fn self_slice(&mut self, run: u64) {
-        let Some(slice_us) = self.bg.as_ref().filter(|_| run == self.bg_run).map(|j| j.slice_us)
+        let Some(slice_us) = self
+            .bg
+            .as_ref()
+            .filter(|_| run == self.bg_run)
+            .map(|j| j.slice_us)
         else {
             return;
         };
@@ -6096,7 +6203,13 @@ impl NoteCore {
         self.me.post(move |core| core.self_slice(run));
     }
 
-    fn publish_change(&mut self, origin: i64, offset: usize, deleted: usize, inserted: &str) -> i64 {
+    fn publish_change(
+        &mut self,
+        origin: i64,
+        offset: usize,
+        deleted: usize,
+        inserted: &str,
+    ) -> i64 {
         self.seq += 1;
         if let Some(sink) = &self.sink {
             sink.add(NoteChange {
@@ -6117,8 +6230,13 @@ impl NoteCore {
     /// and CJK text, with the caret in the middle, and a background job that
     /// wants `job_us` microseconds of CPU.
     pub fn new(chars: i64, job_us: i64, me: Addr<NoteCore>) -> Self {
-        const PROSE: &str = "The quick brown fox jumps over the lazy dog; café, naïve, 日本語のメモ. ";
-        let text: String = PROSE.chars().cycle().take(chars.clamp(0, 1 << 24) as usize).collect();
+        const PROSE: &str =
+            "The quick brown fox jumps over the lazy dog; café, naïve, 日本語のメモ. ";
+        let text: String = PROSE
+            .chars()
+            .cycle()
+            .take(chars.clamp(0, 1 << 24) as usize)
+            .collect();
         let mut core = NoteCore {
             caret: text.len() / 2,
             text,
@@ -6148,7 +6266,10 @@ impl NoteCore {
         let start = core_clock_ns();
         let seq = if text.is_empty() {
             let end = self.caret;
-            let begin = self.text[..end].char_indices().next_back().map_or(end, |(i, _)| i);
+            let begin = self.text[..end]
+                .char_indices()
+                .next_back()
+                .map_or(end, |(i, _)| i);
             self.text.replace_range(begin..end, "");
             self.caret = begin;
             self.publish_change(0, begin, end - begin, "")
@@ -6158,7 +6279,10 @@ impl NoteCore {
             self.caret = at + text.len();
             self.publish_change(0, at, 0, &text)
         };
-        NoteAck { seq, handler_ns: core_clock_ns() - start }
+        NoteAck {
+            seq,
+            handler_ns: core_clock_ns() - start,
+        }
     }
 
     /// One change from a remote peer, as bytes: a little-endian `u32` byte
@@ -6168,7 +6292,9 @@ impl NoteCore {
     pub fn remote(&mut self, change: Vec<u8>) -> NoteAck {
         let start = core_clock_ns();
         let le = |i: usize, n: usize| -> usize {
-            change.get(i..i + n).map_or(0, |b| b.iter().rev().fold(0, |a, &x| (a << 8) | x as usize))
+            change
+                .get(i..i + n)
+                .map_or(0, |b| b.iter().rev().fold(0, |a, &x| (a << 8) | x as usize))
         };
         let at = self.floor_boundary(le(0, 4));
         let end = self.floor_boundary(at + le(4, 2));
@@ -6181,7 +6307,10 @@ impl NoteCore {
         }
         let inserted = inserted.to_owned();
         let seq = self.publish_change(1, at, end - at, &inserted);
-        NoteAck { seq, handler_ns: core_clock_ns() - start }
+        NoteAck {
+            seq,
+            handler_ns: core_clock_ns() - start,
+        }
     }
 
     /// Run the background job for at most `slice_us` microseconds, then return
@@ -6213,7 +6342,10 @@ impl NoteCore {
             }
         }
         std::hint::black_box(self.job_acc);
-        SliceAck { handler_ns: core_clock_ns() - start, jobs_done: self.jobs_done }
+        SliceAck {
+            handler_ns: core_clock_ns() - start,
+            jobs_done: self.jobs_done,
+        }
     }
 
     /// Run the background job as slices of at most `slice_us` that the core
@@ -6221,7 +6353,10 @@ impl NoteCore {
     /// Messages that arrive meanwhile run between slices.
     pub fn start_background(&mut self, slice_us: i64) {
         self.bg_run += 1;
-        self.bg = Some(SelfPostedJob { slice_us, handler_ns: Vec::new() });
+        self.bg = Some(SelfPostedJob {
+            slice_us,
+            handler_ns: Vec::new(),
+        });
         let run = self.bg_run;
         self.me.post(move |core| core.self_slice(run));
     }
@@ -6279,7 +6414,15 @@ impl Slicer {
 #[bridge]
 impl Slicer {
     pub fn new(me: Addr<Slicer>) -> Self {
-        Slicer { me, log: Vec::new(), slices: 0, slice_us: 0, since: 0, stop: false, done: None }
+        Slicer {
+            me,
+            log: Vec::new(),
+            slices: 0,
+            slice_us: 0,
+            since: 0,
+            stop: false,
+            done: None,
+        }
     }
 
     /// Note `label` in the log, as a call.

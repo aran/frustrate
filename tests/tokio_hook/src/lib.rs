@@ -216,10 +216,9 @@ mod gate {
         });
         let runnable = coop.pop(Duration::from_secs(5)).unwrap();
         let mut slot = Some(runnable);
-        let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            slot.take().unwrap().run()
-        }))
-        .unwrap_err();
+        let err =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| slot.take().unwrap().run()))
+                .unwrap_err();
         assert!(panic_message(err).contains("no reactor running"));
         drop(task);
     }
@@ -373,11 +372,7 @@ mod gate {
             let _guard = handle.enter();
             rt.block_on(async { tokio::time::sleep(Duration::from_millis(5)).await });
         }));
-        assert!(
-            same.is_ok(),
-            "got {:?}",
-            same.err().map(panic_message)
-        );
+        assert!(same.is_ok(), "got {:?}", same.err().map(panic_message));
     }
 
     pub(super) fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
@@ -391,9 +386,9 @@ mod gate {
 
 #[cfg(test)]
 mod recipe {
-    use frustrate::codec::FramedWriter;
     use frustrate::__private::envelope::{Outcome, STATUS_OK, STATUS_PANIC};
     use frustrate::__private::executor::Executor;
+    use frustrate::codec::FramedWriter;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
@@ -493,7 +488,6 @@ mod recipe {
         assert_eq!(log.lock().unwrap()[0].0, 1);
         assert_eq!(log.lock().unwrap()[0].1[0], STATUS_OK);
         assert_eq!(exec.task_count(), 0);
-
     }
 
     /// The cancellation the hook exists to give, over `block_on`: a suspended
@@ -530,7 +524,10 @@ mod recipe {
             dropped.load(Ordering::SeqCst),
             "the future — and the tokio leaf inside it — is gone"
         );
-        assert!(log.lock().unwrap().is_empty(), "a cancelled call never completes");
+        assert!(
+            log.lock().unwrap().is_empty(),
+            "a cancelled call never completes"
+        );
         assert_eq!(exec.task_count(), 0);
 
         // The runtime survives having its context torn out from under it.
@@ -625,7 +622,6 @@ mod recipe {
             "the sleeps ran serially ({:?}) — they are not multiplexing",
             started.elapsed()
         );
-
     }
 
     /// Spawn `body` as call `id`, drain it, and return the one answer.
@@ -637,7 +633,10 @@ mod recipe {
         exec.spawn(id, body);
         let started = Instant::now();
         while log.lock().unwrap().is_empty() {
-            assert!(started.elapsed() < Duration::from_secs(10), "never answered");
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "never answered"
+            );
             if !exec.drain_one() {
                 std::thread::yield_now();
             }

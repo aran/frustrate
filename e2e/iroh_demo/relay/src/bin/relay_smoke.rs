@@ -32,7 +32,10 @@ async fn main() -> ExitCode {
     let url: String = std::env::args().nth(1).unwrap_or(DEFAULT_URL.to_string());
     match run(&url).await {
         Ok(()) => {
-            println!("OK: {url} relayed {} bytes between two clients", PAYLOAD.len());
+            println!(
+                "OK: {url} relayed {} bytes between two clients",
+                PAYLOAD.len()
+            );
             ExitCode::SUCCESS
         }
         Err(err) => {

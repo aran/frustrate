@@ -97,7 +97,10 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
             .with_context(|| format!("reading {}", m.ir.display()))?;
         let iface: ir::Interface = serde_json::from_str(&text)
             .with_context(|| format!("reading the interface in {}", m.ir.display()))?;
-        model_inputs.push(models::ModelInterface { iface, import: m.import.clone() });
+        model_inputs.push(models::ModelInterface {
+            iface,
+            import: m.import.clone(),
+        });
     }
     let iface = check::check(iface)
         .and_then(|iface| models::apply(iface, &model_inputs))
@@ -122,8 +125,16 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
         None => PathBuf::from("src"),
     };
     write_atomic(&config.dart_out, &dart.entry)?;
-    write_atomic(&config.dart_out.with_file_name(format!("{entry_stem}.models.dart")), &dart.models)?;
-    write_atomic(&src_dir.join(format!("{entry_stem}.native.dart")), &dart.native)?;
+    write_atomic(
+        &config
+            .dart_out
+            .with_file_name(format!("{entry_stem}.models.dart")),
+        &dart.models,
+    )?;
+    write_atomic(
+        &src_dir.join(format!("{entry_stem}.native.dart")),
+        &dart.native,
+    )?;
     write_atomic(&src_dir.join(format!("{entry_stem}.web.dart")), &dart.web)?;
 
     if let Some(ir_out) = &config.ir_out {
@@ -150,7 +161,8 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
 /// `cargo::` (double colon) is the right prefix, not the older `cargo:`: cargo
 /// has honoured `rustc-check-cfg` only since 1.80 and has understood `cargo::`
 /// since 1.77, so no cargo reads one form and not the other.
-const CHECK_CFG_DIRECTIVE: &str = "cargo::rustc-check-cfg=cfg(frustrate_no_block_check, frustrate_hot_patch)";
+const CHECK_CFG_DIRECTIVE: &str =
+    "cargo::rustc-check-cfg=cfg(frustrate_no_block_check, frustrate_hot_patch)";
 
 fn declare_check_cfg() {
     if in_build_script() {
@@ -242,7 +254,8 @@ pub(crate) fn mask_ids(code: &str) -> String {
     'outer: while !rest.is_empty() {
         for p in PREFIXES {
             if let Some(tail) = rest.strip_prefix(p) {
-                let digits = tail.len() - tail.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+                let digits =
+                    tail.len() - tail.trim_start_matches(|c: char| c.is_ascii_digit()).len();
                 // A prefix not followed by digits is some other identifier
                 // (`call_sync`, `case Foo`), which must pass through whole.
                 if digits > 0 {
@@ -287,9 +300,8 @@ fn arm_id(s: &str) -> Option<usize> {
     ["call_", "spawn_", "actor_"]
         .iter()
         .any(|p| {
-            arm.match_indices(p).any(|(i, _)| {
-                arm[i + p.len()..].starts_with(|c: char| c.is_ascii_digit())
-            })
+            arm.match_indices(p)
+                .any(|(i, _)| arm[i + p.len()..].starts_with(|c: char| c.is_ascii_digit()))
         })
         .then_some(digits)
 }
@@ -362,7 +374,10 @@ mod tests {
             .collect();
         assert_eq!(
             private,
-            BTreeSet::from(["frustrate_no_block_check".to_string(), "frustrate_hot_patch".to_string()]),
+            BTreeSet::from([
+                "frustrate_no_block_check".to_string(),
+                "frustrate_hot_patch".to_string()
+            ]),
             "{code}"
         );
         assert_eq!(

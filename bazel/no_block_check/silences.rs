@@ -81,7 +81,8 @@ impl Applied {
                 }
                 "member" if rest.contains(' ') => {
                     let (id, w) = rest.split_once(' ').unwrap();
-                    a.silences.insert(Silence::Member(id.to_string(), w.to_string()));
+                    a.silences
+                        .insert(Silence::Member(id.to_string(), w.to_string()));
                 }
                 _ => return Err(format!("no_block_check: {path}: cannot read `{line}`.")),
             }
@@ -107,7 +108,10 @@ pub(crate) fn judge(
             .map(|(l, _)| l.as_str())
             .collect()
     };
-    let rooted: BTreeSet<&String> = claims.roots().filter_map(|(s, _)| claims.ids.get(s)).collect();
+    let rooted: BTreeSet<&String> = claims
+        .roots()
+        .filter_map(|(s, _)| claims.ids.get(s))
+        .collect();
     let mut applied: Vec<String> = Vec::new();
     let mut stale: Vec<String> = Vec::new();
     let mut note = |s: &Silence, what: String, why: String| {
@@ -127,7 +131,11 @@ pub(crate) fn judge(
             } else {
                 "the claim is settled without a root, so nothing it reaches is scanned".to_string()
             };
-            note(&Silence::Member(id.clone(), w.clone()), format!("`{w}` on {who}"), why);
+            note(
+                &Silence::Member(id.clone(), w.clone()),
+                format!("`{w}` on {who}"),
+                why,
+            );
         }
     }
     for w in allowed {
@@ -226,35 +234,68 @@ mod tests {
     /// A silence one analysis applies is used, whatever the others found.
     #[test]
     fn a_silence_applied_by_one_analysis_is_used() {
-        let c = census("artifact 1 add crate::add\nallow 1 pthread_mutex_lock\nallow 1 std::futex_wait\n");
+        let c = census(
+            "artifact 1 add crate::add\nallow 1 pthread_mutex_lock\nallow 1 std::futex_wait\n",
+        );
         let ok = judge(
             "//p:c",
             &c,
             &[],
             &[
-                applied("//p:c.native", &[Silence::Member("1".into(), "pthread_mutex_lock".into())], &[]),
-                applied("//p:c.web_threads", &[Silence::Member("1".into(), "std::futex_wait".into())], &[]),
+                applied(
+                    "//p:c.native",
+                    &[Silence::Member("1".into(), "pthread_mutex_lock".into())],
+                    &[],
+                ),
+                applied(
+                    "//p:c.web_threads",
+                    &[Silence::Member("1".into(), "std::futex_wait".into())],
+                    &[],
+                ),
             ],
         )
         .unwrap();
-        assert!(ok.contains("`std::futex_wait` on add, applied by //p:c.web_threads"), "{ok}");
-        assert!(ok.contains("`pthread_mutex_lock` on add, applied by //p:c.native"), "{ok}");
+        assert!(
+            ok.contains("`std::futex_wait` on add, applied by //p:c.web_threads"),
+            "{ok}"
+        );
+        assert!(
+            ok.contains("`pthread_mutex_lock` on add, applied by //p:c.native"),
+            "{ok}"
+        );
     }
 
     #[test]
     fn a_silence_no_analysis_applies_is_an_error() {
-        let c = census("artifact 1 add crate::add\nallow 1 sqlite3_step\nplacement 2 put\nallow 2 nanosleep\n");
+        let c = census(
+            "artifact 1 add crate::add\nallow 1 sqlite3_step\nplacement 2 put\nallow 2 nanosleep\n",
+        );
         let e = judge(
             "//p:c",
             &c,
             &["getaddrinfo".to_string()],
-            &[applied("//p:c.native", &[], &[]), applied("//p:c.wasi", &[], &[])],
+            &[
+                applied("//p:c.native", &[], &[]),
+                applied("//p:c.wasi", &[], &[]),
+            ],
         )
         .unwrap_err();
-        assert!(e.contains("3 silence(s) silence nothing on any of //p:c.native, //p:c.wasi"), "{e}");
-        assert!(e.contains("`sqlite3_step` on add: no analysis found"), "{e}");
-        assert!(e.contains("`nanosleep` on put: the claim is settled without a root"), "{e}");
-        assert!(e.contains("`getaddrinfo` in the check target's `allow`"), "{e}");
+        assert!(
+            e.contains("3 silence(s) silence nothing on any of //p:c.native, //p:c.wasi"),
+            "{e}"
+        );
+        assert!(
+            e.contains("`sqlite3_step` on add: no analysis found"),
+            "{e}"
+        );
+        assert!(
+            e.contains("`nanosleep` on put: the claim is settled without a root"),
+            "{e}"
+        );
+        assert!(
+            e.contains("`getaddrinfo` in the check target's `allow`"),
+            "{e}"
+        );
     }
 
     /// Both of two linked bridges number a member 1 and silence it. Applied
@@ -272,16 +313,30 @@ mod tests {
             )
             .unwrap()
         };
-        let c = Claims::merge(vec![("example".into(), bridge("example")), ("app".into(), bridge("app"))]).unwrap();
+        let c = Claims::merge(vec![
+            ("example".into(), bridge("example")),
+            ("app".into(), bridge("app")),
+        ])
+        .unwrap();
         let e = judge(
             "//p:c",
             &c,
             &[],
-            &[applied("//p:c.native", &[Silence::Member("example:1".into(), "pthread_mutex_lock".into())], &[])],
+            &[applied(
+                "//p:c.native",
+                &[Silence::Member(
+                    "example:1".into(),
+                    "pthread_mutex_lock".into(),
+                )],
+                &[],
+            )],
         )
         .unwrap_err();
         assert!(e.contains("1 silence(s) silence nothing"), "{e}");
-        assert!(e.contains("`pthread_mutex_lock` on app: add: no analysis found"), "{e}");
+        assert!(
+            e.contains("`pthread_mutex_lock` on app: add: no analysis found"),
+            "{e}"
+        );
         assert!(!e.contains("on example: add"), "{e}");
         let ok = judge(
             "//p:c",
@@ -297,7 +352,10 @@ mod tests {
             )],
         )
         .unwrap();
-        assert!(ok.contains("on example: add, applied by //p:c.native"), "{ok}");
+        assert!(
+            ok.contains("on example: add, applied by //p:c.native"),
+            "{ok}"
+        );
         assert!(ok.contains("on app: add, applied by //p:c.native"), "{ok}");
     }
 
@@ -317,8 +375,24 @@ mod tests {
             ],
         )
         .unwrap();
-        assert!(ok.contains("`example::wrap` (`#[frustrate::no_block(allow)]`), applied by //p:c.native"), "{ok}");
-        let e = judge("//p:c", &c, &[], &[applied("//p:c.wasi", &[], &["example::wrap"])]).unwrap_err();
-        assert!(e.contains("`example::wrap` (`#[frustrate::no_block(allow)]`): a claimed member reaches it"), "{e}");
+        assert!(
+            ok.contains(
+                "`example::wrap` (`#[frustrate::no_block(allow)]`), applied by //p:c.native"
+            ),
+            "{ok}"
+        );
+        let e = judge(
+            "//p:c",
+            &c,
+            &[],
+            &[applied("//p:c.wasi", &[], &["example::wrap"])],
+        )
+        .unwrap_err();
+        assert!(
+            e.contains(
+                "`example::wrap` (`#[frustrate::no_block(allow)]`): a claimed member reaches it"
+            ),
+            "{e}"
+        );
     }
 }

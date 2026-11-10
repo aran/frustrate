@@ -165,8 +165,9 @@ pub(crate) fn remove<T: 'static>(slot: u64) -> Box<T> {
 #[cfg_attr(target_family = "wasm", allow(dead_code))]
 pub(crate) fn drain() {
     while let Some(entry) = TABLE.with(|t| t.borrow_mut().pop_last().map(|(_, e)| e)) {
-        let run =
-            || crate::stream::finalize_scope(entry.label, || drop(unsafe { Box::from_raw(entry.ptr) }));
+        let run = || {
+            crate::stream::finalize_scope(entry.label, || drop(unsafe { Box::from_raw(entry.ptr) }))
+        };
         if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)) {
             crate::panic::observed(crate::panic::message(&*payload));
         }

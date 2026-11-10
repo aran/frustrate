@@ -125,9 +125,7 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(top: 20, bottom: 4, left: 4),
       child: Text(
         title,
-        style: Theme.of(context)
-            .textTheme
-            .titleSmall
+        style: Theme.of(context).textTheme.titleSmall
             ?.copyWith(color: Theme.of(context).colorScheme.primary),
       ),
     );
@@ -138,8 +136,11 @@ class _SectionCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final Widget child;
-  const _SectionCard(
-      {required this.title, required this.subtitle, required this.child});
+  const _SectionCard({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -163,11 +164,11 @@ class _SectionCard extends StatelessWidget {
 }
 
 String _fmtPatch(TextPatch p) => switch (p) {
-      TextPatchSplice(:final index, :final text) => 'Splice @$index "$text"',
-      TextPatchDelete(:final index, :final length) => 'Delete @$index ×$length',
-      TextPatchMark(:final field0, :final field1) => 'Mark $field0=$field1',
-      TextPatchClear() => 'Clear',
-    };
+  TextPatchSplice(:final index, :final text) => 'Splice @$index "$text"',
+  TextPatchDelete(:final index, :final length) => 'Delete @$index ×$length',
+  TextPatchMark(:final field0, :final field1) => 'Mark $field0=$field1',
+  TextPatchClear() => 'Clear',
+};
 
 // ================================================================ basics ==
 
@@ -179,8 +180,11 @@ class _GreetingCard extends StatelessWidget {
     return _SectionCard(
       title: 'greet — sync free function',
       subtitle: 'A String crosses to Rust and back, synchronously.',
-      child: Text(greet(name: 'Flutter'),
-          key: const Key('greet'), style: const TextStyle(fontSize: 18)),
+      child: Text(
+        greet(name: 'Flutter'),
+        key: const Key('greet'),
+        style: const TextStyle(fontSize: 18),
+      ),
     );
   }
 }
@@ -199,13 +203,16 @@ class _CounterCardState extends State<_CounterCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'Counter — Confined opaque handle',
-      subtitle: 'Single-owner state on the UI isolate; sync methods run on '
+      subtitle:
+          'Single-owner state on the UI isolate; sync methods run on '
           'the caller (no shadow cache).',
       child: Row(
         children: [
-          Text('$_count',
-              key: const Key('counter'),
-              style: Theme.of(context).textTheme.headlineSmall),
+          Text(
+            '$_count',
+            key: const Key('counter'),
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
           const Spacer(),
           FilledButton(
             onPressed: () => setState(() => _count = _counter.increment()),
@@ -231,7 +238,8 @@ class _PrimeCardState extends State<_PrimeCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'nthPrime — async free function',
-      subtitle: 'Brute-force CPU work completed via a Future (on the pool '
+      subtitle:
+          'Brute-force CPU work completed via a Future (on the pool '
           'where one exists).',
       child: Row(
         children: [
@@ -239,8 +247,10 @@ class _PrimeCardState extends State<_PrimeCard> {
             child: FutureBuilder<int>(
               future: _prime,
               builder: (context, snap) => snap.hasData
-                  ? Text('The ${_n}th prime is ${snap.data}',
-                      key: const Key('prime'))
+                  ? Text(
+                      'The ${_n}th prime is ${snap.data}',
+                      key: const Key('prime'),
+                    )
                   : const LinearProgressIndicator(),
             ),
           ),
@@ -275,9 +285,9 @@ class _ScalarsCardState extends State<_ScalarsCard> {
   final BigIntExtremes _big = bigIntExtremes();
 
   void _select(String c) => setState(() {
-        _pick = c;
-        _echoed = echoChar(c: c);
-      });
+    _pick = c;
+    _echoed = echoChar(c: c);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -285,7 +295,8 @@ class _ScalarsCardState extends State<_ScalarsCard> {
     final hex = code.toRadixString(16).toUpperCase().padLeft(4, '0');
     return _SectionCard(
       title: 'Scalars — char and 128-bit integers',
-      subtitle: 'A Rust char is one Unicode scalar (it crosses as a Dart '
+      subtitle:
+          'A Rust char is one Unicode scalar (it crosses as a Dart '
           'String); i128/u128 run past 2^63, so they arrive as BigInt.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,12 +309,16 @@ class _ScalarsCardState extends State<_ScalarsCard> {
             onSelectionChanged: (s) => _select(s.first),
           ),
           const SizedBox(height: 8),
-          Text('char echoed by Rust: $_echoed  (U+$hex)',
-              key: const Key('charScalar')),
+          Text(
+            'char echoed by Rust: $_echoed  (U+$hex)',
+            key: const Key('charScalar'),
+          ),
           const SizedBox(height: 8),
-          Text('u128 max = ${_big.u128Max}',
-              key: const Key('bigIntScalar'),
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+          Text(
+            'u128 max = ${_big.u128Max}',
+            key: const Key('bigIntScalar'),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
         ],
       ),
     );
@@ -320,7 +335,8 @@ class _HistogramCardState extends State<_HistogramCard> {
   final _input = TextEditingController(text: 'hello world');
   late Int32List _counts = letterHistogram(text: _input.text);
 
-  void _recompute(String s) => setState(() => _counts = letterHistogram(text: s));
+  void _recompute(String s) =>
+      setState(() => _counts = letterHistogram(text: s));
 
   @override
   void dispose() {
@@ -341,7 +357,8 @@ class _HistogramCardState extends State<_HistogramCard> {
     final topLetter = String.fromCharCode('a'.codeUnitAt(0) + topIdx);
     return _SectionCard(
       title: 'Histogram — Vec<i32> as an Int32List',
-      subtitle: 'A typed list: the 26 a-z counts cross as an Int32List, its '
+      subtitle:
+          'A typed list: the 26 a-z counts cross as an Int32List, its '
           'element type fixed at 32-bit — not a boxed List<int>.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,7 +366,9 @@ class _HistogramCardState extends State<_HistogramCard> {
           TextField(
             controller: _input,
             decoration: const InputDecoration(
-                border: OutlineInputBorder(), labelText: 'text to count'),
+              border: OutlineInputBorder(),
+              labelText: 'text to count',
+            ),
             onChanged: _recompute,
           ),
           const SizedBox(height: 12),
@@ -363,8 +382,9 @@ class _HistogramCardState extends State<_HistogramCard> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 1),
                       child: Container(
-                        height:
-                            maxCount == 0 ? 0 : 48.0 * _counts[i] / maxCount,
+                        height: maxCount == 0
+                            ? 0
+                            : 48.0 * _counts[i] / maxCount,
                         color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
@@ -404,11 +424,9 @@ class _CollectionsCardState extends State<_CollectionsCard> {
   }
 
   void _compute(String s) {
-    final xs = toI64List(s
-        .split(',')
-        .map((t) => int.tryParse(t.trim()))
-        .whereType<int>()
-        .toList());
+    final xs = toI64List(
+      s.split(',').map((t) => int.tryParse(t.trim())).whereType<int>().toList(),
+    );
     _tally = tallySorted(xs: xs);
     _distinct = distinctSorted(xs: xs);
     _rotated = rotateLeft(xs: xs, by: 2);
@@ -427,7 +445,8 @@ class _CollectionsCardState extends State<_CollectionsCard> {
     final tally = _tally.entries.map((e) => '${e.key}:${e.value}').join('  ');
     return _SectionCard(
       title: 'Collections — ordered map, set, and deque',
-      subtitle: 'Same numbers, three standard containers. A BTreeMap and '
+      subtitle:
+          'Same numbers, three standard containers. A BTreeMap and '
           'BTreeSet arrive sorted (a HashMap/HashSet would not); a VecDeque '
           'shares the Vec wire.',
       child: Column(
@@ -436,17 +455,23 @@ class _CollectionsCardState extends State<_CollectionsCard> {
           TextField(
             controller: _input,
             decoration: const InputDecoration(
-                border: OutlineInputBorder(), labelText: 'comma-separated ints'),
+              border: OutlineInputBorder(),
+              labelText: 'comma-separated ints',
+            ),
             onChanged: _recompute,
           ),
           const SizedBox(height: 10),
           Text('BTreeMap value:count — $tally', key: const Key('orderedMap')),
           const SizedBox(height: 4),
-          Text('BTreeSet distinct — {${_distinct.join(', ')}}',
-              key: const Key('orderedSet')),
+          Text(
+            'BTreeSet distinct — {${_distinct.join(', ')}}',
+            key: const Key('orderedSet'),
+          ),
           const SizedBox(height: 4),
-          Text('VecDeque rotate-left 2 — ${_rotated.join(', ')}',
-              key: const Key('deque')),
+          Text(
+            'VecDeque rotate-left 2 — ${_rotated.join(', ')}',
+            key: const Key('deque'),
+          ),
         ],
       ),
     );
@@ -477,7 +502,8 @@ class _RecordCardState extends State<_RecordCard> {
     final (text, (chars, bytes)) = _m;
     return _SectionCard(
       title: 'Records — a Rust tuple as a Dart record',
-      subtitle: 'measure returns (String, (int, int)); Dart reads the nested '
+      subtitle:
+          'measure returns (String, (int, int)); Dart reads the nested '
           'record positionally as .\$1 and .\$2.\$1 / .\$2.\$2.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -485,12 +511,16 @@ class _RecordCardState extends State<_RecordCard> {
           TextField(
             controller: _input,
             decoration: const InputDecoration(
-                border: OutlineInputBorder(), labelText: 'text to measure'),
+              border: OutlineInputBorder(),
+              labelText: 'text to measure',
+            ),
             onChanged: _recompute,
           ),
           const SizedBox(height: 8),
-          Text('"$text" → $chars chars, $bytes bytes',
-              key: const Key('record')),
+          Text(
+            '"$text" → $chars chars, $bytes bytes',
+            key: const Key('record'),
+          ),
         ],
       ),
     );
@@ -508,8 +538,7 @@ class _DataClassCardState extends State<_DataClassCard> {
   // the generated methods are exercised live, not dumped once.
   String? _holder = 'Ada';
 
-  void _toggle() =>
-      setState(() => _holder = _holder == null ? 'Ada' : null);
+  void _toggle() => setState(() => _holder = _holder == null ? 'Ada' : null);
 
   @override
   Widget build(BuildContext context) {
@@ -530,23 +559,34 @@ class _DataClassCardState extends State<_DataClassCard> {
 
     return _SectionCard(
       title: 'Data classes — value equality & copyWith',
-      subtitle: 'Passport has generated value equality and copyWith; the '
+      subtitle:
+          'Passport has generated value equality and copyWith; the '
           '#[bridge(no_eq)] Ticket keeps identity equality for contrast.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('round-trip Passport == local: $passEq · Set keeps '
-              '${passSet.length}', key: const Key('valueEq')),
+          Text(
+            'round-trip Passport == local: $passEq · Set keeps '
+            '${passSet.length}',
+            key: const Key('valueEq'),
+          ),
           const SizedBox(height: 4),
-          Text('copyWith(id: 9).id = ${renamed.id} · '
-              'copyWith(holder: null).holder = ${nulled.holder}',
-              key: const Key('copyWith')),
+          Text(
+            'copyWith(id: 9).id = ${renamed.id} · '
+            'copyWith(holder: null).holder = ${nulled.holder}',
+            key: const Key('copyWith'),
+          ),
           const SizedBox(height: 4),
-          Text('two equal Tickets == : $ticketEq · Set keeps '
-              '${ticketSet.length}', key: const Key('noEq')),
+          Text(
+            'two equal Tickets == : $ticketEq · Set keeps '
+            '${ticketSet.length}',
+            key: const Key('noEq'),
+          ),
           const SizedBox(height: 8),
           FilledButton.tonal(
-              onPressed: _toggle, child: const Text('toggle holder')),
+            onPressed: _toggle,
+            child: const Text('toggle holder'),
+          ),
         ],
       ),
     );
@@ -562,7 +602,9 @@ class _SnapshotCard extends StatefulWidget {
 }
 
 class _SnapshotCardState extends State<_SnapshotCard> {
-  final Snapshot _snap = Snapshot.build(words: const ['frozen', 'shared', 'immutable']);
+  final Snapshot _snap = Snapshot.build(
+    words: const ['frozen', 'shared', 'immutable'],
+  );
   late final int _count = _snap.wordCount();
   late final Future<String> _joined = _snap.join(sep: ' · ');
 
@@ -576,7 +618,8 @@ class _SnapshotCardState extends State<_SnapshotCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'Snapshot — Frozen (shared Arc)',
-      subtitle: 'One immutable handle: a sync read and an async method share '
+      subtitle:
+          'One immutable handle: a sync read and an async method share '
           'it — no copy.',
       child: FutureBuilder<String>(
         future: _joined,
@@ -634,7 +677,8 @@ class _LedgerCardState extends State<_LedgerCard> {
     final contended = _status.startsWith('CONTENDED');
     return _SectionCard(
       title: 'Ledger — Locked (RwLock) with contention contract',
-      subtitle: 'Async writes take the lock on the pool; the sync tryGet is '
+      subtitle:
+          'Async writes take the lock on the pool; the sync tryGet is '
           'marked on_contention="error", so a contended read throws an '
           'attributable ContentionException. It runs on every target, browser '
           'main thread included: the try-lock is a compare-exchange and the '
@@ -643,10 +687,13 @@ class _LedgerCardState extends State<_LedgerCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_status,
-              key: const Key('ledger'),
-              style: TextStyle(
-                  color: contended ? Theme.of(context).colorScheme.error : null)),
+          Text(
+            _status,
+            key: const Key('ledger'),
+            style: TextStyle(
+              color: contended ? Theme.of(context).colorScheme.error : null,
+            ),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -712,7 +759,8 @@ class _ActorRaceCardState extends State<_ActorRaceCard> {
     final speedup = serial.elapsedMicroseconds / fanned.elapsedMicroseconds;
     setState(() {
       _racing = false;
-      _raceResult = '4 actors ran ${speedup.toStringAsFixed(1)}x faster than '
+      _raceResult =
+          '4 actors ran ${speedup.toStringAsFixed(1)}x faster than '
           'one (${serial.elapsedMilliseconds}ms serialized, '
           '${fanned.elapsedMilliseconds}ms fanned out)';
     });
@@ -722,7 +770,8 @@ class _ActorRaceCardState extends State<_ActorRaceCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'Prospector — Actor (web parallelism)',
-      subtitle: 'One actor owns one executor. Fan the same work across four via '
+      subtitle:
+          'One actor owns one executor. Fan the same work across four via '
           'ActorPool and it runs in parallel — in the browser too, on stable '
           'Rust.',
       child: Column(
@@ -779,7 +828,8 @@ class _PoolRaceCardState extends State<_PoolRaceCard> {
     final speedup = serial.elapsedMicroseconds / concurrent.elapsedMicroseconds;
     setState(() {
       _racing = false;
-      _result = 'async pool ran ${speedup.toStringAsFixed(1)}x faster than '
+      _result =
+          'async pool ran ${speedup.toStringAsFixed(1)}x faster than '
           'serial (${serial.elapsedMilliseconds}ms serial, '
           '${concurrent.elapsedMilliseconds}ms concurrent)';
     });
@@ -789,7 +839,8 @@ class _PoolRaceCardState extends State<_PoolRaceCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'Async pool — parallel free-function calls',
-      subtitle: 'async ≠ parallel: four async calls serial vs concurrent. Real '
+      subtitle:
+          'async ≠ parallel: four async calls serial vs concurrent. Real '
           'speedup on native and threaded web; honestly ~1.0x single-threaded.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -834,14 +885,15 @@ class _AsyncFnCardState extends State<_AsyncFnCard> {
     // data the cooperative executor multiplexes, not a parked thread. A
     // block_on-per-call model would deadlock here; this is the decisive proof
     // the executor is real, running in a real app on every platform.
-    final results =
-        await Future.wait(
-            List.generate(count, (i) => cooperativeYield(x: i, rounds: 2)));
+    final results = await Future.wait(
+      List.generate(count, (i) => cooperativeYield(x: i, rounds: 2)),
+    );
     sw.stop();
     final ok = List.generate(count, (i) => results[i] == i * 2).every((b) => b);
     setState(() {
       _running = false;
-      _batch = '$count/$count resolved in ${sw.elapsedMilliseconds}ms '
+      _batch =
+          '$count/$count resolved in ${sw.elapsedMilliseconds}ms '
           '(${ok ? 'all correct' : 'MISMATCH'})';
     });
   }
@@ -850,7 +902,8 @@ class _AsyncFnCardState extends State<_AsyncFnCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'cooperativeYield — Rust async fn (.await)',
-      subtitle: 'A true async fn whose body suspends and resumes on the '
+      subtitle:
+          'A true async fn whose body suspends and resumes on the '
           'cooperative executor. Unlike nthPrime (sync body, async dispatch), '
           'it yields to the event loop between polls — so it runs even on '
           'single-threaded web, and thousands multiplex on one thread.',
@@ -860,8 +913,10 @@ class _AsyncFnCardState extends State<_AsyncFnCard> {
           FutureBuilder<int>(
             future: _one,
             builder: (context, snap) => snap.hasData
-                ? Text('cooperativeYield(21, rounds: 3) = ${snap.data}',
-                    key: const Key('asyncFn'))
+                ? Text(
+                    'cooperativeYield(21, rounds: 3) = ${snap.data}',
+                    key: const Key('asyncFn'),
+                  )
                 : const LinearProgressIndicator(),
           ),
           const SizedBox(height: 12),
@@ -910,9 +965,11 @@ class _LiveDocCardState extends State<_LiveDocCard> {
     });
     // Closure flavor of the watch pattern: fired with the new length after
     // each splice (never during the splice call).
-    _doc.onChange(cb: (len) {
-      if (mounted) setState(() => _len = len);
-    });
+    _doc.onChange(
+      cb: (len) {
+        if (mounted) setState(() => _len = len);
+      },
+    );
   }
 
   @override
@@ -938,7 +995,8 @@ class _LiveDocCardState extends State<_LiveDocCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'TextDoc — StreamSink watch + DartCallback (automerge pattern)',
-      subtitle: 'Editing calls sync splice on a Confined doc; a stored '
+      subtitle:
+          'Editing calls sync splice on a Confined doc; a stored '
           'StreamSink relays each patch (StreamBuilder pane), and a stored Dart '
           'closure reports the new length.',
       child: Column(
@@ -950,13 +1008,17 @@ class _LiveDocCardState extends State<_LiveDocCard> {
                 child: TextField(
                   key: const Key('liveDocInput'),
                   decoration: const InputDecoration(
-                      border: OutlineInputBorder(), hintText: 'type to splice…'),
+                    border: OutlineInputBorder(),
+                    hintText: 'type to splice…',
+                  ),
                   onChanged: _onChanged,
                 ),
               ),
               const SizedBox(width: 8),
               FilledButton.tonal(
-                  onPressed: _appendHi, child: const Text('append hi')),
+                onPressed: _appendHi,
+                child: const Text('append hi'),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -1017,7 +1079,8 @@ class _MineProgressCardState extends State<_MineProgressCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'mineProgress — actor progress stream',
-      subtitle: 'You pass the StreamController; the actor relays each result '
+      subtitle:
+          'You pass the StreamController; the actor relays each result '
           'into it as it is computed, not batched at the end.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1071,7 +1134,8 @@ class _AwaitedCallbackCardState extends State<_AwaitedCallbackCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'transform — awaited value-returning callback (portable)',
-      subtitle: 'An async fn .awaits call_async on a Dart closure, so a value '
+      subtitle:
+          'An async fn .awaits call_async on a Dart closure, so a value '
           'flows back from Dart to Rust on every platform — the web too.',
       child: Row(
         children: [
@@ -1081,15 +1145,16 @@ class _AwaitedCallbackCardState extends State<_AwaitedCallbackCard> {
               controller: _input,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                  border: OutlineInputBorder(), labelText: 'x'),
+                border: OutlineInputBorder(),
+                labelText: 'x',
+              ),
               onSubmitted: (_) => _run(),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(child: Text(_result, key: const Key('awaitedCallback'))),
           const SizedBox(width: 8),
-          FilledButton.tonal(
-              onPressed: _run, child: const Text('map x→x²')),
+          FilledButton.tonal(onPressed: _run, child: const Text('map x→x²')),
         ],
       ),
     );
@@ -1117,7 +1182,8 @@ class _NativeCallbackCardState extends State<_NativeCallbackCard> {
     if (!kHasNativeReturningCallbacks) {
       return _SectionCard(
         title: 'transform_sum — blocking callback (native-only)',
-        subtitle: 'A plain pool fn that blocks a worker per item — not a web '
+        subtitle:
+            'A plain pool fn that blocks a worker per item — not a web '
             'limit on callbacks themselves (transform above proves those cross '
             'on web).',
         child: Text(
@@ -1131,7 +1197,8 @@ class _NativeCallbackCardState extends State<_NativeCallbackCard> {
     }
     return _SectionCard(
       title: 'transform_sum — blocking callback (native-only)',
-      subtitle: 'A plain pool fn blocks its worker per item while a Dart '
+      subtitle:
+          'A plain pool fn blocks its worker per item while a Dart '
           'closure maps it — native-only because it parks a worker, not '
           'because callbacks cannot reach web.',
       child: Row(
@@ -1177,7 +1244,8 @@ class _WebStubCardState extends State<_WebStubCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'blockingRead — opt-in runtime-fail on web',
-      subtitle: 'A blocking read is native-only, but opted onto the web '
+      subtitle:
+          'A blocking read is native-only, but opted onto the web '
           'surface with web_stub: present so portable code compiles, '
           'throwing an attributable UnsupportedError if called on web. Native '
           'returns the balance.',
@@ -1185,8 +1253,7 @@ class _WebStubCardState extends State<_WebStubCard> {
         children: [
           Expanded(child: Text(_result, key: const Key('webStub'))),
           const SizedBox(width: 12),
-          FilledButton.tonal(
-              onPressed: _read, child: const Text('read now')),
+          FilledButton.tonal(onPressed: _read, child: const Text('read now')),
         ],
       ),
     );
@@ -1221,7 +1288,8 @@ class _GreeterCardState extends State<_GreeterCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'Greeter — trait object (Box<dyn Greeter>)',
-      subtitle: 'One generated Dart interface backs several Rust impls; '
+      subtitle:
+          'One generated Dart interface backs several Rust impls; '
           'louder() mints a fresh handle.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1272,7 +1340,8 @@ class _PlanCodecCardState extends State<_PlanCodecCard> {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'FakePlan — external (protobuf-style) bytes codec',
-      subtitle: 'A type both sides already own crosses as bytes; the Dart '
+      subtitle:
+          'A type both sides already own crosses as bytes; the Dart '
           'companion class appears directly in the binding signature.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1280,14 +1349,20 @@ class _PlanCodecCardState extends State<_PlanCodecCard> {
           TextField(
             controller: _title,
             decoration: const InputDecoration(
-                border: OutlineInputBorder(), labelText: 'plan title'),
+              border: OutlineInputBorder(),
+              labelText: 'plan title',
+            ),
           ),
           const SizedBox(height: 8),
-          Text('${_plan.title} — revision ${_plan.revision}',
-              key: const Key('planCodec')),
+          Text(
+            '${_plan.title} — revision ${_plan.revision}',
+            key: const Key('planCodec'),
+          ),
           const SizedBox(height: 8),
           FilledButton.tonal(
-              onPressed: _bump, child: const Text('bump revision in Rust')),
+            onPressed: _bump,
+            child: const Text('bump revision in Rust'),
+          ),
         ],
       ),
     );
@@ -1303,18 +1378,21 @@ class _PatchInspectorCard extends StatefulWidget {
 class _PatchInspectorCardState extends State<_PatchInspectorCard> {
   // Build every variant in Dart, round-trip through Rust, and pattern-match
   // the sealed result — the data-enum story end to end.
-  late final List<TextPatch> _got = echoPatches(ps: const [
-    TextPatchSplice(index: 2, text: 'hi'),
-    TextPatchDelete(index: 0, length: 1),
-    TextPatchMark('bold', 1),
-    TextPatchClear(),
-  ]);
+  late final List<TextPatch> _got = echoPatches(
+    ps: const [
+      TextPatchSplice(index: 2, text: 'hi'),
+      TextPatchDelete(index: 0, length: 1),
+      TextPatchMark('bold', 1),
+      TextPatchClear(),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'TextPatch — data enum as a sealed Dart hierarchy',
-      subtitle: 'Every Rust enum variant round-trips and is exhaustively '
+      subtitle:
+          'Every Rust enum variant round-trips and is exhaustively '
           'switch-matched in Dart.',
       child: Text(
         _got.map(_fmtPatch).join('\n'),
@@ -1405,10 +1483,10 @@ class _BrowserStdCardState extends State<_BrowserStdCard> {
       title: 'std::time, HashMap, println!, available_parallelism, sleep',
       subtitle: _present
           ? 'This build links a std whose unsupported stubs call the host, so '
-              'std\'s own APIs work — in Rust that does not know it is on wasm.'
+                'std\'s own APIs work — in Rust that does not know it is on wasm.'
           : 'This build links the stock std, where these have no OS behind '
-              'them: -1 is the sentinel for "no such facility". Build the '
-              'module on @frustrate//bazel:wasm32_browser_std to see real values.',
+                'them: -1 is the sentinel for "no such facility". Build the '
+                'module on @frustrate//bazel:wasm32_browser_std to see real values.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1484,7 +1562,8 @@ class _RustLog {
     sink.stream.listen((record) {
       final next = [...lines.value, record];
       lines.value = List<LogLine>.unmodifiable(
-          next.length > _capacity ? next.sublist(next.length - _capacity) : next);
+        next.length > _capacity ? next.sublist(next.length - _capacity) : next,
+      );
     });
     try {
       setLogSink(sink: sink);
@@ -1503,7 +1582,8 @@ class _RustLogCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: "log::info! — Rust's log crate, arriving as a Dart stream",
-      subtitle: 'The bridge crate logs through the ordinary `log` facade, with '
+      subtitle:
+          'The bridge crate logs through the ordinary `log` facade, with '
           'no frustrate type in sight; frustrate::logging::set_sink puts a '
           'StreamSink behind that facade, so the records land on a Dart Stream '
           'this app owns. The entries below come from other cards doing their '
@@ -1519,9 +1599,12 @@ class _RustLogCard extends StatelessWidget {
                 ? const SizedBox.shrink()
                 : Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: Text('logging not installed — $failure',
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error)),
+                    child: Text(
+                      'logging not installed — $failure',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                   ),
           ),
           ValueListenableBuilder<List<LogLine>>(
@@ -1530,9 +1613,11 @@ class _RustLogCard extends StatelessWidget {
               lines.isEmpty
                   ? 'no records yet'
                   : lines
-                      .map((r) =>
-                          '${r.level.padRight(5)} ${r.target}: ${r.message}')
-                      .join('\n'),
+                        .map(
+                          (r) =>
+                              '${r.level.padRight(5)} ${r.target}: ${r.message}',
+                        )
+                        .join('\n'),
               key: const Key('rustLog'),
               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
             ),
@@ -1542,11 +1627,11 @@ class _RustLogCard extends StatelessWidget {
             spacing: 8,
             children: [
               FilledButton.tonal(
-                onPressed: () => emitDemoLog(message: 'a line logged on request'),
+                onPressed: () =>
+                    emitDemoLog(message: 'a line logged on request'),
                 child: const Text('log a line from Rust'),
               ),
-              TextButton(
-                  onPressed: _rustLog.clear, child: const Text('clear')),
+              TextButton(onPressed: _rustLog.clear, child: const Text('clear')),
             ],
           ),
         ],
@@ -1652,19 +1737,23 @@ final class _Tracer extends DelegatingRuntime {
 
   @override
   Future<BinaryReader> aroundAsync(
-      int fnId, Future<BinaryReader> Function() next,
-      {bool deferred = false,
-      FrustrateCancelToken? cancel,
-      ActorHost? host}) {
+    int fnId,
+    Future<BinaryReader> Function() next, {
+    bool deferred = false,
+    FrustrateCancelToken? cancel,
+    ActorHost? host,
+  }) {
     // `host` is non-null exactly for a call on an actor's executor, and that is
     // the row worth seeing: a generated actor routes every method through the
     // host it was constructed with and never touches `Frustrate.instance`, so a
     // decorator that wrapped only the runtime would look complete on free
     // functions and silently miss an entire concurrency model.
-    _callTrace.record('async  ${_name(fnId)}'
-        '${host != null ? '  @actor' : ''}'
-        '${deferred ? '  deferred' : ''}'
-        '${cancel != null ? '  cancel' : ''}');
+    _callTrace.record(
+      'async  ${_name(fnId)}'
+      '${host != null ? '  @actor' : ''}'
+      '${deferred ? '  deferred' : ''}'
+      '${cancel != null ? '  cancel' : ''}',
+    );
     return next();
   }
 }
@@ -1676,7 +1765,8 @@ class _CallTraceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SectionCard(
       title: 'Call trace — one decorator, every bridge call',
-      subtitle: 'A DelegatingRuntime (package:frustrate/intercept.dart) goes in '
+      subtitle:
+          'A DelegatingRuntime (package:frustrate/intercept.dart) goes in '
           'front of the generated bindings with Frustrate.activate and comes '
           'off again with Frustrate.reset — the seam a tracing or metrics layer '
           'uses in production, and legal to swap while the app runs because a '
@@ -1702,7 +1792,9 @@ class _CallTraceCard extends StatelessWidget {
                 Text(on ? 'tracing on' : 'tracing off'),
                 const Spacer(),
                 TextButton(
-                    onPressed: _callTrace.clear, child: const Text('clear')),
+                  onPressed: _callTrace.clear,
+                  child: const Text('clear'),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -1711,8 +1803,8 @@ class _CallTraceCard extends StatelessWidget {
               builder: (context, lines, _) => Text(
                 lines.isEmpty
                     ? (on
-                        ? 'trace: waiting for a call'
-                        : 'trace: off — no decorator is installed')
+                          ? 'trace: waiting for a call'
+                          : 'trace: off — no decorator is installed')
                     : lines.join('\n'),
                 key: const Key('callTrace'),
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),

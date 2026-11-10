@@ -67,8 +67,24 @@ const PARSER_CLAIMED_BARE_TYPE_NAMES: &[&str] = &[
 /// on the way out. `BigInt`/`Uint8List`/`List` have the same hole and predate
 /// the time work entirely.
 const DART_SHADOWED_TYPE_NAMES: &[&str] = &[
-    "String", "int", "double", "bool", "BigInt", "Duration", "DateTime", "Uint8List", "List",
-    "Map", "Set", "Object", "Record", "Function", "Future", "Stream", "Iterable", "Null",
+    "String",
+    "int",
+    "double",
+    "bool",
+    "BigInt",
+    "Duration",
+    "DateTime",
+    "Uint8List",
+    "List",
+    "Map",
+    "Set",
+    "Object",
+    "Record",
+    "Function",
+    "Future",
+    "Stream",
+    "Iterable",
+    "Null",
 ];
 
 /// Facts about a target platform. Not a build-time choice: every `check`
@@ -793,7 +809,12 @@ fn check_pass(mut iface: Interface, caps: &Capabilities) -> Result<Interface, Ve
     let mut generic_structs = std::mem::take(&mut iface.generic_structs);
     for s in &mut generic_structs {
         for f in &mut s.fields {
-            let ctx = format!("struct `{}<{}>`, field `{}`", s.name, s.generics.join(", "), f.name);
+            let ctx = format!(
+                "struct `{}<{}>`, field `{}`",
+                s.name,
+                s.generics.join(", "),
+                f.name
+            );
             resolve_field(&mut f.ty, &[], Some(&s.name), &ctx, &mut diags);
         }
     }
@@ -818,7 +839,10 @@ fn check_pass(mut iface: Interface, caps: &Capabilities) -> Result<Interface, Ve
     for e in &mut enums_vec {
         for v in &mut e.variants {
             for f in &mut v.fields {
-                let ctx = format!("enum `{}`, variant `{}`, field `{}`", e.name, v.name, f.name);
+                let ctx = format!(
+                    "enum `{}`, variant `{}`, field `{}`",
+                    e.name, v.name, f.name
+                );
                 resolve_field(&mut f.ty, &e.generics, Some(&e.name), &ctx, &mut diags);
                 field_takes_no_borrow(&f.ty, &ctx, &mut diags);
             }
@@ -1451,7 +1475,9 @@ fn check_pass(mut iface: Interface, caps: &Capabilities) -> Result<Interface, Ve
                     .push(name.clone());
             }
             for f in &iface.functions {
-                let Some(parent) = f.parent.as_deref() else { continue };
+                let Some(parent) = f.parent.as_deref() else {
+                    continue;
+                };
                 if iface.instance_of(parent).is_none() {
                     continue;
                 }
@@ -1605,9 +1631,23 @@ fn expand_generics(iface: &mut Interface, diags: &mut Vec<Diagnostic>) {
     for (kind, name, consts, defaulted, dart_interface) in iface
         .generic_structs
         .iter()
-        .map(|s| ("struct", &s.name, &s.const_generics, &s.defaulted_generics, s.dart_interface))
+        .map(|s| {
+            (
+                "struct",
+                &s.name,
+                &s.const_generics,
+                &s.defaulted_generics,
+                s.dart_interface,
+            )
+        })
         .chain(iface.generic_enums.iter().map(|e| {
-            ("enum", &e.name, &e.const_generics, &e.defaulted_generics, false)
+            (
+                "enum",
+                &e.name,
+                &e.const_generics,
+                &e.defaulted_generics,
+                false,
+            )
         }))
     {
         if !consts.is_empty() {
@@ -1739,7 +1779,10 @@ fn expand_generics(iface: &mut Interface, diags: &mut Vec<Diagnostic>) {
     for e in &mut enums {
         for v in &mut e.variants {
             for f in &mut v.fields {
-                let ctx = format!("enum `{}`, variant `{}`, field `{}`", e.name, v.name, f.name);
+                let ctx = format!(
+                    "enum `{}`, variant `{}`, field `{}`",
+                    e.name, v.name, f.name
+                );
                 ex.rewrite(&mut f.ty, &ctx, diags);
             }
         }
@@ -1977,7 +2020,10 @@ fn check_instantiation_growth(iface: &Interface, diags: &mut Vec<Diagnostic>) {
                 sites.push((
                     &e.name,
                     e.generics.clone(),
-                    format!("enum `{}`, variant `{}`, field `{}`", e.name, v.name, f.name),
+                    format!(
+                        "enum `{}`, variant `{}`, field `{}`",
+                        e.name, v.name, f.name
+                    ),
                     vec![&f.ty],
                 ));
             }
@@ -2050,8 +2096,10 @@ fn check_instantiation_growth(iface: &Interface, diags: &mut Vec<Diagnostic>) {
     // cycle. Reported once — the first in declaration order — because the
     // author's fix is to break the cycle, and every node on it names the same
     // cycle.
-    let adjacency: Vec<(GrowthNode, GrowthNode)> =
-        edges.iter().map(|e| (e.from.clone(), e.to.clone())).collect();
+    let adjacency: Vec<(GrowthNode, GrowthNode)> = edges
+        .iter()
+        .map(|e| (e.from.clone(), e.to.clone()))
+        .collect();
     for e in edges.iter().filter(|e| e.grows) {
         if !reaches(&adjacency, &e.to, &e.from) {
             continue;
@@ -2066,11 +2114,7 @@ fn check_instantiation_growth(iface: &Interface, diags: &mut Vec<Diagnostic>) {
                  or break the cycle. (A generic that recurs at the *same* argument — \
                  `struct N<T> {{ next: Option<Box<N<T>>> }}` — is finite and is the \
                  ordinary recursive shape.)",
-                e.ctx,
-                e.from.0,
-                e.wrote,
-                e.to.0,
-                e.from.0,
+                e.ctx, e.from.0, e.wrote, e.to.0, e.from.0,
             ),
         });
         return;
@@ -2239,7 +2283,11 @@ fn check_impl_targets(iface: &Interface, diags: &mut Vec<Diagnostic>) {
                     if params.len() == 1 { "" } else { "s" },
                     params.join(", "),
                     f.parent_args.len(),
-                    if f.parent_args.len() == 1 { "was" } else { "were" },
+                    if f.parent_args.len() == 1 {
+                        "was"
+                    } else {
+                        "were"
+                    },
                 ),
             });
             continue;
@@ -2296,7 +2344,11 @@ fn substitute(ty: &Type, bindings: &[(String, Type)]) -> Type {
         Type::Option(t) => Type::Option(sub(t)),
         Type::Array(t, n) => Type::Array(sub(t), *n),
         Type::Boxed(t) => Type::Boxed(sub(t)),
-        Type::Ref { inner, mutable, unsized_borrow } => Type::Ref {
+        Type::Ref {
+            inner,
+            mutable,
+            unsized_borrow,
+        } => Type::Ref {
             inner: sub(inner),
             mutable: *mutable,
             unsized_borrow: *unsized_borrow,
@@ -2969,11 +3021,7 @@ fn walk_every_type<'a>(iface: &'a Interface, f: &mut dyn FnMut(&'a Type)) {
 /// Cycle-guarded by declaration name, so a recursive type terminates. The
 /// guard is on declarations, not on `Type` values, because only a named
 /// declaration can close a cycle.
-pub(crate) fn walk_type_graph<'a>(
-    iface: &'a Interface,
-    ty: &'a Type,
-    f: &mut dyn FnMut(&'a Type),
-) {
+pub(crate) fn walk_type_graph<'a>(iface: &'a Interface, ty: &'a Type, f: &mut dyn FnMut(&'a Type)) {
     walk_type_graph_mode(iface, ty, true, f)
 }
 
@@ -3123,7 +3171,14 @@ fn walk_type_graph_full<'a>(
             | Type::Opaque(_) => {}
         }
     }
-    go(iface, ty, through_refs, through_channels, &mut HashSet::new(), f);
+    go(
+        iface,
+        ty,
+        through_refs,
+        through_channels,
+        &mut HashSet::new(),
+        f,
+    );
 }
 
 /// [`walk_type_graph`], stopping at a [`Type::Ref`].
@@ -3225,10 +3280,7 @@ pub(crate) fn opaque_in_a_channel_item(
 }
 
 /// Every Dart-object handle reachable from `ty`, structs and enums included.
-pub(crate) fn reachable_handles<'a>(
-    iface: &'a Interface,
-    ty: &'a Type,
-) -> Vec<&'a DartObjectSpec> {
+pub(crate) fn reachable_handles<'a>(iface: &'a Interface, ty: &'a Type) -> Vec<&'a DartObjectSpec> {
     let mut out = vec![];
     walk_type_graph(iface, ty, &mut |t| {
         if let Some(spec) = t.as_dart_object() {
@@ -3259,7 +3311,10 @@ fn data_surface_clash(
 ) -> Option<(&'static str, &'static str)> {
     let dart = crate::emit_dart::dart_name(member);
     if let Some(s) = iface.struct_decl(parent) {
-        if s.fields.iter().any(|f| crate::emit_dart::dart_name(&f.name) == dart) {
+        if s.fields
+            .iter()
+            .any(|f| crate::emit_dart::dart_name(&f.name) == dart)
+        {
             return Some((
                 "a field of the same type",
                 "the generated class would declare a method and a field under one name \
@@ -3607,8 +3662,7 @@ fn resolve_type(ty: &mut Type, scope: &Scope<'_>, ctx: &str, diags: &mut Vec<Dia
         // the claim has to be read before the inner name is resolved — the
         // ordinary path below resolves first and would refuse the bare inner
         // (the rule above) before ever reading the claim.
-        Type::Claimed(claim, inner)
-            if matches!(inner.as_ref(), Type::Named(n) if duals.contains(n.as_str())) =>
+        Type::Claimed(claim, inner) if matches!(inner.as_ref(), Type::Named(n) if duals.contains(n.as_str())) =>
         {
             let claim = *claim;
             let Type::Named(name) = inner.as_ref() else {
@@ -3679,8 +3733,12 @@ fn resolve_type(ty: &mut Type, scope: &Scope<'_>, ctx: &str, diags: &mut Vec<Dia
             }
             *ty = (**inner).clone();
         }
-        Type::List(t, _) | Type::Set(t, _) | Type::Option(t) | Type::Array(t, _)
-        | Type::Boxed(t) | Type::Ref { inner: t, .. } => resolve_type(t, scope, ctx, diags),
+        Type::List(t, _)
+        | Type::Set(t, _)
+        | Type::Option(t)
+        | Type::Array(t, _)
+        | Type::Boxed(t)
+        | Type::Ref { inner: t, .. } => resolve_type(t, scope, ctx, diags),
         Type::Map(k, v, _) => {
             resolve_type(k, scope, ctx, diags);
             resolve_type(v, scope, ctx, diags);
@@ -3796,8 +3854,7 @@ pub(crate) fn check_borrow_positions(
             // built, so there is nothing here for it to outlive. Judged per
             // reference rather than per element, so `HashSet<(&Doc, &str)>`
             // reports the one that is really wrong.
-            let exempt =
-                at == Some(borrow_at::IN_SET_MAP) && is_handle(unbox(inner));
+            let exempt = at == Some(borrow_at::IN_SET_MAP) && is_handle(unbox(inner));
             if let (Some(reason), false) = (at, exempt) {
                 diags.push(Diagnostic {
                     code: "FR0077",
@@ -3841,10 +3898,17 @@ pub(crate) fn check_borrow_positions(
             check_borrow_positions(k, ctx, Some(borrow_at::IN_SET_MAP), is_handle, diags);
             check_borrow_positions(v, ctx, Some(borrow_at::IN_SET_MAP), is_handle, diags);
         }
-        Type::Array(t, _) => check_borrow_positions(t, ctx, Some(borrow_at::IN_ARRAY), is_handle, diags),
+        Type::Array(t, _) => {
+            check_borrow_positions(t, ctx, Some(borrow_at::IN_ARRAY), is_handle, diags)
+        }
         Type::Boxed(t) => check_borrow_positions(t, ctx, Some(borrow_at::IN_BOX), is_handle, diags),
         Type::DartObject(spec) => {
-            for t in spec.item.iter().chain(spec.ret.iter()).chain(spec.err.iter()) {
+            for t in spec
+                .item
+                .iter()
+                .chain(spec.ret.iter())
+                .chain(spec.err.iter())
+            {
                 check_borrow_positions(t, ctx, Some(borrow_at::IN_MIRROR), is_handle, diags);
             }
         }
@@ -3870,7 +3934,13 @@ pub(crate) fn is_bridged_handle(ty: &Type) -> bool {
 /// any depth. Checked once here rather than at every use site, so the field is
 /// named once however many members mention its type.
 fn field_takes_no_borrow(ty: &Type, ctx: &str, diags: &mut Vec<Diagnostic>) {
-    check_borrow_positions(ty, ctx, Some(borrow_at::IN_FIELD), &is_bridged_handle, diags);
+    check_borrow_positions(
+        ty,
+        ctx,
+        Some(borrow_at::IN_FIELD),
+        &is_bridged_handle,
+        diags,
+    );
 }
 
 /// The reasons FR0077 gives, one per position that owns what it decodes.
@@ -4052,8 +4122,12 @@ fn check_inbound_declarations(iface: &mut Interface, diags: &mut Vec<Diagnostic>
                             }
                         }
                     }
-                    Type::Option(t) | Type::List(t, _) | Type::Set(t, _) | Type::Array(t, _)
-                    | Type::Boxed(t) | Type::Ref { inner: t, .. } => stack.push(t),
+                    Type::Option(t)
+                    | Type::List(t, _)
+                    | Type::Set(t, _)
+                    | Type::Array(t, _)
+                    | Type::Boxed(t)
+                    | Type::Ref { inner: t, .. } => stack.push(t),
                     Type::Map(k, v, _) => {
                         stack.push(k);
                         stack.push(v);
@@ -4093,7 +4167,11 @@ fn check_inbound_declarations(iface: &mut Interface, diags: &mut Vec<Diagnostic>
     // many members name the struct — which is why
     // [`forbid_unconsumable_opaque`]'s own inbound arm does not walk these
     // fields again.
-    for s in iface.structs.iter().filter(|s| s.inbound && !refused.contains(&s.name)) {
+    for s in iface
+        .structs
+        .iter()
+        .filter(|s| s.inbound && !refused.contains(&s.name))
+    {
         for f in &s.fields {
             let ctx = format!("struct `{}`, field `{}`", s.name, f.name);
             forbid_unconsumable_opaque(iface, &f.ty, &ctx, diags);
@@ -4118,7 +4196,10 @@ fn check_inbound_declarations(iface: &mut Interface, diags: &mut Vec<Diagnostic>
     for e in &iface.enums {
         for v in &e.variants {
             for f in &v.fields {
-                let ctx = format!("enum `{}`, variant `{}`, field `{}`", e.name, v.name, f.name);
+                let ctx = format!(
+                    "enum `{}`, variant `{}`, field `{}`",
+                    e.name, v.name, f.name
+                );
                 forbid_inbound_shape(iface, &f.ty, &ctx, inbound_at::IN_VARIANT, &mut field_diags);
             }
         }
@@ -4161,10 +4242,12 @@ fn forbid_inbound_shape(
                 ),
             });
         }
-        Type::Ref { inner, .. } | Type::Option(inner) | Type::List(inner, _)
-        | Type::Set(inner, _) | Type::Array(inner, _) | Type::Boxed(inner) => {
-            forbid_inbound_shape(iface, inner, ctx, at, diags)
-        }
+        Type::Ref { inner, .. }
+        | Type::Option(inner)
+        | Type::List(inner, _)
+        | Type::Set(inner, _)
+        | Type::Array(inner, _)
+        | Type::Boxed(inner) => forbid_inbound_shape(iface, inner, ctx, at, diags),
         Type::Map(k, v, _) => {
             forbid_inbound_shape(iface, k, ctx, at, diags);
             forbid_inbound_shape(iface, v, ctx, at, diags);
@@ -4218,8 +4301,8 @@ fn pair_key(a: &str, b: &str) -> (String, String) {
 const DART_RESERVED: &[&str] = &[
     "assert", "break", "case", "catch", "class", "const", "continue", "default", "do", "else",
     "enum", "extends", "false", "final", "finally", "for", "if", "in", "is", "new", "null",
-    "rethrow", "return", "super", "switch", "this", "throw", "true", "try", "var", "void",
-    "while", "with",
+    "rethrow", "return", "super", "switch", "this", "throw", "true", "try", "var", "void", "while",
+    "with",
 ];
 
 /// The type under every `Box` — the type the crossing actually sees, since a
@@ -4324,7 +4407,10 @@ pub(crate) fn taken_handles<'a>(iface: &'a Interface, ty: &'a Type) -> Vec<&'a s
         match ty {
             Type::Opaque(n) => out.push(n.as_str()),
             Type::Ref { .. } => {}
-            Type::Option(t) | Type::List(t, _) | Type::Set(t, _) | Type::Array(t, _)
+            Type::Option(t)
+            | Type::List(t, _)
+            | Type::Set(t, _)
+            | Type::Array(t, _)
             | Type::Boxed(t) => go(iface, t, seen, out),
             Type::Map(k, v, _) => {
                 go(iface, k, seen, out);
@@ -4336,7 +4422,9 @@ pub(crate) fn taken_handles<'a>(iface: &'a Interface, ty: &'a Type) -> Vec<&'a s
                 }
             }
             Type::Struct(n) => {
-                let Some(s) = inbound_struct(iface, n) else { return };
+                let Some(s) = inbound_struct(iface, n) else {
+                    return;
+                };
                 if !seen.insert(n.as_str()) {
                     return;
                 }
@@ -4513,7 +4601,13 @@ fn check_function(
     caps: &Capabilities,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let DeclaredNames { structs, enums, opaques, dyn_traits, duals } = *names;
+    let DeclaredNames {
+        structs,
+        enums,
+        opaques,
+        dyn_traits,
+        duals,
+    } = *names;
     // FR0062 — an `impl` self-type wrapper (`impl Locked<Point>`) claims a
     // representation for `f.parent`; compare it against what `parent`
     // actually declared. Independent of FR0005 below and checked first: a
@@ -4574,7 +4668,10 @@ fn check_function(
     // would be a concrete method on a class every implementor must reimplement
     // — so the caller would have to write the body of a method the bridge is
     // supposed to answer, and whichever one they wrote would win.
-    if f.parent.as_deref().is_some_and(|p| iface.is_dart_interface(p)) {
+    if f.parent
+        .as_deref()
+        .is_some_and(|p| iface.is_dart_interface(p))
+    {
         diags.push(Diagnostic {
             code: "FR0050",
             message: format!(
@@ -4662,10 +4759,7 @@ fn check_function(
     // associated function without a receiver is not dyn-dispatchable (and
     // has no handle to be called on). The syntactic dyn-compatibility rules
     // (generic methods, Self positions) are rejected at parse time.
-    let parent_is_dyn = f
-        .parent
-        .as_ref()
-        .is_some_and(|p| dyn_traits.contains(p));
+    let parent_is_dyn = f.parent.as_ref().is_some_and(|p| dyn_traits.contains(p));
     if parent_is_dyn && f.receiver.is_none() && !f.is_actor_drop {
         diags.push(Diagnostic {
             code: "FR0022",
@@ -5027,9 +5121,8 @@ fn check_function(
             // declaration graph: a handle behind a struct field crosses the
             // boundary exactly as a bare one does, in either direction.
             let inbound = reaches_opaque(iface, &p.ty);
-            let outbound = opaque_in_a_channel_item(iface, &p.ty, &|t| {
-                matches!(t, Type::Opaque(_))
-            });
+            let outbound =
+                opaque_in_a_channel_item(iface, &p.ty, &|t| matches!(t, Type::Opaque(_)));
             if outbound {
                 diags.push(Diagnostic {
                     code: "FR0015",
@@ -5089,8 +5182,7 @@ fn check_function(
             // instance *travelling in* is one the callee cannot route to; one a
             // channel would hand *out* is one nothing could have created here,
             // because a spawn is a constructor. Say which.
-            let is_actor =
-                |t: &Type| matches!(t, Type::Opaque(n) if opaques.get(n.as_str()) == Some(&Model::Actor));
+            let is_actor = |t: &Type| matches!(t, Type::Opaque(n) if opaques.get(n.as_str()) == Some(&Model::Actor));
             let mut inbound = false;
             walk_type_graph_no_channels(iface, &p.ty, &mut |t| inbound |= is_actor(t));
             let outbound = opaque_in_a_channel_item(iface, &p.ty, &is_actor);
@@ -5120,8 +5212,7 @@ fn check_function(
         }
         if let Some(ret) = &f.ret {
             walk_type_graph(iface, ret, &mut |t| {
-                if matches!(t, Type::Opaque(n) if opaques.get(n.as_str()) == Some(&Model::Actor))
-                {
+                if matches!(t, Type::Opaque(n) if opaques.get(n.as_str()) == Some(&Model::Actor)) {
                     diags.push(Diagnostic {
                         code: "FR0015",
                         message: format!(
@@ -5156,8 +5247,7 @@ fn check_function(
     // reasons FR0015 above is: a handle inside a `Vec` or behind a returned
     // struct's field crosses the same thread boundary a bare one does.
     if f.exec == Exec::Async {
-        let is_resident =
-            |n: &str| opaques.get(n) == Some(&Model::Resident);
+        let is_resident = |n: &str| opaques.get(n) == Some(&Model::Resident);
         for p in &f.params {
             let mut hit = false;
             p.ty.walk(&mut |t| hit |= matches!(t, Type::Opaque(n) if is_resident(n)));
@@ -5213,9 +5303,7 @@ fn check_function(
     // than freeing it. So there is no thread this can be right on, and the
     // refusal is unconditional.
     {
-        let is_resident = |t: &Type| {
-            matches!(t, Type::Opaque(n) if opaques.get(n.as_str()) == Some(&Model::Resident))
-        };
+        let is_resident = |t: &Type| matches!(t, Type::Opaque(n) if opaques.get(n.as_str()) == Some(&Model::Resident));
         for p in &f.params {
             if opaque_in_a_channel_item(iface, &p.ty, &is_resident) {
                 diags.push(Diagnostic {
@@ -5509,10 +5597,7 @@ fn check_function(
                 // no owner left to race with. The glue takes the `Box` on the
                 // calling thread and moves the value into the future, which
                 // `T: Send` (the confined bound) already licenses.
-                if model == Model::Confined
-                    && f.exec == Exec::Async
-                    && p.borrow != Borrow::Value
-                {
+                if model == Model::Confined && f.exec == Exec::Async && p.borrow != Borrow::Value {
                     diags.push(Diagnostic {
                         code: "FR0012",
                         message: format!(
@@ -5732,7 +5817,13 @@ fn check_function(
         // A borrow nested in the return is read where it still points at
         // something — the encode runs in the same scope as the call — so the
         // positions are the parameter's (FR0077).
-        check_borrow_positions(ret, &format!("{ctx}, return type"), None, &is_bridged_handle, diags);
+        check_borrow_positions(
+            ret,
+            &format!("{ctx}, return type"),
+            None,
+            &is_bridged_handle,
+            diags,
+        );
         // An **inbound** declaration is refused here whatever it holds: the
         // question is the shape of its Dart class, not whether this particular
         // position could encode the handles behind it.
@@ -5778,7 +5869,10 @@ mod tests {
         .unwrap_err();
         let msg = format!("{e:?}");
         assert!(msg.contains("FR0035"), "{msg}");
-        assert!(msg.contains("dispose"), "names the lifecycle problem: {msg}");
+        assert!(
+            msg.contains("dispose"),
+            "names the lifecycle problem: {msg}"
+        );
         assert!(msg.contains("anyhow::Result"), "names the way out: {msg}");
     }
 
@@ -5804,7 +5898,9 @@ mod tests {
         ] {
             let iface = check(
                 crate::parse::parse_source(
-                    &format!("{decl}\n#[bridge(sync)] pub fn f() -> Result<i64, SendError> {{ Ok(0) }}"),
+                    &format!(
+                        "{decl}\n#[bridge(sync)] pub fn f() -> Result<i64, SendError> {{ Ok(0) }}"
+                    ),
                     "crate::api",
                 )
                 .unwrap(),
@@ -5895,7 +5991,12 @@ mod tests {
     /// handle sits.
     #[test]
     fn a_dispatched_member_may_not_mint_a_resident() {
-        for ret in ["Scene", "Vec<Scene>", "Option<Scene>", "anyhow::Result<Scene>"] {
+        for ret in [
+            "Scene",
+            "Vec<Scene>",
+            "Option<Scene>",
+            "anyhow::Result<Scene>",
+        ] {
             let src = format!("{SCENE}#[bridge] pub fn make() -> {ret} {{ todo!() }}");
             assert!(
                 codes(check_src(&src)).contains(&"FR0079"),
@@ -5904,7 +6005,11 @@ mod tests {
             );
             // The same shape on the caller is exactly what the model wants.
             let ok = format!("{SCENE}#[bridge(sync)] pub fn make() -> {ret} {{ todo!() }}");
-            assert!(codes(check_src(&ok)).is_empty(), "{ret}: {:?}", codes(check_src(&ok)));
+            assert!(
+                codes(check_src(&ok)).is_empty(),
+                "{ret}: {:?}",
+                codes(check_src(&ok))
+            );
         }
     }
 
@@ -5924,16 +6029,25 @@ mod tests {
         }
         // The confined twin, for contrast: the consume is *allowed* there.
         let confined = "#[bridge(confined)] pub struct D { n: i64 }\n                        #[bridge] pub fn f(d: D) -> i64 { todo!() }";
-        assert!(codes(check_src(confined)).is_empty(), "{:?}", codes(check_src(confined)));
+        assert!(
+            codes(check_src(confined)).is_empty(),
+            "{:?}",
+            codes(check_src(confined))
+        );
     }
 
     /// Members derive sync, like confined's, so a plain `#[bridge]` method is
     /// not a refusal — it is a caller-thread call.
     #[test]
     fn resident_members_derive_sync() {
-        let src = format!("{SCENE}#[bridge] impl Scene {{ #[bridge] pub fn n(&self) -> i64 {{ 0 }} }}");
+        let src =
+            format!("{SCENE}#[bridge] impl Scene {{ #[bridge] pub fn n(&self) -> i64 {{ 0 }} }}");
         let iface = check_src(&src).expect("accepted");
-        let m = iface.functions.iter().find(|f| f.name == "n").expect("the member");
+        let m = iface
+            .functions
+            .iter()
+            .find(|f| f.name == "n")
+            .expect("the member");
         assert_eq!(m.exec, Exec::Sync);
     }
 
@@ -5947,7 +6061,11 @@ mod tests {
         let ds = check_src(&src).unwrap_err();
         let d = ds.iter().find(|d| d.code == "FR0029").expect("FR0029");
         assert!(d.message.contains("resident"), "{}", d.message);
-        assert!(d.message.contains("actor"), "names where such a body belongs: {}", d.message);
+        assert!(
+            d.message.contains("actor"),
+            "names where such a body belongs: {}",
+            d.message
+        );
     }
 
     /// A resident `dyn` trait needs no supertrait: there is no thread bound to
@@ -5955,9 +6073,14 @@ mod tests {
     #[test]
     fn a_resident_trait_needs_no_send_supertrait() {
         let src = "#[bridge(resident)] pub trait Sink { #[bridge(sync)] fn push(&self, n: i64); }";
-        assert!(codes(check_src(src)).is_empty(), "{:?}", codes(check_src(src)));
+        assert!(
+            codes(check_src(src)).is_empty(),
+            "{:?}",
+            codes(check_src(src))
+        );
         // The confined twin still demands one.
-        let confined = "#[bridge(confined)] pub trait Sink { #[bridge(sync)] fn push(&self, n: i64); }";
+        let confined =
+            "#[bridge(confined)] pub trait Sink { #[bridge(sync)] fn push(&self, n: i64); }";
         assert!(codes(check_src(confined)).contains(&"FR0021"));
     }
 
@@ -5969,7 +6092,11 @@ mod tests {
         let src = format!(
             "{SCENE}#[bridge(actor)] pub struct Job {{ n: i64 }}\n             #[bridge] impl Job {{ pub fn new() -> Self {{ todo!() }}              pub fn run(&self, s: &Scene) -> i64 {{ todo!() }} }}"
         );
-        assert!(codes(check_src(&src)).contains(&"FR0015"), "{:?}", codes(check_src(&src)));
+        assert!(
+            codes(check_src(&src)).contains(&"FR0015"),
+            "{:?}",
+            codes(check_src(&src))
+        );
     }
 
     /// `#[bridge(data, inbound)]` — every position it is admitted in, and
@@ -5993,13 +6120,26 @@ mod tests {
             "pub fn f(b: Vec<Option<B>>) {}",
         ] {
             let src = format!("{decl} #[bridge(sync)] {sig}");
-            assert!(check_src(&src).is_ok(), "{sig}: {:?}", check_src(&src).err());
+            assert!(
+                check_src(&src).is_ok(),
+                "{sig}: {:?}",
+                check_src(&src).err()
+            );
         }
         // Refused, each with the reason for that position.
         for (sig, needle) in [
-            ("pub fn f() -> B { todo!() }", "A return reads the other shape"),
-            ("pub fn f() -> Vec<B> { todo!() }", "A return reads the other shape"),
-            ("pub fn f() -> Option<B> { todo!() }", "A return reads the other shape"),
+            (
+                "pub fn f() -> B { todo!() }",
+                "A return reads the other shape",
+            ),
+            (
+                "pub fn f() -> Vec<B> { todo!() }",
+                "A return reads the other shape",
+            ),
+            (
+                "pub fn f() -> Option<B> { todo!() }",
+                "A return reads the other shape",
+            ),
             (
                 "pub fn f(b: &B) {}",
                 "opaque type `Doc` cannot be reached from here",
@@ -6007,27 +6147,43 @@ mod tests {
         ] {
             let src = format!("{decl} #[bridge(sync)] {sig}");
             let ds = check_src(&src).unwrap_err();
-            let d = ds.iter().find(|d| d.code == "FR0004").unwrap_or_else(|| panic!("{sig}: {ds:?}"));
+            let d = ds
+                .iter()
+                .find(|d| d.code == "FR0004")
+                .unwrap_or_else(|| panic!("{sig}: {ds:?}"));
             assert!(d.message.contains(needle), "{sig}: {}", d.message);
         }
         // A field of a plain struct, and a variant of an enum: refused at the
         // declaration, once, rather than at every use of the outer type.
-        let plain = format!("{decl} #[bridge(data)] pub struct W {{ pub b: B }} \
+        let plain = format!(
+            "{decl} #[bridge(data)] pub struct W {{ pub b: B }} \
                              #[bridge(sync)] pub fn f(w: W) {{}} \
-                             #[bridge(sync)] pub fn g(w: W) {{}}");
+                             #[bridge(sync)] pub fn g(w: W) {{}}"
+        );
         let ds = check_src(&plain).unwrap_err();
         let field: Vec<_> = ds
             .iter()
             .filter(|d| d.message.contains("This declaration is not inbound"))
             .collect();
-        assert_eq!(field.len(), 1, "reported once per field, not per use: {ds:?}");
-        assert!(field[0].message.contains("struct `W`, field `b`"), "{:?}", field[0]);
+        assert_eq!(
+            field.len(),
+            1,
+            "reported once per field, not per use: {ds:?}"
+        );
+        assert!(
+            field[0].message.contains("struct `W`, field `b`"),
+            "{:?}",
+            field[0]
+        );
 
-        let en = format!("{decl} #[bridge(data)] pub enum E {{ V(B) }} \
-                          #[bridge(sync)] pub fn f(e: E) {{}}");
+        let en = format!(
+            "{decl} #[bridge(data)] pub enum E {{ V(B) }} \
+                          #[bridge(sync)] pub fn f(e: E) {{}}"
+        );
         let ds = check_src(&en).unwrap_err();
         assert!(
-            ds.iter().any(|d| d.message.contains("An enum has no `inbound` of its own")),
+            ds.iter()
+                .any(|d| d.message.contains("An enum has no `inbound` of its own")),
             "{ds:?}"
         );
     }
@@ -6045,7 +6201,11 @@ mod tests {
         .unwrap_err();
         assert_eq!(ds.len(), 1, "{ds:?}");
         assert_eq!(ds[0].code, "FR0004");
-        assert!(ds[0].message.contains("reaches no handle"), "{}", ds[0].message);
+        assert!(
+            ds[0].message.contains("reaches no handle"),
+            "{}",
+            ds[0].message
+        );
 
         // Self-referential: the staged form is the struct's fields with each
         // handle left as an id, and that has no finite spelling here.
@@ -6056,7 +6216,11 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(ds.len(), 1, "one diagnostic, at the declaration: {ds:?}");
-        assert!(ds[0].message.contains("cannot reach itself"), "{}", ds[0].message);
+        assert!(
+            ds[0].message.contains("cannot reach itself"),
+            "{}",
+            ds[0].message
+        );
         // The plain twin is still fine, handles and all — nothing stages it.
         assert!(check_src(
             "#[bridge(confined)] pub struct Doc { x: i64 } \
@@ -6120,8 +6284,8 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            ds.iter().any(|d| d.code == "FR0004"
-                && d.message.contains("`B` reaches no handle")),
+            ds.iter()
+                .any(|d| d.code == "FR0004" && d.message.contains("`B` reaches no handle")),
             "{ds:?}"
         );
         assert!(
@@ -6152,8 +6316,15 @@ mod tests {
                  #[bridge(sync)] pub fn f(b: B) {{}}"
             );
             let ds = check_src(&src).unwrap_err();
-            let d = ds.iter().find(|d| d.code == "FR0004").unwrap_or_else(|| panic!("{recv}: {ds:?}"));
-            assert!(d.message.contains("would spend those tokens"), "{recv}: {}", d.message);
+            let d = ds
+                .iter()
+                .find(|d| d.code == "FR0004")
+                .unwrap_or_else(|| panic!("{recv}: {ds:?}"));
+            assert!(
+                d.message.contains("would spend those tokens"),
+                "{recv}: {}",
+                d.message
+            );
         }
         // A receiverless member is fine: nothing decodes the parent.
         assert!(check_src(
@@ -6203,7 +6374,10 @@ mod tests {
                  #[bridge(sync)] pub fn f() {{}}"
             );
             let ds = check_src(&src).unwrap_err();
-            assert!(codes(Err(ds.clone())).contains(&"FR0046"), "{name} accepted");
+            assert!(
+                codes(Err(ds.clone())).contains(&"FR0046"),
+                "{name} accepted"
+            );
             assert!(
                 ds.iter().any(|d| d.message.contains("on every path")),
                 "{name}: {ds:?}"
@@ -6218,8 +6392,9 @@ mod tests {
             );
             let ds = check_src(&src).unwrap_err();
             assert!(
-                ds.iter().any(|d| d.code == "FR0046"
-                    && d.message.contains("silently mean something else")),
+                ds.iter()
+                    .any(|d| d.code == "FR0046"
+                        && d.message.contains("silently mean something else")),
                 "{name}: {ds:?}"
             );
         }
@@ -6281,10 +6456,9 @@ mod tests {
             "#[bridge(confined)] pub trait T { fn f(&mut self) -> i64; }",
         ));
         assert_eq!(ds, vec!["FR0021"]);
-        assert!(check_src(
-            "#[bridge(confined)] pub trait T: Send { fn f(&mut self) -> i64; }"
-        )
-        .is_ok());
+        assert!(
+            check_src("#[bridge(confined)] pub trait T: Send { fn f(&mut self) -> i64; }").is_ok()
+        );
         // ...and `Sync` is not demanded of it.
         assert!(check_src(
             "#[bridge(confined)] pub trait T: Send + Sync { fn f(&mut self) -> i64; }"
@@ -6412,7 +6586,10 @@ mod tests {
             "{decl} #[bridge] impl P {{ #[bridge(sync)] pub fn bump(&mut self) {{}} }}"
         ))
         .unwrap_err();
-        assert_eq!(ds.iter().map(|d| d.code).collect::<Vec<_>>(), vec!["FR0013"]);
+        assert_eq!(
+            ds.iter().map(|d| d.code).collect::<Vec<_>>(),
+            vec!["FR0013"]
+        );
         assert!(ds[0].message.contains("discarded"), "{}", ds[0].message);
         assert!(ds[0].message.contains("final"), "{}", ds[0].message);
 
@@ -6424,7 +6601,11 @@ mod tests {
             let src = format!(
                 "{decl} #[bridge] impl P {{ #[bridge(sync)] pub fn take({recv}) -> i64 {{ 0 }} }}"
             );
-            assert!(check_src(&src).is_ok(), "{src}: {:?}", check_src(&src).err());
+            assert!(
+                check_src(&src).is_ok(),
+                "{src}: {:?}",
+                check_src(&src).err()
+            );
         }
 
         // The handle arm is gone: `self` on a handle consumes, and the Dart
@@ -6497,7 +6678,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(bare, marked);
-        assert!(bare.functions.iter().any(|f| f.name == "new" && f.is_constructor));
+        assert!(bare
+            .functions
+            .iter()
+            .any(|f| f.name == "new" && f.is_constructor));
         // A data type's receiverless member returning the parent is a static,
         // not a constructor: the class already has its own `const` one.
         let iface = check_src(
@@ -6554,8 +6738,14 @@ mod tests {
         // user wrote, so unlike a representation marker this is not erased.
         // What must not differ is anything the crossing can see, which is the
         // schema fingerprint.
-        assert_eq!(boxed.functions[0].ret, Some(Type::Boxed(Box::new(Type::Opaque("D".into())))));
-        assert_eq!(crate::hash::schema_hash(&boxed), crate::hash::schema_hash(&bare));
+        assert_eq!(
+            boxed.functions[0].ret,
+            Some(Type::Boxed(Box::new(Type::Opaque("D".into()))))
+        );
+        assert_eq!(
+            crate::hash::schema_hash(&boxed),
+            crate::hash::schema_hash(&bare)
+        );
     }
 
     /// A by-value receiver on a data type needs no annotation, and `Copy` is
@@ -6574,7 +6764,11 @@ mod tests {
             let src = format!(
                 "{decl} #[bridge] impl P {{ #[bridge(sync)] pub fn take(self) -> i64 {{ 0 }} }}"
             );
-            assert!(check_src(&src).is_ok(), "{src}: {:?}", check_src(&src).err());
+            assert!(
+                check_src(&src).is_ok(),
+                "{src}: {:?}",
+                check_src(&src).err()
+            );
         }
         // A handle's by-value receiver is a different thing and keeps its own
         // rules: the object *is* handed over, through the Dart `take()`.
@@ -6592,9 +6786,18 @@ mod tests {
     fn a_getter_is_refused_where_a_property_has_no_room() {
         let decl = "#[bridge(frozen)] pub struct S { x: i64 }";
         for (member, needle) in [
-            ("#[bridge(sync, getter)] pub fn a(&self, k: i64) -> i64 { 0 }", "takes no arguments"),
-            ("#[bridge(sync, getter)] pub fn b(&self) {}", "must read something"),
-            ("#[bridge(getter)] pub async fn c(&self) -> i64 { 0 }", "`cancel:` token"),
+            (
+                "#[bridge(sync, getter)] pub fn a(&self, k: i64) -> i64 { 0 }",
+                "takes no arguments",
+            ),
+            (
+                "#[bridge(sync, getter)] pub fn b(&self) {}",
+                "must read something",
+            ),
+            (
+                "#[bridge(getter)] pub async fn c(&self) -> i64 { 0 }",
+                "`cancel:` token",
+            ),
         ] {
             let ds = check_src(&format!("{decl} #[bridge] impl S {{ {member} }}")).unwrap_err();
             let d = ds
@@ -6611,7 +6814,11 @@ mod tests {
             "#[bridge(sync, getter)] pub fn n() -> i64 { 0 }",
         ] {
             let src = format!("{decl} #[bridge] impl S {{ {member} }}");
-            assert!(check_src(&src).is_ok(), "{member}: {:?}", check_src(&src).err());
+            assert!(
+                check_src(&src).is_ok(),
+                "{member}: {:?}",
+                check_src(&src).err()
+            );
         }
         // A `locked` type's own rules still decide sync-ness: a sync getter
         // without a contention contract is FR0007, exactly as a method is.
@@ -6640,7 +6847,14 @@ mod tests {
              #[bridge] impl D { #[bridge(sync)] pub fn new() -> D { D { x: 0 } } }",
         )
         .unwrap();
-        assert!(iface.functions.iter().find(|f| f.name == "new").unwrap().is_constructor);
+        assert!(
+            iface
+                .functions
+                .iter()
+                .find(|f| f.name == "new")
+                .unwrap()
+                .is_constructor
+        );
     }
 
     /// FR0027 — a member whose Dart name is already taken by the class it
@@ -6801,7 +7015,8 @@ mod tests {
         .unwrap_err();
         assert!(ds.iter().any(|d| d.code == "FR0062"), "{ds:?}");
         assert!(
-            ds.iter().any(|d| d.message.contains("declared `data`, not `locked`")),
+            ds.iter()
+                .any(|d| d.message.contains("declared `data`, not `locked`")),
             "{ds:?}"
         );
     }
@@ -6817,7 +7032,8 @@ mod tests {
         .unwrap_err();
         assert!(ds.iter().any(|d| d.code == "FR0062"), "{ds:?}");
         assert!(
-            ds.iter().any(|d| d.message.contains("its own representation")),
+            ds.iter()
+                .any(|d| d.message.contains("its own representation")),
             "{ds:?}"
         );
     }
@@ -6931,17 +7147,15 @@ mod tests {
     /// the parameter already carries names the registry the take comes out of.
     #[test]
     fn a_by_value_trait_param_is_a_consume() {
-        assert!(
-            check_src(
-                r#"
+        assert!(check_src(
+            r#"
             #[bridge(confined)]
             pub trait T: Send { fn f(&self) -> i64; }
             #[bridge(sync)]
             pub fn g(x: Box<dyn T>) {}
             "#,
-            )
-            .is_ok()
-        );
+        )
+        .is_ok());
     }
 
     #[test]
@@ -6965,7 +7179,10 @@ mod tests {
         assert_eq!(iface.functions[1].ret, Some(Type::Opaque("Store".into())));
         assert_eq!(
             iface.functions[3].ret,
-            Some(Type::List(Box::new(Type::Opaque("Store".into())), SeqKind::Vec))
+            Some(Type::List(
+                Box::new(Type::Opaque("Store".into())),
+                SeqKind::Vec
+            ))
         );
         assert_eq!(
             iface.functions[4].ret,
@@ -7101,7 +7318,10 @@ mod tests {
         let f = &iface.functions[0];
         assert!(f.rust_async);
         assert_eq!(f.exec, Exec::Async);
-        assert!(!f.requires_native, "async fns run on the executor everywhere");
+        assert!(
+            !f.requires_native,
+            "async fns run on the executor everywhere"
+        );
         // Frozen AND Locked methods may be async fns (executor execution), also
         // portable. Both are checked, because a locked `async fn` accepted here
         // must also compile in the generated glue.
@@ -7173,12 +7393,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(iface.functions.iter().filter(|f| f.rust_async).count(), 1);
-        assert!(!iface
-            .functions
-            .iter()
-            .find(|f| f.name == "slow")
-            .unwrap()
-            .requires_native);
+        assert!(
+            !iface
+                .functions
+                .iter()
+                .find(|f| f.name == "slow")
+                .unwrap()
+                .requires_native
+        );
     }
 
     #[test]
@@ -7217,14 +7439,30 @@ mod tests {
         ] {
             let src = format!("{opaque} #[bridge] impl O {{ pub fn m({recv}) {{}} }}");
             let ds = check_src(&src).err().unwrap();
-            assert_eq!(ds.iter().map(|d| d.code).collect::<Vec<_>>(), vec!["FR0057"], "{src}");
-            assert!(ds[0].message.starts_with("`O::m`: "), "{src}: {}", ds[0].message);
-            assert!(ds[0].message.contains("not decided"), "{src}: {}", ds[0].message);
+            assert_eq!(
+                ds.iter().map(|d| d.code).collect::<Vec<_>>(),
+                vec!["FR0057"],
+                "{src}"
+            );
+            assert!(
+                ds[0].message.starts_with("`O::m`: "),
+                "{src}: {}",
+                ds[0].message
+            );
+            assert!(
+                ds[0].message.contains("not decided"),
+                "{src}: {}",
+                ds[0].message
+            );
         }
         // The four accepted spellings on a handle.
         for recv in ["&self", "&mut self", "self", "mut self", "self: Box<Self>"] {
             let src = format!("{opaque} #[bridge] impl O {{ pub fn m({recv}) {{}} }}");
-            assert!(check_src(&src).is_ok(), "{src}: {:?}", check_src(&src).err());
+            assert!(
+                check_src(&src).is_ok(),
+                "{src}: {:?}",
+                check_src(&src).err()
+            );
         }
         // The rule is about the *spelling*, not the representation: a data
         // type refuses the same four and accepts the same five.
@@ -7233,7 +7471,10 @@ mod tests {
             "{data} #[bridge] impl P {{ #[bridge(sync)] pub fn m(self: std::rc::Rc<Self>) {{}} }}"
         ))
         .unwrap_err();
-        assert_eq!(ds.iter().map(|d| d.code).collect::<Vec<_>>(), vec!["FR0057"]);
+        assert_eq!(
+            ds.iter().map(|d| d.code).collect::<Vec<_>>(),
+            vec!["FR0057"]
+        );
         assert!(ds[0].message.contains("not decided"), "{}", ds[0].message);
         assert!(check_src(&format!(
             "{data} #[bridge] impl P {{ #[bridge(sync)] pub fn m(self: Box<Self>) -> i64 {{ 0 }} }}"
@@ -7284,11 +7525,22 @@ mod tests {
     #[test]
     fn a_consumed_confined_handle_is_exempt_from_the_async_borrow_rule() {
         let decl = "#[bridge(confined)] pub struct C { n: i64 }";
-        assert!(check_src(&format!("{decl} #[bridge] pub async fn eat(c: C) -> i64 {{ 0 }}")).is_ok());
-        assert!(check_src(&format!("{decl} #[bridge] pub async fn eat(c: Vec<C>) -> i64 {{ 0 }}")).is_ok());
-        let ds = check_src(&format!("{decl} #[bridge] pub async fn peek(c: &C) -> i64 {{ 0 }}"))
-            .unwrap_err();
-        assert_eq!(ds.iter().map(|d| d.code).collect::<Vec<_>>(), vec!["FR0012"]);
+        assert!(check_src(&format!(
+            "{decl} #[bridge] pub async fn eat(c: C) -> i64 {{ 0 }}"
+        ))
+        .is_ok());
+        assert!(check_src(&format!(
+            "{decl} #[bridge] pub async fn eat(c: Vec<C>) -> i64 {{ 0 }}"
+        ))
+        .is_ok());
+        let ds = check_src(&format!(
+            "{decl} #[bridge] pub async fn peek(c: &C) -> i64 {{ 0 }}"
+        ))
+        .unwrap_err();
+        assert_eq!(
+            ds.iter().map(|d| d.code).collect::<Vec<_>>(),
+            vec!["FR0012"]
+        );
         // The message points at the way out that now exists.
         assert!(ds[0].message.contains("by value"), "{}", ds[0].message);
     }
@@ -7330,8 +7582,7 @@ mod tests {
                 .is_ok()
         );
         for recv in ["self", "mut self"] {
-            let src =
-                format!("#[bridge(frozen)] pub trait T: Send + Sync {{ fn m({recv}); }}");
+            let src = format!("#[bridge(frozen)] pub trait T: Send + Sync {{ fn m({recv}); }}");
             let ds = check_src(&src).unwrap_err();
             let d = ds.iter().find(|d| d.code == "FR0022").expect("FR0022");
             assert!(d.message.contains("self: Box<Self>"), "{}", d.message);
@@ -7344,9 +7595,7 @@ mod tests {
              #[bridge] impl C { #[bridge(sync)] pub fn m(self) -> i64 { 0 } }",
         )
         .is_ok());
-        assert!(
-            check_src("#[bridge(frozen)] pub trait T: Send + Sync { fn m(&self); }").is_ok()
-        );
+        assert!(check_src("#[bridge(frozen)] pub trait T: Send + Sync { fn m(&self); }").is_ok());
         // A concrete type implementing the trait declares its own consuming
         // member alongside; that one dispatches through its own fn_id.
         assert!(check_src(
@@ -7369,7 +7618,10 @@ mod tests {
         for (src, expected) in [
             // A generic *function*: nothing could supply the instantiation,
             // because a Dart call carries bytes and not Rust types.
-            ("#[bridge(sync)] pub fn f<T>(x: T) -> T { x }", vec!["FR0056"]),
+            (
+                "#[bridge(sync)] pub fn f<T>(x: T) -> T { x }",
+                vec!["FR0056"],
+            ),
             ("#[bridge(sync)] pub fn f<T>(x: i32) {}", vec!["FR0056"]),
             (
                 "#[bridge(frozen)] pub struct O; \
@@ -7406,7 +7658,11 @@ mod tests {
         )
         .err()
         .unwrap();
-        assert!(ds[0].message.starts_with("fn `O::m`: "), "{}", ds[0].message);
+        assert!(
+            ds[0].message.starts_with("fn `O::m`: "),
+            "{}",
+            ds[0].message
+        );
         assert!(ds[0].message.contains("`<T, N>`"), "{}", ds[0].message);
         // Lifetimes are not generics here: a borrowed `&str` and a struct with
         // a lifetime parameter both stay accepted.
@@ -7419,14 +7675,23 @@ mod tests {
              #[bridge(sync)] pub fn f(c: Cache<i64>) -> i64 { 0 }",
         )
         .unwrap();
-        assert_eq!(iface.generic_structs[0].fields[0].ty, Type::Param("T".into()));
-        assert_eq!(iface.struct_decl("Cache<i64>").unwrap().fields[0].ty, Type::I64);
+        assert_eq!(
+            iface.generic_structs[0].fields[0].ty,
+            Type::Param("T".into())
+        );
+        assert_eq!(
+            iface.struct_decl("Cache<i64>").unwrap().fields[0].ty,
+            Type::I64
+        );
         // …but a field type the interface does not declare still is, reported
         // against the template rather than against a use site.
         let ds = check_src("#[bridge(data)] pub struct W<T>(pub semver::Version, pub T);")
             .err()
             .unwrap();
-        assert_eq!(ds.iter().map(|d| d.code).collect::<Vec<_>>(), vec!["FR0003"]);
+        assert_eq!(
+            ds.iter().map(|d| d.code).collect::<Vec<_>>(),
+            vec!["FR0003"]
+        );
         assert!(ds[0].message.contains("struct `W<T>`"), "{}", ds[0].message);
     }
 
@@ -7470,8 +7735,7 @@ mod tests {
         // would reach `Page<Item>.n`. Distinctness is the claim — the ids come
         // from each expansion's own facts (`hash::member_ids`), which differ in
         // `parent_repr`.
-        let ids: std::collections::HashSet<u32> =
-            iface.functions.iter().map(|f| f.fn_id).collect();
+        let ids: std::collections::HashSet<u32> = iface.functions.iter().map(|f| f.fn_id).collect();
         assert_eq!(ids.len(), iface.functions.len(), "{ids:?}");
         // A parameter in the signature is bound per instantiation.
         let iface = check_src(&format!(
@@ -7544,10 +7808,7 @@ mod tests {
         // class's, both measured with `dart analyze`: a member `Object`
         // already has cannot be declared on an extension at all, and anything
         // else is simply outranked by the class member.
-        for (member, needle) in [
-            ("to_string", "would not compile"),
-            ("x", "never be called"),
-        ] {
+        for (member, needle) in [("to_string", "would not compile"), ("x", "never be called")] {
             let ds = check_src(&format!(
                 "#[bridge(data)] pub struct P<T> {{ pub x: T }} \
                  #[bridge] impl<T> P<T> {{ \
@@ -7631,7 +7892,11 @@ mod tests {
         let ds = check_src(CLASH).err().unwrap();
         let d = ds.iter().find(|d| d.code == "FR0002").unwrap();
         assert!(d.message.contains("prefix notation"), "{}", d.message);
-        assert!(d.message.contains("`Page<Bytes>` and `Page<Vec<u8>>`"), "{}", d.message);
+        assert!(
+            d.message.contains("`Page<Bytes>` and `Page<Vec<u8>>`"),
+            "{}",
+            d.message
+        );
         let iface = check_src(&CLASH.replace(
             "#[bridge(data)] pub struct Bytes",
             "#[bridge(data, dart_identifier = \"ByteCount\")] pub struct Bytes",
@@ -7802,11 +8067,10 @@ mod tests {
         // A template named with no arguments at all is the same fact, and gets
         // its own message: the declaration exists, which is what FR0003 would
         // have denied.
-        let ds = check_src(
-            "#[bridge(data)] pub struct P<T> { x: T } #[bridge(sync)] pub fn f(a: P) {}",
-        )
-        .err()
-        .unwrap();
+        let ds =
+            check_src("#[bridge(data)] pub struct P<T> { x: T } #[bridge(sync)] pub fn f(a: P) {}")
+                .err()
+                .unwrap();
         assert_eq!(ds[0].code, "FR0073", "{ds:?}");
         assert!(ds[0].message.contains("is generic"), "{}", ds[0].message);
     }
@@ -7931,7 +8195,10 @@ mod tests {
     fn an_instantiation_stem_is_an_identifier_that_cannot_collide() {
         let a = instance_stem("Page<Item>");
         assert!(a.starts_with(|c: char| c.is_ascii_digit()), "{a}");
-        assert!(a.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'), "{a}");
+        assert!(
+            a.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
+            "{a}"
+        );
         // Injective where the naive `Page_Item` spelling is not.
         assert_ne!(instance_stem("A<B_C>"), instance_stem("A_B<C>"));
         assert_ne!(instance_stem("P<Vec<i64>>"), instance_stem("P<Vec<i64> >"));
@@ -7956,7 +8223,9 @@ mod tests {
             assert!(check_src(src).is_ok(), "{src}");
         }
         assert_eq!(
-            codes(check_src("#[bridge(data)] pub struct W(pub semver::Version);")),
+            codes(check_src(
+                "#[bridge(data)] pub struct W(pub semver::Version);"
+            )),
             vec!["FR0003"]
         );
         // The synthesized names reach the IR in declaration order, which is
@@ -7976,7 +8245,9 @@ mod tests {
     /// advice that does not work.
     #[test]
     fn unknown_type_is_actionable() {
-        let ds = check_src("#[bridge] pub fn f(x: Mystery) {}").err().unwrap();
+        let ds = check_src("#[bridge] pub fn f(x: Mystery) {}")
+            .err()
+            .unwrap();
         assert_eq!(ds[0].code, "FR0003");
         for needle in ["confined", "bytes(...)", "#[bridge(data)] struct", "From"] {
             assert!(ds[0].message.contains(needle), "{}", ds[0].message);
@@ -8007,11 +8278,7 @@ mod tests {
             vec!["FR0048"]
         );
         assert!(ds[0].message.contains("no_block"), "{}", ds[0].message);
-        assert!(
-            ds[0].message.contains("on_contention"),
-            "{}",
-            ds[0].message
-        );
+        assert!(ds[0].message.contains("on_contention"), "{}", ds[0].message);
     }
 
     /// FR0049 — invoking a value-returning Dart callback waits for Dart's
@@ -8098,7 +8365,11 @@ mod tests {
         .err()
         .unwrap();
         assert_eq!(ds[0].code, "FR0012");
-        assert!(ds[0].message.contains("#[bridge(sync)]"), "{}", ds[0].message);
+        assert!(
+            ds[0].message.contains("#[bridge(sync)]"),
+            "{}",
+            ds[0].message
+        );
     }
 
     #[test]
@@ -8116,7 +8387,11 @@ mod tests {
         .unwrap();
         assert_eq!(ds[0].code, "FR0007");
         assert!(ds[0].message.contains("on_contention"), "{}", ds[0].message);
-        assert!(ds[0].message.contains("ContentionException"), "{}", ds[0].message);
+        assert!(
+            ds[0].message.contains("ContentionException"),
+            "{}",
+            ds[0].message
+        );
     }
 
     #[test]
@@ -8160,7 +8435,10 @@ mod tests {
         let f = |n: &str| iface.functions.iter().find(|f| f.name == n).unwrap();
         assert!(f("get").requires_native, "block waits to acquire");
         assert!(!f("try_get").requires_native, "the try-lock never waits");
-        assert!(!f("read").requires_native, "a dispatched locked member is portable");
+        assert!(
+            !f("read").requires_native,
+            "a dispatched locked member is portable"
+        );
     }
 
     /// The other half of the same fact, asserted where it bites: the web pass
@@ -8220,7 +8498,10 @@ mod tests {
         )
         .expect("the try-lock keeps the claim");
         let f = |n: &str| iface.functions.iter().find(|f| f.name == n).unwrap();
-        assert!(!f("try_get").requires_native, "and stays on the web surface");
+        assert!(
+            !f("try_get").requires_native,
+            "and stays on the web surface"
+        );
         // The claim is settled by placement on the dispatched sibling and by an
         // artifact on the synchronous one — the two halves of `no_block`'s one
         // definition, and the reason refusing the try-lock cost a proof.
@@ -8256,8 +8537,15 @@ mod tests {
         let dial = iface.functions.iter().find(|f| f.name == "dial").unwrap();
         assert!(dial.requires_native && dial.native_only);
         assert!(dial.on_contention.is_none(), "no blocking contract");
-        assert!(dial.params.iter().all(|p| !matches!(p.ty, Type::DartObject(_))));
-        let p = iface.functions.iter().find(|f| f.name == "portable").unwrap();
+        assert!(dial
+            .params
+            .iter()
+            .all(|p| !matches!(p.ty, Type::DartObject(_))));
+        let p = iface
+            .functions
+            .iter()
+            .find(|f| f.name == "portable")
+            .unwrap();
         assert!(!p.requires_native, "an undeclared sibling stays portable");
     }
 
@@ -8284,7 +8572,11 @@ mod tests {
             assert!(f.requires_native, "{name} names a native-only type");
             assert!(f.native_only, "{name}: inherited, so it reads as declared");
         }
-        let u = iface.functions.iter().find(|f| f.name == "unrelated").unwrap();
+        let u = iface
+            .functions
+            .iter()
+            .find(|f| f.name == "unrelated")
+            .unwrap();
         assert!(!u.requires_native);
     }
 
@@ -8315,10 +8607,8 @@ mod tests {
         // FR0030's condition is `!requires_native`, and a declared member now
         // satisfies it — so the opt-in is finally usable for the reason it was
         // written: a member absent on web that portable Dart still names.
-        let iface = check_src(
-            "#[bridge(sync, native_only, web_stub)] pub fn dial() -> i64 { 0 }",
-        )
-        .unwrap();
+        let iface =
+            check_src("#[bridge(sync, native_only, web_stub)] pub fn dial() -> i64 { 0 }").unwrap();
         let f = &iface.functions[0];
         assert!(f.requires_native && f.native_only && f.web_stub);
     }
@@ -8454,7 +8744,10 @@ mod tests {
         .unwrap();
         for name in ["f", "g"] {
             let m = iface.functions.iter().find(|f| f.name == name).unwrap();
-            assert!(m.requires_native, "{name} cannot be more portable than its impl");
+            assert!(
+                m.requires_native,
+                "{name} cannot be more portable than its impl"
+            );
         }
     }
 
@@ -8480,11 +8773,23 @@ mod tests {
             "#,
         )
         .unwrap();
-        let br = iface.functions.iter().find(|f| f.name == "blocking_read").unwrap();
+        let br = iface
+            .functions
+            .iter()
+            .find(|f| f.name == "blocking_read")
+            .unwrap();
         assert!(br.requires_native && br.web_stub);
-        let bg = iface.functions.iter().find(|f| f.name == "blocking_get").unwrap();
+        let bg = iface
+            .functions
+            .iter()
+            .find(|f| f.name == "blocking_get")
+            .unwrap();
         assert!(bg.requires_native && !bg.web_stub, "un-opted stays default");
-        let tr = iface.functions.iter().find(|f| f.name == "transform").unwrap();
+        let tr = iface
+            .functions
+            .iter()
+            .find(|f| f.name == "transform")
+            .unwrap();
         assert!(tr.requires_native && tr.web_stub);
     }
 
@@ -8492,9 +8797,7 @@ mod tests {
     fn web_stub_on_a_portable_member_is_rejected() {
         // FR0030: the opt-in is meaningless on a member that already runs on
         // web (nothing to fail at runtime). A plain free function:
-        let ds = codes(check_src(
-            "#[bridge(sync, web_stub)] pub fn f() {}",
-        ));
+        let ds = codes(check_src("#[bridge(sync, web_stub)] pub fn f() {}"));
         assert_eq!(ds, vec!["FR0030"]);
         // A void (fire-and-forget) DartCallback is portable too — still rejected.
         let ds = codes(check_src(
@@ -8503,14 +8806,14 @@ mod tests {
         assert_eq!(ds, vec!["FR0030"]);
         // A genuinely native-only returning callback (a plain pool member,
         // which must use the blocking `call`) accepts it.
-        assert!(check_src(
-            "#[bridge(web_stub)] pub fn t(f: DartFunction<i64, i64>) -> i64 { 0 }"
-        )
-        .is_ok());
+        assert!(
+            check_src("#[bridge(web_stub)] pub fn t(f: DartFunction<i64, i64>) -> i64 { 0 }")
+                .is_ok()
+        );
         // But an `async fn` returning callback is portable (awaits call_async),
         // so the opt-in is meaningless on it — FR0030 rejects it.
         let ds = codes(check_src(
-            "#[bridge(web_stub)] pub async fn transform(f: DartFunction<i64, i64>) -> i64 { 0 }"
+            "#[bridge(web_stub)] pub async fn transform(f: DartFunction<i64, i64>) -> i64 { 0 }",
         ));
         assert_eq!(ds, vec!["FR0030"]);
     }
@@ -8617,7 +8920,11 @@ mod tests {
              #[bridge(sync)] pub fn f(s: std::collections::HashSet<(&S, &str)>) {}",
         )
         .unwrap_err();
-        assert_eq!(ds.iter().filter(|d| d.code == "FR0077").count(), 1, "{ds:?}");
+        assert_eq!(
+            ds.iter().filter(|d| d.code == "FR0077").count(),
+            1,
+            "{ds:?}"
+        );
         // A handle borrow under a set survives a container in between.
         assert!(check_src(
             "#[bridge(frozen)] pub struct S { x: i32 } \
@@ -8644,28 +8951,37 @@ mod tests {
             assert!(check_src(&src).is_ok(), "{ret}");
         }
         // Passed: refused, and the message has to say which direction works.
-        let ds = check_src(&format!(
-            "{decls} #[bridge] pub fn eat(h: Holder) {{}}"
-        ))
-        .unwrap_err();
-        assert_eq!(ds.iter().map(|d| d.code).collect::<Vec<_>>(), vec!["FR0004"]);
+        let ds = check_src(&format!("{decls} #[bridge] pub fn eat(h: Holder) {{}}")).unwrap_err();
+        assert_eq!(
+            ds.iter().map(|d| d.code).collect::<Vec<_>>(),
+            vec!["FR0004"]
+        );
         // A by-value data struct is the *consume* path, and it is refused for
         // a Dart-surface reason: one class, two field types.
         assert!(ds[0].message.contains("Consumed<"), "{}", ds[0].message);
         assert!(ds[0].message.contains("by reference"), "{}", ds[0].message);
         // Borrowed, the refusal stands: nothing is transferred, so
         // there is nowhere for the handle to come from.
-        let ds = check_src(&format!(
-            "{decls} #[bridge] pub fn peek(h: &Holder) {{}}"
-        ))
-        .unwrap_err();
-        assert_eq!(ds.iter().map(|d| d.code).collect::<Vec<_>>(), vec!["FR0004"]);
-        assert!(ds[0].message.contains("transfers nothing"), "{}", ds[0].message);
+        let ds = check_src(&format!("{decls} #[bridge] pub fn peek(h: &Holder) {{}}")).unwrap_err();
+        assert_eq!(
+            ds.iter().map(|d| d.code).collect::<Vec<_>>(),
+            vec!["FR0004"]
+        );
+        assert!(
+            ds[0].message.contains("transfers nothing"),
+            "{}",
+            ds[0].message
+        );
         // Nested one declaration deeper, in both directions.
         let deep = format!("{decls} #[bridge(data)] pub struct Outer {{ pub h: Holder }}");
-        assert!(check_src(&format!("{deep} #[bridge] pub fn make() -> Outer {{ todo!() }}")).is_ok());
+        assert!(check_src(&format!(
+            "{deep} #[bridge] pub fn make() -> Outer {{ todo!() }}"
+        ))
+        .is_ok());
         assert_eq!(
-            codes(check_src(&format!("{deep} #[bridge] pub fn eat(o: Outer) {{}}"))),
+            codes(check_src(&format!(
+                "{deep} #[bridge] pub fn eat(o: Outer) {{}}"
+            ))),
             vec!["FR0004"]
         );
     }
@@ -8679,7 +8995,8 @@ mod tests {
     /// written for would not compile in Dart with nothing having said why.
     #[test]
     fn a_bridged_traits_implementors_are_handles() {
-        let decls = "#[bridge(confined)] pub trait Tally: Send { #[bridge(sync)] fn total(&self) -> i64; }";
+        let decls =
+            "#[bridge(confined)] pub trait Tally: Send { #[bridge(sync)] fn total(&self) -> i64; }";
         let ds = check_src(&format!(
             "{decls} #[bridge(data)] pub struct P {{ pub x: i64 }} \
              #[bridge] impl Tally for P {{ #[bridge(sync)] fn total(&self) -> i64 {{ 0 }} }}"
@@ -8843,9 +9160,8 @@ mod tests {
         // `extension Page$Item on Page<Item>`), so a written `$` could be
         // spelled like one and collide inside generated code.
         for bad in ["", "2fast", "has space", "class", "a-b", "Page$Item", "a$b"] {
-            let src = format!(
-                "#[bridge(sync, dart_identifier = \"{bad}\")] pub fn f() -> i64 {{ 0 }}"
-            );
+            let src =
+                format!("#[bridge(sync, dart_identifier = \"{bad}\")] pub fn f() -> i64 {{ 0 }}");
             let ds = check_src(&src).unwrap_err();
             assert!(
                 ds.iter().any(|d| d.code == "FR0065"),
@@ -8853,9 +9169,8 @@ mod tests {
             );
         }
         for good in ["wordCount", "_private", "a1", "class_"] {
-            let src = format!(
-                "#[bridge(sync, dart_identifier = \"{good}\")] pub fn f() -> i64 {{ 0 }}"
-            );
+            let src =
+                format!("#[bridge(sync, dart_identifier = \"{good}\")] pub fn f() -> i64 {{ 0 }}");
             assert!(check_src(&src).is_ok(), "{good} refused");
         }
     }
@@ -8927,8 +9242,18 @@ mod tests {
              #[bridge(sync)] pub fn g() -> [i64; 2] { [0, 0] }",
         )
         .unwrap();
-        let f = |n: &str| iface.functions.iter().find(|f| f.name == n).unwrap().requires_native;
-        assert!(f("f"), "a native-only opaque inside an array is still in scope");
+        let f = |n: &str| {
+            iface
+                .functions
+                .iter()
+                .find(|f| f.name == n)
+                .unwrap()
+                .requires_native
+        };
+        assert!(
+            f("f"),
+            "a native-only opaque inside an array is still in scope"
+        );
         assert!(f("h"), "…and inside a Box");
         assert!(!f("g"), "an array of plain data is portable");
     }
@@ -9019,7 +9344,10 @@ mod tests {
             "#,
         )
         .unwrap_err();
-        assert_eq!(ds.iter().map(|d| d.code).collect::<Vec<_>>(), vec!["FR0035"]);
+        assert_eq!(
+            ds.iter().map(|d| d.code).collect::<Vec<_>>(),
+            vec!["FR0035"]
+        );
         assert!(ds[0].message.contains("`catch`"), "{}", ds[0].message);
     }
 
@@ -9151,10 +9479,7 @@ mod tests {
              #[bridge] pub fn f() -> H { todo!() }",
         ] {
             let ds = check_src(src).unwrap_err();
-            assert!(
-                ds.iter().any(|d| d.code == "FR0031"),
-                "{src}: {ds:?}"
-            );
+            assert!(ds.iter().any(|d| d.code == "FR0031"), "{src}: {ds:?}");
         }
     }
 
@@ -9385,7 +9710,10 @@ mod tests {
         let void_cb = &iface.functions[0];
         assert!(!void_cb.requires_native, "fire-and-forget is web-legal");
         assert_eq!(
-            void_cb.params[0].ty.as_dart_object().and_then(|s| s.item.clone()),
+            void_cb.params[0]
+                .ty
+                .as_dart_object()
+                .and_then(|s| s.item.clone()),
             Some(Type::Enum("Patch".into()))
         );
         let returning = &iface.functions[1];
@@ -9488,10 +9816,7 @@ mod tests {
 
     #[test]
     fn returning_callback_on_sync_member_is_a_static_deadlock_error() {
-        let ds = check_src(
-            "#[bridge(sync)] pub fn f(t: DartFunction<i64, i64>) {}",
-        )
-        .unwrap_err();
+        let ds = check_src("#[bridge(sync)] pub fn f(t: DartFunction<i64, i64>) {}").unwrap_err();
         assert_eq!(ds[0].code, "FR0020");
         assert!(ds[0].message.contains("deadlock"), "{}", ds[0].message);
         assert!(ds[0].message.contains("DartCallback"), "{}", ds[0].message);
@@ -9533,9 +9858,11 @@ mod tests {
         .unwrap();
         let f = &iface.functions[0];
         assert!(!f.rust_async);
-        assert!(f.requires_native, "a non-`async fn` returning callback is native-only");
+        assert!(
+            f.requires_native,
+            "a non-`async fn` returning callback is native-only"
+        );
     }
-
 
     #[test]
     fn actor_gets_a_synthetic_drop_appended_last() {
@@ -9598,7 +9925,9 @@ mod tests {
     fn deferred_is_actor_methods_only() {
         // Free fn, non-actor method, async fn: FR0038.
         assert_eq!(
-            codes(check_src("#[bridge] pub fn f() -> Deferred<i64> { unimplemented!() }")),
+            codes(check_src(
+                "#[bridge] pub fn f() -> Deferred<i64> { unimplemented!() }"
+            )),
             vec!["FR0038"]
         );
         assert_eq!(
@@ -9609,7 +9938,9 @@ mod tests {
             vec!["FR0038"]
         );
         assert_eq!(
-            codes(check_src("#[bridge] pub async fn g() -> Deferred<i64> { unimplemented!() }")),
+            codes(check_src(
+                "#[bridge] pub async fn g() -> Deferred<i64> { unimplemented!() }"
+            )),
             vec!["FR0038"]
         );
         // An actor constructor: FR0039.
@@ -9696,7 +10027,13 @@ mod tests {
     /// maps to itself. Checking the Rust spelling would miss the second.
     #[test]
     fn a_dart_interface_method_may_not_collide_with_object() {
-        for field in ["to_string", "toString", "hash_code", "runtime_type", "no_such_method"] {
+        for field in [
+            "to_string",
+            "toString",
+            "hash_code",
+            "runtime_type",
+            "no_such_method",
+        ] {
             let src = format!(
                 "#[bridge(data, dart_interface)] pub struct W {{ pub {field}: DartCallback<i64> }}"
             );
@@ -9739,11 +10076,16 @@ mod tests {
         assert!(ds.contains(&"FR0020"), "{ds:?}");
         // A non-`async fn` async member is legal but native-only: invoking the
         // returning method parks a pool worker.
-        let ok = check_src(&format!("{iface} #[bridge] pub fn f(a: W) {{ let _ = a; }}")).unwrap();
+        let ok = check_src(&format!(
+            "{iface} #[bridge] pub fn f(a: W) {{ let _ = a; }}"
+        ))
+        .unwrap();
         assert!(ok.functions[0].requires_native, "{:?}", ok.functions[0]);
         // An `async fn` awaits the reply instead, so it stays portable.
-        let ok =
-            check_src(&format!("{iface} #[bridge] pub async fn f(a: W) {{ let _ = a; }}")).unwrap();
+        let ok = check_src(&format!(
+            "{iface} #[bridge] pub async fn f(a: W) {{ let _ = a; }}"
+        ))
+        .unwrap();
         assert!(!ok.functions[0].requires_native, "{:?}", ok.functions[0]);
         // FR0049: and `no_block` contradicts the wait.
         let ds = codes(check_src(&format!(
@@ -9918,8 +10260,10 @@ mod tests {
         assert!(d.message.contains("field `next`"), "{}", d.message);
         assert!(d.message.contains("written `Self`"), "{}", d.message);
         // A bare name at a position `Self` cannot reach gets the plain message.
-        let ds = check_src(&format!("{DUAL} #[bridge(sync)] pub fn f(d: Doc) -> i64 {{ 0 }}"))
-            .unwrap_err();
+        let ds = check_src(&format!(
+            "{DUAL} #[bridge(sync)] pub fn f(d: Doc) -> i64 {{ 0 }}"
+        ))
+        .unwrap_err();
         assert!(
             ds.iter().all(|d| !d.message.contains("written `Self`")),
             "a parameter is never `Self`: {ds:?}"
@@ -10047,7 +10391,11 @@ mod tests {
         ))
         .unwrap_err();
         let d = ds.iter().find(|d| d.code == "FR0067").expect("FR0067");
-        assert!(d.message.contains("impl Store for Locked<Doc>"), "{}", d.message);
+        assert!(
+            d.message.contains("impl Store for Locked<Doc>"),
+            "{}",
+            d.message
+        );
         assert!(
             !d.message.contains("impl Store for Data<Doc>"),
             "the value half is FR0026 here: {}",
@@ -10067,7 +10415,11 @@ mod tests {
         )
         .unwrap_err();
         let d = ds.iter().find(|d| d.code == "FR0002").expect("FR0002");
-        assert!(d.message.contains("One Rust type, two Dart classes"), "{}", d.message);
+        assert!(
+            d.message.contains("One Rust type, two Dart classes"),
+            "{}",
+            d.message
+        );
         assert!(d.message.contains("data(dart_identifier"), "{}", d.message);
         // …and not the duplicate-*type*-name message, which has no fix here.
         assert!(!d.message.contains("must be unique"), "{}", d.message);
@@ -10081,7 +10433,11 @@ mod tests {
         )
         .unwrap_err();
         let d = ds.iter().find(|d| d.code == "FR0002").expect("FR0002");
-        assert!(d.message.contains("One Rust type, two Dart classes"), "{}", d.message);
+        assert!(
+            d.message.contains("One Rust type, two Dart classes"),
+            "{}",
+            d.message
+        );
     }
 
     /// A bridged trait is implemented by handles (FR0026), so on a dual type
@@ -10214,7 +10570,10 @@ mod tests {
              #[bridge(sync)] pub fn g(p: Option<&Page<Item>>) -> i64 { 0 }",
         )
         .unwrap();
-        assert!(ok.struct_decl("Page<Item>").is_some(), "the lent use was expanded");
+        assert!(
+            ok.struct_decl("Page<Item>").is_some(),
+            "the lent use was expanded"
+        );
         for name in ["f", "g"] {
             let f = ok.functions.iter().find(|f| f.name == name).unwrap();
             let mut lent = false;
@@ -10223,7 +10582,10 @@ mod tests {
                     lent |= **inner == Type::Struct("Page<Item>".into());
                 }
             });
-            assert!(lent, "{name}: the borrow's inner is the expansion, not an `App`");
+            assert!(
+                lent,
+                "{name}: the borrow's inner is the expansion, not an `App`"
+            );
         }
     }
 
@@ -10241,20 +10603,33 @@ mod tests {
         ] {
             let src = format!("{BORROW_DECL} #[bridge(sync)] pub fn f(x: {ty}) {{ let _ = x; }}");
             let ds = check_src(&src).unwrap_err();
-            let d = ds.iter().find(|d| d.code == "FR0077").unwrap_or_else(|| panic!("{ty}: {ds:?}"));
+            let d = ds
+                .iter()
+                .find(|d| d.code == "FR0077")
+                .unwrap_or_else(|| panic!("{ty}: {ds:?}"));
             assert!(d.message.contains(reason), "{ty}: {}", d.message);
         }
         // A struct or enum field, refused once at the declaration.
         let ds = check_src("#[bridge(data)] pub struct S { pub name: &'static str }").unwrap_err();
-        let d = ds.iter().find(|d| d.code == "FR0077").unwrap_or_else(|| panic!("{ds:?}"));
-        assert!(d.message.contains("data class is reconstructed"), "{}", d.message);
+        let d = ds
+            .iter()
+            .find(|d| d.code == "FR0077")
+            .unwrap_or_else(|| panic!("{ds:?}"));
+        assert!(
+            d.message.contains("data class is reconstructed"),
+            "{}",
+            d.message
+        );
         // A mirror's item type.
         let ds = check_src(
             "#[bridge(data)] pub struct P { pub x: i64 } \
              #[bridge(sync)] pub fn f(c: DartCallback<Vec<&P>>) { let _ = c; }",
         )
         .unwrap_err();
-        let d = ds.iter().find(|d| d.code == "FR0077").unwrap_or_else(|| panic!("{ds:?}"));
+        let d = ds
+            .iter()
+            .find(|d| d.code == "FR0077")
+            .unwrap_or_else(|| panic!("{ds:?}"));
         assert!(d.message.contains("envelope"), "{}", d.message);
     }
 
@@ -10263,9 +10638,11 @@ mod tests {
     /// A `&mut` of a *handle* is a real exclusive borrow and stays accepted.
     #[test]
     fn a_nested_mutable_borrow_of_a_value_is_refused() {
-        let src = format!("{BORROW_DECL} #[bridge(sync)] pub fn f(x: Vec<&mut P>) {{ let _ = x; }}");
+        let src =
+            format!("{BORROW_DECL} #[bridge(sync)] pub fn f(x: Vec<&mut P>) {{ let _ = x; }}");
         assert_eq!(codes(check_src(&src)), vec!["FR0013"]);
-        let src = format!("{BORROW_DECL} #[bridge(sync)] pub fn f(x: Vec<&mut C>) {{ let _ = x; }}");
+        let src =
+            format!("{BORROW_DECL} #[bridge(sync)] pub fn f(x: Vec<&mut C>) {{ let _ = x; }}");
         assert_eq!(codes(check_src(&src)), Vec::<&str>::new());
     }
 
@@ -10376,9 +10753,13 @@ mod tests {
     /// the body still owns.
     #[test]
     fn a_lent_handle_in_the_return_is_refused() {
-        let src = format!("{BORROW_DECL} #[bridge(sync)] pub fn f() -> Option<&'static D> {{ None }}");
+        let src =
+            format!("{BORROW_DECL} #[bridge(sync)] pub fn f() -> Option<&'static D> {{ None }}");
         let ds = check_src(&src).unwrap_err();
-        let d = ds.iter().find(|d| d.code == "FR0004").unwrap_or_else(|| panic!("{ds:?}"));
+        let d = ds
+            .iter()
+            .find(|d| d.code == "FR0004")
+            .unwrap_or_else(|| panic!("{ds:?}"));
         assert!(d.message.contains("borrowed return"), "{}", d.message);
     }
 
@@ -10387,9 +10768,10 @@ mod tests {
     /// the glue conjures its references with an unbound lifetime.
     #[test]
     fn a_named_lifetime_is_refused_at_any_depth() {
-        let src = format!("{BORROW_DECL} #[bridge(sync)] pub fn f(xs: Vec<&'static D>) {{ let _ = xs; }}");
+        let src = format!(
+            "{BORROW_DECL} #[bridge(sync)] pub fn f(xs: Vec<&'static D>) {{ let _ = xs; }}"
+        );
         let ds = check_src(&src).unwrap_err();
         assert!(ds.iter().any(|d| d.code == "FR0044"), "{ds:?}");
     }
-
 }

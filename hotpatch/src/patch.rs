@@ -92,7 +92,10 @@ pub fn baseline(module: &Module) -> Baseline {
     let hashes = module.hashes();
     Baseline {
         statics: statics(module, &hashes),
-        hashes: hashes.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+        hashes: hashes
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect(),
         layouts: crate::debuginfo::layouts(
             module
                 .entities
@@ -164,7 +167,11 @@ pub fn build(base: &Baseline, new: &Module, target: &Target) -> Outcome {
         .iter()
         .filter(|e| e.kind == Kind::Define)
         .filter_map(|e| e.name)
-        .filter(|n| image.exported.contains(&format!("{SLOT_PREFIX}{}", ir::unescape(n))))
+        .filter(|n| {
+            image
+                .exported
+                .contains(&format!("{SLOT_PREFIX}{}", ir::unescape(n)))
+        })
         .collect();
 
     // Every function that changed, and every function that refers to one.
@@ -181,7 +188,11 @@ pub fn build(base: &Baseline, new: &Module, target: &Target) -> Outcome {
     // A changed function that no routed entry point reaches through the patch
     // would be delivered and never run.
     let mut reached: HashSet<&str> = HashSet::new();
-    let mut stack: Vec<&str> = include.iter().copied().filter(|n| roots.contains(n)).collect();
+    let mut stack: Vec<&str> = include
+        .iter()
+        .copied()
+        .filter(|n| roots.contains(n))
+        .collect();
     while let Some(n) = stack.pop() {
         if !reached.insert(n) {
             continue;
@@ -208,7 +219,11 @@ pub fn build(base: &Baseline, new: &Module, target: &Target) -> Outcome {
     for e in new.entities.iter().filter(|e| e.kind == Kind::Global) {
         let held = e.name.is_some_and(|n| !new.is_content_addressed(n));
         if held {
-            other_entries.extend(new.references(e).into_iter().filter(|r| references.contains_key(r)));
+            other_entries.extend(
+                new.references(e)
+                    .into_iter()
+                    .filter(|r| references.contains_key(r)),
+            );
         }
     }
     let mut live: HashSet<&str> = HashSet::new();
@@ -258,7 +273,10 @@ pub fn build(base: &Baseline, new: &Module, target: &Target) -> Outcome {
                 continue;
             }
             let Some(entity) = new.get(r) else {
-                reasons.push(format!("refers to `{}`, which the compilation does not declare", demangle(r)));
+                reasons.push(format!(
+                    "refers to `{}`, which the compilation does not declare",
+                    demangle(r)
+                ));
                 continue;
             };
             let symbol = image.symbols.get(&ir::unescape(r));
@@ -289,10 +307,12 @@ pub fn build(base: &Baseline, new: &Module, target: &Target) -> Outcome {
                         continue;
                     }
                     match symbol {
-                        Some(s) if s.duplicated && s.kind != SymKind::Text => reasons.push(format!(
+                        Some(s) if s.duplicated && s.kind != SymKind::Text => {
+                            reasons.push(format!(
                             "uses static `{}`, which the running library defines more than once",
                             demangle(r)
-                        )),
+                        ))
+                        }
                         Some(_) => {
                             bound.insert(r);
                         }
@@ -338,7 +358,11 @@ pub fn build(base: &Baseline, new: &Module, target: &Target) -> Outcome {
         })
         .collect();
 
-    let mut routed: Vec<&str> = include.iter().copied().filter(|n| roots.contains(n)).collect();
+    let mut routed: Vec<&str> = include
+        .iter()
+        .copied()
+        .filter(|n| roots.contains(n))
+        .collect();
     routed.sort();
 
     let ir_text = emit_module(new, &include, &kept_constants, &bound, &tls);
@@ -429,7 +453,11 @@ fn emit_module(
                     body.push('\n');
                 } else if bound.contains(name) {
                     let value_type = ir::global_value_type(e.text);
-                    let _ = writeln!(body, "{} = external global {value_type}", ir::spell(&ir::unescape(name)));
+                    let _ = writeln!(
+                        body,
+                        "{} = external global {value_type}",
+                        ir::spell(&ir::unescape(name))
+                    );
                 }
             }
             Kind::Define => {
@@ -437,7 +465,8 @@ fn emit_module(
                 if include.contains(name) {
                     let mut text = strip_debug(e.text, &mut metadata_roots);
                     if !tls.is_empty() {
-                        text = text.replace("@llvm.threadlocal.address.p0(", "@frustrate_hot_tlv_get(");
+                        text = text
+                            .replace("@llvm.threadlocal.address.p0(", "@frustrate_hot_tlv_get(");
                     }
                     body.push_str(&text);
                     body.push('\n');
@@ -475,7 +504,9 @@ fn emit_module(
         .filter_map(|e| {
             let rest = e.text.strip_prefix('!')?;
             let (id, _) = rest.split_once(" = ")?;
-            id.bytes().all(|c| c.is_ascii_digit()).then_some((id, e.text))
+            id.bytes()
+                .all(|c| c.is_ascii_digit())
+                .then_some((id, e.text))
         })
         .collect();
     let mut emitted: BTreeSet<&str> = BTreeSet::new();
@@ -514,10 +545,7 @@ fn strip_debug(text: &str, roots: &mut Vec<String>) -> String {
     let mut out = String::with_capacity(text.len());
     for (i, line) in text.split('\n').enumerate() {
         let trimmed = line.trim_start();
-        if i > 0
-            && (trimmed.starts_with("#dbg_")
-                || trimmed.contains("call void @llvm.dbg."))
-        {
+        if i > 0 && (trimmed.starts_with("#dbg_") || trimmed.contains("call void @llvm.dbg.")) {
             continue;
         }
         if i > 0 {
@@ -574,7 +602,11 @@ fn attachment_start(s: &str) -> Option<usize> {
     let trimmed = s.strip_suffix(' ')?;
     let bang = trimmed.rfind('!')?;
     let kind = &trimmed[bang + 1..];
-    if kind.is_empty() || !kind.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'_') {
+    if kind.is_empty()
+        || !kind
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'_')
+    {
         return None;
     }
     let before = &trimmed[..bang];
@@ -600,11 +632,24 @@ fn declaration(define: &str) -> String {
     let (signature, suffix) = rest.split_at(close + 1);
 
     const DROP: &[&str] = &[
-        "private", "internal", "linkonce_odr", "linkonce", "weak_odr", "weak",
-        "available_externally", "common", "appending", "extern_weak", "unnamed_addr",
-        "local_unnamed_addr", "dso_local",
+        "private",
+        "internal",
+        "linkonce_odr",
+        "linkonce",
+        "weak_odr",
+        "weak",
+        "available_externally",
+        "common",
+        "appending",
+        "extern_weak",
+        "unnamed_addr",
+        "local_unnamed_addr",
+        "dso_local",
     ];
-    let prefix: Vec<&str> = prefix.split(' ').filter(|w| !w.is_empty() && !DROP.contains(w)).collect();
+    let prefix: Vec<&str> = prefix
+        .split(' ')
+        .filter(|w| !w.is_empty() && !DROP.contains(w))
+        .collect();
 
     let words: Vec<&str> = split_words(suffix);
     let mut kept = Vec::new();
@@ -733,12 +778,17 @@ fn split_words(s: &str) -> Vec<&str> {
 /// function privately — a statically linked unwinder, say. Names the library
 /// merely imports stay the dynamic linker's to resolve. `objects` are
 /// relocatable object files; `bound` is what the patch already binds.
-pub fn backend_references(objects: &[Vec<u8>], bound: &BTreeSet<&str>, image: &Image) -> Result<BTreeSet<String>, String> {
+pub fn backend_references(
+    objects: &[Vec<u8>],
+    bound: &BTreeSet<&str>,
+    image: &Image,
+) -> Result<BTreeSet<String>, String> {
     use object::{Object, ObjectSymbol};
     let mut undefined: BTreeSet<String> = BTreeSet::new();
     let mut defined: HashSet<String> = HashSet::new();
     for bytes in objects {
-        let file = object::File::parse(bytes.as_slice()).map_err(|e| format!("not a patch object file: {e}"))?;
+        let file = object::File::parse(bytes.as_slice())
+            .map_err(|e| format!("not a patch object file: {e}"))?;
         for sym in file.symbols() {
             let Ok(raw) = sym.name() else { continue };
             let name = match image.format {
@@ -758,7 +808,12 @@ pub fn backend_references(objects: &[Vec<u8>], bound: &BTreeSet<&str>, image: &I
     Ok(undefined
         .into_iter()
         .filter(|n| !defined.contains(n) && !bound.contains(n.as_str()))
-        .filter(|n| image.symbols.get(n).is_some_and(|s| s.kind == SymKind::Text))
+        .filter(|n| {
+            image
+                .symbols
+                .get(n)
+                .is_some_and(|s| s.kind == SymKind::Text)
+        })
         .collect())
 }
 
@@ -789,17 +844,27 @@ define ptr @frustrate_hot_tlv_get(ptr %variable) {
 /// once.
 pub fn support(patches: &[&Patch], target: &Target, backend: &BTreeSet<String>) -> String {
     let mut out = String::new();
-    for line in patches.first().map(|p| p.target_lines.as_slice()).unwrap_or_default() {
+    for line in patches
+        .first()
+        .map(|p| p.target_lines.as_slice())
+        .unwrap_or_default()
+    {
         let _ = writeln!(out, "{line}");
     }
-    let mut bound: BTreeSet<&str> = patches.iter().flat_map(|p| p.bound.iter().map(String::as_str)).collect();
+    let mut bound: BTreeSet<&str> = patches
+        .iter()
+        .flat_map(|p| p.bound.iter().map(String::as_str))
+        .collect();
     bound.extend(backend.iter().map(String::as_str));
     let tls = patches.iter().any(|p| p.tls);
     out.push_str(&emit_stubs(&bound, tls, target));
     if tls && target.image.format == Format::Elf {
         out.push_str(ELF_TLS_GETTER);
     }
-    let routed: Vec<&str> = patches.iter().flat_map(|p| p.routed.iter().map(String::as_str)).collect();
+    let routed: Vec<&str> = patches
+        .iter()
+        .flat_map(|p| p.routed.iter().map(String::as_str))
+        .collect();
     for r in &routed {
         let _ = writeln!(out, "declare void {}()", ir::spell(r));
     }
@@ -877,7 +942,9 @@ fn emit_stubs(bound: &BTreeSet<&str>, tls: bool, target: &Target) -> String {
     let mut asm = String::new();
     let _ = writeln!(asm, ".text");
     for &raw in bound {
-        let Some(sym) = image.symbols.get(raw) else { continue };
+        let Some(sym) = image.symbols.get(raw) else {
+            continue;
+        };
         let address = (sym.address as i64 + target.slide) as u64;
         let label = mangle(raw);
         match sym.kind {
@@ -938,7 +1005,11 @@ fn emit_stubs(bound: &BTreeSet<&str>, tls: bool, target: &Target) -> String {
     }
     let mut out = String::new();
     for line in asm.lines() {
-        let _ = writeln!(out, "module asm \"{}\"", escape_bytes_keep_space(line.as_bytes()));
+        let _ = writeln!(
+            out,
+            "module asm \"{}\"",
+            escape_bytes_keep_space(line.as_bytes())
+        );
     }
     out
 }
@@ -1005,9 +1076,16 @@ start:
         let image = crate::image::Image::for_test(
             &["frustrate_call_sync", "helper", "held", "dead"],
             &["frustrate_hot_slot_frustrate_call_sync", "HOOK"],
-            &["frustrate_call_sync", "frustrate_hot_slot_frustrate_call_sync"],
+            &[
+                "frustrate_call_sync",
+                "frustrate_hot_slot_frustrate_call_sync",
+            ],
         );
-        let target = Target { image: &image, slide: 0x4000, anchor: 0x5000 };
+        let target = Target {
+            image: &image,
+            slide: 0x4000,
+            anchor: 0x5000,
+        };
         let baseline = |edited: &str| {
             let mut b = baseline(&module);
             *b.hashes.get_mut(edited).unwrap() += 1;
@@ -1020,7 +1098,10 @@ start:
             Outcome::Unchanged => panic!("a routed edit has something to deliver"),
         }
         assert!(
-            matches!(build(&baseline("dead"), &module, &target), Outcome::Unchanged),
+            matches!(
+                build(&baseline("dead"), &module, &target),
+                Outcome::Unchanged
+            ),
             "an edit to a function nothing calls delivers nothing"
         );
         match build(&baseline("held"), &module, &target) {
@@ -1042,14 +1123,28 @@ start:
         image.format = Format::Elf;
         image.symbols.insert(
             "COUNTER".to_string(),
-            Symbol { address: 0x18, kind: SymKind::Tls, duplicated: false },
+            Symbol {
+                address: 0x18,
+                kind: SymKind::Tls,
+                duplicated: false,
+            },
         );
-        let target = Target { image: &image, slide: 0x4000, anchor: 0 };
+        let target = Target {
+            image: &image,
+            slide: 0x4000,
+            anchor: 0,
+        };
         let bound: BTreeSet<&str> = ["COUNTER", "f"].into_iter().collect();
         let asm = emit_stubs(&bound, true, &target);
-        assert!(asm.contains("\\22COUNTER\\22:") && asm.contains(".quad 0x18"), "{asm}");
+        assert!(
+            asm.contains("\\22COUNTER\\22:") && asm.contains(".quad 0x18"),
+            "{asm}"
+        );
         assert!(!asm.contains(".set"), "no address is bound: {asm}");
-        assert!(!asm.contains("frustrate_hot_tlv_get"), "the getter is IR on ELF: {asm}");
+        assert!(
+            !asm.contains("frustrate_hot_tlv_get"),
+            "the getter is IR on ELF: {asm}"
+        );
     }
 
     #[test]

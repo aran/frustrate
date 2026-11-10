@@ -330,7 +330,10 @@ mod tests {
         let files = parse("files").unwrap();
         assert!(files.wasi_call(WASI_MODULE, "path_open"));
         assert!(files.wasi_call(WASI_MODULE, "fd_read"));
-        assert!(!files.wasi_call(WASI_MODULE, "fd_write"), "stderr is a write");
+        assert!(
+            !files.wasi_call(WASI_MODULE, "fd_write"),
+            "stderr is a write"
+        );
         assert!(!files.wasi_call("env", "path_open"));
         assert!(files.native_call(Os::Apple, "open"));
         assert!(files.native_call(Os::Apple, "realpath$DARWIN_EXTSN"));
@@ -375,7 +378,11 @@ mod tests {
             }
             for (names, _) in libc.no_wait {
                 for n in names.iter().map(|n| n.trim_end_matches('*')) {
-                    assert!(!CATEGORIES.iter().any(|c| c.native_call(libc.os, n)), "{}: `{n}`", libc.name);
+                    assert!(
+                        !CATEGORIES.iter().any(|c| c.native_call(libc.os, n)),
+                        "{}: `{n}`",
+                        libc.name
+                    );
                 }
             }
         }

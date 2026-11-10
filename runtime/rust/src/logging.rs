@@ -495,13 +495,19 @@ mod tests {
         set_sink(LevelFilter::Trace, second_sink, level_and_message).expect("still ours");
         log::info!("after");
 
-        assert_eq!(drain(&first), vec![("INFO".to_string(), "before".to_string())]);
+        assert_eq!(
+            drain(&first),
+            vec![("INFO".to_string(), "before".to_string())]
+        );
         assert_eq!(
             first.terminal(),
             Some(Terminal::Closed),
             "the displaced sink must be dropped, which ends its Dart stream"
         );
-        assert_eq!(drain(&second), vec![("INFO".to_string(), "after".to_string())]);
+        assert_eq!(
+            drain(&second),
+            vec![("INFO".to_string(), "after".to_string())]
+        );
         clear_sink();
     }
 
@@ -526,7 +532,10 @@ mod tests {
         let (next_sink, next) = testing::stream::<(String, String)>();
         set_sink(LevelFilter::Trace, next_sink, level_and_message).expect("still ours");
         log::info!("live again");
-        assert_eq!(drain(&next), vec![("INFO".to_string(), "live again".to_string())]);
+        assert_eq!(
+            drain(&next),
+            vec![("INFO".to_string(), "live again".to_string())]
+        );
         clear_sink();
     }
 

@@ -148,7 +148,16 @@ static LOST: Lock<BTreeMap<&'static str, usize>> = Lock::new(BTreeMap::new());
 /// Record a freshly minted resident. Called by [`crate::__private::handle::resident_new`].
 pub(crate) fn record(handle: u64, name: &'static str) {
     let born = thread_tag();
-    LIVE.with(|live| live.insert(handle, Entry { name, born, isolate: None }));
+    LIVE.with(|live| {
+        live.insert(
+            handle,
+            Entry {
+                name,
+                born,
+                isolate: None,
+            },
+        )
+    });
 }
 
 /// Retire a resident that is being freed, answering its type name. `None` if
@@ -235,7 +244,10 @@ pub fn live_count() -> usize {
 pub fn leak_report() -> Vec<(String, usize)> {
     let tally: Vec<(&'static str, usize)> =
         LOST.with(|lost| lost.iter().map(|(name, n)| (*name, *n)).collect());
-    tally.into_iter().map(|(name, n)| (name.to_string(), n)).collect()
+    tally
+        .into_iter()
+        .map(|(name, n)| (name.to_string(), n))
+        .collect()
 }
 
 /// Add to the tally. Takes `&'static str`s so the map's keys cost nothing.
@@ -286,7 +298,10 @@ pub(crate) fn reap_isolate(isolate: u32) {
             .filter(|(_, e)| e.isolate == Some(isolate))
             .map(|(h, _)| *h)
             .collect();
-        ids.iter().filter_map(|h| map.remove(h)).map(|e| e.name).collect()
+        ids.iter()
+            .filter_map(|h| map.remove(h))
+            .map(|e| e.name)
+            .collect()
     });
     if doomed.is_empty() {
         return;
@@ -356,7 +371,10 @@ mod tests {
     use crate::__private::handle::{resident_drop, resident_new};
 
     fn leaked(name: &str) -> Option<usize> {
-        leak_report().into_iter().find(|(n, _)| n == name).map(|(_, n)| n)
+        leak_report()
+            .into_iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, n)| n)
     }
 
     /// `live_count` is one number for the process, so a test that measures a
@@ -436,7 +454,10 @@ mod tests {
     fn a_second_thread_is_refused() {
         let _x = exclusive();
         let h = resident_new(std::rc::Rc::new(5i32), "ProbeAffine");
-        assert!(on_owning_thread(h).is_ok(), "the minting thread may touch it");
+        assert!(
+            on_owning_thread(h).is_ok(),
+            "the minting thread may touch it"
+        );
         let verdict = std::thread::spawn(move || on_owning_thread(h))
             .join()
             .expect("the probe thread does not panic");

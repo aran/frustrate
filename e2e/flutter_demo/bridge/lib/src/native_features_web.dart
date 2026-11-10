@@ -10,4 +10,5 @@ const bool kHasNativeReturningCallbacks = false;
 /// only so the shared UI can name one symbol on both platforms.
 Future<int> nativeTransformSum(List<int> values, int Function(int) f) =>
     throw UnsupportedError(
-        'value-returning callbacks are native-only — compile-time absent on web');
+      'value-returning callbacks are native-only — compile-time absent on web',
+    );

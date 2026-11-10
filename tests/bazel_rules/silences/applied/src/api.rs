@@ -17,11 +17,14 @@ pub fn add(by: i64) -> i64 {
 }
 
 /// Takes the `Mutex` itself, silenced by each analysis's name for the wait.
-#[bridge(sync, no_block(allow(
-    pthread_mutex_lock,
-    syscall::SYS_futex::FUTEX_WAIT_BITSET,
-    std::sys::sync::mutex::futex::Mutex::lock_contended,
-)))]
+#[bridge(
+    sync,
+    no_block(allow(
+        pthread_mutex_lock,
+        syscall::SYS_futex::FUTEX_WAIT_BITSET,
+        std::sys::sync::mutex::futex::Mutex::lock_contended,
+    ))
+)]
 pub fn read() -> i64 {
     *TOTAL.lock().unwrap()
 }

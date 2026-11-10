@@ -91,10 +91,7 @@ impl Browser {
     pub fn panic_in_callback(&mut self, message: String) {
         let callback = Closure::once_into_js(move || -> () { panic!("{message}") });
         scope()
-            .set_timeout_with_callback_and_timeout_and_arguments_0(
-                callback.unchecked_ref(),
-                0,
-            )
+            .set_timeout_with_callback_and_timeout_and_arguments_0(callback.unchecked_ref(), 0)
             .expect("setTimeout");
     }
 

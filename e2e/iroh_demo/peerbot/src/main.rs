@@ -126,10 +126,7 @@ impl Args {
         };
         let mut argv = std::env::args().skip(1);
         while let Some(flag) = argv.next() {
-            let mut value = || {
-                argv.next()
-                    .ok_or_else(|| format!("{flag} needs a value"))
-            };
+            let mut value = || argv.next().ok_or_else(|| format!("{flag} needs a value"));
             match flag.as_str() {
                 "--nickname" => args.nickname = value()?,
                 "--connect" => args.connect = Some(value()?),
@@ -139,7 +136,9 @@ impl Args {
                     args.n0 = match value()?.as_str() {
                         "minimal" => false,
                         "n0" => true,
-                        other => return Err(format!("--preset must be minimal or n0, not {other}")),
+                        other => {
+                            return Err(format!("--preset must be minimal or n0, not {other}"))
+                        }
                     }
                 }
                 "--help" | "-h" => {
@@ -343,9 +342,7 @@ fn send_to(bot: &Bot, who: &str, body: String) {
         return say(&format!("error {who} is not an endpoint id"));
     };
     match peers.get(&id) {
-        Some(out) if out.send(body.clone()).is_ok() => {
-            say(&format!("sent {id} {}", escape(&body)))
-        }
+        Some(out) if out.send(body.clone()).is_ok() => say(&format!("sent {id} {}", escape(&body))),
         Some(_) => say(&format!("error {id} is closing")),
         None => say(&format!("error not connected to {id}")),
     }
@@ -517,7 +514,9 @@ fn say(line: &str) {
 
 /// Make a body safe to put on one line.
 fn escape(body: &str) -> String {
-    body.replace('\\', "\\\\").replace('\n', "\\n").replace('\r', "\\r")
+    body.replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
 }
 
 #[cfg(test)]

@@ -63,10 +63,11 @@ Future<void> main() async {
   final events = StreamController<PeerEvent>();
   final eventSubscription = events.stream.listen((_) {});
   final node = await Node.open(
-      nickname: 'logprobe',
-      preset: Preset.minimal,
-      relay: null,
-      events: events);
+    nickname: 'logprobe',
+    preset: Preset.minimal,
+    relay: null,
+    events: events,
+  );
 
   // Delivery is a port message, so records land on later turns of the event
   // loop. Bounded, and the bound is what fails the test.
@@ -80,21 +81,27 @@ Future<void> main() async {
   if (fromDependencies.isEmpty) {
     final seen = records.map((r) => r.target).toSet().toList()..sort();
     throw StateError(
-        'no record from a dependency reached Dart in 10s. ${records.length} '
-        'record(s) arrived, from: $seen.\n'
-        'If that list is empty, frustrate\'s runtime and this crate are '
-        'holding two different `log` rlibs — check that //:.bazelrc still '
-        'sets --@frustrate//runtime/rust:log=@iroh_crates//:log.\n'
-        'If only this crate\'s targets are listed, something now installs a '
-        '`tracing` subscriber, which stops tracing events becoming `log` '
-        'records at all.');
+      'no record from a dependency reached Dart in 10s. ${records.length} '
+      'record(s) arrived, from: $seen.\n'
+      'If that list is empty, frustrate\'s runtime and this crate are '
+      'holding two different `log` rlibs — check that //:.bazelrc still '
+      'sets --@frustrate//runtime/rust:log=@iroh_crates//:log.\n'
+      'If only this crate\'s targets are listed, something now installs a '
+      '`tracing` subscriber, which stops tracing events becoming `log` '
+      'records at all.',
+    );
   }
 
   // What arrived has to be a record and not a placeholder: a level `log` can
   // name, a target that is a module path, and something in the message.
   for (final record in fromDependencies) {
-    if (!const {'ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE'}
-        .contains(record.level)) {
+    if (!const {
+      'ERROR',
+      'WARN',
+      'INFO',
+      'DEBUG',
+      'TRACE',
+    }.contains(record.level)) {
       throw StateError('unexpected level ${record.level} on ${record.target}');
     }
     if (record.message.isEmpty) {
@@ -103,9 +110,11 @@ Future<void> main() async {
   }
 
   final example = fromDependencies.first;
-  stdout.writeln('${fromDependencies.length} of ${records.length} records came '
-      'from a dependency; first: [${example.level}] ${example.target}: '
-      '${example.message}');
+  stdout.writeln(
+    '${fromDependencies.length} of ${records.length} records came '
+    'from a dependency; first: [${example.level}] ${example.target}: '
+    '${example.message}',
+  );
 
   // Release in the order the runtime documents: the logger outlives the node
   // that provoked it, so clearing the sink is what ends the stream.

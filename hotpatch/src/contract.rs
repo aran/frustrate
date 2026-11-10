@@ -94,9 +94,7 @@ pub fn classify(old: &[u8], new: &[u8]) -> Classification {
         serde_json::from_slice::<Value>(old),
         serde_json::from_slice::<Value>(new),
     ) else {
-        refused.push(
-            "the bridge's interface changed, and it could not be read to say how".into(),
-        );
+        refused.push("the bridge's interface changed, and it could not be read to say how".into());
         return Classification { carried, refused };
     };
 
@@ -171,7 +169,12 @@ fn stripped(root: &Value) -> Value {
 
 fn keyed(root: &Value, section: &str) -> BTreeMap<String, Value> {
     let mut out = BTreeMap::new();
-    for item in root.get(section).and_then(Value::as_array).into_iter().flatten() {
+    for item in root
+        .get(section)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
         let part = |k: &str| item.get(k).and_then(Value::as_str).map(str::to_string);
         let mut key = part("module_path").unwrap_or_default();
         if let Some(parent) = part("parent") {
@@ -262,7 +265,11 @@ mod tests {
         let c = classify(old, new);
         assert!(c.carried.is_empty(), "{:?}", c.carried);
         assert_eq!(c.refused.len(), 1);
-        assert!(c.refused[0].contains("keeps its dispatch id"), "{:?}", c.refused);
+        assert!(
+            c.refused[0].contains("keeps its dispatch id"),
+            "{:?}",
+            c.refused
+        );
     }
 
     #[test]
@@ -285,7 +292,11 @@ mod tests {
         let new = br#"{"crate_name":"b","functions":[]}"#;
         let c = classify(old, new);
         assert!(c.carried.is_empty());
-        assert!(c.refused[0].contains("outside its declarations"), "{:?}", c.refused);
+        assert!(
+            c.refused[0].contains("outside its declarations"),
+            "{:?}",
+            c.refused
+        );
     }
 
     #[test]

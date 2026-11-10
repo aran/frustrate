@@ -29,7 +29,11 @@ pub(crate) struct Budgeted;
 
 /// The budget for an input of `len` bytes.
 fn budget_for(len: u64) -> usize {
-    BASE.saturating_add(usize::try_from(len).unwrap_or(usize::MAX).saturating_mul(PER_INPUT_BYTE))
+    BASE.saturating_add(
+        usize::try_from(len)
+            .unwrap_or(usize::MAX)
+            .saturating_mul(PER_INPUT_BYTE),
+    )
 }
 
 /// Set the budget for the scan of `path`, the input `label` names.

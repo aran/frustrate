@@ -202,7 +202,12 @@ mod barrier {
 
         /// Every way to interleave `threads`, keeping each one's own order.
         fn interleavings(threads: &[Vec<Step>]) -> Vec<Vec<Step>> {
-            fn go(threads: &[Vec<Step>], at: &mut [usize], run: &mut Vec<Step>, out: &mut Vec<Vec<Step>>) {
+            fn go(
+                threads: &[Vec<Step>],
+                at: &mut [usize],
+                run: &mut Vec<Step>,
+                out: &mut Vec<Vec<Step>>,
+            ) {
                 let mut moved = false;
                 for t in 0..threads.len() {
                     if at[t] < threads[t].len() {
@@ -219,7 +224,12 @@ mod barrier {
                 }
             }
             let mut out = Vec::new();
-            go(threads, &mut vec![0; threads.len()], &mut Vec::new(), &mut out);
+            go(
+                threads,
+                &mut vec![0; threads.len()],
+                &mut Vec::new(),
+                &mut out,
+            );
             out
         }
 
@@ -262,17 +272,27 @@ mod barrier {
                 vec![Step::Notify(11)],
             ];
             let orders = interleavings(&threads);
-            assert_eq!(orders.len(), 15120, "9 steps in runs of 2, 2, 3, 1, 1: 9!/(2!·2!·3!)");
+            assert_eq!(
+                orders.len(),
+                15120,
+                "9 steps in runs of 2, 2, 3, 1, 1: 9!/(2!·2!·3!)"
+            );
             for order in &orders {
                 let queue = run(2, order);
                 for port in [10, 11] {
                     let notices: Vec<usize> = (0..queue.len())
                         .filter(|&i| queue[i] == Message::Idle(port))
                         .collect();
-                    assert_eq!(notices.len(), 1, "port {port} heard once in {order:?}: {queue:?}");
+                    assert_eq!(
+                        notices.len(),
+                        1,
+                        "port {port} heard once in {order:?}: {queue:?}"
+                    );
                     // Job 2 is owed only when it began before this harness asked.
-                        let asked = order.iter().position(|s| matches!(s, Step::Notify(p) if *p == port));
-                        let began = order.iter().position(|s| matches!(s, Step::Begin));
+                    let asked = order
+                        .iter()
+                        .position(|s| matches!(s, Step::Notify(p) if *p == port));
+                    let began = order.iter().position(|s| matches!(s, Step::Begin));
                     let owed: &[usize] = if began < asked { &[0, 1, 2] } else { &[0, 1] };
                     for &job in owed {
                         let answer = queue.iter().position(|&m| m == Message::Answer(job));

@@ -45,7 +45,10 @@ impl State {
 
     /// Record which build of the patch builder wrote this state.
     pub fn write_builder(&self) -> Result<(), String> {
-        write(&self.builder_path(), format!("{:016x}\n", builder_identity()?).as_bytes())
+        write(
+            &self.builder_path(),
+            format!("{:016x}\n", builder_identity()?).as_bytes(),
+        )
     }
 
     /// Whether the state was written by this build of the patch builder. What
@@ -62,10 +65,18 @@ impl State {
             let _ = writeln!(out, "H\t{h:016x}\t{name}");
         }
         for (name, s) in &b.statics {
-            let _ = writeln!(out, "S\t{:016x}\t{:016x}\t{name}", s.value_type, s.initializer);
+            let _ = writeln!(
+                out,
+                "S\t{:016x}\t{:016x}\t{name}",
+                s.value_type, s.initializer
+            );
         }
         for (id, (h, display)) in &b.layouts.types {
-            let _ = writeln!(out, "T\t{h:016x}\t{id}\t{}", display.replace(['\t', '\n'], " "));
+            let _ = writeln!(
+                out,
+                "T\t{h:016x}\t{id}\t{}",
+                display.replace(['\t', '\n'], " ")
+            );
         }
         write(&self.baseline_path(), out.as_bytes())
     }
@@ -77,7 +88,8 @@ impl State {
         let mut types = HashMap::new();
         for line in text.lines() {
             let parts: Vec<&str> = line.splitn(4, '\t').collect();
-            let hex = |s: &str| u64::from_str_radix(s, 16).map_err(|e| format!("corrupt state: {e}"));
+            let hex =
+                |s: &str| u64::from_str_radix(s, 16).map_err(|e| format!("corrupt state: {e}"));
             match parts.as_slice() {
                 ["H", h, name] => {
                     hashes.insert(name.to_string(), hex(h)?);
@@ -168,7 +180,11 @@ impl State {
     pub fn write_inputs(&self, digests: &[Digest]) -> Result<(), String> {
         let mut out = String::new();
         for d in digests {
-            let _ = writeln!(out, "{:016x}\t{}\t{}\t{}", d.content, d.size, d.modified, d.path);
+            let _ = writeln!(
+                out,
+                "{:016x}\t{}\t{}\t{}",
+                d.content, d.size, d.modified, d.path
+            );
         }
         write(&self.inputs_path(), out.as_bytes())
     }
@@ -266,7 +282,12 @@ pub fn changed(old: &[Digest], new: &[Digest]) -> Vec<String> {
         .iter()
         .filter(|(p, c)| after.get(*p) != Some(c))
         .map(|(p, _)| p.to_string())
-        .chain(after.keys().filter(|p| !before.contains_key(*p)).map(|p| p.to_string()))
+        .chain(
+            after
+                .keys()
+                .filter(|p| !before.contains_key(*p))
+                .map(|p| p.to_string()),
+        )
         .collect();
     out.sort();
     out
@@ -274,7 +295,8 @@ pub fn changed(old: &[Digest], new: &[Digest]) -> Vec<String> {
 
 /// A content hash of the running patch builder's executable.
 fn builder_identity() -> Result<u64, String> {
-    let exe = std::env::current_exe().map_err(|e| format!("cannot locate the patch builder: {e}"))?;
+    let exe =
+        std::env::current_exe().map_err(|e| format!("cannot locate the patch builder: {e}"))?;
     let bytes = fs::read(&exe).map_err(|e| format!("cannot read {}: {e}", exe.display()))?;
     let mut h = std::collections::hash_map::DefaultHasher::new();
     bytes.hash(&mut h);

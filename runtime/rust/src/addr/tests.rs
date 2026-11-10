@@ -6,12 +6,12 @@
 //! every call through the process-global completion callback.
 
 use super::*;
-use crate::actor::{Host, spawn_host};
+use crate::actor::{spawn_host, Host};
 use crate::codec::FramedWriter;
 use crate::test_wait::Count;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Mutex;
 use std::time::Duration;
 
 /// Answers go nowhere: these tests observe the actor, not the replies.
@@ -340,7 +340,11 @@ fn a_panicking_post_reaches_its_owner_and_leaves_the_host_serving() {
     on_host(&host, move || {
         root().me.post(|_| panic!("a posted closure exploded"));
         call_tx
-            .send(root().me.call(|_| -> i64 { panic!("a called closure exploded") }))
+            .send(
+                root()
+                    .me
+                    .call(|_| -> i64 { panic!("a called closure exploded") }),
+            )
             .unwrap();
         root().me.post(move |r| {
             r.note("after");

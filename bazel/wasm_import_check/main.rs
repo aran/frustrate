@@ -283,9 +283,8 @@ fn check_namespaces(
         return stray_env_error(label, &stray_env);
     }
 
-    let mut msg = format!(
-        "frustrate_wasm_module: {label} imports namespaces nothing will supply:\n\n"
-    );
+    let mut msg =
+        format!("frustrate_wasm_module: {label} imports namespaces nothing will supply:\n\n");
     for (ns, n) in &foreign {
         let plural = if *n == 1 { "import" } else { "imports" };
         msg.push_str(&format!("  {ns} ({n} {plural})\n"));
@@ -727,7 +726,11 @@ mod tests {
             ("frustrate", "post", Kind::Func),
             ("__wbindgen_placeholder__", "__wbg_new_1", Kind::Func),
             ("__wbindgen_placeholder__", "__wbg_new_2", Kind::Func),
-            ("__wbindgen_externref_xform__", "__wbindgen_copy", Kind::Func),
+            (
+                "__wbindgen_externref_xform__",
+                "__wbindgen_copy",
+                Kind::Func,
+            ),
         ]);
         let e = check(&m).unwrap_err();
         assert!(e.contains("//pkg:mod.wasm"), "{e}");
@@ -768,7 +771,10 @@ mod tests {
         let e = check_with_hosts(&m, &["example_opfs"]).unwrap_err();
         assert!(e.contains("other_js (1 import)"), "{e}");
         assert!(e.contains("host_imports = [\"other_js\"]"), "{e}");
-        assert!(e.contains("declares host_imports = [\"example_opfs\"]"), "{e}");
+        assert!(
+            e.contains("declares host_imports = [\"example_opfs\"]"),
+            "{e}"
+        );
         assert!(!e.contains("example_opfs (1 import)"), "{e}");
     }
 
@@ -785,7 +791,10 @@ mod tests {
             ("./demo_bg.js", "__wbg_new", Kind::Func),
             ("example_opfs", "read", Kind::Func),
         ]);
-        assert_eq!(check_full(&m, &["example_opfs"], Some("./demo_bg.js")), Ok(()));
+        assert_eq!(
+            check_full(&m, &["example_opfs"], Some("./demo_bg.js")),
+            Ok(())
+        );
     }
 
     #[test]
@@ -999,7 +1008,11 @@ mod tests {
     fn limits_the_runtimes_own_memory_cannot_satisfy_fail() {
         // Declares more pages than the runtime's initial.
         let too_big = post_pass_module(
-            Some((HOST_MEMORY_INITIAL_PAGES + 1, Some(HOST_MEMORY_MAX_PAGES), true)),
+            Some((
+                HOST_MEMORY_INITIAL_PAGES + 1,
+                Some(HOST_MEMORY_MAX_PAGES),
+                true,
+            )),
             CONFORMING,
             false,
         );
@@ -1025,8 +1038,11 @@ mod tests {
 
     #[test]
     fn a_module_that_does_not_re_export_its_memory_fails() {
-        let without: Vec<(&str, u8)> =
-            CONFORMING.iter().copied().filter(|(n, _)| *n != "memory").collect();
+        let without: Vec<(&str, u8)> = CONFORMING
+            .iter()
+            .copied()
+            .filter(|(n, _)| *n != "memory")
+            .collect();
         let e = check_post_pass(&post_pass_module(
             Some((34, Some(HOST_MEMORY_MAX_PAGES), true)),
             &without,

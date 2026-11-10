@@ -16,7 +16,10 @@ compile_error!("//bazel:wasm_build resolved to neither branch");
 #[unsafe(no_mangle)]
 pub extern "C" fn probe_is_wasm() -> i32 {
     const {
-        assert!(cfg!(target_family = "wasm"), "wasm branch on a non-wasm target");
+        assert!(
+            cfg!(target_family = "wasm"),
+            "wasm branch on a non-wasm target"
+        );
     }
     1
 }
@@ -28,7 +31,10 @@ pub extern "C" fn probe_is_wasm() -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn probe_is_native() -> i32 {
     const {
-        assert!(!cfg!(target_family = "wasm"), "default branch on a wasm target");
+        assert!(
+            !cfg!(target_family = "wasm"),
+            "default branch on a wasm target"
+        );
     }
     0
 }

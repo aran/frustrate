@@ -96,7 +96,8 @@ pub(crate) fn test_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     // A panicking test poisons the lock; the serialization it provides is
     // unaffected, so keep going.
-    LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    LOCK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Native completion routing across isolates.
@@ -835,7 +836,6 @@ mod native {
                 assert_eq!(read_u32(&mut too_wide), None);
             }
         }
-
     }
 
     #[cfg(test)]
@@ -866,7 +866,10 @@ mod native {
             let a = register_callback(record_a);
             let b = register_callback(record_b);
             assert_ne!(a, b);
-            assert!(ROUTED.load(Ordering::SeqCst), "two isolates must route via the map");
+            assert!(
+                ROUTED.load(Ordering::SeqCst),
+                "two isolates must route via the map"
+            );
 
             // Same low bits (5), different isolate tags: the exact collision
             // that misdelivered before.
@@ -897,14 +900,23 @@ mod native {
 
             let iso = register_callback(count);
             let call = (iso << ISOLATE_SHIFT) | 7;
-            assert!(deliver(call, FramedWriter::from_bytes(vec![1u8])), "a live target takes the message");
+            assert!(
+                deliver(call, FramedWriter::from_bytes(vec![1u8])),
+                "a live target takes the message"
+            );
             assert_eq!(*HITS.lock().unwrap(), 1);
 
             // Simulate the port refusing: this is what `deliver` does on a
             // false return from `Dart_PostCObject`.
             mark_gone(iso as u32);
-            assert!(!deliver(call, FramedWriter::from_bytes(vec![2u8])), "a gone isolate is refused");
-            assert!(!deliver(call, FramedWriter::from_bytes(vec![3u8])), "and the refusal is latched");
+            assert!(
+                !deliver(call, FramedWriter::from_bytes(vec![2u8])),
+                "a gone isolate is refused"
+            );
+            assert!(
+                !deliver(call, FramedWriter::from_bytes(vec![3u8])),
+                "and the refusal is latched"
+            );
             assert_eq!(
                 *HITS.lock().unwrap(),
                 1,

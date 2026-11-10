@@ -129,10 +129,10 @@ class Net {
 /// argument), but passing an empty one would change the build configuration for
 /// no reason and cost a second full compile.
 List<String> _defines(Net net) => [
-      'NICKNAME=$kAppNickname',
-      'PRESET=${net.preset}',
-      if (net.relay != null) 'RELAY_URL=${net.relay}',
-    ];
+  'NICKNAME=$kAppNickname',
+  'PRESET=${net.preset}',
+  if (net.relay != null) 'RELAY_URL=${net.relay}',
+];
 
 /// The build setting behind `flutter_bazel --dart-define`. Passed to the
 /// pre-build too, so the dev tool's own build is a cache hit rather than a
@@ -142,9 +142,9 @@ List<String> _defines(Net net) => [
 /// string_list build setting, and one `--flag=a --flag=b` pair is how Bazel
 /// accumulates one.
 List<String> _defineFlags(Net net) => [
-      for (final define in _defines(net))
-        '--@rules_flutter//flutter:extra_dart_defines=$define',
-    ];
+  for (final define in _defines(net))
+    '--@rules_flutter//flutter:extra_dart_defines=$define',
+];
 
 /// How long to wait for the dev tool to have both a control channel and an app.
 /// Generous: it builds and installs the bundle first.
@@ -169,9 +169,11 @@ class DriveFailure implements Exception {
 }
 
 Future<void> main(List<String> argv) async {
-  final workspace = Platform.environment['BUILD_WORKSPACE_DIRECTORY'] ??
+  final workspace =
+      Platform.environment['BUILD_WORKSPACE_DIRECTORY'] ??
       Directory.current.path;
-  final screenshot = _flag(argv, '--screenshot') ??
+  final screenshot =
+      _flag(argv, '--screenshot') ??
       '${Directory.systemTemp.path}/tin_can_two_peers.png';
   final keepGoing = argv.contains('--no-shutdown');
   // The default contacts nobody. `--relay` self-hosts, `--n0` opts into n0's
@@ -180,8 +182,10 @@ Future<void> main(List<String> argv) async {
   final relayFlag = _flag(argv, '--relay');
   final wantsN0 = argv.contains('--n0');
   if (relayFlag != null && wantsN0) {
-    log('--relay and --n0 cannot both be given: --relay names a relay to use, '
-        '--n0 asks for n0\'s.');
+    log(
+      '--relay and --n0 cannot both be given: --relay names a relay to use, '
+      '--n0 asks for n0\'s.',
+    );
     exitCode = 2;
     return;
   }
@@ -286,27 +290,27 @@ class Peerbot {
     // peerbot stays on `presets::Minimal` whatever the app does. Even under
     // `--n0` there is no reason for the *bot* to publish to pkarr: it hands its
     // ticket to the driver directly, on stdout.
-    log(net.relay == null
-        ? 'starting peerbot (presets::Minimal — no relay, no DNS, no pkarr)'
-        : 'starting peerbot (presets::Minimal + --relay ${net.relay} — that '
-            'relay and nothing else)');
-    final process = await Process.start(
-      exe,
-      [
-        '--nickname', 'peerbot',
-        '--prefix', kPrefix,
-        if (net.relay != null) ...['--relay', net.relay!],
-      ],
-      workingDirectory: workspace,
+    log(
+      net.relay == null
+          ? 'starting peerbot (presets::Minimal — no relay, no DNS, no pkarr)'
+          : 'starting peerbot (presets::Minimal + --relay ${net.relay} — that '
+                'relay and nothing else)',
     );
+    final process = await Process.start(exe, [
+      '--nickname',
+      'peerbot',
+      '--prefix',
+      kPrefix,
+      if (net.relay != null) ...['--relay', net.relay!],
+    ], workingDirectory: workspace);
     final bot = Peerbot._(process);
     process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
-      bot.lines.add(line);
-      bot._incoming.add(line);
-    });
+          bot.lines.add(line);
+          bot._incoming.add(line);
+        });
     process.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())
@@ -315,15 +319,16 @@ class Peerbot {
     bot.id = await bot._field('id');
     bot.ticket = await bot._field('ticket');
     await bot.expect('ready', 'peerbot: ready', const Duration(seconds: 30));
-    log('peerbot id ${bot.id.substring(0, 12)}…, '
-        'ticket ${bot.ticket.length} chars');
+    log(
+      'peerbot id ${bot.id.substring(0, 12)}…, '
+      'ticket ${bot.ticket.length} chars',
+    );
     return bot;
   }
 
   Future<String> _field(String verb) async {
     final prefix = 'peerbot: $verb ';
-    final line =
-        await expect('its $verb', prefix, const Duration(seconds: 30));
+    final line = await expect('its $verb', prefix, const Duration(seconds: 30));
     return line.substring(line.indexOf(prefix) + prefix.length).trim();
   }
 
@@ -408,61 +413,71 @@ class DevTool {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
-      tool.stderrLines.add(line);
-      Object? decoded;
-      try {
-        decoded = json.decode(line);
-      } catch (_) {
-        return;
-      }
-      if (decoded is Map && decoded['message'] == 'http_control_channel') {
-        tool.channelBanners++;
-        if (!channel.isCompleted) {
-          channel
-              .complete([decoded['uri'] as String, decoded['token'] as String]);
-        }
-      }
-    });
+          tool.stderrLines.add(line);
+          Object? decoded;
+          try {
+            decoded = json.decode(line);
+          } catch (_) {
+            return;
+          }
+          if (decoded is Map && decoded['message'] == 'http_control_channel') {
+            tool.channelBanners++;
+            if (!channel.isCompleted) {
+              channel.complete([
+                decoded['uri'] as String,
+                decoded['token'] as String,
+              ]);
+            }
+          }
+        });
 
     process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
-      // The machine protocol wraps every message in `[{…}]`. Anything else on
-      // this stream is noise the protocol does not own.
-      final start = line.indexOf('[{');
-      if (start < 0 || !line.endsWith('}]')) return;
-      List<dynamic> messages;
-      try {
-        messages = json.decode(line.substring(start)) as List<dynamic>;
-      } catch (_) {
-        return;
-      }
-      for (final message in messages) {
-        if (message is Map &&
-            message['event'] == 'app.start' &&
-            !started.isCompleted) {
-          started.complete((message['params'] as Map)['appId'] as String);
-        }
-      }
-    });
+          // The machine protocol wraps every message in `[{…}]`. Anything else on
+          // this stream is noise the protocol does not own.
+          final start = line.indexOf('[{');
+          if (start < 0 || !line.endsWith('}]')) return;
+          List<dynamic> messages;
+          try {
+            messages = json.decode(line.substring(start)) as List<dynamic>;
+          } catch (_) {
+            return;
+          }
+          for (final message in messages) {
+            if (message is Map &&
+                message['event'] == 'app.start' &&
+                !started.isCompleted) {
+              started.complete((message['params'] as Map)['appId'] as String);
+            }
+          }
+        });
 
-    unawaited(process.exitCode.then((code) {
-      final why = DriveFailure(
+    unawaited(
+      process.exitCode.then((code) {
+        final why = DriveFailure(
           'the dev tool exited ($code) before the app was drivable:\n'
-          '  ${tool.stderrLines.join("\n  ")}');
-      if (!channel.isCompleted) channel.completeError(why);
-      if (!started.isCompleted) started.completeError(why);
-    }));
+          '  ${tool.stderrLines.join("\n  ")}',
+        );
+        if (!channel.isCompleted) channel.completeError(why);
+        if (!started.isCompleted) started.completeError(why);
+      }),
+    );
 
-    final pair = await channel.future.timeout(kLaunch,
-        onTimeout: () => throw DriveFailure(
-            'no http_control_channel within ${kLaunch.inMinutes} min'));
+    final pair = await channel.future.timeout(
+      kLaunch,
+      onTimeout: () => throw DriveFailure(
+        'no http_control_channel within ${kLaunch.inMinutes} min',
+      ),
+    );
     tool.uri = Uri.parse(pair[0]);
     tool.token = pair[1];
-    tool.appId = await started.future.timeout(kLaunch,
-        onTimeout: () =>
-            throw DriveFailure('no app.start within ${kLaunch.inMinutes} min'));
+    tool.appId = await started.future.timeout(
+      kLaunch,
+      onTimeout: () =>
+          throw DriveFailure('no app.start within ${kLaunch.inMinutes} min'),
+    );
     log('control channel ${tool.uri}, app ${tool.appId}');
     return tool;
   }
@@ -473,17 +488,22 @@ class DevTool {
   /// widget matching …") comes back 200 with an `error` field, so both are
   /// checked here. Returning an error map quietly is how a driver ends up
   /// asserting against `null` three steps later.
-  Future<Map<String, dynamic>> call(String method,
-      [Map<String, dynamic> params = const {}]) async {
+  Future<Map<String, dynamic>> call(
+    String method, [
+    Map<String, dynamic> params = const {},
+  ]) async {
     final client = HttpClient();
     try {
       final request = await client.postUrl(
-          uri.replace(path: '/command', queryParameters: {'token': token}));
+        uri.replace(path: '/command', queryParameters: {'token': token}),
+      );
       request.headers.contentType = ContentType.json;
-      request.write(json.encode({
-        'method': method,
-        'params': {'appId': appId, ...params},
-      }));
+      request.write(
+        json.encode({
+          'method': method,
+          'params': {'appId': appId, ...params},
+        }),
+      );
       final response = await request.close();
       final body = await utf8.decoder.bind(response).join();
       if (response.statusCode != 200) {
@@ -493,7 +513,8 @@ class DevTool {
       if (result is Map<String, dynamic>) {
         if (result['error'] != null) {
           throw DriveFailure(
-              '$method ${json.encode(params)} → ${result['error']}');
+            '$method ${json.encode(params)} → ${result['error']}',
+          );
         }
         return result;
       }
@@ -543,19 +564,26 @@ class DevTool {
       }
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
-    throw DriveFailure('gave up waiting for $what after ${within.inSeconds}s; '
-        'last saw: $last');
+    throw DriveFailure(
+      'gave up waiting for $what after ${within.inSeconds}s; '
+      'last saw: $last',
+    );
   }
 
   Future<List<String>> appLogs() async {
     final client = HttpClient();
     try {
-      final request = await client.getUrl(uri.replace(
-          path: '/sessions/$appId/logs', queryParameters: {'token': token}));
+      final request = await client.getUrl(
+        uri.replace(
+          path: '/sessions/$appId/logs',
+          queryParameters: {'token': token},
+        ),
+      );
       final response = await request.close();
       final body = await utf8.decoder.bind(response).join();
       if (response.statusCode != 200) return ['<logs unavailable: $body>'];
-      final lines = (json.decode(body) as Map<String, dynamic>)['lines'] as List;
+      final lines =
+          (json.decode(body) as Map<String, dynamic>)['lines'] as List;
       return [for (final line in lines) (line as Map)['t'].toString()];
     } catch (e) {
       return ['<logs unavailable: $e>'];
@@ -567,9 +595,12 @@ class DevTool {
   Future<void> screenshot(String path) async {
     final client = HttpClient();
     try {
-      final request = await client.getUrl(uri.replace(
+      final request = await client.getUrl(
+        uri.replace(
           path: '/sessions/$appId/screenshot/flutter',
-          queryParameters: {'token': token}));
+          queryParameters: {'token': token},
+        ),
+      );
       final response = await request.close();
       if (response.statusCode != 200) {
         log('screenshot unavailable (HTTP ${response.statusCode})');
@@ -609,19 +640,27 @@ class DevTool {
 // ============================================================ the drive ===
 
 Future<void> _drive(
-    DevTool app, Peerbot bot, String screenshotPath, Net net) async {
+  DevTool app,
+  Peerbot bot,
+  String screenshotPath,
+  Net net,
+) async {
   // 0. Both peers really took the relay. peerbot prints the relay url out of
   //    its own EndpointAddr, so this is the endpoint's answer and not an echo
   //    of the flag; the app's chip is the same fact on the other side.
   if (net.relay != null) {
     final line = await bot.expect(
-        'its relay address', 'peerbot: relay ', const Duration(seconds: 30));
+      'its relay address',
+      'peerbot: relay ',
+      const Duration(seconds: 30),
+    );
     log('peerbot bound $line');
     final chip = await app.text('transportChip');
     if (!chip.startsWith('relay ')) {
       throw DriveFailure(
-          'the app was launched with RELAY_URL=${net.relay} but its '
-          'transport chip reads "$chip"');
+        'the app was launched with RELAY_URL=${net.relay} but its '
+        'transport chip reads "$chip"',
+      );
     }
     log('the app chip reads "$chip"');
   } else if (net.isHermetic) {
@@ -631,8 +670,10 @@ Future<void> _drive(
     // whole change exists to make impossible.
     final chip = await app.text('transportChip');
     if (chip != 'no relay — direct only') {
-      throw DriveFailure('this run is meant to contact nobody, but the app\'s '
-          'transport chip reads "$chip"');
+      throw DriveFailure(
+        'this run is meant to contact nobody, but the app\'s '
+        'transport chip reads "$chip"',
+      );
     }
     log('the app chip reads "$chip" — no third party configured');
   }
@@ -660,8 +701,10 @@ Future<void> _drive(
     } catch (_) {
       status = '<statusText unreadable too>';
     }
-    throw DriveFailure('${e.message}\n  the app\'s own status line reads: '
-        '$status');
+    throw DriveFailure(
+      '${e.message}\n  the app\'s own status line reads: '
+      '$status',
+    );
   }
   if (ticket.length < 32) {
     throw DriveFailure('that is not a ticket: "$ticket"');
@@ -676,17 +719,26 @@ Future<void> _drive(
   // 3. Both sides agree a connection exists. peerbot's line is the independent
   //    witness — and it carries the nickname, which is the --dart-define this
   //    run launched the app with, so the peer that dialled really is this app.
-  final connected =
-      await bot.expect('a connection from the app', 'peerbot: connected ', kNetwork);
+  final connected = await bot.expect(
+    'a connection from the app',
+    'peerbot: connected ',
+    kNetwork,
+  );
   final appPeerId = connected.split(' ')[2];
   if (!connected.endsWith(' $kAppNickname')) {
-    throw DriveFailure('peerbot was dialled by "$connected", '
-        'expected the nickname $kAppNickname');
+    throw DriveFailure(
+      'peerbot was dialled by "$connected", '
+      'expected the nickname $kAppNickname',
+    );
   }
-  await app.call('app.waitFor',
-      {'key': 'peer:${bot.id}', 'timeoutMs': kNetwork.inMilliseconds});
-  log('connected: the app sees peer:${bot.id.substring(0, 12)}…, '
-      'peerbot sees ${appPeerId.substring(0, 12)}… as "$kAppNickname"');
+  await app.call('app.waitFor', {
+    'key': 'peer:${bot.id}',
+    'timeoutMs': kNetwork.inMilliseconds,
+  });
+  log(
+    'connected: the app sees peer:${bot.id.substring(0, 12)}…, '
+    'peerbot sees ${appPeerId.substring(0, 12)}… as "$kAppNickname"',
+  );
 
   // 4. Select the peer, then send. Selecting is what opens the message pane;
   //    without it `messageLog` reads "no peer selected".
@@ -699,7 +751,10 @@ Future<void> _drive(
   //    the frame off a QUIC stream and decoded it with the same proto.rs the
   //    app encoded it with.
   await bot.expect(
-      'the message arriving', 'peerbot: recv $appPeerId $kMessage', kNetwork);
+    'the message arriving',
+    'peerbot: recv $appPeerId $kMessage',
+    kNetwork,
+  );
   log('peerbot received it — the message really crossed the wire');
 
   // 6. And back. peerbot echoed with a prefix, so finding `echo: <message>` in
@@ -730,7 +785,8 @@ Future<void> _drive(
   );
   if (path != 'direct') {
     throw DriveFailure(
-        'two peers on one host should be direct; the badge says "$path"');
+      'two peers on one host should be direct; the badge says "$path"',
+    );
   }
   log('the path badge reads direct');
 
@@ -776,6 +832,8 @@ Future<void> _probeRestart(DevTool app) async {
     alive = 'NO — $e';
   }
   log('probe: is the control channel still answering? $alive');
-  log('probe: new http_control_channel banners since the restart: '
-      '${app.channelBanners - before}');
+  log(
+    'probe: new http_control_channel banners since the restart: '
+    '${app.channelBanners - before}',
+  );
 }

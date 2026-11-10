@@ -138,7 +138,9 @@ impl Raw {
         unsafe(export_name = "frustrate_bounded_lock_acquire")
     )]
     fn acquire(&self) -> std::sync::MutexGuard<'_, ()> {
-        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     #[cfg(test)]

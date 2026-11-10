@@ -204,10 +204,7 @@ pub mod r#async {
     pub type StreamController<T> = crate::stream::StreamSink<T>;
 
     /// Construct the handle for a decoded id (generated glue).
-    pub fn stream_controller<T>(
-        id: u64,
-        encode: fn(T, &mut ByteWriter),
-    ) -> StreamController<T> {
+    pub fn stream_controller<T>(id: u64, encode: fn(T, &mut ByteWriter)) -> StreamController<T> {
         crate::stream::sink(id, encode)
     }
 }

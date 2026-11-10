@@ -75,10 +75,8 @@ impl Toolchain {
             i += 1;
         }
         link_args.retain(|a| !a.contains("${") && !links_an_archive(a, &static_libs));
-        let mut env: Vec<(String, String)> = env
-            .into_iter()
-            .map(|(k, v)| (k, substitute(&v)))
-            .collect();
+        let mut env: Vec<(String, String)> =
+            env.into_iter().map(|(k, v)| (k, substitute(&v))).collect();
         apple_developer_env(&mut env);
         Toolchain {
             llc,
@@ -112,7 +110,13 @@ impl Toolchain {
         Ok(())
     }
 
-    pub fn link(&self, format: Format, arch: Arch, objects: &[&Path], output: &Path) -> Result<(), String> {
+    pub fn link(
+        &self,
+        format: Format,
+        arch: Arch,
+        objects: &[&Path],
+        output: &Path,
+    ) -> Result<(), String> {
         let file_name = output
             .file_name()
             .map(|f| f.to_string_lossy().into_owned())
@@ -194,15 +198,29 @@ fn links_an_archive(arg: &str, static_libs: &[String]) -> bool {
 /// and version the action does record. A variable the patch builder's own
 /// environment already sets wins.
 fn apple_developer_env(env: &mut Vec<(String, String)>) {
-    let get = |env: &Vec<(String, String)>, key: &str| env.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
-    let (Some(platform), Some(version)) = (get(env, "APPLE_SDK_PLATFORM"), get(env, "APPLE_SDK_VERSION_OVERRIDE")) else {
+    let get = |env: &Vec<(String, String)>, key: &str| {
+        env.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
+    };
+    let (Some(platform), Some(version)) = (
+        get(env, "APPLE_SDK_PLATFORM"),
+        get(env, "APPLE_SDK_VERSION_OVERRIDE"),
+    ) else {
         return;
     };
-    let developer_dir = get(env, "DEVELOPER_DIR").or_else(|| std::env::var("DEVELOPER_DIR").ok()).or_else(|| {
-        let out = Command::new("/usr/bin/xcode-select").arg("--print-path").output().ok()?;
-        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
-    });
-    let Some(developer_dir) = developer_dir else { return };
+    let developer_dir = get(env, "DEVELOPER_DIR")
+        .or_else(|| std::env::var("DEVELOPER_DIR").ok())
+        .or_else(|| {
+            let out = Command::new("/usr/bin/xcode-select")
+                .arg("--print-path")
+                .output()
+                .ok()?;
+            out.status
+                .success()
+                .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        });
+    let Some(developer_dir) = developer_dir else {
+        return;
+    };
     if get(env, "DEVELOPER_DIR").is_none() {
         env.push(("DEVELOPER_DIR".into(), developer_dir.clone()));
     }
@@ -214,7 +232,10 @@ fn apple_developer_env(env: &mut Vec<(String, String)>) {
             .output()
         {
             if out.status.success() {
-                env.push(("SDKROOT".into(), String::from_utf8_lossy(&out.stdout).trim().to_string()));
+                env.push((
+                    "SDKROOT".into(),
+                    String::from_utf8_lossy(&out.stdout).trim().to_string(),
+                ));
             }
         }
     }

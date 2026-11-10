@@ -48,16 +48,13 @@ use std::fmt::Write;
 
 use crate::emit_dart::{
     dart_name, dart_type, dart_type_opt, decl_has_handle, decl_owns_handles, decode_expr,
-    fake_class_header, fake_data_class, fake_handle_class, fake_variant_class, field_name, member_name,
-    decode_expr_fake,
-    emit_doc_comment, encode_stmts_fake, error_class_stem, error_exception_type,
-    has_handle, web_fate,
-    SizeHint, WebFate,
+    decode_expr_fake, emit_doc_comment, encode_stmts_fake, error_class_stem, error_exception_type,
+    fake_class_header, fake_data_class, fake_handle_class, fake_variant_class, field_name,
+    has_handle, member_name, web_fate, SizeHint, WebFate,
 };
 use crate::ir::{
     DartMirror, DartObjectSpec, EnumDecl, Exec, Function, Interface, Model, OpaqueDecl, Receiver,
-    Repr,
-    StructDecl, StructShape, Type,
+    Repr, StructDecl, StructShape, Type,
 };
 
 /// Upper-camel of the crate name — `test_api` becomes `TestApi` — used as the
@@ -99,7 +96,11 @@ pub(crate) fn free_name(iface: &Interface, f: &Function) -> String {
         Some(p) if iface.instance_of(p).is_some() => {
             let stem = crate::emit_dart::instance_extension(iface, p);
             let mut cs = stem.chars();
-            let head: String = cs.next().map(|c| c.to_ascii_lowercase()).into_iter().collect();
+            let head: String = cs
+                .next()
+                .map(|c| c.to_ascii_lowercase())
+                .into_iter()
+                .collect();
             format!("{head}{}{member}", cs.as_str())
         }
         Some(p) => format!("{}{member}", dart_name(p)),
@@ -316,7 +317,11 @@ fn collect(
                 return;
             }
             seen.push(n.clone());
-            let e = iface.enums.iter().find(|e| &e.name == n).expect("enum in IR");
+            let e = iface
+                .enums
+                .iter()
+                .find(|e| &e.name == n)
+                .expect("enum in IR");
             for v in &e.variants {
                 for f in &v.fields {
                     collect(iface, &f.ty, seen, out);
@@ -345,7 +350,10 @@ pub(crate) fn mirror_call(iface: &Interface, spec: &DartObjectSpec, spread: bool
 /// when the encode mints nothing, a block naming `_fakeWire` when it does.
 fn fake_wire_scope(enc: &str) -> (&'static str, &'static str) {
     if enc.contains("_fakeWire") {
-        ("{\n    final _fakeWire = _fakeReq.wire;\n    return ", ";\n}")
+        (
+            "{\n    final _fakeWire = _fakeReq.wire;\n    return ",
+            ";\n}",
+        )
     } else {
         ("=>\n\x20   ", ";")
     }
@@ -366,7 +374,9 @@ fn emit_mirror_factories(out: &mut String, iface: &Interface) {
         // into several arguments; re-assemble in declaration order.
         let encoded: Vec<(&Type, String)> = match (&spec.item, *spread) {
             (None, _) => vec![],
-            (Some(Type::Tuple(ts)), true) => ts.iter().zip(&names).map(|(t, n)| (t, n.clone())).collect(),
+            (Some(Type::Tuple(ts)), true) => {
+                ts.iter().zip(&names).map(|(t, n)| (t, n.clone())).collect()
+            }
             (Some(t), _) => vec![(t, names[0].clone())],
         };
         let mut hint = SizeHint::default();
@@ -638,7 +648,11 @@ fn emit_handle_struct_codec(out: &mut String, iface: &Interface, s: &StructDecl)
     // opposite. A handle field decodes by *taking* the object out of the
     // registry the fake minted it in, which is what the real Rust's adopt does.
     if s.inbound {
-        let req = if decl_has_handle(iface, n) { ", FakeRequest _fakeReq" } else { "" };
+        let req = if decl_has_handle(iface, n) {
+            ", FakeRequest _fakeReq"
+        } else {
+            ""
+        };
         let _ = write!(
             out,
             "{fcls} _fakeDec{stem}(BinaryReader r, FakeWire _fakeWire{req}) {{\n"
@@ -789,7 +803,10 @@ fn emit_handle_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
                 );
             }
             let args: Vec<String> = if v.tuple {
-                v.fields.iter().map(|f| format!("${}", field_name(f))).collect()
+                v.fields
+                    .iter()
+                    .map(|f| format!("${}", field_name(f)))
+                    .collect()
             } else {
                 v.fields
                     .iter()
@@ -1003,8 +1020,15 @@ fn emit_arm(out: &mut String, iface: &Interface, f: &Function) {
             // impl tag first where the client writes one, which is a consuming
             // receiver on a bridged trait (`emit_dart::emit_function`).
             let read = if matches!(f.receiver, Some(Receiver::Value | Receiver::Boxed)) {
-                let take = if o.dyn_trait { "_fakeTakeTagged" } else { "_fakeTake" };
-                format!("{take}<{}>(_fakeWire, r)", fake_handle_class(iface, &o.name))
+                let take = if o.dyn_trait {
+                    "_fakeTakeTagged"
+                } else {
+                    "_fakeTake"
+                };
+                format!(
+                    "{take}<{}>(_fakeWire, r)",
+                    fake_handle_class(iface, &o.name)
+                )
             } else {
                 format!(
                     "_fakeWire.resolveHandle(r.readHandle()) as {}",
@@ -1016,7 +1040,11 @@ fn emit_arm(out: &mut String, iface: &Interface, f: &Function) {
             // A value receiver: decoded from the request exactly as Rust
             // decodes it, and handed to the crate fake as the first argument.
             let ty = data_receiver_type(iface, f).expect("a value receiver is declared");
-            let _ = write!(out, "{pad}final _self = {};\n", decode_expr_fake(iface, &ty));
+            let _ = write!(
+                out,
+                "{pad}final _self = {};\n",
+                decode_expr_fake(iface, &ty)
+            );
         }
     }
     for p in &f.params {
@@ -1337,7 +1365,12 @@ mod tests {
     #[test]
     fn a_sync_arm_consumes_the_request_and_frames_its_own_status() {
         let code = emit_src("#[bridge(sync)] pub fn add(a: i32, b: i32) -> i32 { a + b }");
-        assert!(code.contains("  int add({required int a, required int b}) => throw UnimplementedError("), "{code}");
+        assert!(
+            code.contains(
+                "  int add({required int a, required int b}) => throw UnimplementedError("
+            ),
+            "{code}"
+        );
         assert!(
             code.contains(
                 "          final a = r.readI32();\n\
@@ -1375,7 +1408,10 @@ mod tests {
         // emitted unconditionally, so the question is about the *dispatch
         // methods*: neither may hoist a wire it never reads.
         assert!(!hoisted(&scalars, "Uint8List answerSync"), "{scalars}");
-        assert!(!hoisted(&scalars, "Future<Uint8List> answerAsync"), "{scalars}");
+        assert!(
+            !hoisted(&scalars, "Future<Uint8List> answerAsync"),
+            "{scalars}"
+        );
 
         let mixed = emit_src(
             r#"
@@ -1412,9 +1448,18 @@ mod tests {
             }
             "#,
         );
-        assert!(code.contains("Future<int> slow({required int n}) => throw UnimplementedError("), "{code}");
-        assert!(code.contains("Future<int> dig({required int n}) => throw UnimplementedError("), "{code}");
-        assert!(!code.contains("cancel) => throw UnimplementedError"), "{code}");
+        assert!(
+            code.contains("Future<int> slow({required int n}) => throw UnimplementedError("),
+            "{code}"
+        );
+        assert!(
+            code.contains("Future<int> dig({required int n}) => throw UnimplementedError("),
+            "{code}"
+        );
+        assert!(
+            !code.contains("cancel) => throw UnimplementedError"),
+            "{code}"
+        );
         // The client's own signatures still carry it.
         assert!(code.contains("FrustrateCancelToken? cancel})"), "{code}");
     }
@@ -1433,13 +1478,17 @@ mod tests {
             }
             "#,
         );
-        assert!(code.contains("  FakeTextDoc textDocNew() => throw UnimplementedError("), "{code}");
-        assert!(code.contains("w.writeHandle(_fakeWire.mintHandle(_ret));"), "{code}");
+        assert!(
+            code.contains("  FakeTextDoc textDocNew() => throw UnimplementedError("),
+            "{code}"
+        );
+        assert!(
+            code.contains("w.writeHandle(_fakeWire.mintHandle(_ret));"),
+            "{code}"
+        );
         // An instance member resolves its receiver out of the same registry.
         assert!(
-            code.contains(
-                "final _self = _fakeWire.resolveHandle(r.readHandle()) as FakeTextDoc;"
-            ),
+            code.contains("final _self = _fakeWire.resolveHandle(r.readHandle()) as FakeTextDoc;"),
             "{code}"
         );
         assert!(code.contains("final _ret = _self.len();"), "{code}");
@@ -1467,7 +1516,10 @@ mod tests {
             ),
             "{code}"
         );
-        assert!(!code.contains("frustrateDropMiner"), "no fake method for it: {code}");
+        assert!(
+            !code.contains("frustrateDropMiner"),
+            "no fake method for it: {code}"
+        );
     }
 
     /// A stream parameter reaches the fake as the write end plus the consumer's
@@ -1486,7 +1538,9 @@ mod tests {
         assert!(code.contains("hasAddError: true);"), "{code}");
         assert!(code.contains("hasAddError: false);"), "{code}");
         assert!(
-            code.contains("  void watch({required FakeStreamSink<int> sink}) => throw UnimplementedError("),
+            code.contains(
+                "  void watch({required FakeStreamSink<int> sink}) => throw UnimplementedError("
+            ),
             "{code}"
         );
         assert!(
@@ -1503,9 +1557,7 @@ mod tests {
             "{code}"
         );
         assert!(
-            code.contains(
-                "          } finally {\n            _fakeReq.retire();\n          }"
-            ),
+            code.contains("          } finally {\n            _fakeReq.retire();\n          }"),
             "{code}"
         );
     }
@@ -1522,10 +1574,15 @@ mod tests {
             "#,
         );
         assert!(
-            code.contains("  void notify({required void Function(int) cb}) => throw UnimplementedError("),
+            code.contains(
+                "  void notify({required void Function(int) cb}) => throw UnimplementedError("
+            ),
             "{code}"
         );
-        assert!(code.contains("if (!_fakeReq.wire.deliver(id, 0, w)) {"), "{code}");
+        assert!(
+            code.contains("if (!_fakeReq.wire.deliver(id, 0, w)) {"),
+            "{code}"
+        );
         assert!(
             code.contains(
                 "  Future<void> transform({required Future<String> Function(int) f}) => throw UnimplementedError("
@@ -1533,7 +1590,9 @@ mod tests {
             "{code}"
         );
         assert!(
-            code.contains("final r = decodeEnvelope(\n          await _fakeReq.wire.invokeChannel(id, w));"),
+            code.contains(
+                "final r = decodeEnvelope(\n          await _fakeReq.wire.invokeChannel(id, w));"
+            ),
             "{code}"
         );
         // One message for one fact: a closure whose call has answered says the
@@ -1541,7 +1600,11 @@ mod tests {
         // the void mirror tests the channel *before* encoding as well, because
         // an argument that reaches a handle is minted by that encode and a
         // throw afterwards would strand it.
-        assert_eq!(code.matches("_fakeClosureGone(_fakeReq.label)").count(), 3, "{code}");
+        assert_eq!(
+            code.matches("_fakeClosureGone(_fakeReq.label)").count(),
+            3,
+            "{code}"
+        );
     }
 
     /// A closure that may refuse hands the fake the same exception class the
@@ -1581,9 +1644,18 @@ mod tests {
             "#,
         );
         assert!(code.contains("class FakeAuditor {"), "{code}");
-        assert!(code.contains("  final void Function(String) note;"), "{code}");
-        assert!(code.contains("  final void Function(int, String) approve;"), "{code}");
-        assert!(code.contains("final a = _fakeDecAuditor(r, _fakeReq);"), "{code}");
+        assert!(
+            code.contains("  final void Function(String) note;"),
+            "{code}"
+        );
+        assert!(
+            code.contains("  final void Function(int, String) approve;"),
+            "{code}"
+        );
+        assert!(
+            code.contains("final a = _fakeDecAuditor(r, _fakeReq);"),
+            "{code}"
+        );
     }
 
     /// A channel whose item carries a handle is the fake's to **mint**: the
@@ -1602,14 +1674,23 @@ mod tests {
             #[bridge] pub fn plain(s: StreamSink<i64>) {}
             "#,
         );
-        assert!(code.contains("FakeStreamSink<FakeDoc> _fakeMirror"), "{code}");
+        assert!(
+            code.contains("FakeStreamSink<FakeDoc> _fakeMirror"),
+            "{code}"
+        );
         assert!(code.contains("final _fakeWire = _fakeReq.wire;"), "{code}");
-        assert!(code.contains("w.writeHandle(_fakeWire.mintHandle(v));"), "{code}");
+        assert!(
+            code.contains("w.writeHandle(_fakeWire.mintHandle(v));"),
+            "{code}"
+        );
         // The value channel is untouched: still an arrow, still no wire.
         assert!(code.contains("FakeStreamSink<int> _fakeMirror"), "{code}");
         assert!(code.contains("w.writeI64(v);"), "{code}");
         // And the fake's method signature speaks the fake's item type.
-        assert!(code.contains("watch({required FakeStreamSink<FakeDoc> s})"), "{code}");
+        assert!(
+            code.contains("watch({required FakeStreamSink<FakeDoc> s})"),
+            "{code}"
+        );
     }
 
     /// A member's own typed error is the one throw the dispatch wrapper cannot
@@ -1623,7 +1704,10 @@ mod tests {
             "#,
         );
         assert!(code.contains("} on DeniedException catch (_x) {"), "{code}");
-        assert!(code.contains("final w = BinaryWriter()..writeU8(statusTypedError);"), "{code}");
+        assert!(
+            code.contains("final w = BinaryWriter()..writeU8(statusTypedError);"),
+            "{code}"
+        );
         assert!(code.contains("_encDenied(w, _e);"), "{code}");
     }
 
@@ -1650,8 +1734,14 @@ mod tests {
         );
         assert!(code.contains("FakeGreeter _fakeResolveGreeter("), "{code}");
         assert!(code.contains("r.readU8(); // impl tag"), "{code}");
-        assert!(code.contains("final g = _fakeResolveGreeter(_fakeWire, r);"), "{code}");
-        assert!(code.contains("class FakeRobot implements FakeGreeter {"), "{code}");
+        assert!(
+            code.contains("final g = _fakeResolveGreeter(_fakeWire, r);"),
+            "{code}"
+        );
+        assert!(
+            code.contains("class FakeRobot implements FakeGreeter {"),
+            "{code}"
+        );
     }
 
     /// A struct or an enum that reaches a Dart-object handle has no client
@@ -1676,8 +1766,14 @@ mod tests {
         );
         // The enum: the same sealed hierarchy the client has, one level over.
         assert!(code.contains("sealed class FakeRoute {"), "{code}");
-        assert!(code.contains("final class FakeRouteChatty extends FakeRoute {"), "{code}");
-        assert!(code.contains("      return const FakeRouteSilent();"), "{code}");
+        assert!(
+            code.contains("final class FakeRouteChatty extends FakeRoute {"),
+            "{code}"
+        );
+        assert!(
+            code.contains("      return const FakeRouteSilent();"),
+            "{code}"
+        );
         assert!(
             code.contains("invalid variant index $idx for Route"),
             "{code}"
@@ -1696,9 +1792,22 @@ mod tests {
             #[bridge(sync)] pub fn ping() -> i64 { 0 }
             "#,
         );
-        assert!(b.native.contains("  int dial({required String t}) => throw UnimplementedError("), "{}", b.native);
-        assert!(!b.web.contains("int dial({required String t}) => throw"), "{}", b.web);
-        assert!(b.web.contains("  int ping() => throw UnimplementedError("), "{}", b.web);
+        assert!(
+            b.native
+                .contains("  int dial({required String t}) => throw UnimplementedError("),
+            "{}",
+            b.native
+        );
+        assert!(
+            !b.web.contains("int dial({required String t}) => throw"),
+            "{}",
+            b.web
+        );
+        assert!(
+            b.web.contains("  int ping() => throw UnimplementedError("),
+            "{}",
+            b.web
+        );
         assert!(
             b.web.contains("is not on this surface, so nothing "),
             "{}",

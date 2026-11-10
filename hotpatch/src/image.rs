@@ -50,7 +50,8 @@ pub struct Image {
 
 impl Image {
     pub fn read(bytes: &[u8]) -> Result<Image, String> {
-        let file = object::File::parse(bytes).map_err(|e| format!("not a library object file: {e}"))?;
+        let file =
+            object::File::parse(bytes).map_err(|e| format!("not a library object file: {e}"))?;
         let format = match file.format() {
             object::BinaryFormat::MachO => Format::MachO,
             object::BinaryFormat::Elf => Format::Elf,
@@ -87,7 +88,10 @@ impl Image {
                 imported.insert(name.to_string());
                 continue;
             }
-            let kind = if sym.section_index().is_some_and(|i| tls_sections.contains(&i)) {
+            let kind = if sym
+                .section_index()
+                .is_some_and(|i| tls_sections.contains(&i))
+            {
                 SymKind::Tls
             } else {
                 match sym.kind() {
@@ -138,13 +142,21 @@ impl Image {
         for (i, name) in text.iter().enumerate() {
             symbols.insert(
                 name.to_string(),
-                Symbol { address: 0x1000 + i as u64 * 0x100, kind: SymKind::Text, duplicated: false },
+                Symbol {
+                    address: 0x1000 + i as u64 * 0x100,
+                    kind: SymKind::Text,
+                    duplicated: false,
+                },
             );
         }
         for (i, name) in data.iter().enumerate() {
             symbols.insert(
                 name.to_string(),
-                Symbol { address: 0x9000 + i as u64 * 0x8, kind: SymKind::Data, duplicated: false },
+                Symbol {
+                    address: 0x9000 + i as u64 * 0x8,
+                    kind: SymKind::Data,
+                    duplicated: false,
+                },
             );
         }
         Image {

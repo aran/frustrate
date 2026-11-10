@@ -250,10 +250,7 @@ mod width {
 /// right future, and replenishes the pool (`frustrate_pool_replenish`) —
 /// pool width is an invariant, though state the panicking job touched — a
 /// `locked` object whose guard never dropped, say — stays wedged.
-pub fn spawn_call(
-    call_id: u64,
-    job: impl FnOnce() -> crate::codec::FramedWriter + Send + 'static,
-) {
+pub fn spawn_call(call_id: u64, job: impl FnOnce() -> crate::codec::FramedWriter + Send + 'static) {
     let mut captured = crate::carry::Captured::here();
     spawn(move || {
         #[cfg(all(target_family = "wasm", feature = "wasm-threads"))]
@@ -391,7 +388,9 @@ mod native {
     /// cgroup quota is respected — which is also why it disagrees with Dart's
     /// `Platform.numberOfProcessors` under Bazel.
     fn probe() -> usize {
-        thread::available_parallelism().map(|n| n.get()).unwrap_or(4)
+        thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
     }
 
     /// The pool's width: what it was built at, or — before the first job —
@@ -779,7 +778,11 @@ mod tests {
             word.declare(nonzero(3)),
             Err(WidthError::AlreadyFixed { width: 2 })
         );
-        assert_eq!(word.forecast(|| 8), 2, "a refused declaration changed nothing");
+        assert_eq!(
+            word.forecast(|| 8),
+            2,
+            "a refused declaration changed nothing"
+        );
     }
 
     /// The same refusal against the process's *real* pool, which by this point

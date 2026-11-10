@@ -22,7 +22,10 @@ pub(crate) struct Count {
 
 impl Count {
     pub(crate) const fn new() -> Self {
-        Count { n: Mutex::new(0), raised: Condvar::new() }
+        Count {
+            n: Mutex::new(0),
+            raised: Condvar::new(),
+        }
     }
 
     pub(crate) fn add(&self) {

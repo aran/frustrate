@@ -175,7 +175,12 @@ impl Probe {
     };
 
     const fn of(readers: usize, queued: usize, writer: bool, head_writes: Option<bool>) -> Probe {
-        Probe { readers, queued, writer, head_writes }
+        Probe {
+            readers,
+            queued,
+            writer,
+            head_writes,
+        }
     }
 }
 
@@ -812,7 +817,11 @@ mod tests {
             assert_eq!(*g2, 7);
             assert_eq!(lock.probe(), Probe::of(2, 0, false, None));
         }
-        assert_eq!(lock.probe(), Probe::IDLE, "both readers gave their count back");
+        assert_eq!(
+            lock.probe(),
+            Probe::IDLE,
+            "both readers gave their count back"
+        );
         {
             let mut g = lock.try_write().expect("free again");
             *g = 9;
@@ -927,10 +936,17 @@ mod tests {
             Poll::Ready(g) => g,
             Poll::Pending => panic!("granted"),
         };
-        assert_eq!(lock.probe(), Probe::of(2, 1, false, Some(true)),
-            "two readers, the writer queued");
+        assert_eq!(
+            lock.probe(),
+            Probe::of(2, 1, false, Some(true)),
+            "two readers, the writer queued"
+        );
         drop((g1, g2));
-        assert_eq!(c3.0.load(Ordering::SeqCst), 1, "the last reader out wakes it");
+        assert_eq!(
+            c3.0.load(Ordering::SeqCst),
+            1,
+            "the last reader out wakes it"
+        );
         assert!(poll_once(&mut w, &w3).is_ready());
     }
 
@@ -945,7 +961,11 @@ mod tests {
         assert!(poll_once(&mut w, &waker).is_pending());
         assert_eq!(lock.probe(), Probe::of(1, 1, false, Some(true)));
         drop(w);
-        assert_eq!(lock.probe(), Probe::of(1, 0, false, None), "the queue is empty again");
+        assert_eq!(
+            lock.probe(),
+            Probe::of(1, 0, false, None),
+            "the queue is empty again"
+        );
         lock.try_read()
             .expect("with nothing queued a later reader may join");
         drop(held);
@@ -962,7 +982,10 @@ mod tests {
         let mut w = boxed(lock.write());
         let mut r = boxed(lock.read());
         assert!(poll_once(&mut w, &waker_w).is_pending());
-        assert!(poll_once(&mut r, &waker_r).is_pending(), "behind the writer");
+        assert!(
+            poll_once(&mut r, &waker_r).is_pending(),
+            "behind the writer"
+        );
         drop(held);
         assert_eq!(cw.0.load(Ordering::SeqCst), 1);
         assert_eq!(cr.0.load(Ordering::SeqCst), 0, "still behind the writer");
@@ -985,7 +1008,11 @@ mod tests {
         assert!(poll_once(&mut w, &waker).is_pending());
         drop(held);
         assert_eq!(count.0.load(Ordering::SeqCst), 1, "granted and woken");
-        assert_eq!(lock.probe(), Probe::of(0, 0, true, None), "the writer bit is its permit");
+        assert_eq!(
+            lock.probe(),
+            Probe::of(0, 0, true, None),
+            "the writer bit is its permit"
+        );
         // Never polled again: the grant is still unobserved when this drops.
         drop(w);
         assert_eq!(lock.probe(), Probe::IDLE, "the permit came back");
@@ -1000,7 +1027,11 @@ mod tests {
         let mut r = boxed(lock.read());
         assert!(poll_once(&mut r, &waker).is_pending());
         drop(held);
-        assert_eq!(lock.probe(), Probe::of(1, 0, false, None), "granted: one reader counted");
+        assert_eq!(
+            lock.probe(),
+            Probe::of(1, 0, false, None),
+            "granted: one reader counted"
+        );
         drop(r);
         assert_eq!(lock.probe(), Probe::IDLE);
         lock.try_write().expect("free again");
@@ -1012,7 +1043,11 @@ mod tests {
         let held = lock.try_write().expect("free");
         drop(lock.read());
         drop(lock.write());
-        assert_eq!(lock.probe(), Probe::of(0, 0, true, None), "only the guard is accounted");
+        assert_eq!(
+            lock.probe(),
+            Probe::of(0, 0, true, None),
+            "only the guard is accounted"
+        );
         drop(held);
         assert_eq!(lock.probe(), Probe::IDLE);
     }
@@ -1027,7 +1062,11 @@ mod tests {
         assert!(poll_once(&mut r, &w_first).is_pending());
         assert!(poll_once(&mut r, &w_second).is_pending());
         drop(held);
-        assert_eq!(first.0.load(Ordering::SeqCst), 0, "the stale waker is not used");
+        assert_eq!(
+            first.0.load(Ordering::SeqCst),
+            0,
+            "the stale waker is not used"
+        );
         assert_eq!(second.0.load(Ordering::SeqCst), 1);
         assert!(poll_once(&mut r, &w_second).is_ready());
     }
@@ -1359,7 +1398,11 @@ mod tests {
                 });
             }
         });
-        assert_eq!(lock.probe(), Probe::IDLE, "every holder gave its count back");
+        assert_eq!(
+            lock.probe(),
+            Probe::IDLE,
+            "every holder gave its count back"
+        );
         assert_eq!(occupancy.load(Ordering::SeqCst), 0);
     }
 }

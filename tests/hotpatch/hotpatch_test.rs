@@ -28,14 +28,19 @@ type Apply = unsafe extern "C" fn(*const c_char, *mut c_char, usize) -> i32;
 /// the failure this whole test file exists to make impossible.
 fn fn_id(contract: &Path, member: &str) -> u32 {
     let ir: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(contract).expect("the contract")).expect("interface IR");
+        serde_json::from_slice(&std::fs::read(contract).expect("the contract"))
+            .expect("interface IR");
     let found: Vec<&serde_json::Value> = ir["functions"]
         .as_array()
         .expect("functions")
         .iter()
         .filter(|f| f["name"] == member)
         .collect();
-    assert_eq!(found.len(), 1, "exactly one member named {member}: {found:?}");
+    assert_eq!(
+        found.len(),
+        1,
+        "exactly one member named {member}: {found:?}"
+    );
     found[0]["fn_id"].as_u64().expect("an fn_id") as u32
 }
 
@@ -62,7 +67,11 @@ impl Data {
             .iter()
             .filter(|f| f.to_string_lossy().ends_with(suffix))
             .collect();
-        assert_eq!(found.len(), 1, "exactly one data file ends with {suffix}: {found:?}");
+        assert_eq!(
+            found.len(),
+            1,
+            "exactly one data file ends with {suffix}: {found:?}"
+        );
         found[0].clone()
     }
 }
@@ -82,13 +91,18 @@ impl Library {
     fn open_bridge(path: &Path, call_sync: &CStr) -> Library {
         let c = CString::new(path.to_string_lossy().as_bytes()).unwrap();
         let handle = unsafe { dlopen(c.as_ptr(), 2) };
-        assert!(!handle.is_null(), "dlopen: {}", unsafe { CStr::from_ptr(dlerror()) }.to_string_lossy());
+        assert!(
+            !handle.is_null(),
+            "dlopen: {}",
+            unsafe { CStr::from_ptr(dlerror()) }.to_string_lossy()
+        );
         let sym = |name: &CStr| {
             let p = unsafe { dlsym(handle, name.as_ptr()) };
             assert!(!p.is_null(), "{name:?} is not exported");
             p
         };
-        let abi: unsafe extern "C" fn() -> u32 = unsafe { std::mem::transmute(sym(c"flutter_hot_patch_abi")) };
+        let abi: unsafe extern "C" fn() -> u32 =
+            unsafe { std::mem::transmute(sym(c"flutter_hot_patch_abi")) };
         assert_eq!(unsafe { abi() }, 1);
         let apply = sym(c"flutter_hot_patch_apply");
         Library {
@@ -101,8 +115,21 @@ impl Library {
     fn call(&self, fn_id: u32, args: &[i64]) -> i64 {
         let req: Vec<u8> = args.iter().flat_map(|a| a.to_le_bytes()).collect();
         let mut out = [0u8; 64];
-        let n = unsafe { (self.call_sync)(fn_id, req.as_ptr(), req.len() as u64, out.as_mut_ptr(), out.len() as u64) };
-        assert_eq!((n, out[0]), (9, 0), "an ok envelope with one i64: {:?}", &out[..n.max(0) as usize]);
+        let n = unsafe {
+            (self.call_sync)(
+                fn_id,
+                req.as_ptr(),
+                req.len() as u64,
+                out.as_mut_ptr(),
+                out.len() as u64,
+            )
+        };
+        assert_eq!(
+            (n, out[0]),
+            (9, 0),
+            "an ok envelope with one i64: {:?}",
+            &out[..n.max(0) as usize]
+        );
         i64::from_le_bytes(out[1..9].try_into().unwrap())
     }
 
@@ -112,7 +139,15 @@ impl Library {
     fn call_status(&self, fn_id: u32, args: &[i64]) -> Option<u8> {
         let req: Vec<u8> = args.iter().flat_map(|a| a.to_le_bytes()).collect();
         let mut out = [0u8; 64];
-        let n = unsafe { (self.call_sync)(fn_id, req.as_ptr(), req.len() as u64, out.as_mut_ptr(), out.len() as u64) };
+        let n = unsafe {
+            (self.call_sync)(
+                fn_id,
+                req.as_ptr(),
+                req.len() as u64,
+                out.as_mut_ptr(),
+                out.len() as u64,
+            )
+        };
         (n > 0).then(|| out[0])
     }
 
@@ -129,7 +164,10 @@ impl Library {
         if rc == 0 {
             Ok(())
         } else {
-            Err(CStr::from_bytes_until_nul(&message).unwrap().to_string_lossy().into_owned())
+            Err(CStr::from_bytes_until_nul(&message)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned())
         }
     }
 }
@@ -156,7 +194,11 @@ impl Builder {
             .expect("run the patch builder");
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
-        assert_eq!(stdout.lines().count(), 1, "one JSON line on stdout: {stdout}\n{stderr}");
+        assert_eq!(
+            stdout.lines().count(),
+            1,
+            "one JSON line on stdout: {stdout}\n{stderr}"
+        );
         (
             serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}")),
             stderr,
@@ -212,11 +254,17 @@ fn manifest(data: &Data, target: &str, scratch: &str) -> (Value, PathBuf, Builde
     let real = std::fs::canonicalize(&manifest_path).unwrap();
     let real = real.to_string_lossy();
     let exec_root = PathBuf::from(&real[..real.find("/bazel-out/").expect("an output path")]);
-    let manifest: Value = serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    let manifest: Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
     assert_eq!(manifest["version"], 1);
     let tmp = PathBuf::from(std::env::var("TEST_TMPDIR").unwrap()).join(scratch);
     let builder = Builder {
-        command: manifest["command"].as_array().unwrap().iter().map(|a| a.as_str().unwrap().to_string()).collect(),
+        command: manifest["command"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a.as_str().unwrap().to_string())
+            .collect(),
         exec_root: exec_root.clone(),
         state: tmp.join("state"),
         out: tmp.join("out"),
@@ -230,22 +278,43 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
     let (manifest, exec_root, builder) = manifest(&data, "fixture_hot", "single");
     let tmp = builder.state.parent().unwrap().to_path_buf();
     assert!(
-        manifest["sources"].as_array().unwrap().iter().any(|s| s == "tests/hotpatch/fixture/src/api.rs"),
+        manifest["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s == "tests/hotpatch/fixture/src/api.rs"),
         "the crate's own sources are listed: {manifest}"
     );
 
     let library = Library::open(&exec_root.join(manifest["library"].as_str().unwrap()));
-    assert_eq!(builder.run(&["snapshot", "--state", &builder.state.to_string_lossy()]), serde_json::json!({"status": "ok"}));
+    assert_eq!(
+        builder.run(&["snapshot", "--state", &builder.state.to_string_lossy()]),
+        serde_json::json!({"status": "ok"})
+    );
 
     let launch_contract = data.find("tests/hotpatch/fixture/bridge/interface.frustrate.json");
     // The two members these assertions drive, named rather than numbered.
-    let (add, count) = (fn_id(&launch_contract, "add"), fn_id(&launch_contract, "count"));
+    let (add, count) = (
+        fn_id(&launch_contract, "add"),
+        fn_id(&launch_contract, "count"),
+    );
 
     assert_eq!(library.call(add, &[2, 3]), 5);
-    assert_eq!(library.call(count, &[]), 1, "a static and a thread-local, both fresh");
+    assert_eq!(
+        library.call(count, &[]),
+        1,
+        "a static and a thread-local, both fresh"
+    );
     assert_eq!(library.call(count, &[]), 3);
 
-    let edit = |name: &str| (data.find(&format!("tests/hotpatch/{name}.ll")), data.find(&format!("tests/hotpatch/{name}/bridge/interface.frustrate.json")));
+    let edit = |name: &str| {
+        (
+            data.find(&format!("tests/hotpatch/{name}.ll")),
+            data.find(&format!(
+                "tests/hotpatch/{name}/bridge/interface.frustrate.json"
+            )),
+        )
+    };
 
     // Two bodies edited: both run new code, and `count` keeps counting in the
     // static the launched code was counting in.
@@ -253,10 +322,18 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
     let reply = builder.patch(&ir, &contract, library.anchor);
     assert_eq!(reply["status"], "patched", "{reply}");
     let functions = reply["functions"].to_string();
-    assert!(functions.contains("hotpatch_fixture::api::add") && functions.contains("hotpatch_fixture::api::count"), "{reply}");
+    assert!(
+        functions.contains("hotpatch_fixture::api::add")
+            && functions.contains("hotpatch_fixture::api::count"),
+        "{reply}"
+    );
     library.apply(reply["file"].as_str()).unwrap();
     assert_eq!(library.call(add, &[2, 3]), 1005);
-    assert_eq!(library.call(count, &[]), 105, "both the static and the thread-local carried over");
+    assert_eq!(
+        library.call(count, &[]),
+        105,
+        "both the static and the thread-local carried over"
+    );
 
     // A second patch is built against the launch build, not on top of the
     // first: `count`, unedited this time, runs as it launched.
@@ -270,7 +347,10 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
     // Every edit reverted: nothing to build, and a null patch sends calls back
     // to the launched code.
     let launch_ir = data.find("tests/hotpatch/fixture/fixture.hot_patch.ll");
-    assert_eq!(builder.patch(&launch_ir, &launch_contract, library.anchor), serde_json::json!({"status": "unchanged"}));
+    assert_eq!(
+        builder.patch(&launch_ir, &launch_contract, library.anchor),
+        serde_json::json!({"status": "unchanged"})
+    );
     library.apply(None).unwrap();
     assert_eq!(library.call(add, &[2, 3]), 5);
     assert_eq!(library.call(count, &[]), 9);
@@ -299,7 +379,11 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
     let reply = builder.patch(&ir, &contract, library.anchor);
     assert_eq!(reply["status"], "patched", "{reply}");
     library.apply(reply["file"].as_str()).unwrap();
-    assert_eq!(library.call(add, &[2, 3]), 5, "live_count() is 0 with no resident objects");
+    assert_eq!(
+        library.call(add, &[2, 3]),
+        5,
+        "live_count() is 0 with no resident objects"
+    );
     library.apply(None).unwrap();
 
     // An actor method and an `async fn`: different entry points from the sync
@@ -345,12 +429,21 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
     let reply = builder.patch(&ir, &contract, library.anchor);
     assert_eq!(reply["status"], "patched", "{reply}");
     assert!(
-        reply["interface"].to_string().contains("api::sub") && reply["interface"].to_string().contains("added"),
+        reply["interface"].to_string().contains("api::sub")
+            && reply["interface"].to_string().contains("added"),
         "the reply names what the interface gained: {reply}"
     );
     library.apply(reply["file"].as_str()).unwrap();
-    assert_eq!(library.call(fn_id(&contract, "sub"), &[9, 4]), 5, "the added member answers");
-    assert_eq!(library.call(add, &[2, 3]), 5, "an unchanged member keeps the id its callers hold");
+    assert_eq!(
+        library.call(fn_id(&contract, "sub"), &[9, 4]),
+        5,
+        "the added member answers"
+    );
+    assert_eq!(
+        library.call(add, &[2, 3]),
+        5,
+        "an unchanged member keeps the id its callers hold"
+    );
     library.apply(None).unwrap();
 
     // A changed signature, which is the case the whole id scheme exists for.
@@ -365,7 +458,11 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
     library.apply(reply["file"].as_str()).unwrap();
     let new_add = fn_id(&contract, "add");
     assert_ne!(new_add, add, "a changed signature must move the id");
-    assert_eq!(library.call(new_add, &[41]), 42, "the new signature answers");
+    assert_eq!(
+        library.call(new_add, &[41]),
+        42,
+        "the new signature answers"
+    );
     assert_eq!(
         library.call_status(add, &[2, 3]),
         Some(2),
@@ -377,7 +474,10 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
 
     let (ir, contract) = edit("layout_change");
     let why = reasons(&builder.patch(&ir, &contract, library.anchor));
-    assert!(why.contains("hotpatch_fixture::api::Tally") && why.contains("layout"), "{why}");
+    assert!(
+        why.contains("hotpatch_fixture::api::Tally") && why.contains("layout"),
+        "{why}"
+    );
 
     let (ir, contract) = edit("new_static");
     let why = reasons(&builder.patch(&ir, &contract, library.anchor));
@@ -461,15 +561,21 @@ fn a_running_library_takes_patches_and_refuses_what_it_cannot() {
             library.apply(None).unwrap();
         }
         stop.store(true, std::sync::atomic::Ordering::Relaxed);
-        let seen: std::collections::BTreeSet<i64> =
-            callers.into_iter().flat_map(|c| c.join().expect("a caller thread")).collect();
+        let seen: std::collections::BTreeSet<i64> = callers
+            .into_iter()
+            .flat_map(|c| c.join().expect("a caller thread"))
+            .collect();
         assert_eq!(
             seen,
             std::collections::BTreeSet::from([5, 1005]),
             "every answer is one version's, and both were seen"
         );
     });
-    assert_eq!(library.call(add, &[2, 3]), 5, "the reset is what the last apply did");
+    assert_eq!(
+        library.call(add, &[2, 3]),
+        5,
+        "the reset is what the last apply did"
+    );
 
     // A patch linked for this library at another address belongs to another
     // process: loading it is refused and the running code is untouched.
@@ -497,19 +603,32 @@ fn a_library_of_two_bridges_takes_a_patch_to_either() {
     let alpha = Library::open_bridge(&path, c"frustrate_hotpatch_alpha_call_sync");
     let beta = Library::open_bridge(&path, c"frustrate_hotpatch_beta_call_sync");
     assert_eq!(alpha.anchor, beta.anchor, "one image");
-    assert_eq!(builder.run(&["snapshot", "--state", &builder.state.to_string_lossy()]), serde_json::json!({"status": "ok"}));
+    assert_eq!(
+        builder.run(&["snapshot", "--state", &builder.state.to_string_lossy()]),
+        serde_json::json!({"status": "ok"})
+    );
 
-    let contract = |edition: &str| data.find(&format!("tests/hotpatch/composed/{edition}/bridge/interface.frustrate.json"));
+    let contract = |edition: &str| {
+        data.find(&format!(
+            "tests/hotpatch/composed/{edition}/bridge/interface.frustrate.json"
+        ))
+    };
     let ir = |edit: &str| data.find(&format!("tests/hotpatch/{edit}.ll"));
     let (alpha_ir, beta_ir) = (
         data.find("tests/hotpatch/composed/alpha/alpha_lib.hot_patch.ll"),
         data.find("tests/hotpatch/composed/beta/beta_lib.hot_patch.ll"),
     );
     let (alpha_contract, beta_contract) = (contract("alpha"), contract("beta"));
-    let (add, alpha_count) = (fn_id(&alpha_contract, "add"), fn_id(&alpha_contract, "count"));
+    let (add, alpha_count) = (
+        fn_id(&alpha_contract, "add"),
+        fn_id(&alpha_contract, "count"),
+    );
     let (mul, beta_count) = (fn_id(&beta_contract, "mul"), fn_id(&beta_contract, "count"));
     // A counter in a crate both bridges link: A bumps it, B reads it.
-    let (bump, shared) = (fn_id(&alpha_contract, "bump"), fn_id(&beta_contract, "shared"));
+    let (bump, shared) = (
+        fn_id(&alpha_contract, "bump"),
+        fn_id(&beta_contract, "shared"),
+    );
 
     assert_eq!(alpha.call(add, &[2, 3]), 5);
     assert_eq!(alpha.call(alpha_count, &[]), 1);
@@ -522,11 +641,25 @@ fn a_library_of_two_bridges_takes_a_patch_to_either() {
 
     // An edit in bridge A: A runs new code and keeps counting in its static;
     // B runs as it launched and keeps its own count.
-    let (reply, said) = builder.patch_units(&[("hotpatch_alpha", &ir("alpha_body_edit"), &contract("alpha_body_edit"))], alpha.anchor);
+    let (reply, said) = builder.patch_units(
+        &[(
+            "hotpatch_alpha",
+            &ir("alpha_body_edit"),
+            &contract("alpha_body_edit"),
+        )],
+        alpha.anchor,
+    );
     assert_eq!(reply["status"], "patched", "{reply}");
     let functions = reply["functions"].to_string();
-    assert!(functions.contains("hotpatch_alpha::api::add") && !functions.contains("hotpatch_beta"), "{reply}");
-    assert!(said.contains("frustrate_hotpatch_alpha_call_sync") && !said.contains("frustrate_hotpatch_beta"), "{said}");
+    assert!(
+        functions.contains("hotpatch_alpha::api::add") && !functions.contains("hotpatch_beta"),
+        "{reply}"
+    );
+    assert!(
+        said.contains("frustrate_hotpatch_alpha_call_sync")
+            && !said.contains("frustrate_hotpatch_beta"),
+        "{said}"
+    );
     alpha.apply(reply["file"].as_str()).unwrap();
     assert_eq!(alpha.call(add, &[2, 3]), 1005);
     assert_eq!(alpha.call(alpha_count, &[]), 102, "A's static carried over");
@@ -536,29 +669,63 @@ fn a_library_of_two_bridges_takes_a_patch_to_either() {
     // counter, and B, which the patch does not touch, reads that same storage:
     // the patch bound to the image's counter rather than bringing its own.
     assert_eq!(alpha.call(bump, &[]), 12);
-    assert_eq!(beta.call(shared, &[]), 12, "B sees what A's patched code wrote");
+    assert_eq!(
+        beta.call(shared, &[]),
+        12,
+        "B sees what A's patched code wrote"
+    );
 
     // An edit in bridge B, with A back at its launch code. Built against the
     // launch image, so A's earlier edit is not in it.
-    let (reply, said) = builder.patch_units(&[("hotpatch_beta", &ir("beta_body_edit"), &contract("beta_body_edit"))], beta.anchor);
+    let (reply, said) = builder.patch_units(
+        &[(
+            "hotpatch_beta",
+            &ir("beta_body_edit"),
+            &contract("beta_body_edit"),
+        )],
+        beta.anchor,
+    );
     assert_eq!(reply["status"], "patched", "{reply}");
     let functions = reply["functions"].to_string();
-    assert!(functions.contains("hotpatch_beta::api::mul") && !functions.contains("hotpatch_alpha"), "{reply}");
-    assert!(said.contains("frustrate_hotpatch_beta_call_sync") && !said.contains("frustrate_hotpatch_alpha"), "{said}");
+    assert!(
+        functions.contains("hotpatch_beta::api::mul") && !functions.contains("hotpatch_alpha"),
+        "{reply}"
+    );
+    assert!(
+        said.contains("frustrate_hotpatch_beta_call_sync")
+            && !said.contains("frustrate_hotpatch_alpha"),
+        "{said}"
+    );
     beta.apply(reply["file"].as_str()).unwrap();
     assert_eq!(beta.call(mul, &[2, 3]), 60);
     assert_eq!(beta.call(beta_count, &[]), 3);
     assert_eq!(alpha.call(add, &[2, 3]), 5, "A's edit is not in this patch");
-    assert_eq!(alpha.call(alpha_count, &[]), 4, "A counts on in its launch code");
-    assert_eq!(alpha.call(bump, &[]), 13, "with A's patch gone, the count it left is kept");
+    assert_eq!(
+        alpha.call(alpha_count, &[]),
+        4,
+        "A counts on in its launch code"
+    );
+    assert_eq!(
+        alpha.call(bump, &[]),
+        13,
+        "with A's patch gone, the count it left is kept"
+    );
     assert_eq!(beta.call(shared, &[]), 13);
 
     // Both at once: one patch, both crates' code, one set of bindings to the
     // image they share.
     let (reply, _) = builder.patch_units(
         &[
-            ("hotpatch_alpha", &ir("alpha_body_edit"), &contract("alpha_body_edit")),
-            ("hotpatch_beta", &ir("beta_body_edit"), &contract("beta_body_edit")),
+            (
+                "hotpatch_alpha",
+                &ir("alpha_body_edit"),
+                &contract("alpha_body_edit"),
+            ),
+            (
+                "hotpatch_beta",
+                &ir("beta_body_edit"),
+                &contract("beta_body_edit"),
+            ),
         ],
         alpha.anchor,
     );
@@ -569,7 +736,15 @@ fn a_library_of_two_bridges_takes_a_patch_to_either() {
 
     // Every edit reverted.
     assert_eq!(
-        builder.patch_units(&[("hotpatch_alpha", &alpha_ir, &alpha_contract), ("hotpatch_beta", &beta_ir, &beta_contract)], alpha.anchor).0,
+        builder
+            .patch_units(
+                &[
+                    ("hotpatch_alpha", &alpha_ir, &alpha_contract),
+                    ("hotpatch_beta", &beta_ir, &beta_contract)
+                ],
+                alpha.anchor
+            )
+            .0,
         serde_json::json!({"status": "unchanged"})
     );
     alpha.apply(None).unwrap();
@@ -577,14 +752,29 @@ fn a_library_of_two_bridges_takes_a_patch_to_either() {
     assert_eq!(beta.call(mul, &[2, 3]), 6);
 
     // A changed type in one bridge restarts, naming the bridge.
-    let why = reasons(&builder.patch_units(&[("hotpatch_beta", &ir("beta_type_change"), &contract("beta_type_change"))], beta.anchor).0);
-    assert!(why.contains("hotpatch_beta") && why.contains("api::Pair"), "{why}");
+    let why = reasons(
+        &builder
+            .patch_units(
+                &[(
+                    "hotpatch_beta",
+                    &ir("beta_type_change"),
+                    &contract("beta_type_change"),
+                )],
+                beta.anchor,
+            )
+            .0,
+    );
+    assert!(
+        why.contains("hotpatch_beta") && why.contains("api::Pair"),
+        "{why}"
+    );
 
     // Ids are per bridge: each dispatches through its own exports. B taking an
     // id A holds is no reuse; B giving one of its own ids to another of its
     // members is.
     let forge = |name: &str, edit: &dyn Fn(&mut Vec<Value>)| {
-        let mut json: Value = serde_json::from_slice(&std::fs::read(&beta_contract).unwrap()).unwrap();
+        let mut json: Value =
+            serde_json::from_slice(&std::fs::read(&beta_contract).unwrap()).unwrap();
         edit(json["functions"].as_array_mut().unwrap());
         let path = builder.state.parent().unwrap().join(name);
         std::fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
@@ -594,9 +784,14 @@ fn a_library_of_two_bridges_takes_a_patch_to_either() {
         let count = functions.iter_mut().find(|f| f["name"] == "count").unwrap();
         count["fn_id"] = Value::from(add);
     });
-    assert!(![mul, beta_count].contains(&add), "A's `add` id is not already one of B's");
+    assert!(
+        ![mul, beta_count].contains(&add),
+        "A's `add` id is not already one of B's"
+    );
     assert_eq!(
-        builder.patch_units(&[("hotpatch_beta", &beta_ir, &shared)], beta.anchor).0,
+        builder
+            .patch_units(&[("hotpatch_beta", &beta_ir, &shared)], beta.anchor)
+            .0,
         serde_json::json!({"status": "unchanged"}),
         "A's id in B is not a reuse"
     );
@@ -604,6 +799,13 @@ fn a_library_of_two_bridges_takes_a_patch_to_either() {
         let mul = functions.iter_mut().find(|f| f["name"] == "mul").unwrap();
         mul["name"] = Value::from("renamed");
     });
-    let why = reasons(&builder.patch_units(&[("hotpatch_beta", &beta_ir, &reused)], beta.anchor).0);
-    assert!(why.contains("hotpatch_beta") && why.contains("api::renamed") && why.contains("api::mul"), "{why}");
+    let why = reasons(
+        &builder
+            .patch_units(&[("hotpatch_beta", &beta_ir, &reused)], beta.anchor)
+            .0,
+    );
+    assert!(
+        why.contains("hotpatch_beta") && why.contains("api::renamed") && why.contains("api::mul"),
+        "{why}"
+    );
 }

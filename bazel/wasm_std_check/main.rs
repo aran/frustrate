@@ -156,7 +156,10 @@ fn contains_segment(name: &str, segment: &str) -> bool {
     if name.contains(segment) {
         return true;
     }
-    let digits = segment.len() - segment.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    let digits = segment.len()
+        - segment
+            .trim_start_matches(|c: char| c.is_ascii_digit())
+            .len();
     let ident = &segment[digits..];
     digits > 0
         && ident.starts_with('_')
@@ -193,8 +196,12 @@ fn imports(d: &[u8]) -> Result<Vec<(String, String)>, String> {
 fn function_names(d: &[u8]) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
     for p in payloads(d)? {
-        let Payload::CustomSection(c) = p else { continue };
-        let KnownCustom::Name(names) = c.as_known() else { continue };
+        let Payload::CustomSection(c) = p else {
+            continue;
+        };
+        let KnownCustom::Name(names) = c.as_known() else {
+            continue;
+        };
         for sub in names {
             if let Name::Function(map) = sub.map_err(|e| e.to_string())? {
                 for n in map {
@@ -326,9 +333,7 @@ fn run(path: &str, label: &str, allowed: &[String]) -> Result<(), String> {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 4 {
-        eprintln!(
-            "usage: wasm_std_check <module.wasm> <label> <marker-out> [allowed-facility...]"
-        );
+        eprintln!("usage: wasm_std_check <module.wasm> <label> <marker-out> [allowed-facility...]");
         return ExitCode::FAILURE;
     }
     match run(&args[1], &args[2], &args[4..]) {
@@ -490,11 +495,7 @@ mod tests {
     /// fail a module that is fine (toolchain/custom_std).
     #[test]
     fn a_custom_std_clock_serves_system_time() {
-        assert!(check(
-            &[PANIC, SYSTEM_TIME_NOW],
-            &[("frustrate", "now_wall_ns")]
-        )
-        .is_ok());
+        assert!(check(&[PANIC, SYSTEM_TIME_NOW], &[("frustrate", "now_wall_ns")]).is_ok());
     }
 
     /// The recipe has to be runnable, not illustrative: it names only the
@@ -505,7 +506,10 @@ mod tests {
     fn the_rebuild_recipe_names_this_modules_facilities_and_the_replace_trap() {
         let err = check(&[PANIC, PRINT], &[]).unwrap_err();
         assert!(err.contains("--facilities=stdio"), "{err}");
-        assert!(!err.contains("clock"), "clock is not what this module needs: {err}");
+        assert!(
+            !err.contains("clock"),
+            "clock is not what this module needs: {err}"
+        );
         assert!(err.contains("REPLACES"), "{err}");
         assert!(err.contains("atomics"), "{err}");
 
@@ -599,7 +603,10 @@ mod tests {
         )
         .unwrap_err();
         assert!(e.contains("println!"), "{e}");
-        assert!(!e.contains("SystemTime::now — "), "waived facility still named: {e}");
+        assert!(
+            !e.contains("SystemTime::now — "),
+            "waived facility still named: {e}"
+        );
     }
 
     /// A waiver for something never checked reads as coverage the author does
@@ -609,7 +616,10 @@ mod tests {
     fn a_waiver_naming_an_uncovered_facility_is_an_error() {
         let e = check_allowing(&[PANIC], &[], &["std::thread::sleep"]).unwrap_err();
         assert!(e.contains("does not cover"), "{e}");
-        assert!(e.contains("std::time::SystemTime::now"), "lists what is covered: {e}");
+        assert!(
+            e.contains("std::time::SystemTime::now"),
+            "lists what is covered: {e}"
+        );
     }
 
     /// v0 writes a separator `_` when the identifier itself starts with `_`,
@@ -632,9 +642,15 @@ mod tests {
     #[test]
     fn the_separator_tolerance_does_not_loosen_other_segments() {
         assert!(contains_segment("_ZN3std2io5stdio6_print17hE", "6_print"));
-        assert!(contains_segment("_RNvNtNtCs_3std2io5stdio6__print", "6_print"));
+        assert!(contains_segment(
+            "_RNvNtNtCs_3std2io5stdio6__print",
+            "6_print"
+        ));
         assert!(!contains_segment("_ZN3std4time10SystemTime3nowE", "3__now"));
-        assert!(!contains_segment("_ZN3std4time7Instant3nowE", "10SystemTime"));
+        assert!(!contains_segment(
+            "_ZN3std4time7Instant3nowE",
+            "10SystemTime"
+        ));
     }
 
     #[test]

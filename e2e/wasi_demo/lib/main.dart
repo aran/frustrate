@@ -26,10 +26,10 @@ class WasiDemoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Frustrate wasi Demo',
-        theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.teal),
-        home: const _Home(),
-      );
+    title: 'Frustrate wasi Demo',
+    theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.teal),
+    home: const _Home(),
+  );
 }
 
 class _Home extends StatefulWidget {
@@ -70,8 +70,10 @@ class _HomeState extends State<_Home> {
     // that returned a constant, or seconds where nanoseconds were wanted,
     // shows up here as a skew of years rather than milliseconds.
     final probe = _log.append(label: 'clock-probe');
-    _clockSkewMs =
-        probe.at.difference(DateTime.now().toUtc()).inMilliseconds.abs();
+    _clockSkewMs = probe.at
+        .difference(DateTime.now().toUtc())
+        .inMilliseconds
+        .abs();
     _firstElapsed = probe.sinceStart;
     _lastElapsed = probe.sinceStart;
     _entries.add(probe);
@@ -125,7 +127,8 @@ class _HomeState extends State<_Home> {
           _Check(
             'WASI-ENTROPY',
             ok: _entropy.healthy,
-            detail: 'healthy=${_entropy.healthy} '
+            detail:
+                'healthy=${_entropy.healthy} '
                 'distinct=${_entropy.distinct}/${_entropy.samples} '
                 'nil=${_entropy.anyNil} '
                 'bits=${_entropy.setBits}/${_entropy.totalBits}',
@@ -137,7 +140,8 @@ class _HomeState extends State<_Home> {
             'WASI-CLOCK',
             ok: _clockSkewMs < 60000,
             detail: 'skew_ms=$_clockSkewMs',
-            note: 'SystemTime::now() -> clock_time_get(REALTIME), '
+            note:
+                'SystemTime::now() -> clock_time_get(REALTIME), '
                 'against Dart\'s DateTime.now()',
           ),
 
@@ -145,7 +149,8 @@ class _HomeState extends State<_Home> {
           _Check(
             'WASI-MONOTONIC',
             ok: _monotonicOk,
-            detail: 'increasing=$_monotonicOk '
+            detail:
+                'increasing=$_monotonicOk '
                 'last_us=${_lastElapsed?.inMicroseconds}',
             note: 'Instant::elapsed() -> clock_time_get(MONOTONIC)',
           ),
@@ -199,15 +204,19 @@ class _Section extends StatelessWidget {
   final String title;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-      );
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+  );
 }
 
 /// One check, rendered as a single line whose text is the assertion surface.
 class _Check extends StatelessWidget {
-  const _Check(this.token,
-      {required this.ok, required this.detail, required this.note});
+  const _Check(
+    this.token, {
+    required this.ok,
+    required this.detail,
+    required this.note,
+  });
   final String token;
   final bool ok;
   final String detail;
@@ -215,27 +224,35 @@ class _Check extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(ok ? Icons.check_circle : Icons.error,
-                color: ok ? Colors.green : Colors.red, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('$token ${ok ? 'PASS' : 'FAIL'} $detail',
-                      style: const TextStyle(
-                          fontFamily: 'monospace', fontSize: 12)),
-                  Text(note,
-                      style: TextStyle(
-                          fontSize: 11, color: Theme.of(context).hintColor)),
-                ],
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          ok ? Icons.check_circle : Icons.error,
+          color: ok ? Colors.green : Colors.red,
+          size: 18,
         ),
-      );
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$token ${ok ? 'PASS' : 'FAIL'} $detail',
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+              Text(
+                note,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).hintColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }

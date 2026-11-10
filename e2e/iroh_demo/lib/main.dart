@@ -37,7 +37,10 @@ import 'package:qr/qr.dart';
 ///
 /// Same vocabulary as `peerbot --preset minimal|n0`, so a two-peer run is
 /// described by one pair of words rather than two vocabularies.
-const String kPreset = String.fromEnvironment('PRESET', defaultValue: 'minimal');
+const String kPreset = String.fromEnvironment(
+  'PRESET',
+  defaultValue: 'minimal',
+);
 
 /// [kPreset] as the bridge enum, or `null` if the define is not one of the two.
 ///
@@ -46,10 +49,10 @@ const String kPreset = String.fromEnvironment('PRESET', defaultValue: 'minimal')
 /// failure this app exists to make visible. [_TinCanHomeState._open] turns it
 /// into a visible refusal.
 Preset? get presetArgument => switch (kPreset.trim().toLowerCase()) {
-      'minimal' => Preset.minimal,
-      'n0' => Preset.n0,
-      _ => null,
-    };
+  'minimal' => Preset.minimal,
+  'n0' => Preset.n0,
+  _ => null,
+};
 
 /// The relay this build uses, or empty for none.
 ///
@@ -85,38 +88,38 @@ String _relayLabel(String url) {
 /// Both relay cases start with `relay `, which is what `//tools:two_peers`
 /// asserts on.
 String get _transportLabel => switch ((presetArgument, relayArgument)) {
-      (Preset.n0, null) => 'n0 relays',
-      (Preset.n0, final url?) => 'relay ${_relayLabel(url)} + n0 lookup',
-      (Preset.minimal, null) => 'no relay — direct only',
-      (Preset.minimal, final url?) => 'relay ${_relayLabel(url)}',
-      (null, _) => 'PRESET=$kPreset is not valid',
-    };
+  (Preset.n0, null) => 'n0 relays',
+  (Preset.n0, final url?) => 'relay ${_relayLabel(url)} + n0 lookup',
+  (Preset.minimal, null) => 'no relay — direct only',
+  (Preset.minimal, final url?) => 'relay ${_relayLabel(url)}',
+  (null, _) => 'PRESET=$kPreset is not valid',
+};
 
 /// The long form, which exists to keep one distinction from being blurred: a
 /// custom relay under `n0` is *not* self-hosting, because pkarr and DNS stay
 /// n0's. The chip alone cannot carry that, so the tooltip says it.
 String get _transportTooltip => switch ((presetArgument, relayArgument)) {
-      (Preset.n0, null) =>
-        'n0\'s public relays, pkarr and DNS — a third party carries the bytes '
-            'and resolves the addresses. The zero-configuration default. Build '
-            'with --dart-define=PRESET=minimal to contact nobody.',
-      (Preset.n0, _) =>
-        'Bytes go through $kRelayUrl instead of n0\'s relays, but address '
-            'lookup is still n0\'s pkarr over HTTPS. This is "n0\'s relays are '
-            'out of the data path", not "no n0 service is involved" — for that, '
-            'add --dart-define=PRESET=minimal.',
-      (Preset.minimal, null) =>
-        'No relay, no DNS, no pkarr: nothing outside this machine is contacted. '
-            'Peers pair by full ticket and connect directly, which works on one '
-            'host or one LAN. Across the internet you need a relay, or PRESET=n0.',
-      (Preset.minimal, _) =>
-        'Fully self-hosted: $kRelayUrl carries the bytes and no n0 service is '
-            'involved at all. Pairing is by full ticket, because there is no '
-            'address lookup to resolve a bare identity with.',
-      (null, _) =>
-        'PRESET was set to "$kPreset", which is neither "minimal" nor "n0", so '
-            'this build refuses to open rather than guess who it may contact.',
-    };
+  (Preset.n0, null) =>
+    'n0\'s public relays, pkarr and DNS — a third party carries the bytes '
+        'and resolves the addresses. The zero-configuration default. Build '
+        'with --dart-define=PRESET=minimal to contact nobody.',
+  (Preset.n0, _) =>
+    'Bytes go through $kRelayUrl instead of n0\'s relays, but address '
+        'lookup is still n0\'s pkarr over HTTPS. This is "n0\'s relays are '
+        'out of the data path", not "no n0 service is involved" — for that, '
+        'add --dart-define=PRESET=minimal.',
+  (Preset.minimal, null) =>
+    'No relay, no DNS, no pkarr: nothing outside this machine is contacted. '
+        'Peers pair by full ticket and connect directly, which works on one '
+        'host or one LAN. Across the internet you need a relay, or PRESET=n0.',
+  (Preset.minimal, _) =>
+    'Fully self-hosted: $kRelayUrl carries the bytes and no n0 service is '
+        'involved at all. Pairing is by full ticket, because there is no '
+        'address lookup to resolve a bare identity with.',
+  (null, _) =>
+    'PRESET was set to "$kPreset", which is neither "minimal" nor "n0", so '
+        'this build refuses to open rather than guess who it may contact.',
+};
 
 /// Nickname to open with. A define so an automated run does not have to type.
 const String kNickname = String.fromEnvironment('NICKNAME', defaultValue: 'me');
@@ -224,13 +227,13 @@ class NodeController extends ChangeNotifier {
       case Phase.opening:
         return relayUnconfirmed
             ? 'opening… — no answer from the endpoint after '
-                '${kRelayGrace.inSeconds} s'
+                  '${kRelayGrace.inSeconds} s'
             : 'opening…';
       case Phase.listening:
         return relayUnconfirmed
             ? 'listening, but no relay confirmation after '
-                '${kRelayGrace.inSeconds} s — a peer holding your ticket may '
-                'not be able to reach you'
+                  '${kRelayGrace.inSeconds} s — a peer holding your ticket may '
+                  'not be able to reach you'
             : 'listening — waiting for relay confirmation';
       case Phase.online:
         return 'online';
@@ -261,14 +264,17 @@ class NodeController extends ChangeNotifier {
     // installs those itself and throws StateError if we got there first.
     _sub = events.stream.listen(_apply, onError: _onStreamError);
     _armRelayTimer();
-    _note('opening endpoint as "$nickname" on $kPreset via '
-        '${relayArgument ?? (preset == Preset.n0 ? "n0 relays" : "no relay")}');
+    _note(
+      'opening endpoint as "$nickname" on $kPreset via '
+      '${relayArgument ?? (preset == Preset.n0 ? "n0 relays" : "no relay")}',
+    );
     try {
       _node = await Node.open(
-          nickname: nickname,
-          preset: preset,
-          relay: relayArgument,
-          events: events);
+        nickname: nickname,
+        preset: preset,
+        relay: relayArgument,
+        events: events,
+      );
     } catch (e) {
       // `Result<Self, String>` arrives as a thrown BridgeException; anything
       // else is a bug on this side and is shown just as loudly.
@@ -321,8 +327,10 @@ class NodeController extends ChangeNotifier {
     // string we rendered — a re-encoded ticket for the same endpoint would
     // still get through — but that is the case a human actually hits.
     if (t == ticket) {
-      _fail('that is your own ticket — dialing yourself would not tell you '
-          'anything, so nothing was sent');
+      _fail(
+        'that is your own ticket — dialing yourself would not tell you '
+        'anything, so nothing was sent',
+      );
       return;
     }
     final node = _node;
@@ -423,8 +431,12 @@ class NodeController extends ChangeNotifier {
         _peer(peer).direct = direct;
       case PeerEventMessage(:final peer, :final body, :final at):
         _peer(peer);
-        _lineList(peer).add(ChatLine('${_peer(peer).label} '
-            '[${at.toLocal().toIso8601String().substring(11, 19)}]: $body'));
+        _lineList(peer).add(
+          ChatLine(
+            '${_peer(peer).label} '
+            '[${at.toLocal().toIso8601String().substring(11, 19)}]: $body',
+          ),
+        );
       case PeerEventLeft(:final peer, :final why):
         _peer(peer).connected = false;
         _fail('${_peer(peer).label} left: $why', notify: false);
@@ -560,17 +572,18 @@ class _TinCanAppState extends State<TinCanApp> with WidgetsBindingObserver {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
       ),
-      home: NodeScope(
-        notifier: _controller,
-        child: const _HomePage(),
-      ),
+      home: NodeScope(notifier: _controller, child: const _HomePage()),
     );
   }
 }
 
 /// Hands the controller down and rebuilds every dependent when it notifies.
 class NodeScope extends InheritedNotifier<NodeController> {
-  const NodeScope({super.key, required NodeController super.notifier, required super.child});
+  const NodeScope({
+    super.key,
+    required NodeController super.notifier,
+    required super.child,
+  });
 
   static NodeController of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<NodeScope>()!;
@@ -612,7 +625,11 @@ class _HomePage extends StatelessWidget {
 // ============================================================== chrome ===
 
 class _Card extends StatelessWidget {
-  const _Card({required this.title, required this.subtitle, required this.child});
+  const _Card({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
 
   final String title;
   final String subtitle;
@@ -676,7 +693,9 @@ class _IdentityCard extends StatefulWidget {
 }
 
 class _IdentityCardState extends State<_IdentityCard> {
-  final TextEditingController _nickname = TextEditingController(text: kNickname);
+  final TextEditingController _nickname = TextEditingController(
+    text: kNickname,
+  );
 
   @override
   void dispose() {
@@ -695,7 +714,8 @@ class _IdentityCardState extends State<_IdentityCard> {
     final ticket = c.ticket;
     return _Card(
       title: 'You',
-      subtitle: 'The nickname is a constructor argument to Node.open, so '
+      subtitle:
+          'The nickname is a constructor argument to Node.open, so '
           'changing it rebinds the endpoint: new ticket, peers dropped.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -794,10 +814,12 @@ class _TicketQrState extends State<_TicketQr> {
     _error = null;
     if (widget.ticket.isEmpty) return;
     try {
-      _image = QrImage(QrCode.fromData(
-        data: widget.ticket,
-        errorCorrectLevel: QrErrorCorrectLevel.L,
-      ));
+      _image = QrImage(
+        QrCode.fromData(
+          data: widget.ticket,
+          errorCorrectLevel: QrErrorCorrectLevel.L,
+        ),
+      );
     } on InputTooLongException catch (e) {
       _error = 'ticket too long to encode as a QR code (${e.message})';
     }
@@ -850,7 +872,12 @@ class _QrPainter extends CustomPainter {
       for (var col = 0; col < image.moduleCount; col++) {
         if (!image.isDark(row, col)) continue;
         canvas.drawRect(
-          Rect.fromLTWH((col + quiet) * scale, (row + quiet) * scale, scale, scale),
+          Rect.fromLTWH(
+            (col + quiet) * scale,
+            (row + quiet) * scale,
+            scale,
+            scale,
+          ),
           dark,
         );
       }
@@ -871,7 +898,9 @@ class _ConnectCard extends StatefulWidget {
 }
 
 class _ConnectCardState extends State<_ConnectCard> {
-  final TextEditingController _ticket = TextEditingController(text: kPeerTicket);
+  final TextEditingController _ticket = TextEditingController(
+    text: kPeerTicket,
+  );
 
   @override
   void dispose() {
@@ -884,7 +913,8 @@ class _ConnectCardState extends State<_ConnectCard> {
     final c = NodeScope.of(context);
     return _Card(
       title: 'Connect',
-      subtitle: 'Paste a peer\'s ticket. Dialing is fire-and-forget: the '
+      subtitle:
+          'Paste a peer\'s ticket. Dialing is fire-and-forget: the '
           'outcome arrives as an event, not as a return value.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -904,10 +934,7 @@ class _ConnectCardState extends State<_ConnectCard> {
                 // matched element, and a Chip's label is several elements
                 // down. Keying the Chip makes the badge findable and its
                 // text unreadable, which is the wrong half.
-                label: Text(
-                  _transportLabel,
-                  key: const Key('transportChip'),
-                ),
+                label: Text(_transportLabel, key: const Key('transportChip')),
               ),
             ),
           ),
@@ -944,7 +971,8 @@ class _PeersCard extends StatelessWidget {
     final peers = c.peerList;
     return _Card(
       title: 'Peers',
-      subtitle: 'The badge reads relay until iroh hole-punches, then direct. '
+      subtitle:
+          'The badge reads relay until iroh hole-punches, then direct. '
           'That flip is the whole point.',
       child: Column(
         key: const Key('peerList'),
@@ -1004,11 +1032,18 @@ class _PathBadge extends StatelessWidget {
     final (text, bg, fg) = switch (direct) {
       true => ('direct', scheme.primary, scheme.onPrimary),
       false => ('relay', scheme.tertiaryContainer, scheme.onTertiaryContainer),
-      null => ('path unknown', scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+      null => (
+        'path unknown',
+        scheme.surfaceContainerHighest,
+        scheme.onSurfaceVariant,
+      ),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Text(
         text,
         key: Key('path:${peer.id}'),
@@ -1052,7 +1087,8 @@ class _MessagesCardState extends State<_MessagesCard> {
       title: peer == null
           ? 'Messages'
           : 'Messages — ${c.peers[peer]?.label ?? peer}',
-      subtitle: 'send() returning normally means queued, not delivered: a '
+      subtitle:
+          'send() returning normally means queued, not delivered: a '
           'write failure arrives later as a Left event.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1070,8 +1106,8 @@ class _MessagesCardState extends State<_MessagesCard> {
               child: Text(
                 lines.isEmpty
                     ? (peer == null
-                        ? 'no peer selected'
-                        : 'no messages with this peer yet')
+                          ? 'no peer selected'
+                          : 'no messages with this peer yet')
                     : lines.map((l) => l.text).join('\n'),
                 key: const Key('messageLog'),
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
@@ -1116,7 +1152,8 @@ class _ActivityCard extends StatelessWidget {
     final c = NodeScope.of(context);
     return _Card(
       title: 'Activity',
-      subtitle: 'Every visible state change is caused by one of these, so the '
+      subtitle:
+          'Every visible state change is caused by one of these, so the '
           'log is a complete explanation of the UI.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1125,7 +1162,9 @@ class _ActivityCard extends StatelessWidget {
             c.failure ?? 'no failures',
             key: const Key('failureText'),
             style: TextStyle(
-              color: c.failure == null ? null : Theme.of(context).colorScheme.error,
+              color: c.failure == null
+                  ? null
+                  : Theme.of(context).colorScheme.error,
             ),
           ),
           const SizedBox(height: 8),

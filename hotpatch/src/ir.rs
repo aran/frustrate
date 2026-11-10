@@ -256,7 +256,10 @@ impl<'a> Module<'a> {
     pub fn references(&self, entity: &Entity<'a>) -> HashSet<&'a str> {
         let mut out = HashSet::new();
         let body = match entity.kind {
-            Kind::Global => entity.text.split_once(" = ").map_or(entity.text, |(_, b)| b),
+            Kind::Global => entity
+                .text
+                .split_once(" = ")
+                .map_or(entity.text, |(_, b)| b),
             _ => entity.text,
         };
         let mut stack: Vec<&'a str> = Tokens::new(body)
@@ -333,7 +336,10 @@ pub fn global_value_type(text: &str) -> &str {
     let after = rhs
         .find(" global ")
         .map(|i| &rhs[i + " global ".len()..])
-        .or_else(|| rhs.find(" constant ").map(|i| &rhs[i + " constant ".len()..]))
+        .or_else(|| {
+            rhs.find(" constant ")
+                .map(|i| &rhs[i + " constant ".len()..])
+        })
         .or_else(|| rhs.strip_prefix("global "))
         .or_else(|| rhs.strip_prefix("constant "))
         .unwrap_or(rhs);
@@ -665,7 +671,10 @@ attributes #1 = { "target-cpu"="apple-m1" }
         assert!(counter.local && !counter.constant);
         assert!(global_linkage(m.get("vtable.0").unwrap().text).is_content_addressed());
         assert!(global_linkage(m.get("weird name").unwrap().text).declaration);
-        assert_eq!(global_value_type(m.get("COUNTER").unwrap().text), "<{ [8 x i8] }>");
+        assert_eq!(
+            global_value_type(m.get("COUNTER").unwrap().text),
+            "<{ [8 x i8] }>"
+        );
         assert_eq!(global_value_type(m.get("weird name").unwrap().text), "i32");
     }
 

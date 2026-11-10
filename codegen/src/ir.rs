@@ -1296,7 +1296,11 @@ impl Type {
             // Spelled as written. A borrow can only reach an instantiation
             // as an argument, where the expansion puts it into a field and
             // FR0077 refuses it — so this is rendered for that message.
-            Type::Ref { inner, mutable, unsized_borrow } => {
+            Type::Ref {
+                inner,
+                mutable,
+                unsized_borrow,
+            } => {
                 let mu = if *mutable { "mut " } else { "" };
                 let inner = match (unsized_borrow, inner.as_ref()) {
                     (true, Type::String) => "str".to_string(),
@@ -1398,7 +1402,9 @@ impl Interface {
 
     /// The `models` bridge the data declaration `name` is taken from.
     pub fn model_of(&self, name: &str) -> Option<&ModelBridge> {
-        self.models.iter().find(|m| m.types.iter().any(|t| t == name))
+        self.models
+            .iter()
+            .find(|m| m.types.iter().any(|t| t == name))
     }
 
     pub fn opaque(&self, name: &str) -> Option<&OpaqueDecl> {

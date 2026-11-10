@@ -185,7 +185,10 @@ impl<T: ?Sized> Hook<T> {
     /// still applies because "virtually never" is not "never".
     pub(crate) fn clear_if(&self, expected: &Arc<T>) -> bool {
         let displaced = self.slot.with(|slot| {
-            if !slot.as_ref().is_some_and(|held| Arc::ptr_eq(held, expected)) {
+            if !slot
+                .as_ref()
+                .is_some_and(|held| Arc::ptr_eq(held, expected))
+            {
                 return None;
             }
             let displaced = slot.take();
@@ -298,7 +301,10 @@ mod tests {
         hook.set(Arc::new(7));
 
         assert!(!hook.clear_if(&first));
-        assert!(hook.get().is_some(), "the second registration is still live");
+        assert!(
+            hook.get().is_some(),
+            "the second registration is still live"
+        );
     }
 
     #[test]

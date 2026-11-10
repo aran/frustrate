@@ -3,7 +3,11 @@ use models_shared::model::{Block, Graph, Shape};
 
 #[bridge(sync)]
 pub fn make_block(id: i64, text: String) -> Block {
-    Block { id, text, tags: vec!["a".into()] }
+    Block {
+        id,
+        text,
+        tags: vec!["a".into()],
+    }
 }
 
 #[bridge(sync)]

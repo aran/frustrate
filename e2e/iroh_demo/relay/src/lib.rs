@@ -24,7 +24,7 @@ use iroh_dns::dns::DnsResolver;
 use iroh_relay::{
     client::ClientBuilder,
     protos::relay::{ClientToRelayMsg, RelayToClientMsg},
-    tls::{CaTlsConfig, default_provider},
+    tls::{default_provider, CaTlsConfig},
 };
 use n0_future::{SinkExt, StreamExt};
 
@@ -92,7 +92,7 @@ pub async fn relay_one_datagram(
             } => {
                 if remote_endpoint_id != id_a {
                     return Err(
-                        format!("datagram from {remote_endpoint_id}, expected {id_a}").into()
+                        format!("datagram from {remote_endpoint_id}, expected {id_a}").into(),
                     );
                 }
                 if datagrams.contents.as_ref() != payload {
@@ -116,8 +116,8 @@ pub async fn relay_one_datagram(
 /// collides, and [`Server::http_addr`] reports what it picked.
 ///
 /// [`Server::http_addr`]: iroh_relay::server::Server::http_addr
-pub async fn spawn_loopback_relay()
--> Result<(iroh_relay::server::Server, RelayUrl), Box<dyn std::error::Error>> {
+pub async fn spawn_loopback_relay(
+) -> Result<(iroh_relay::server::Server, RelayUrl), Box<dyn std::error::Error>> {
     use std::net::Ipv4Addr;
 
     use iroh_relay::server::{RelayConfig, Server, ServerConfig};

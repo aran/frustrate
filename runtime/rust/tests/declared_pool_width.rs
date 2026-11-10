@@ -65,7 +65,11 @@ fn the_pool_is_built_at_the_declared_width() {
         pool::declare_width(NonZeroUsize::new(declared).unwrap()),
         Ok(())
     );
-    assert_eq!(pool::width(), declared, "the declaration is what width reports");
+    assert_eq!(
+        pool::width(),
+        declared,
+        "the declaration is what width reports"
+    );
 
     assert!(
         all_at_once(declared, Duration::from_secs(10)),

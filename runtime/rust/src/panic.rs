@@ -379,8 +379,7 @@ fn install_recorder() {
                 // Forced, not `capture()`: `capture()` obeys `RUST_BACKTRACE`,
                 // and a Flutter app has no environment in which anyone set it.
                 let backtrace = std::backtrace::Backtrace::force_capture();
-                let captured =
-                    backtrace.status() == std::backtrace::BacktraceStatus::Captured;
+                let captured = backtrace.status() == std::backtrace::BacktraceStatus::Captured;
                 let site = Site {
                     location: info.location().map(owned_location),
                     backtrace: captured.then_some(backtrace),

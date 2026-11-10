@@ -20,6 +20,7 @@
 //! are single map operations, so spinning is bounded and tiny. See that
 //! module for the full argument and for why the release is a `Drop` guard.
 
+use crate::bounded::Lock;
 use crate::codec::{ByteWriter, FramedWriter};
 use crate::envelope::{
     string_envelope, STATUS_ERROR, STATUS_LEAKED, STATUS_STREAM_END, STATUS_STREAM_ITEM,
@@ -27,7 +28,6 @@ use crate::envelope::{
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
-use crate::bounded::Lock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use std::task::{Context, Poll, Waker};
@@ -525,9 +525,7 @@ impl<T: Send + 'static> StreamSink<T> {
     pub fn error(self, msg: impl std::fmt::Display) {
         if self.inner.take_terminal() {
             match &self.inner.capture {
-                Some(c) => {
-                    c.set_terminal(crate::testing::Terminal::Error(msg.to_string()))
-                }
+                Some(c) => c.set_terminal(crate::testing::Terminal::Error(msg.to_string())),
                 None => crate::post::respond(
                     self.inner.id,
                     string_envelope(STATUS_ERROR, &msg.to_string()),
@@ -618,9 +616,7 @@ impl<T: Send + 'static> futures_sink::Sink<T> for StreamSink<T> {
 pub(crate) fn sink_from<T>(inner: Arc<Inner>) -> StreamSink<T> {
     StreamSink {
         inner,
-        encode: |_, _| {
-            unreachable!("frustrate::testing: a captured sink never encodes")
-        },
+        encode: |_, _| unreachable!("frustrate::testing: a captured sink never encodes"),
     }
 }
 
@@ -813,7 +809,11 @@ mod tests {
         assert_eq!(ev[0][1], selector::ADD_ERROR);
         assert_eq!(ByteReader::new(&ev[0][2..]).read_string(), "recoverable");
         assert_eq!(ev[1][1], selector::ADD);
-        assert_eq!(ev[2], vec![STATUS_STREAM_END], "one normal end, not an error");
+        assert_eq!(
+            ev[2],
+            vec![STATUS_STREAM_END],
+            "one normal end, not an error"
+        );
     }
 
     /// Backpressure: `send()` parks while paused, wakes on resume, unparks with
@@ -952,7 +952,11 @@ mod tests {
         let inner = end(9302);
         let mut w = item_writer(selector::ADD);
         enc(Counted(22), &mut w);
-        assert_eq!(DROPPED.load(Ordering::SeqCst), 1, "minting consumed the item");
+        assert_eq!(
+            DROPPED.load(Ordering::SeqCst),
+            1,
+            "minting consumed the item"
+        );
         inner.cancel();
         assert!(!post_method(&inner, w));
         assert_eq!(
@@ -1000,7 +1004,10 @@ mod tests {
 
         // Paused → not ready; resume → ready again.
         frustrate_stream_pause(9201);
-        assert!(matches!(Pin::new(&mut s).poll_ready(&mut cx), Poll::Pending));
+        assert!(matches!(
+            Pin::new(&mut s).poll_ready(&mut cx),
+            Poll::Pending
+        ));
         frustrate_stream_resume(9201);
         assert!(matches!(
             Pin::new(&mut s).poll_ready(&mut cx),

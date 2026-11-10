@@ -76,7 +76,10 @@ impl Unit {
         match (&self.ir, &self.contract) {
             (Some(ir), Some(contract)) => Ok(Some((ir, contract))),
             (None, None) => Ok(None),
-            _ => Err(format!("unit `{}` needs both --ir and --contract, or neither", self.name)),
+            _ => Err(format!(
+                "unit `{}` needs both --ir and --contract, or neither",
+                self.name
+            )),
         }
     }
 }
@@ -110,7 +113,10 @@ impl Options {
         let linking: Vec<&Unit> = self.units.iter().filter(|u| u.links).collect();
         match linking.as_slice() {
             [one] => Ok(one),
-            _ => Err(format!("exactly one unit must be marked --links, found {}", linking.len())),
+            _ => Err(format!(
+                "exactly one unit must be marked --links, found {}",
+                linking.len()
+            )),
         }
     }
 }
@@ -132,7 +138,10 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Options, String> {
                 current = Some(match o.units.iter().position(|u| u.name == name) {
                     Some(i) => i,
                     None => {
-                        o.units.push(Unit { name, ..Unit::default() });
+                        o.units.push(Unit {
+                            name,
+                            ..Unit::default()
+                        });
                         o.units.len() - 1
                     }
                 });
@@ -242,10 +251,12 @@ fn about(several: bool, unit: &Unit, sentence: &str) -> String {
 fn snapshot(o: &Options) -> Result<serde_json::Value, String> {
     let library = required(&o.library, "--library")?;
     let state_dir = required(&o.state, "--state")?;
-    std::fs::create_dir_all(state_dir).map_err(|e| format!("cannot create the state directory: {e}"))?;
+    std::fs::create_dir_all(state_dir)
+        .map_err(|e| format!("cannot create the state directory: {e}"))?;
     let state = State::new(state_dir);
 
-    let bytes = std::fs::read(library).map_err(|e| format!("cannot read {}: {e}", library.display()))?;
+    let bytes =
+        std::fs::read(library).map_err(|e| format!("cannot read {}: {e}", library.display()))?;
     let image = Image::read(&bytes)?;
     if image.identity.is_none() {
         return Err(format!(
@@ -281,13 +292,15 @@ fn snapshot(o: &Options) -> Result<serde_json::Value, String> {
                 ));
             }
             unit_state.write_baseline(&patch::baseline(&module))?;
-            let contract = std::fs::read(contract).map_err(|e| format!("cannot read the binding contract: {e}"))?;
+            let contract = std::fs::read(contract)
+                .map_err(|e| format!("cannot read the binding contract: {e}"))?;
             // Seeds the id ledger: what every id means in the image about to
             // run. Per bridge, because ids are: each bridge dispatches through
             // its own exports, so two bridges may hold the same id for
             // different members without either caller reaching the other.
             unit_state.record_ids(&contract::member_ids(&contract)?)?;
-            std::fs::write(unit_state.contract(), contract).map_err(|e| format!("cannot save the contract: {e}"))?;
+            std::fs::write(unit_state.contract(), contract)
+                .map_err(|e| format!("cannot save the contract: {e}"))?;
         }
         let inputs = state::digests(&input_paths(required(&unit.inputs, "--inputs")?)?, &[])?;
         unit_state.write_inputs(&inputs)?;
@@ -307,7 +320,8 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
         return Err(format!("--symbol must name {ANCHOR}, not {symbol}"));
     }
 
-    let bytes = std::fs::read(state.library()).map_err(|e| format!("no snapshot in the state directory: {e}"))?;
+    let bytes = std::fs::read(state.library())
+        .map_err(|e| format!("no snapshot in the state directory: {e}"))?;
     if !state.written_by_this_builder()? {
         return Ok(json!({"status": "restart", "reasons": [
             "the patch builder itself was rebuilt since this app launched, so it cannot compare against the launch record"
@@ -323,8 +337,10 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
     let mut ids = Vec::new();
     for (unit, _, contract) in &bridges {
         let unit_state = unit_state(state_dir, unit)?;
-        let old = std::fs::read(unit_state.contract()).map_err(|e| format!("no snapshot of `{}` in the state directory: {e}", unit.name))?;
-        let new = std::fs::read(contract).map_err(|e| format!("cannot read the binding contract: {e}"))?;
+        let old = std::fs::read(unit_state.contract())
+            .map_err(|e| format!("no snapshot of `{}` in the state directory: {e}", unit.name))?;
+        let new = std::fs::read(contract)
+            .map_err(|e| format!("cannot read the binding contract: {e}"))?;
         let interface = contract::classify(&old, &new);
         carried.extend(interface.carried.iter().map(|s| about(several, unit, s)));
         refused.extend(interface.refused.iter().map(|s| about(several, unit, s)));
@@ -339,7 +355,12 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
     // anything is built, since no patch can make it safe.
     let mut reused = Vec::new();
     for ((unit, _, _), (unit_state, unit_ids)) in bridges.iter().zip(&ids) {
-        reused.extend(unit_state.reused_ids(unit_ids)?.iter().map(|s| about(several, unit, s)));
+        reused.extend(
+            unit_state
+                .reused_ids(unit_ids)?
+                .iter()
+                .map(|s| about(several, unit, s)),
+        );
     }
     if !reused.is_empty() {
         return Ok(json!({"status": "restart", "reasons": reused}));
@@ -349,7 +370,10 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
     for unit in &o.units {
         let unit_state = unit_state(state_dir, unit)?;
         let previous = unit_state.read_inputs()?;
-        let current = state::digests(&input_paths(required(&unit.inputs, "--inputs")?)?, &previous)?;
+        let current = state::digests(
+            &input_paths(required(&unit.inputs, "--inputs")?)?,
+            &previous,
+        )?;
         inputs_moved.extend(state::changed(&previous, &current));
     }
     inputs_moved.sort();
@@ -357,7 +381,12 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
     if !inputs_moved.is_empty() {
         let reasons: Vec<String> = inputs_moved
             .iter()
-            .map(|p| format!("`{}` changed, and a patch carries only the bridge crates' own code", describe_input(p)))
+            .map(|p| {
+                format!(
+                    "`{}` changed, and a patch carries only the bridge crates' own code",
+                    describe_input(p)
+                )
+            })
             .collect();
         return Ok(json!({"status": "restart", "reasons": reasons}));
     }
@@ -385,7 +414,9 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
         let module = Module::parse(&text)?;
         match patch::build(&base, &module, &target) {
             Outcome::Unchanged => {}
-            Outcome::Restart(reasons) => restart.extend(reasons.iter().map(|s| about(several, unit, s))),
+            Outcome::Restart(reasons) => {
+                restart.extend(reasons.iter().map(|s| about(several, unit, s)))
+            }
             Outcome::Patch(p) => built.push(p),
         }
     }
@@ -395,13 +426,17 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
     if built.is_empty() {
         return Ok(json!({"status": "unchanged"}));
     }
-    let routed: Vec<&str> = built.iter().flat_map(|p| p.routed.iter().map(String::as_str)).collect();
+    let routed: Vec<&str> = built
+        .iter()
+        .flat_map(|p| p.routed.iter().map(String::as_str))
+        .collect();
     eprintln!("frustrate_hotpatch: redirecting {}", routed.join(", "));
     for s in built.iter().flat_map(|p| &p.kept_statics) {
         eprintln!("frustrate_hotpatch: the initializer of static `{s}` changed; the running value is kept");
     }
 
-    std::fs::create_dir_all(out_dir).map_err(|e| format!("cannot create {}: {e}", out_dir.display()))?;
+    std::fs::create_dir_all(out_dir)
+        .map_err(|e| format!("cannot create {}: {e}", out_dir.display()))?;
     let n = (0..)
         .find(|i| !out_dir.join(format!("patch-{i}.support.ll")).exists())
         .expect("a free patch number");
@@ -442,10 +477,14 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
                 .iter()
                 .map(|o| std::fs::read(o).map_err(|e| format!("cannot read {}: {e}", o.display())))
                 .collect::<Result<Vec<_>, _>>()?;
-            let bound: BTreeSet<&str> = built.iter().flat_map(|p| p.bound.iter().map(String::as_str)).collect();
+            let bound: BTreeSet<&str> = built
+                .iter()
+                .flat_map(|p| p.bound.iter().map(String::as_str))
+                .collect();
             let backend = patch::backend_references(&bytes, &bound, &image)?;
             let text = patch::support(&parts, &target, &backend);
-            std::fs::write(&support_module, &text).map_err(|e| format!("cannot write the patch: {e}"))?;
+            std::fs::write(&support_module, &text)
+                .map_err(|e| format!("cannot write the patch: {e}"))?;
             toolchain.compile(&support_module, &support_object)
         })
         .and_then(|_| {
@@ -477,8 +516,15 @@ fn patch(o: &Options) -> Result<serde_json::Value, String> {
 
 /// A crate name for an rlib path, the path otherwise.
 fn describe_input(path: &str) -> String {
-    let file = Path::new(path).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
-    if let Some(stem) = file.strip_prefix("lib").and_then(|f| f.split_once('-')).map(|(s, _)| s) {
+    let file = Path::new(path)
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    if let Some(stem) = file
+        .strip_prefix("lib")
+        .and_then(|f| f.split_once('-'))
+        .map(|(s, _)| s)
+    {
         if file.ends_with(".rlib") || file.ends_with(".rmeta") {
             return stem.to_string();
         }

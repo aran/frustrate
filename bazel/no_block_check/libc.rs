@@ -93,9 +93,16 @@ const MAPPINGS: (&[&str], &str) = (
 
 const UNWIND_FRAME: (&[&str], &str) = (
     &[
-        "_Unwind_GetIP", "_Unwind_GetIPInfo", "_Unwind_GetCFA", "_Unwind_GetLanguageSpecificData",
-        "_Unwind_GetRegionStart", "_Unwind_GetDataRelBase", "_Unwind_GetTextRelBase",
-        "_Unwind_SetGR", "_Unwind_SetIP", "_Unwind_DeleteException",
+        "_Unwind_GetIP",
+        "_Unwind_GetIPInfo",
+        "_Unwind_GetCFA",
+        "_Unwind_GetLanguageSpecificData",
+        "_Unwind_GetRegionStart",
+        "_Unwind_GetDataRelBase",
+        "_Unwind_GetTextRelBase",
+        "_Unwind_SetGR",
+        "_Unwind_SetIP",
+        "_Unwind_DeleteException",
     ],
     "read or write the frame the unwinder hands a personality routine",
 );
@@ -107,17 +114,37 @@ const UNWIND_START: (&[&str], &str) = (
 );
 
 const SIGNALS: (&[&str], &str) = (
-    &["sigaction", "sigaltstack", "sigemptyset", "sigaddset", "signal", "pthread_sigmask"],
+    &[
+        "sigaction",
+        "sigaltstack",
+        "sigemptyset",
+        "sigaddset",
+        "signal",
+        "pthread_sigmask",
+    ],
     "set signal disposition or masks, and return",
 );
 
-const EXIT: (&[&str], &str) = (&["abort", "_exit"], "end the process without running anything else");
+const EXIT: (&[&str], &str) = (
+    &["abort", "_exit"],
+    "end the process without running anything else",
+);
 
 const PTHREAD_RELEASE: &[&str] = &[
-    "pthread_mutex_unlock", "pthread_mutex_trylock", "pthread_mutex_init", "pthread_mutex_destroy",
-    "pthread_mutexattr_*", "pthread_cond_signal", "pthread_cond_broadcast", "pthread_cond_init",
-    "pthread_cond_destroy", "pthread_condattr_*", "pthread_rwlock_unlock",
-    "pthread_rwlock_tryrdlock", "pthread_rwlock_trywrlock", "pthread_rwlock_init",
+    "pthread_mutex_unlock",
+    "pthread_mutex_trylock",
+    "pthread_mutex_init",
+    "pthread_mutex_destroy",
+    "pthread_mutexattr_*",
+    "pthread_cond_signal",
+    "pthread_cond_broadcast",
+    "pthread_cond_init",
+    "pthread_cond_destroy",
+    "pthread_condattr_*",
+    "pthread_rwlock_unlock",
+    "pthread_rwlock_tryrdlock",
+    "pthread_rwlock_trywrlock",
+    "pthread_rwlock_init",
     "pthread_rwlock_destroy",
 ];
 
@@ -127,15 +154,34 @@ pub(crate) const APPLE: Libc = Libc {
     no_wait: &[
         (
             &[
-                "memcmp", "memcpy", "memmove", "memset", "memchr", "bcmp", "bzero", "strlen",
-                "strnlen", "strcmp", "strncmp", "strchr", "strrchr", "strerror_r",
+                "memcmp",
+                "memcpy",
+                "memmove",
+                "memset",
+                "memchr",
+                "bcmp",
+                "bzero",
+                "strlen",
+                "strnlen",
+                "strcmp",
+                "strncmp",
+                "strchr",
+                "strrchr",
+                "strerror_r",
             ],
             PURE_WHY,
         ),
         (
             &[
-                "malloc", "calloc", "realloc", "free", "posix_memalign", "aligned_alloc",
-                "malloc_size", "malloc_usable_size", "valloc",
+                "malloc",
+                "calloc",
+                "realloc",
+                "free",
+                "posix_memalign",
+                "aligned_alloc",
+                "malloc_size",
+                "malloc_usable_size",
+                "valloc",
             ],
             "the system allocator: its locks guard only its own structures, are \
              released before it returns, and it calls nothing back",
@@ -143,38 +189,82 @@ pub(crate) const APPLE: Libc = Libc {
         MAPPINGS,
         (
             &[
-                "pthread_mutex_unlock", "pthread_mutex_trylock", "pthread_mutex_init",
-                "pthread_mutex_destroy", "pthread_mutexattr_*", "pthread_cond_signal",
-                "pthread_cond_broadcast", "pthread_cond_init", "pthread_cond_destroy",
-                "pthread_condattr_*", "pthread_rwlock_unlock", "pthread_rwlock_tryrdlock",
-                "pthread_rwlock_trywrlock", "pthread_rwlock_init", "pthread_rwlock_destroy",
-                "os_unfair_lock_unlock", "os_unfair_lock_trylock", "dispatch_semaphore_signal",
-                "dispatch_semaphore_create", "dispatch_release", "dispatch_retain",
-                "dispatch_time", "__ulock_wake", "os_sync_wake_by_address_*",
+                "pthread_mutex_unlock",
+                "pthread_mutex_trylock",
+                "pthread_mutex_init",
+                "pthread_mutex_destroy",
+                "pthread_mutexattr_*",
+                "pthread_cond_signal",
+                "pthread_cond_broadcast",
+                "pthread_cond_init",
+                "pthread_cond_destroy",
+                "pthread_condattr_*",
+                "pthread_rwlock_unlock",
+                "pthread_rwlock_tryrdlock",
+                "pthread_rwlock_trywrlock",
+                "pthread_rwlock_init",
+                "pthread_rwlock_destroy",
+                "os_unfair_lock_unlock",
+                "os_unfair_lock_trylock",
+                "dispatch_semaphore_signal",
+                "dispatch_semaphore_create",
+                "dispatch_release",
+                "dispatch_retain",
+                "dispatch_time",
+                "__ulock_wake",
+                "os_sync_wake_by_address_*",
             ],
             "release, wake, try, create or destroy a lock; none of them waits",
         ),
         (
             &[
-                "pthread_self", "pthread_threadid_np", "pthread_get_stackaddr_np",
-                "pthread_get_stacksize_np", "pthread_getspecific", "pthread_setspecific",
-                "pthread_key_create", "pthread_attr_*", "pthread_detach", "pthread_setname_np",
-                "_tlv_atexit", "__error",
+                "pthread_self",
+                "pthread_threadid_np",
+                "pthread_get_stackaddr_np",
+                "pthread_get_stacksize_np",
+                "pthread_getspecific",
+                "pthread_setspecific",
+                "pthread_key_create",
+                "pthread_attr_*",
+                "pthread_detach",
+                "pthread_setname_np",
+                "_tlv_atexit",
+                "__error",
             ],
             "read or set the calling thread's own state, or a thread's attributes",
         ),
         (
             &[
-                "clock_gettime", "clock_gettime_nsec_np", "mach_absolute_time",
-                "mach_continuous_time", "mach_timebase_info", "gettimeofday", "time",
-                "getpid", "getppid", "getuid", "geteuid", "getgid", "getegid", "sysconf",
-                "_NSGetArgc", "_NSGetArgv", "_NSGetEnviron", "_NSGetExecutablePath",
+                "clock_gettime",
+                "clock_gettime_nsec_np",
+                "mach_absolute_time",
+                "mach_continuous_time",
+                "mach_timebase_info",
+                "gettimeofday",
+                "time",
+                "getpid",
+                "getppid",
+                "getuid",
+                "geteuid",
+                "getgid",
+                "getegid",
+                "sysconf",
+                "_NSGetArgc",
+                "_NSGetArgv",
+                "_NSGetEnviron",
+                "_NSGetExecutablePath",
             ],
             "read a clock, an id or a process constant; none waits for anything to \
              happen",
         ),
         (
-            &["CCRandomGenerateBytes", "arc4random", "arc4random_buf", "arc4random_uniform", "getentropy"],
+            &[
+                "CCRandomGenerateBytes",
+                "arc4random",
+                "arc4random_buf",
+                "arc4random_uniform",
+                "getentropy",
+            ],
             "kernel entropy, which on Apple platforms never blocks once the system \
              has booted",
         ),
@@ -220,7 +310,10 @@ pub(crate) const APPLE: Libc = Libc {
 
 /// The futex operations that only wake waiters or read, on either Linux
 /// library: the kernel returns without waiting for anyone.
-const FUTEX_WAKES: &[&str] = &["syscall::SYS_futex::FUTEX_WAKE", "syscall::SYS_futex::FUTEX_WAKE_BITSET"];
+const FUTEX_WAKES: &[&str] = &[
+    "syscall::SYS_futex::FUTEX_WAKE",
+    "syscall::SYS_futex::FUTEX_WAKE_BITSET",
+];
 
 /// The kernel's own entropy call, made through the C library's wrapper or
 /// `syscall`. It blocks only until the kernel's pool is first initialised,
@@ -255,8 +348,14 @@ pub(crate) const BIONIC: Libc = Libc {
         ),
         (
             &[
-                "malloc", "calloc", "realloc", "free", "posix_memalign", "aligned_alloc",
-                "memalign", "malloc_usable_size",
+                "malloc",
+                "calloc",
+                "realloc",
+                "free",
+                "posix_memalign",
+                "aligned_alloc",
+                "memalign",
+                "malloc_usable_size",
             ],
             "bionic's allocator (Scudo): its locks guard only its own structures, \
              are released before it returns, and it calls nothing back",
@@ -266,22 +365,44 @@ pub(crate) const BIONIC: Libc = Libc {
             PTHREAD_RELEASE,
             "release, try, create or destroy a pthread lock; none of them waits",
         ),
-        (FUTEX_WAKES, "wake a futex's waiters, which the kernel does without waiting"),
+        (
+            FUTEX_WAKES,
+            "wake a futex's waiters, which the kernel does without waiting",
+        ),
         (
             &[
-                "pthread_self", "pthread_getspecific", "pthread_setspecific", "pthread_key_create",
-                "pthread_key_delete", "pthread_attr_init", "pthread_attr_destroy",
-                "pthread_attr_setstacksize", "pthread_attr_getstack", "pthread_attr_getguardsize",
-                "pthread_detach", "__errno",
+                "pthread_self",
+                "pthread_getspecific",
+                "pthread_setspecific",
+                "pthread_key_create",
+                "pthread_key_delete",
+                "pthread_attr_init",
+                "pthread_attr_destroy",
+                "pthread_attr_setstacksize",
+                "pthread_attr_getstack",
+                "pthread_attr_getguardsize",
+                "pthread_detach",
+                "__errno",
             ],
             "read or set the calling thread's own state, or a thread's attributes; \
              bionic's pthread keys are a fixed array claimed with atomics",
         ),
-        (LINUX_THREAD_IDS, "ask the kernel for a thread's id or CPU set"),
+        (
+            LINUX_THREAD_IDS,
+            "ask the kernel for a thread's id or CPU set",
+        ),
         (
             &[
-                "clock_gettime", "gettimeofday", "time", "getpid", "getppid", "getuid", "geteuid",
-                "getgid", "getegid", "getauxval",
+                "clock_gettime",
+                "gettimeofday",
+                "time",
+                "getpid",
+                "getppid",
+                "getuid",
+                "geteuid",
+                "getgid",
+                "getegid",
+                "getauxval",
             ],
             "read a clock, an id or a process constant; none waits for anything to \
              happen",
@@ -341,11 +462,21 @@ pub(crate) const GLIBC: Libc = Libc {
     os: Os::Linux,
     no_wait: &[
         (PURE, PURE_WHY),
-        (&["gai_strerror"], "return a fixed message for an error code"),
+        (
+            &["gai_strerror"],
+            "return a fixed message for an error code",
+        ),
         (
             &[
-                "malloc", "calloc", "realloc", "free", "posix_memalign", "aligned_alloc",
-                "memalign", "malloc_usable_size", "valloc",
+                "malloc",
+                "calloc",
+                "realloc",
+                "free",
+                "posix_memalign",
+                "aligned_alloc",
+                "memalign",
+                "malloc_usable_size",
+                "valloc",
             ],
             "glibc's malloc: its arena locks guard only its own structures, are \
              released before it returns, and it calls nothing back",
@@ -355,22 +486,44 @@ pub(crate) const GLIBC: Libc = Libc {
             PTHREAD_RELEASE,
             "release, try, create or destroy a pthread lock; none of them waits",
         ),
-        (FUTEX_WAKES, "wake a futex's waiters, which the kernel does without waiting"),
+        (
+            FUTEX_WAKES,
+            "wake a futex's waiters, which the kernel does without waiting",
+        ),
         (
             &[
-                "pthread_self", "pthread_getspecific", "pthread_setspecific", "pthread_key_create",
-                "pthread_key_delete", "pthread_attr_init", "pthread_attr_destroy",
-                "pthread_attr_setstacksize", "pthread_attr_getstack", "pthread_attr_getguardsize",
-                "pthread_detach", "__errno_location",
+                "pthread_self",
+                "pthread_getspecific",
+                "pthread_setspecific",
+                "pthread_key_create",
+                "pthread_key_delete",
+                "pthread_attr_init",
+                "pthread_attr_destroy",
+                "pthread_attr_setstacksize",
+                "pthread_attr_getstack",
+                "pthread_attr_getguardsize",
+                "pthread_detach",
+                "__errno_location",
             ],
             "read or set the calling thread's own state, or a thread's attributes; \
              glibc's pthread keys are a fixed array claimed with atomics",
         ),
-        (LINUX_THREAD_IDS, "ask the kernel for a thread's id or CPU set"),
+        (
+            LINUX_THREAD_IDS,
+            "ask the kernel for a thread's id or CPU set",
+        ),
         (
             &[
-                "clock_gettime", "gettimeofday", "time", "getpid", "getppid", "getuid", "geteuid",
-                "getgid", "getegid", "getauxval",
+                "clock_gettime",
+                "gettimeofday",
+                "time",
+                "getpid",
+                "getppid",
+                "getuid",
+                "geteuid",
+                "getgid",
+                "getegid",
+                "getauxval",
             ],
             "read a clock (through the vDSO), an id or a process constant; none \
              waits for anything to happen",
@@ -524,7 +677,11 @@ fn constant(arg: &str) -> Option<u64> {
     let ty = words.next()?;
     let bits: u32 = ty.strip_prefix('i')?.parse().ok()?;
     let value: i128 = words.last()?.parse().ok()?;
-    let mask = if bits >= 64 { u64::MAX } else { (1u64 << bits) - 1 };
+    let mask = if bits >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << bits) - 1
+    };
     Some((value as u64) & mask)
 }
 
@@ -534,46 +691,89 @@ mod tests {
 
     #[test]
     fn each_triple_names_its_library() {
-        assert_eq!(for_triple("arm64-apple-macosx11.0.0").unwrap().name, APPLE.name);
-        assert_eq!(for_triple("arm64-apple-ios17.0.0").unwrap().name, APPLE.name);
-        assert_eq!(for_triple("aarch64-unknown-linux-android").unwrap().name, BIONIC.name);
-        assert_eq!(for_triple("x86_64-unknown-linux-android").unwrap().name, BIONIC.name);
-        assert_eq!(for_triple("x86_64-unknown-linux-gnu").unwrap().name, GLIBC.name);
-        assert_eq!(for_triple("aarch64-unknown-linux-gnu").unwrap().name, GLIBC.name);
+        assert_eq!(
+            for_triple("arm64-apple-macosx11.0.0").unwrap().name,
+            APPLE.name
+        );
+        assert_eq!(
+            for_triple("arm64-apple-ios17.0.0").unwrap().name,
+            APPLE.name
+        );
+        assert_eq!(
+            for_triple("aarch64-unknown-linux-android").unwrap().name,
+            BIONIC.name
+        );
+        assert_eq!(
+            for_triple("x86_64-unknown-linux-android").unwrap().name,
+            BIONIC.name
+        );
+        assert_eq!(
+            for_triple("x86_64-unknown-linux-gnu").unwrap().name,
+            GLIBC.name
+        );
+        assert_eq!(
+            for_triple("aarch64-unknown-linux-gnu").unwrap().name,
+            GLIBC.name
+        );
         assert!(for_triple("x86_64-unknown-linux-musl").is_none());
         assert!(for_triple("x86_64-pc-windows-msvc").is_none());
     }
 
     #[test]
     fn a_futex_call_is_named_by_its_operation() {
-        let wake = "i64 noundef 202, ptr noundef nonnull align 4 %0, i32 noundef 129, i32 noundef 1)";
-        assert_eq!(syscall_name("x86_64", wake), "syscall::SYS_futex::FUTEX_WAKE");
-        let wait = "i64 noundef 98, ptr noundef nonnull align 4 %6, i32 noundef 137, i32 noundef -1, \
+        let wake =
+            "i64 noundef 202, ptr noundef nonnull align 4 %0, i32 noundef 129, i32 noundef 1)";
+        assert_eq!(
+            syscall_name("x86_64", wake),
+            "syscall::SYS_futex::FUTEX_WAKE"
+        );
+        let wait =
+            "i64 noundef 98, ptr noundef nonnull align 4 %6, i32 noundef 137, i32 noundef -1, \
                     ptr noundef %43, ptr noundef null, i32 noundef -1)";
-        assert_eq!(syscall_name("aarch64", wait), "syscall::SYS_futex::FUTEX_WAIT_BITSET");
+        assert_eq!(
+            syscall_name("aarch64", wait),
+            "syscall::SYS_futex::FUTEX_WAIT_BITSET"
+        );
         // A futex word that is a constant expression, with its own commas
         // and parentheses, does not move the operation.
         let gep = "i64 noundef 202, ptr noundef nonnull align 4 getelementptr inbounds nuw (i8, ptr @S, i64 8), \
                    i32 noundef 129, i32 noundef 2147483647)";
-        assert_eq!(syscall_name("x86_64", gep), "syscall::SYS_futex::FUTEX_WAKE");
+        assert_eq!(
+            syscall_name("x86_64", gep),
+            "syscall::SYS_futex::FUTEX_WAKE"
+        );
     }
 
     #[test]
     fn a_number_is_read_in_its_architectures_table() {
-        assert_eq!(syscall_name("x86_64", "i64 noundef 318, ptr %1, i64 %2, i32 4)"), "syscall::SYS_getrandom");
-        assert_eq!(syscall_name("aarch64", "i64 noundef 278, ptr %1, i64 %2, i32 4)"), "syscall::SYS_getrandom");
+        assert_eq!(
+            syscall_name("x86_64", "i64 noundef 318, ptr %1, i64 %2, i32 4)"),
+            "syscall::SYS_getrandom"
+        );
+        assert_eq!(
+            syscall_name("aarch64", "i64 noundef 278, ptr %1, i64 %2, i32 4)"),
+            "syscall::SYS_getrandom"
+        );
         // 98 is futex on aarch64 and nothing the table knows on x86_64.
         assert_eq!(syscall_name("x86_64", "i64 noundef 98)"), "syscall::nr_98");
     }
 
     #[test]
     fn what_is_not_a_constant_is_unknown() {
-        assert_eq!(syscall_name("x86_64", "i64 noundef %n, ptr %1)"), "syscall::unknown");
+        assert_eq!(
+            syscall_name("x86_64", "i64 noundef %n, ptr %1)"),
+            "syscall::unknown"
+        );
         let op = "i64 noundef 202, ptr noundef %f, i32 noundef %op, i32 noundef 1)";
         assert_eq!(syscall_name("x86_64", op), "syscall::SYS_futex::unknown");
         assert_eq!(syscall_name("riscv64", "i64 noundef 98)"), "syscall::nr_98");
         for libc in KNOWN {
-            for n in ["syscall::unknown", "syscall::SYS_futex::unknown", "syscall::nr_98", "syscall"] {
+            for n in [
+                "syscall::unknown",
+                "syscall::SYS_futex::unknown",
+                "syscall::nr_98",
+                "syscall",
+            ] {
                 assert!(!libc.no_wait(n), "{} {n}", libc.name);
             }
         }
@@ -584,7 +784,11 @@ mod tests {
     #[test]
     fn futex_operations_are_classified_on_both_linux_libraries() {
         for libc in [&BIONIC, &GLIBC] {
-            assert!(libc.no_wait("syscall::SYS_futex::FUTEX_WAKE"), "{}", libc.name);
+            assert!(
+                libc.no_wait("syscall::SYS_futex::FUTEX_WAKE"),
+                "{}",
+                libc.name
+            );
             for w in [
                 "syscall::SYS_futex::FUTEX_WAIT",
                 "syscall::SYS_futex::FUTEX_WAIT_BITSET",
@@ -595,7 +799,10 @@ mod tests {
                 assert!(libc.waits(w), "{} {w}", libc.name);
                 assert!(!libc.no_wait(w), "{} {w}", libc.name);
             }
-            assert_eq!(libc.acquire_waits, ["syscall::SYS_futex::FUTEX_WAIT_BITSET"]);
+            assert_eq!(
+                libc.acquire_waits,
+                ["syscall::SYS_futex::FUTEX_WAIT_BITSET"]
+            );
         }
     }
 

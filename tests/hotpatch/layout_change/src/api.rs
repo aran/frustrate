@@ -19,7 +19,11 @@ struct Tally {
     first: i64,
 }
 
-static TALLY: Mutex<Tally> = Mutex::new(Tally { hits: 0, last: 0, first: 0 });
+static TALLY: Mutex<Tally> = Mutex::new(Tally {
+    hits: 0,
+    last: 0,
+    first: 0,
+});
 
 #[bridge(sync)]
 pub fn add(a: i64, b: i64) -> i64 {

@@ -3,5 +3,4 @@
 /// here, not in app code.
 library;
 
-export 'src/init_native.dart'
-    if (dart.library.js_interop) 'src/init_web.dart';
+export 'src/init_native.dart' if (dart.library.js_interop) 'src/init_web.dart';

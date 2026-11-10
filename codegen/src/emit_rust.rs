@@ -857,7 +857,10 @@ fn rust_type_opt(iface: &Interface, ty: &Type, opaque_is_a_type: bool) -> String
                         .unwrap_or_else(|| "()".into()),
                     rust_type_opt(iface, e, opaque_is_a_type)
                 ),
-                (Some(r), None) => format!("{path}<{item}, {}>", rust_type_opt(iface, r, opaque_is_a_type)),
+                (Some(r), None) => format!(
+                    "{path}<{item}, {}>",
+                    rust_type_opt(iface, r, opaque_is_a_type)
+                ),
                 (None, None) => format!("{path}<{item}>"),
             }
         }
@@ -894,19 +897,33 @@ fn rust_type_opt(iface: &Interface, ty: &Type, opaque_is_a_type: bool) -> String
         // type the user's own signature spells. Everything else — the wire, the
         // Dart surface — sees straight through it.
         Type::Boxed(t) => format!("Box<{}>", rust_type_opt(iface, t, opaque_is_a_type)),
-        Type::List(t, SeqKind::Vec) => format!("Vec<{}>", rust_type_opt(iface, t, opaque_is_a_type)),
+        Type::List(t, SeqKind::Vec) => {
+            format!("Vec<{}>", rust_type_opt(iface, t, opaque_is_a_type))
+        }
         Type::List(t, SeqKind::VecDeque) => {
-            format!("std::collections::VecDeque<{}>", rust_type_opt(iface, t, opaque_is_a_type))
+            format!(
+                "std::collections::VecDeque<{}>",
+                rust_type_opt(iface, t, opaque_is_a_type)
+            )
         }
         Type::Set(t, MapKind::Hash) => {
-            format!("std::collections::HashSet<{}>", rust_type_opt(iface, t, opaque_is_a_type))
+            format!(
+                "std::collections::HashSet<{}>",
+                rust_type_opt(iface, t, opaque_is_a_type)
+            )
         }
         Type::Set(t, MapKind::BTree) => {
-            format!("std::collections::BTreeSet<{}>", rust_type_opt(iface, t, opaque_is_a_type))
+            format!(
+                "std::collections::BTreeSet<{}>",
+                rust_type_opt(iface, t, opaque_is_a_type)
+            )
         }
         Type::Tuple(ts) => format!(
             "({})",
-            ts.iter().map(|t| rust_type_opt(iface, t, opaque_is_a_type)).collect::<Vec<_>>().join(", ")
+            ts.iter()
+                .map(|t| rust_type_opt(iface, t, opaque_is_a_type))
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
         Type::Map(k, v, kind) => format!(
             "std::collections::{}<{}, {}>",
@@ -923,7 +940,11 @@ fn rust_type_opt(iface: &Interface, ty: &Type, opaque_is_a_type: bool) -> String
         // between `&str`/`&String` and `&[u8]`/`&Vec<u8>`, which parse to one
         // `Type` and differ only here — the same fact `Param::unsized_borrow`
         // carries at the top level.
-        Type::Ref { inner, mutable, unsized_borrow } => {
+        Type::Ref {
+            inner,
+            mutable,
+            unsized_borrow,
+        } => {
             let mu = if *mutable { "mut " } else { "" };
             let inner = match (unsized_borrow, inner.as_ref()) {
                 (true, Type::String) => "str".to_string(),
@@ -992,7 +1013,11 @@ fn emit_struct_codec(out: &mut String, iface: &Interface, s: &StructDecl) {
     let owns_handles = crate::check::reaches_opaque(iface, &Type::Struct(s.name.clone()));
     if !decl_has_handle(iface, &s.name) {
         out.push_str(ALLOW);
-        let recv = if owns_handles { path.clone() } else { format!("&{path}") };
+        let recv = if owns_handles {
+            path.clone()
+        } else {
+            format!("&{path}")
+        };
         let _ = write!(
             out,
             "fn enc_{}(w: &mut ByteWriter, v: {recv}) {{\n",
@@ -1049,7 +1074,11 @@ fn emit_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
     let enc_start = out.len();
     // encode
     out.push_str(ALLOW);
-    let recv = if owns_handles { path.clone() } else { format!("&{path}") };
+    let recv = if owns_handles {
+        path.clone()
+    } else {
+        format!("&{path}")
+    };
     let _ = write!(
         out,
         "fn enc_{}(w: &mut ByteWriter, v: {recv}) {{\n    match v {{\n",
@@ -1068,7 +1097,10 @@ fn emit_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
         } else {
             format!("{vpath}::{} {{ {} }}", v.name, binds.join(", "))
         };
-        let _ = write!(out, "        {pattern} => {{\n            w.write_u32({idx});\n");
+        let _ = write!(
+            out,
+            "        {pattern} => {{\n            w.write_u32({idx});\n"
+        );
         for (f, bind) in v.fields.iter().zip(&binds) {
             if owns_handles {
                 // Matching on the value itself, so each binding owns its field.
@@ -1102,7 +1134,12 @@ fn emit_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
             let _ = write!(out, "        {idx} => {vpath}::{},\n", v.name);
         } else if v.tuple {
             let args: Vec<String> = v.fields.iter().map(|f| decode_expr(iface, &f.ty)).collect();
-            let _ = write!(out, "        {idx} => {vpath}::{}({}),\n", v.name, args.join(", "));
+            let _ = write!(
+                out,
+                "        {idx} => {vpath}::{}({}),\n",
+                v.name,
+                args.join(", ")
+            );
         } else {
             let fields: Vec<String> = v
                 .fields
@@ -1125,7 +1162,14 @@ fn emit_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
 }
 
 /// Encode `expr`, where `expr` is a place expression (e.g. a field access).
-fn encode_ref(out: &mut String, iface: &Interface, ty: &Type, expr: &str, depth: usize, wexpr: &str) {
+fn encode_ref(
+    out: &mut String,
+    iface: &Interface,
+    ty: &Type,
+    expr: &str,
+    depth: usize,
+    wexpr: &str,
+) {
     let pad = "    ".repeat(depth);
     match ty {
         // Unreachable by construction: FR0031 makes handles argument-only,
@@ -1332,13 +1376,27 @@ fn encode_ref(out: &mut String, iface: &Interface, ty: &Type, expr: &str, depth:
 }
 
 /// Encode where `bind` is already a reference binding (&T).
-fn encode_ref_binding(out: &mut String, iface: &Interface, ty: &Type, bind: &str, depth: usize, wexpr: &str) {
+fn encode_ref_binding(
+    out: &mut String,
+    iface: &Interface,
+    ty: &Type,
+    bind: &str,
+    depth: usize,
+    wexpr: &str,
+) {
     encode_ref(out, iface, ty, &format!("(*{bind})"), depth, wexpr)
 }
 
 /// Encode an owned return value, consuming it. Opaque values become handles
 /// here (and only here).
-fn encode_owned(out: &mut String, iface: &Interface, ty: &Type, expr: &str, depth: usize, wexpr: &str) {
+fn encode_owned(
+    out: &mut String,
+    iface: &Interface,
+    ty: &Type,
+    expr: &str,
+    depth: usize,
+    wexpr: &str,
+) {
     let pad = "    ".repeat(depth);
     match ty {
         Type::Opaque(n) => {
@@ -1409,10 +1467,7 @@ fn encode_owned(out: &mut String, iface: &Interface, ty: &Type, expr: &str, dept
                     // `unsafe`: recording a (handle, drop) pair is what obliges
                     // the two to match, and this is the one site that knows they
                     // do — the constructor and the drop come from the same arm.
-                    let _ = write!(
-                        out,
-                        "{pad}unsafe {{ w.write_minted({ctor}, {d}) }};\n"
-                    );
+                    let _ = write!(out, "{pad}unsafe {{ w.write_minted({ctor}, {d}) }};\n");
                 }
                 None => {
                     let _ = write!(out, "{pad}w.write_handle({ctor});\n");
@@ -1776,7 +1831,10 @@ fn decode_expr_mode(iface: &Interface, ty: &Type, staged: bool) -> String {
         // matches the encode order.
         Type::Tuple(ts) => format!(
             "({})",
-            ts.iter().map(|t| decode_expr_mode(iface, t, staged)).collect::<Vec<_>>().join(", ")
+            ts.iter()
+                .map(|t| decode_expr_mode(iface, t, staged))
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
         // Presence tag through the validating `read_bool` (panics loudly on
         // any byte >1), symmetric with the Dart side: a corrupt tag must be a
@@ -1796,10 +1854,18 @@ fn decode_expr_mode(iface: &Interface, ty: &Type, staged: bool) -> String {
         // left to right, so the fields are read in wire order (the same
         // guarantee the `Type::Tuple` arm above already rests on).
         Type::Struct(n) if staged && crate::check::inbound_struct(iface, n).is_some() => {
-            let fields = &crate::check::inbound_struct(iface, n).expect("guarded").fields;
-            let parts: Vec<String> =
-                fields.iter().map(|f| decode_expr_mode(iface, &f.ty, true)).collect();
-            format!("({}{})", parts.join(", "), if parts.len() == 1 { "," } else { "" })
+            let fields = &crate::check::inbound_struct(iface, n)
+                .expect("guarded")
+                .fields;
+            let parts: Vec<String> = fields
+                .iter()
+                .map(|f| decode_expr_mode(iface, &f.ty, true))
+                .collect();
+            format!(
+                "({}{})",
+                parts.join(", "),
+                if parts.len() == 1 { "," } else { "" }
+            )
         }
         Type::Struct(n) | Type::Enum(n) => format!("dec_{}(r)", iface.codec_stem(n)),
         Type::Extern(n) => format!(
@@ -1862,12 +1928,9 @@ fn trait_is_consumed(iface: &Interface, t: &str) -> bool {
     iface.functions.iter().any(|f| {
         (matches!(f.receiver, Some(Receiver::Value | Receiver::Boxed))
             && f.parent.as_deref() == Some(t))
-            || f.params
-                .iter()
-                .any(|p| {
-                    consumed_param(iface, p)
-                        && crate::check::taken_handles(iface, &p.ty).contains(&t)
-                })
+            || f.params.iter().any(|p| {
+                consumed_param(iface, p) && crate::check::taken_handles(iface, &p.ty).contains(&t)
+            })
     })
 }
 
@@ -1940,9 +2003,14 @@ fn emit_trait_helpers(out: &mut String, iface: &Interface, o: &OpaqueDecl) {
     let t = &o.name;
     let p = rust_path(iface, t);
     let impls = iface.trait_implementors(t);
-    let variants: Vec<(String, String)> = std::iter::once(("Dyn".to_string(), format!("Box<dyn {p}>")))
-        .chain(impls.iter().map(|c| (c.name.clone(), rust_path(iface, &c.name))))
-        .collect();
+    let variants: Vec<(String, String)> =
+        std::iter::once(("Dyn".to_string(), format!("Box<dyn {p}>")))
+            .chain(
+                impls
+                    .iter()
+                    .map(|c| (c.name.clone(), rust_path(iface, &c.name))),
+            )
+            .collect();
     if trait_is_consumed(iface, t) {
         emit_trait_owner(out, iface, o, &variants);
     }
@@ -1956,7 +2024,10 @@ fn emit_trait_helpers(out: &mut String, iface: &Interface, o: &OpaqueDecl) {
             }
             let _ = write!(out, "}}\n");
             out.push_str(ALLOW);
-            let _ = write!(out, "impl __FrArc_{t} {{\n    fn as_dyn(&self) -> &dyn {p} {{\n        match self {{\n");
+            let _ = write!(
+                out,
+                "impl __FrArc_{t} {{\n    fn as_dyn(&self) -> &dyn {p} {{\n        match self {{\n"
+            );
             for (v, _) in &variants {
                 let deref = if v == "Dyn" { "&***" } else { "&**" };
                 let _ = write!(out, "            Self::{v}(a) => {deref}a,\n");
@@ -1984,14 +2055,20 @@ fn emit_trait_helpers(out: &mut String, iface: &Interface, o: &OpaqueDecl) {
                 out.push_str(ALLOW);
                 let _ = write!(out, "impl<'a> __FrGuard{g}_{t}<'a> {{\n");
                 if g == "R" {
-                    let _ = write!(out, "    fn as_dyn(&self) -> &dyn {p} {{\n        match self {{\n");
+                    let _ = write!(
+                        out,
+                        "    fn as_dyn(&self) -> &dyn {p} {{\n        match self {{\n"
+                    );
                     for (v, _) in &variants {
                         let deref = if v == "Dyn" { "&***" } else { "&**" };
                         let _ = write!(out, "            Self::{v}(g) => {deref}g,\n");
                     }
                     let _ = write!(out, "        }}\n    }}\n}}\n");
                 } else {
-                    let _ = write!(out, "    fn as_dyn_mut(&mut self) -> &mut dyn {p} {{\n        match self {{\n");
+                    let _ = write!(
+                        out,
+                        "    fn as_dyn_mut(&mut self) -> &mut dyn {p} {{\n        match self {{\n"
+                    );
                     for (v, _) in &variants {
                         let deref = if v == "Dyn" { "&mut ***" } else { "&mut **" };
                         let _ = write!(out, "            Self::{v}(g) => {deref}g,\n");
@@ -2222,11 +2299,7 @@ enum ArmKind {
 /// The consume-beside-a-guard duplicate is refused by `alias_check`, which
 /// every consuming member joins.
 fn locked_acquisitions(iface: &Interface, f: &Function) -> usize {
-    let is_locked = |n: &str| {
-        iface
-            .opaque(n)
-            .is_some_and(|o| o.model == Model::Locked)
-    };
+    let is_locked = |n: &str| iface.opaque(n).is_some_and(|o| o.model == Model::Locked);
     let recv = matches!(f.receiver, Some(Receiver::Ref | Receiver::RefMut))
         && iface
             .receiver_handle(f)
@@ -2260,8 +2333,7 @@ fn locked_acquisitions(iface: &Interface, f: &Function) -> usize {
         + f.params
             .iter()
             .filter(|p| {
-                p.borrow != Borrow::Value
-                    && matches!(&p.ty, Type::Opaque(n) if is_locked(n))
+                p.borrow != Borrow::Value && matches!(&p.ty, Type::Opaque(n) if is_locked(n))
             })
             .count()
 }
@@ -2305,10 +2377,18 @@ pub(crate) fn handle_count(iface: &Interface, ty: &Type) -> usize {
         // A list, a set and a map are the unbounded containers: how many is
         // the caller's, so each answers 2 whatever it holds.
         Type::List(..) | Type::Set(..) | Type::Map(..) => 2,
-        Type::Tuple(ts) => ts.iter().map(|t| handle_count(iface, t)).sum::<usize>().min(2),
+        Type::Tuple(ts) => ts
+            .iter()
+            .map(|t| handle_count(iface, t))
+            .sum::<usize>()
+            .min(2),
         Type::Struct(n) => crate::check::inbound_struct(iface, n)
             .map(|s| {
-                s.fields.iter().map(|f| handle_count(iface, &f.ty)).sum::<usize>().min(2)
+                s.fields
+                    .iter()
+                    .map(|f| handle_count(iface, &f.ty))
+                    .sum::<usize>()
+                    .min(2)
             })
             .unwrap_or(0),
         _ => 0,
@@ -2384,7 +2464,9 @@ fn lent_positions(iface: &Interface, ty: &Type, param: &str, mode: AcquireMode) 
             Type::Ref { inner, mutable, .. } => {
                 if let Type::Opaque(n) = crate::check::unbox(inner) {
                     let i = out.len();
-                    let decl = iface.opaque(n).expect("a lent position names a bridged type");
+                    let decl = iface
+                        .opaque(n)
+                        .expect("a lent position names a bridged type");
                     let needs_ids = mode.guarded
                         || decl.model == Model::Locked
                         || (decl.model == Model::Frozen && mode.for_pool);
@@ -2577,34 +2659,20 @@ fn build_call_parts(iface: &Interface, f: &Function, kind: ArmKind) -> CallParts
             // implementor. Receivers are never tagged — the Dart class
             // already dispatched to the right fn_id.
             Type::Opaque(n) if iface.opaque(n).unwrap().dyn_trait => {
-                let arg = acquire_trait_param(
-                    iface,
-                    f,
-                    &p.name,
-                    n,
-                    param_use(p),
-                    mode,
-                    &mut parts,
-                );
+                let arg = acquire_trait_param(iface, f, &p.name, n, param_use(p), mode, &mut parts);
                 param_args.push(arg);
             }
             Type::Opaque(n) => {
-                let arg = acquire_handle(
-                    iface,
-                    f,
-                    &p.name,
-                    n,
-                    param_use(p),
-                    mode,
-                    &mut parts,
-                );
+                let arg = acquire_handle(iface, f, &p.name, n, param_use(p), mode, &mut parts);
                 param_args.push(arg);
             }
             // A handle inside a container the call takes: staged as ids in
             // wire order here, and moved out of its container only after the
             // duplicate check has seen every one of them.
             ty if consumed_param(iface, p) => {
-                param_args.push(acquire_consumed_container(iface, f, p, ty, mode, &mut parts));
+                param_args.push(acquire_consumed_container(
+                    iface, f, p, ty, mode, &mut parts,
+                ));
             }
             // A handle inside a container the call only borrows: staged as ids
             // in wire order here, acquired at the invocation — after the
@@ -2620,9 +2688,7 @@ fn build_call_parts(iface: &Interface, f: &Function, kind: ArmKind) -> CallParts
             // pool and actor arms must stay owned, and `ByteReader`'s borrowed
             // decoders for the full safety argument.
             ty @ (Type::Bytes | Type::String)
-                if kind == ArmKind::Sync
-                    && p.borrow == Borrow::Ref
-                    && p.unsized_borrow =>
+                if kind == ArmKind::Sync && p.borrow == Borrow::Ref && p.unsized_borrow =>
             {
                 let read = match ty {
                     Type::Bytes => "r.read_bytes_borrowed()",
@@ -2790,7 +2856,10 @@ fn emit_alias_check(f: &Function, parts: &mut CallParts) {
 /// from here is the infallible confined and actor takes, whose values then
 /// move into the closure.
 fn flush_takes(for_pool: bool, parts: &mut CallParts) {
-    debug_assert!(parts.adopts.is_empty(), "adoptions are flushed into the prelude first");
+    debug_assert!(
+        parts.adopts.is_empty(),
+        "adoptions are flushed into the prelude first"
+    );
     if parts.takes.is_empty() {
         return;
     }
@@ -2927,7 +2996,10 @@ fn emit_lock_plan(f: &Function, for_pool: bool, parts: &mut CallParts) {
              {pad}    match pos {{\n"
         );
     } else {
-        let _ = write!(out, "{pad}for &(_, idx) in plan.iter() {{\n{pad}    match idx {{\n");
+        let _ = write!(
+            out,
+            "{pad}for &(_, idx) in plan.iter() {{\n{pad}    match idx {{\n"
+        );
     }
     for (i, l) in parts.locks.iter().enumerate() {
         match &l.many {
@@ -2999,10 +3071,16 @@ fn acquire_consumed_container(
     mode: AcquireMode,
     parts: &mut CallParts,
 ) -> String {
-    let AcquireMode { for_pool, guarded, .. } = mode;
+    let AcquireMode {
+        for_pool, guarded, ..
+    } = mode;
     let name = &p.name;
     let staged = format!("staged_{name}");
-    let _ = write!(parts.prelude, "    let {staged} = {};\n", decode_staged(iface, ty));
+    let _ = write!(
+        parts.prelude,
+        "    let {staged} = {};\n",
+        decode_staged(iface, ty)
+    );
     // The lent half is set up here, off the staged value, because its ids have
     // to be read before the adoption moves it — and its `Arc` clones and lock
     // plan belong on the calling thread either way.
@@ -3048,7 +3126,9 @@ fn acquire_consumed_container(
         take_expr(iface, ty, &format!("owned_{name}"), 0),
         consumed_type_name(iface, ty),
     );
-    let Some(leaves) = leaves else { return name.clone() };
+    let Some(leaves) = leaves else {
+        return name.clone();
+    };
     // The argument is the **taken** value walked once more, moving: each lent
     // position becomes its acquisition, each taken one moves in as it stands.
     let acq = |i: usize, place: &str| leaves[i].replace("PLACE", place);
@@ -3148,8 +3228,9 @@ fn adopt_expr(iface: &Interface, ty: &Type, expr: &str, depth: usize) -> String 
             let Some(decl) = crate::check::inbound_struct(iface, n) else {
                 unreachable!("FR0004 keeps a consumed handle out of a plain declaration")
             };
-            let binds: Vec<String> =
-                (0..decl.fields.len()).map(|i| format!("a{depth}_{i}")).collect();
+            let binds: Vec<String> = (0..decl.fields.len())
+                .map(|i| format!("a{depth}_{i}"))
+                .collect();
             let parts: Vec<String> = decl
                 .fields
                 .iter()
@@ -3218,7 +3299,11 @@ fn gather_entries(iface: &Interface, ty: &Type, expr: &str, depth: usize, out: &
             // so the entry resolves per arm, exactly as a top-level trait
             // acquisition's does.
             let tagged = iface.opaque(n).is_some_and(|o| o.dyn_trait);
-            let id = if tagged { format!("{expr}.1") } else { format!("*{expr}") };
+            let id = if tagged {
+                format!("{expr}.1")
+            } else {
+                format!("*{expr}")
+            };
             let entry = match iface.opaque(n).unwrap().model {
                 Model::Confined | Model::Resident | Model::Actor if tagged => {
                     let mut m = format!("match {expr}.0 {{ ");
@@ -3278,8 +3363,9 @@ fn gather_entries(iface: &Interface, ty: &Type, expr: &str, depth: usize, out: &
             let Some(decl) = crate::check::inbound_struct(iface, n) else {
                 unreachable!("FR0004 keeps a consumed handle out of a plain declaration")
             };
-            let binds: Vec<String> =
-                (0..decl.fields.len()).map(|i| format!("g{depth}_{i}")).collect();
+            let binds: Vec<String> = (0..decl.fields.len())
+                .map(|i| format!("g{depth}_{i}"))
+                .collect();
             let _ = write!(
                 out,
                 "    let ({}{}) = &{expr};\n",
@@ -3414,8 +3500,9 @@ fn take_expr(iface: &Interface, ty: &Type, expr: &str, depth: usize) -> String {
             let Some(decl) = crate::check::inbound_struct(iface, n) else {
                 unreachable!("FR0004 keeps a consumed handle out of a plain declaration")
             };
-            let binds: Vec<String> =
-                (0..decl.fields.len()).map(|i| format!("t{depth}_{i}")).collect();
+            let binds: Vec<String> = (0..decl.fields.len())
+                .map(|i| format!("t{depth}_{i}"))
+                .collect();
             let takes: Vec<String> = decl
                 .fields
                 .iter()
@@ -3572,10 +3659,20 @@ fn lent_arg_expr(
     }
     // An element's place: a moving walk hands the element itself, a borrowing
     // one hands a dereferenced borrow of it.
-    let elem = |n: &str| if moving { n.to_string() } else { format!("(*{n})") };
+    let elem = |n: &str| {
+        if moving {
+            n.to_string()
+        } else {
+            format!("(*{n})")
+        }
+    };
     let iter = if moving { "into_iter()" } else { "iter()" };
     match ty {
-        Type::Ref { inner, unsized_borrow, .. } => {
+        Type::Ref {
+            inner,
+            unsized_borrow,
+            ..
+        } => {
             if matches!(crate::check::unbox(inner), Type::Opaque(_)) {
                 let i = *next;
                 *next += 1;
@@ -3587,7 +3684,15 @@ fn lent_arg_expr(
         Type::Option(inner) => format!(
             "{place}{}.map(|a{depth}| {})",
             if moving { "" } else { ".as_ref()" },
-            lent_arg_expr(inner, &elem(&format!("a{depth}")), depth + 1, moving, moving, next, acq)
+            lent_arg_expr(
+                inner,
+                &elem(&format!("a{depth}")),
+                depth + 1,
+                moving,
+                moving,
+                next,
+                acq
+            )
         ),
         Type::List(inner, kind) => {
             let target = match kind {
@@ -3596,7 +3701,15 @@ fn lent_arg_expr(
             };
             format!(
                 "{place}.{iter}.map(|a{depth}| {}).collect::<{target}>()",
-                lent_arg_expr(inner, &elem(&format!("a{depth}")), depth + 1, moving, moving, next, acq)
+                lent_arg_expr(
+                    inner,
+                    &elem(&format!("a{depth}")),
+                    depth + 1,
+                    moving,
+                    moving,
+                    next,
+                    acq
+                )
             )
         }
         // Built from the flat staging, so the container the body sees is a set
@@ -3610,7 +3723,15 @@ fn lent_arg_expr(
             };
             format!(
                 "{place}.{iter}.map(|a{depth}| {}).collect::<{target}>()",
-                lent_arg_expr(inner, &elem(&format!("a{depth}")), depth + 1, moving, moving, next, acq)
+                lent_arg_expr(
+                    inner,
+                    &elem(&format!("a{depth}")),
+                    depth + 1,
+                    moving,
+                    moving,
+                    next,
+                    acq
+                )
             )
         }
         Type::Map(k, v, kind) => {
@@ -3620,8 +3741,24 @@ fn lent_arg_expr(
             };
             format!(
                 "{place}.{iter}.map(|(k{depth}, v{depth})| ({}, {})).collect::<{target}>()",
-                lent_arg_expr(k, &elem(&format!("k{depth}")), depth + 1, moving, moving, next, acq),
-                lent_arg_expr(v, &elem(&format!("v{depth}")), depth + 1, moving, moving, next, acq)
+                lent_arg_expr(
+                    k,
+                    &elem(&format!("k{depth}")),
+                    depth + 1,
+                    moving,
+                    moving,
+                    next,
+                    acq
+                ),
+                lent_arg_expr(
+                    v,
+                    &elem(&format!("v{depth}")),
+                    depth + 1,
+                    moving,
+                    moving,
+                    next,
+                    acq
+                )
             )
         }
         // A moving walk destructures, because reading `p.0` and then moving
@@ -3633,13 +3770,25 @@ fn lent_arg_expr(
                 .zip(&binds)
                 .map(|(t, b)| lent_arg_expr(t, b, depth + 1, true, true, next, acq))
                 .collect();
-            format!("{{ let ({}) = {place}; ({}) }}", binds.join(", "), parts.join(", "))
+            format!(
+                "{{ let ({}) = {place}; ({}) }}",
+                binds.join(", "),
+                parts.join(", ")
+            )
         }
         Type::Tuple(ts) => format!(
             "({})",
             ts.iter()
                 .enumerate()
-                .map(|(i, t)| lent_arg_expr(t, &format!("{place}.{i}"), depth, owned, moving, next, acq))
+                .map(|(i, t)| lent_arg_expr(
+                    t,
+                    &format!("{place}.{i}"),
+                    depth,
+                    owned,
+                    moving,
+                    next,
+                    acq
+                ))
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
@@ -3674,7 +3823,11 @@ fn acquire_lent_container(
 ) -> String {
     let name = &p.name;
     let staged = format!("staged_{name}");
-    let _ = write!(parts.prelude, "    let {staged} = {};\n", decode_staged(iface, ty));
+    let _ = write!(
+        parts.prelude,
+        "    let {staged} = {};\n",
+        decode_staged(iface, ty)
+    );
     let leaves = lend_positions(iface, f, name, ty, &staged, mode, parts);
     let acq = |i: usize, place: &str| leaves[i].replace("PLACE", place);
     let arg = lent_arg_expr(ty, &staged, 0, true, false, &mut 0, &acq);
@@ -3708,7 +3861,11 @@ fn lend_positions(
     let AcquireMode { guarded, .. } = mode;
     let positions = lent_positions(iface, ty, name, mode);
     for pos in positions.iter().filter(|p| p.needs_ids) {
-        let _ = write!(parts.prelude, "    let mut {}: Vec<u64> = Vec::new();\n", pos.ids_local);
+        let _ = write!(
+            parts.prelude,
+            "    let mut {}: Vec<u64> = Vec::new();\n",
+            pos.ids_local
+        );
         if let Some(tags) = &pos.tags_local {
             let _ = write!(parts.prelude, "    let mut {tags}: Vec<u8> = Vec::new();\n");
         }
@@ -3721,7 +3878,9 @@ fn lend_positions(
 
     let mut leaves: Vec<String> = vec![];
     for pos in &positions {
-        let decl = iface.opaque(&pos.opaque).expect("a lent position names a bridged type");
+        let decl = iface
+            .opaque(&pos.opaque)
+            .expect("a lent position names a bridged type");
         let path = handle_type(iface, &pos.opaque);
         if guarded {
             // The entry constructor follows the container, not the model: only
@@ -3729,7 +3888,11 @@ fn lend_positions(
             // `handle::alias_entry`. For a trait position it follows the *tag*
             // too, for the same reason a top-level trait acquisition's does:
             // the backing type is the implementor's.
-            let usage = if pos.mutable { Acquire::Mut } else { Acquire::Shared };
+            let usage = if pos.mutable {
+                Acquire::Mut
+            } else {
+                Acquire::Shared
+            };
             let entry = match (decl.model, &pos.tags_local) {
                 (Model::Confined | Model::Resident | Model::Actor, Some(_)) => {
                     let mut m = "match *t { ".to_string();
@@ -3752,12 +3915,18 @@ fn lend_positions(
                     usage.runtime_use()
                 ),
                 (Model::Frozen | Model::Locked, _) => {
-                    format!("frustrate::__private::handle::arc_alias_entry(*h, {})", usage.runtime_use())
+                    format!(
+                        "frustrate::__private::handle::arc_alias_entry(*h, {})",
+                        usage.runtime_use()
+                    )
                 }
             };
             let entries = format!("entries_{}", pos.local_stem);
             let source = match &pos.tags_local {
-                Some(tags) => format!("{}.iter().zip({tags}.iter()).map(|(h, t)| {entry})", pos.ids_local),
+                Some(tags) => format!(
+                    "{}.iter().zip({tags}.iter()).map(|(h, t)| {entry})",
+                    pos.ids_local
+                ),
                 None => format!("{}.iter().map(|h| {entry})", pos.ids_local),
             };
             let _ = write!(
@@ -3851,7 +4020,10 @@ fn lent_leaf(
             "{}.iter().zip({tags}.iter()).map(|(h, t)| {expr}).collect::<Vec<_>>()",
             pos.ids_local
         ),
-        None => format!("{}.iter().map(|h| {expr}).collect::<Vec<_>>()", pos.ids_local),
+        None => format!(
+            "{}.iter().map(|h| {expr}).collect::<Vec<_>>()",
+            pos.ids_local
+        ),
     };
     // The per-tag acquisition, over `*t` and `*h`, wrapped in the carrier the
     // flat vector's element type is.
@@ -3871,8 +4043,15 @@ fn lent_leaf(
     let inline = |acc: &str| {
         let mut m = format!("{{ let __v: &{mu}dyn {p} = match PLACE.0 {{ ");
         for (tag, _, ty) in trait_arms(iface, t) {
-            let deref = if tag == 0 { format!("&{mu}**") } else { String::new() };
-            let _ = write!(m, "{tag} => {deref}unsafe {{ handle::{acc}::<{ty}>(PLACE.1) }}, ");
+            let deref = if tag == 0 {
+                format!("&{mu}**")
+            } else {
+                String::new()
+            };
+            let _ = write!(
+                m,
+                "{tag} => {deref}unsafe {{ handle::{acc}::<{ty}>(PLACE.1) }}, "
+            );
         }
         let _ = write!(m, "{unknown} }}; __v }}");
         m
@@ -4025,7 +4204,11 @@ fn acquire_handle(
     mode: AcquireMode,
     parts: &mut CallParts,
 ) -> String {
-    let AcquireMode { for_pool, planned, guarded } = mode;
+    let AcquireMode {
+        for_pool,
+        planned,
+        guarded,
+    } = mode;
     let mutable = usage.is_mut();
     let model = iface.opaque(ty_name).unwrap().model;
     let path = handle_type(iface, ty_name);
@@ -4093,9 +4276,8 @@ fn acquire_handle(
                     .aliases
                     .last_mut()
                     .expect("pushed just above")
-                    .deref_stmt = format!(
-                    "    let {name} = unsafe {{ handle::{acc}::<{path}>(h_{name}) }};\n"
-                );
+                    .deref_stmt =
+                    format!("    let {name} = unsafe {{ handle::{acc}::<{path}>(h_{name}) }};\n");
             } else {
                 let _ = write!(
                     prelude,
@@ -4184,9 +4366,7 @@ fn acquire_handle(
         (Model::Locked, true) => {
             let op = if mutable { "write" } else { "read" };
             let mu = if mutable { "mut " } else { "" };
-            let guard_expr = format!(
-                "arc_{name}.{op}().await"
-            );
+            let guard_expr = format!("arc_{name}.{op}().await");
             let _ = write!(
                 prelude,
                 "    let arc_{name} = unsafe {{ handle::locked_arc::<{path}>({read}) }};\n"
@@ -4261,7 +4441,9 @@ fn take_handle(
     read: &str,
     parts: &mut CallParts,
 ) -> String {
-    let AcquireMode { for_pool, guarded, .. } = mode;
+    let AcquireMode {
+        for_pool, guarded, ..
+    } = mode;
     let model = iface.opaque(ty_name).unwrap().model;
     let path = handle_type(iface, ty_name);
     let boxed = usage == Acquire::ConsumeBox;
@@ -4284,7 +4466,11 @@ fn take_handle(
             );
         }
         Model::Frozen | Model::Locked => {
-            let adopter = if model == Model::Frozen { "frozen_adopt" } else { "locked_adopt" };
+            let adopter = if model == Model::Frozen {
+                "frozen_adopt"
+            } else {
+                "locked_adopt"
+            };
             let _ = write!(
                 adopt,
                 "    let arc_{name} = unsafe {{ handle::{adopter}::<{path}>({read}) }};\n"
@@ -4307,14 +4493,22 @@ fn take_handle(
             }
         }
         Model::Frozen | Model::Locked => {
-            let take = if model == Model::Frozen { "frozen_take" } else { "locked_take" };
+            let take = if model == Model::Frozen {
+                "frozen_take"
+            } else {
+                "locked_take"
+            };
             let (out, pad) = if for_pool {
                 (&mut parts.body_prelude, "            ")
             } else {
                 (&mut parts.takes, "    ")
             };
             let method = member_label(f);
-            let inner = if boxed { format!("Box::new({name})") } else { name.to_string() };
+            let inner = if boxed {
+                format!("Box::new({name})")
+            } else {
+                name.to_string()
+            };
             let _ = write!(
                 out,
                 "{pad}let {name} = match frustrate::__private::handle::{take}(arc_{name}) {{\n\
@@ -4351,7 +4545,11 @@ fn acquire_trait_param(
     mode: AcquireMode,
     parts: &mut CallParts,
 ) -> String {
-    let AcquireMode { for_pool, planned, guarded } = mode;
+    let AcquireMode {
+        for_pool,
+        planned,
+        guarded,
+    } = mode;
     let mutable = usage.is_mut();
     let model = iface.opaque(ty_name).unwrap().model;
     let p = rust_path(iface, ty_name);
@@ -4411,10 +4609,16 @@ fn acquire_trait_param(
     let prelude = &mut parts.prelude;
     match (model, for_pool) {
         (Model::Confined | Model::Resident, false) => {
-            let (acc, mu) = (box_accessor(model, mutable), if mutable { "mut " } else { "" });
+            let (acc, mu) = (
+                box_accessor(model, mutable),
+                if mutable { "mut " } else { "" },
+            );
             let mut deref_stmt = String::new();
             let out: &mut String = if guarded { &mut deref_stmt } else { prelude };
-            let _ = write!(out, "    let {name}: &{mu}dyn {p} = match __tag_{name} {{\n");
+            let _ = write!(
+                out,
+                "    let {name}: &{mu}dyn {p} = match __tag_{name} {{\n"
+            );
             for (tag, _, ty) in &arms {
                 let deref = if *tag == 0 {
                     format!("&{mu}**")
@@ -4441,7 +4645,10 @@ fn acquire_trait_param(
         (Model::Confined, true) => unreachable!("checker forbids confined in async"),
         (Model::Resident, true) => unreachable!("checker forbids resident in async"),
         (Model::Frozen, false) => {
-            let _ = write!(prelude, "    let {name}: &dyn {p} = match __tag_{name} {{\n");
+            let _ = write!(
+                prelude,
+                "    let {name}: &dyn {p} = match __tag_{name} {{\n"
+            );
             for (tag, _, ty) in &arms {
                 let deref = if *tag == 0 { "&**" } else { "" };
                 let _ = write!(
@@ -4468,7 +4675,11 @@ fn acquire_trait_param(
                 Some(parent) => format!("{parent}::{}", f.name),
                 None => f.name.clone(),
             };
-            let (g, op) = if mutable { ("W", "write") } else { ("R", "read") };
+            let (g, op) = if mutable {
+                ("W", "write")
+            } else {
+                ("R", "read")
+            };
             let mu = if mutable { "mut " } else { "" };
             // Built as an *expression* rather than written straight out, because
             // it may have to become a `guard_expr` in the lock plan instead of a
@@ -4533,7 +4744,11 @@ fn acquire_trait_param(
                 );
             }
             let _ = write!(prelude, "{unknown}    }};\n");
-            let (op, mu) = if mutable { ("write", "mut ") } else { ("read", "") };
+            let (op, mu) = if mutable {
+                ("write", "mut ")
+            } else {
+                ("read", "")
+            };
             // A trait parameter can name the same object as a concrete
             // parameter of the implementing type, so it joins the plan like
             // any other acquisition. Its handle id is already bound.
@@ -4586,7 +4801,9 @@ fn take_trait_param(
     unknown: &str,
     parts: &mut CallParts,
 ) -> String {
-    let AcquireMode { for_pool, guarded, .. } = mode;
+    let AcquireMode {
+        for_pool, guarded, ..
+    } = mode;
     let model = iface.opaque(ty_name).unwrap().model;
     let adopter = match model {
         m @ (Model::Confined | Model::Resident | Model::Actor) => box_adopter(m),
@@ -4796,7 +5013,11 @@ fn emit_actor_call(out: &mut String, iface: &Interface, f: &Function) {
     );
     out.push_str(&parts.prelude);
     out.push_str(ASSERT_CONSUMED);
-    let _ = write!(out, "    let ret = {};\n", invocation(iface, f, &parts.args));
+    let _ = write!(
+        out,
+        "    let ret = {};\n",
+        invocation(iface, f, &parts.args)
+    );
     emit_result_encode(out, iface, f, 1);
     out.push_str("}\n\n");
 }
@@ -4869,7 +5090,11 @@ fn emit_sync_call(out: &mut String, iface: &Interface, f: &Function) {
     );
     out.push_str(&parts.prelude);
     out.push_str(ASSERT_CONSUMED);
-    let _ = write!(out, "    let ret = {};\n", invocation(iface, f, &parts.args));
+    let _ = write!(
+        out,
+        "    let ret = {};\n",
+        invocation(iface, f, &parts.args)
+    );
     emit_result_encode(out, iface, f, 1);
     out.push_str("}\n\n");
 }
@@ -5008,7 +5233,12 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     let call_async = iface.export_symbol("call_async");
     let (slot, route) = hot_route(
         &call_async,
-        &[("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64"), ("call_id", "u64")],
+        &[
+            ("fn_id", "u32"),
+            ("req", "*const u8"),
+            ("req_len", "u64"),
+            ("call_id", "u64"),
+        ],
         "",
     );
     out.push_str(ALLOW);
@@ -5084,8 +5314,11 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
     // Native actor entry: copy the request (liveness: bytes leave the
     // caller's buffer before this returns), then run the body on the
     // actor's host thread; the runtime responds with the body's envelope.
-    let actor_fns: Vec<&Function> =
-        iface.functions.iter().filter(|f| is_actor_fn(iface, f)).collect();
+    let actor_fns: Vec<&Function> = iface
+        .functions
+        .iter()
+        .filter(|f| is_actor_fn(iface, f))
+        .collect();
     if !actor_fns.is_empty() {
         // Emitted only when there is at least one arm, so this reader is live
         // by construction. ALLOW anyway, for the same reason every other item
@@ -5095,7 +5328,13 @@ fn emit_dispatch(out: &mut String, iface: &Interface) {
         let actor_call = iface.export_symbol("actor_call");
         let (slot, route) = hot_route(
             &actor_call,
-            &[("host", "*const core::ffi::c_void"), ("call_id", "u64"), ("fn_id", "u32"), ("req", "*const u8"), ("req_len", "u64")],
+            &[
+                ("host", "*const core::ffi::c_void"),
+                ("call_id", "u64"),
+                ("fn_id", "u32"),
+                ("req", "*const u8"),
+                ("req_len", "u64"),
+            ],
             "",
         );
         out.push_str(&slot);
@@ -5330,11 +5569,18 @@ mod tests {
                 "    {}    if let Some(patched) = frustrate::hot_patch::route(&frustrate_hot_slot_{export}, {export} as *const core::ffi::c_void) {{",
                 super::HOT_PATCH_CFG
             );
-            assert!(code.contains(&route), "{export} is not routed under the cfg:\n{code}");
+            assert!(
+                code.contains(&route),
+                "{export} is not routed under the cfg:\n{code}"
+            );
         }
         // Exactly the five above: a routed export is one a patch may take over,
         // so a sixth appearing without a decision should fail here.
-        assert_eq!(code.matches("frustrate::hot_patch::route(").count(), 5, "{code}");
+        assert_eq!(
+            code.matches("frustrate::hot_patch::route(").count(),
+            5,
+            "{code}"
+        );
     }
 
     /// Every symbol the glue exports carries the crate name, so two bridges
@@ -5368,7 +5614,9 @@ mod tests {
         let is = |attrs: &[syn::Attribute], path: &str, inner: &str| {
             attrs.iter().any(|a| {
                 a.path().is_ident(path)
-                    && a.meta.require_list().is_ok_and(|l| l.tokens.to_string().contains(inner))
+                    && a.meta
+                        .require_list()
+                        .is_ok_and(|l| l.tokens.to_string().contains(inner))
             })
         };
         let mut exports = vec![];
@@ -5394,16 +5642,22 @@ mod tests {
             "frustrate_test_api_finalize_Scene",
             "frustrate_hot_slot_frustrate_test_api_call_sync",
         ] {
-            assert!(exports.iter().any(|e| e == want), "{want} is not exported: {exports:?}");
+            assert!(
+                exports.iter().any(|e| e == want),
+                "{want} is not exported: {exports:?}"
+            );
         }
         assert!(
-            exports.iter().any(|e| e.starts_with("frustrate_check_block_test_api_") && e.ends_with("_quick")),
+            exports
+                .iter()
+                .any(|e| e.starts_with("frustrate_check_block_test_api_") && e.ends_with("_quick")),
             "the check root is not exported: {exports:?}"
         );
         for e in &exports {
             let bare = e.strip_prefix("frustrate_hot_slot_").unwrap_or(e);
             assert!(
-                bare.starts_with("frustrate_test_api_") || bare.starts_with("frustrate_check_block_test_api_"),
+                bare.starts_with("frustrate_test_api_")
+                    || bare.starts_with("frustrate_check_block_test_api_"),
                 "`{e}` lacks the crate name"
             );
         }
@@ -5425,8 +5679,14 @@ mod tests {
             code.contains("fn enc_16Page_3c_Item_3e_(w: &mut ByteWriter, v: &crate::api::Page<crate::api::Item>)"),
             "{code}"
         );
-        assert!(code.contains("-> crate::api::Page<crate::api::Item> {"), "{code}");
-        assert!(code.contains("    crate::api::Page::<crate::api::Item> {"), "{code}");
+        assert!(
+            code.contains("-> crate::api::Page<crate::api::Item> {"),
+            "{code}"
+        );
+        assert!(
+            code.contains("    crate::api::Page::<crate::api::Item> {"),
+            "{code}"
+        );
         assert!(
             code.contains("crate::api::Either::<i64, crate::api::Item>::Left"),
             "{code}"
@@ -5445,7 +5705,9 @@ mod tests {
              #[bridge(sync)] pub fn out() -> P<Doc> { todo!() }",
         );
         assert!(
-            code.contains("fn enc_12P_3c_Doc_3e_(w: &mut ByteWriter, v: crate::api::P<crate::api::Doc>)"),
+            code.contains(
+                "fn enc_12P_3c_Doc_3e_(w: &mut ByteWriter, v: crate::api::P<crate::api::Doc>)"
+            ),
             "{code}"
         );
         assert!(!code.contains("fn dec_12P_3c_Doc_3e_"), "{code}");
@@ -5476,7 +5738,10 @@ mod tests {
     #[test]
     fn sync_unsized_borrow_params_decode_borrowed() {
         let code = emit_src("#[bridge(sync)] pub fn f(data: &[u8]) -> i64 { data.len() as i64 }");
-        assert!(code.contains("let data = r.read_bytes_borrowed();"), "{code}");
+        assert!(
+            code.contains("let data = r.read_bytes_borrowed();"),
+            "{code}"
+        );
         assert!(!code.contains("r.read_bytes()"), "{code}");
         // Passed as the slice itself, not `&owned`.
         assert!(code.contains("crate::api::f(data)"), "{code}");
@@ -5501,14 +5766,20 @@ mod tests {
         );
         // Encode reads through the Box; no marker of any kind on the wire.
         assert!(code.contains("enc_Tree(w, &(*(*f0)));"), "{code}");
-        assert!(code.contains("crate::api::Tree::Pair(Box::new(dec_Tree(r)), Box::new(dec_Tree(r)))"), "{code}");
+        assert!(
+            code.contains("crate::api::Tree::Pair(Box::new(dec_Tree(r)), Box::new(dec_Tree(r)))"),
+            "{code}"
+        );
         assert!(
             code.contains("next: if r.read_bool() { Some(Box::new(dec_Link(r))) } else { None },"),
             "{code}"
         );
         // The Rust type keeps the Box — it is the one place it is visible.
         let scalar = emit_src("#[bridge(sync)] pub fn f(x: Box<i64>) -> Box<i64> { x }");
-        assert!(scalar.contains("let x = Box::new(r.read_i64());"), "{scalar}");
+        assert!(
+            scalar.contains("let x = Box::new(r.read_i64());"),
+            "{scalar}"
+        );
         assert!(scalar.contains("w.write_i64((*ret));"), "{scalar}");
         // …and `bulk_rust_prim` does NOT see through it: a `Vec<Box<i32>>` has
         // no contiguous run to memcpy, so Rust loops where Dart bulk-writes.
@@ -5599,9 +5870,8 @@ mod tests {
 
         // A map that reaches no handle keeps the borrowing codec exactly as it
         // was — the owned arms are guarded, not a replacement.
-        let plain = emit_src(
-            "#[bridge] pub fn f() -> std::collections::HashMap<String, i64> { todo!() }",
-        );
+        let plain =
+            emit_src("#[bridge] pub fn f() -> std::collections::HashMap<String, i64> { todo!() }");
         assert!(plain.contains("for (k3, v3) in ret.iter() {"), "{plain}");
     }
 
@@ -5612,7 +5882,8 @@ mod tests {
     /// to live in the IR because the type alone cannot carry it.
     #[test]
     fn sync_borrow_of_an_owned_container_still_decodes_owned() {
-        let code = emit_src("#[bridge(sync)] pub fn f(data: &Vec<u8>) -> i64 { data.len() as i64 }");
+        let code =
+            emit_src("#[bridge(sync)] pub fn f(data: &Vec<u8>) -> i64 { data.len() as i64 }");
         assert!(code.contains("let data = r.read_bytes();"), "{code}");
         assert!(code.contains("crate::api::f(&data)"), "{code}");
 
@@ -5696,7 +5967,10 @@ mod tests {
         );
         // A genuine tuple variant still emits the positional form.
         assert!(code.contains("crate::api::E::V(f0)"), "{code}");
-        assert!(code.contains("crate::api::E::V(") && !code.contains("E::V {"), "{code}");
+        assert!(
+            code.contains("crate::api::E::V(") && !code.contains("E::V {"),
+            "{code}"
+        );
     }
 
     #[test]
@@ -5772,15 +6046,27 @@ mod tests {
             code.contains("std::time::Duration::from_micros(u64::try_from(r.read_i64())"),
             "{code}"
         );
-        assert!(code.contains("which is unsigned — declare the peer"), "{code}");
+        assert!(
+            code.contains("which is unsigned — declare the peer"),
+            "{code}"
+        );
         // Checked, not `+`/`-`: std's operators panic from inside std, and on
         // wasm32 every pre-epoch instant overflows an unsigned SystemTime.
-        assert!(code.contains("std::time::UNIX_EPOCH.checked_sub(__d)"), "{code}");
+        assert!(
+            code.contains("std::time::UNIX_EPOCH.checked_sub(__d)"),
+            "{code}"
+        );
         assert!(code.contains("no pre-epoch DateTime fits"), "{code}");
         // ...and the SystemTime return encodes signed micros vs the epoch,
         // range-checked rather than cast (Duration::MAX wrapped to -1).
-        assert!(code.contains("match ret.duration_since(std::time::UNIX_EPOCH)"), "{code}");
-        assert!(code.contains("Ok(d) => i64::try_from(d.as_micros()),"), "{code}");
+        assert!(
+            code.contains("match ret.duration_since(std::time::UNIX_EPOCH)"),
+            "{code}"
+        );
+        assert!(
+            code.contains("Ok(d) => i64::try_from(d.as_micros()),"),
+            "{code}"
+        );
         // Pre-epoch: the magnitude is rounded *up* so the signed result is
         // floored, which is what chrono's accessor already does. Without it
         // the same instant crossed as two values depending on the peer.
@@ -5843,17 +6129,17 @@ mod tests {
     /// changing. chrono floors natively; the other two are made to.
     #[test]
     fn instant_peers_agree_on_rounding_below_the_epoch() {
-        let code = emit_src(
-            "#[bridge(sync)] pub fn f() -> time::OffsetDateTime { todo!() }",
-        );
+        let code = emit_src("#[bridge(sync)] pub fn f() -> time::OffsetDateTime { todo!() }");
         assert!(
             code.contains("ret.unix_timestamp_nanos().div_euclid(1_000)"),
             "{code}"
         );
-        let code = emit_src(
-            "#[bridge(sync)] pub fn f() -> chrono::DateTime<chrono::Utc> { todo!() }",
+        let code =
+            emit_src("#[bridge(sync)] pub fn f() -> chrono::DateTime<chrono::Utc> { todo!() }");
+        assert!(
+            code.contains("w.write_i64(ret.timestamp_micros());"),
+            "{code}"
         );
-        assert!(code.contains("w.write_i64(ret.timestamp_micros());"), "{code}");
     }
 
     /// The declared peer is what the glue names — it has to be, since the glue
@@ -5880,9 +6166,7 @@ mod tests {
             "{code}"
         );
         assert!(
-            code.contains(
-                "chrono::DateTime::<chrono::Utc>::from_timestamp_micros(r.read_i64())"
-            ),
+            code.contains("chrono::DateTime::<chrono::Utc>::from_timestamp_micros(r.read_i64())"),
             "{code}"
         );
         assert!(
@@ -5890,7 +6174,10 @@ mod tests {
             "{code}"
         );
         // ...and the return encodes through that peer's own accessor.
-        assert!(code.contains("w.write_i64(ret.timestamp_micros());"), "{code}");
+        assert!(
+            code.contains("w.write_i64(ret.timestamp_micros());"),
+            "{code}"
+        );
 
         // The signature the dispatch calls names the peer too.
         let code = emit_src(
@@ -5979,7 +6266,11 @@ mod tests {
         assert!(!code.contains("Future::poll"), "{code}");
         assert!(!code.contains("core::pin::pin!"), "{code}");
         assert!(!code.contains("Waker::noop"), "{code}");
-        assert_eq!(code.matches("#[cfg(frustrate_no_block_check)]").count(), 1, "{code}");
+        assert_eq!(
+            code.matches("#[cfg(frustrate_no_block_check)]").count(),
+            1,
+            "{code}"
+        );
     }
 
     /// A dispatched member whose parameters carry a bridge-external type is not
@@ -6008,7 +6299,11 @@ mod tests {
         // The body is placed, so nothing in the root reaches it.
         assert!(!root.contains("spawn_#_take"), "{root}");
         assert!(!root.contains("ByteReader"), "{root}");
-        assert!(census_src(src).contains("\nartifact-residue # take\n"), "{}", census_src(src));
+        assert!(
+            census_src(src).contains("\nartifact-residue # take\n"),
+            "{}",
+            census_src(src)
+        );
     }
 
     /// The decode edge follows the parameter type *graph*, not the top-level
@@ -6046,7 +6341,11 @@ mod tests {
             "{}",
             census_src(src)
         );
-        assert!(!emit_src(src).contains("frustrate_check_block_test_api_#_make"), "{}", emit_src(src));
+        assert!(
+            !emit_src(src).contains("frustrate_check_block_test_api_#_make"),
+            "{}",
+            emit_src(src)
+        );
     }
 
     /// No claims means no roots and no marker comment — a file that never opts
@@ -6099,10 +6398,20 @@ mod tests {
              }}\n\
              #[bridge(sync, no_block)] pub fn kept(x: i64) -> i64 {{ x }}"
         ));
-        assert!(code.contains("frustrate_check_block_test_api_#_kept(request"), "{code}");
-        assert!(!code.contains("frustrate_check_block_test_api_#_park"), "{code}");
+        assert!(
+            code.contains("frustrate_check_block_test_api_#_kept(request"),
+            "{code}"
+        );
+        assert!(
+            !code.contains("frustrate_check_block_test_api_#_park"),
+            "{code}"
+        );
         // One root, so exactly one cfg gate in the whole section.
-        assert_eq!(code.matches("#[cfg(frustrate_no_block_check)]").count(), 1, "{code}");
+        assert_eq!(
+            code.matches("#[cfg(frustrate_no_block_check)]").count(),
+            1,
+            "{code}"
+        );
     }
 
     /// A bridge whose every claim is placement-settled builds no check
@@ -6189,7 +6498,10 @@ mod tests {
         assert!(census.contains("\nplacement # M::park\n"), "{census}");
         assert!(census.contains("\nplacement # N::wait\n"), "{census}");
         assert!(census.contains("\ndeclared # d\n"), "{census}");
-        assert!(census.contains("\nartifact # s crate::api::s\n"), "{census}");
+        assert!(
+            census.contains("\nartifact # s crate::api::s\n"),
+            "{census}"
+        );
         assert!(census.contains("\nplacement-dispatch # p\n"), "{census}");
         assert!(census.contains("\nartifact-residue # h\n"), "{census}");
         assert!(census.contains("crate test_api\n"), "{census}");
@@ -6227,30 +6539,39 @@ mod tests {
         // cannot drift from what a `dispose()` runs. (Hot patch routing, when
         // compiled in, only decides which copy of that body runs.)
         let body = |export: &str| {
-            code.split(&format!("pub unsafe extern \"C\" fn {export}(h: *mut core::ffi::c_void) {{\n"))
-                .nth(1)
-                .and_then(|b| b.split("\n}\n").next())
-                .unwrap_or_default()
-                .to_string()
+            code.split(&format!(
+                "pub unsafe extern \"C\" fn {export}(h: *mut core::ffi::c_void) {{\n"
+            ))
+            .nth(1)
+            .and_then(|b| b.split("\n}\n").next())
+            .unwrap_or_default()
+            .to_string()
         };
         assert!(
-            body("frustrate_test_api_drop_Doc").ends_with("    unsafe { drop_inner_Doc(h as u64) }"),
+            body("frustrate_test_api_drop_Doc")
+                .ends_with("    unsafe { drop_inner_Doc(h as u64) }"),
             "{code}"
         );
         assert!(
-            body("frustrate_test_api_finalize_Doc").ends_with("    unsafe { finalize_inner_Doc(h as u64) }"),
+            body("frustrate_test_api_finalize_Doc")
+                .ends_with("    unsafe { finalize_inner_Doc(h as u64) }"),
             "{code}"
         );
         // ...and the exports themselves are still absent from a check build,
         // which is the whole reason the inner split exists.
         assert!(
             code.contains(&format!(
-                "{}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_test_api_drop_Doc", super::NO_BLOCK_CHECK_SUPPRESS
+                "{}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn frustrate_test_api_drop_Doc",
+                super::NO_BLOCK_CHECK_SUPPRESS
             )),
             "{code}"
         );
         assert!(
-            !code.contains(&format!("{}{}unsafe fn drop_inner_Doc", super::NO_BLOCK_CHECK_SUPPRESS, super::ALLOW)),
+            !code.contains(&format!(
+                "{}{}unsafe fn drop_inner_Doc",
+                super::NO_BLOCK_CHECK_SUPPRESS,
+                super::ALLOW
+            )),
             "the inner glue must exist in the check configuration: {code}"
         );
     }
@@ -6302,11 +6623,11 @@ mod tests {
             #[bridge(sync, no_block)] pub fn plain(x: i64) -> i64 { x }
             "#,
         );
-        assert!(code.contains("frustrate_check_block_test_api_#_plain"), "{code}");
         assert!(
-            !code.contains("drop_inner_Doc(handle)"),
+            code.contains("frustrate_check_block_test_api_#_plain"),
             "{code}"
         );
+        assert!(!code.contains("drop_inner_Doc(handle)"), "{code}");
     }
 
     /// A claimed member returning a **native-only** handle is itself
@@ -6321,12 +6642,20 @@ mod tests {
                 #[bridge(sync, no_block)] pub fn open() -> Self { Disk { x: 0 } }
             }
             "#;
-        assert!(census_src(src).contains("\ndeclared # Disk::open\n"), "{}", census_src(src));
+        assert!(
+            census_src(src).contains("\ndeclared # Disk::open\n"),
+            "{}",
+            census_src(src)
+        );
         let code = emit_src(src);
         assert!(!code.contains("frustrate_check_block_"), "{code}");
         // The inner glue is gated with the type, exactly as the exports are.
         assert!(
-            code.contains(&format!("{}{}unsafe fn drop_inner_Disk", super::NATIVE_ONLY_CFG, super::ALLOW)),
+            code.contains(&format!(
+                "{}{}unsafe fn drop_inner_Disk",
+                super::NATIVE_ONLY_CFG,
+                super::ALLOW
+            )),
             "{code}"
         );
     }
@@ -6355,7 +6684,10 @@ mod tests {
     #[test]
     fn a_bridge_with_no_claims_writes_a_header_only_census() {
         let census = census_src("#[bridge(sync)] pub fn f(x: i64) -> i64 { x }");
-        assert!(census.ends_with("frustrate-claim-census 7\ncrate test_api\n"), "{census}");
+        assert!(
+            census.ends_with("frustrate-claim-census 7\ncrate test_api\n"),
+            "{census}"
+        );
     }
 
     /// Allow entries ride after their claim's row, one each, whatever the
@@ -6382,7 +6714,10 @@ mod tests {
     #[test]
     fn a_consuming_receiver_takes_per_model() {
         for (model, needle) in [
-            ("confined", "handle::confined_adopt::<crate::api::D>(h_this)"),
+            (
+                "confined",
+                "handle::confined_adopt::<crate::api::D>(h_this)",
+            ),
             ("frozen", "handle::frozen_adopt::<crate::api::D>(h_this)"),
             ("locked", "handle::locked_adopt::<crate::api::D>(h_this)"),
         ] {
@@ -6410,7 +6745,10 @@ mod tests {
             "#[bridge(confined)] pub struct D { n: i64 }\n\
              #[bridge] impl D { #[bridge(sync)] pub fn into_n(self: Box<Self>) -> i64 { self.n } }",
         );
-        assert!(code.contains("handle::confined_adopt::<crate::api::D>(h_this)"), "{code}");
+        assert!(
+            code.contains("handle::confined_adopt::<crate::api::D>(h_this)"),
+            "{code}"
+        );
         // `self` reads through the Box, `self: Box<Self>` is the Box.
         let plain = emit_src(
             "#[bridge(confined)] pub struct D { n: i64 }\n\
@@ -6466,11 +6804,16 @@ mod tests {
         // object may forgive a zero-sized type, so a container mixing models
         // must not push every id through one constructor.
         assert!(
-            arm.contains("entries_ds.push(frustrate::__private::handle::alias_entry::<crate::api::D>"),
+            arm.contains(
+                "entries_ds.push(frustrate::__private::handle::alias_entry::<crate::api::D>"
+            ),
             "{arm}"
         );
         // The refusal names the element, not just the parameter.
-        assert!(arm.contains(r#"format!("{}[{}]", NAMES[pos as usize], idx)"#), "{arm}");
+        assert!(
+            arm.contains(r#"format!("{}[{}]", NAMES[pos as usize], idx)"#),
+            "{arm}"
+        );
     }
 
     /// A member that both locks and consumes emitted Rust that did not
@@ -6520,7 +6863,10 @@ mod tests {
              #[bridge] pub async fn eat(c: C, cs: Vec<C>) -> i64 { 0 }",
         );
         let arm = &pool[pool.find("fn spawn_").expect("arm")..];
-        let spawn = arm.find("executor::spawn").or_else(|| arm.find("pool::spawn_call")).expect("spawn");
+        let spawn = arm
+            .find("executor::spawn")
+            .or_else(|| arm.find("pool::spawn_call"))
+            .expect("spawn");
         for owner in ["confined_adopt::<crate::api::C>", "let owned_cs ="] {
             let at = arm.find(owner).unwrap_or_else(|| panic!("{owner}\n{arm}"));
             assert!(at < spawn, "{owner} must own on the caller\n{arm}");
@@ -6558,7 +6904,9 @@ mod tests {
              #[bridge(sync)] pub fn eat(t: (C, F)) -> i64 { 0 }",
         );
         assert!(
-            code.contains("entries_t.push(frustrate::__private::handle::alias_entry::<crate::api::C>"),
+            code.contains(
+                "entries_t.push(frustrate::__private::handle::alias_entry::<crate::api::C>"
+            ),
             "{code}"
         );
         assert!(
@@ -6576,9 +6924,13 @@ mod tests {
     #[test]
     fn a_lone_optional_handle_carries_no_check() {
         let decl = "#[bridge(confined)] pub struct C { n: i64 }";
-        let opt = emit_src(&format!("{decl}\n#[bridge(sync)] pub fn eat(c: Option<C>) {{}}"));
+        let opt = emit_src(&format!(
+            "{decl}\n#[bridge(sync)] pub fn eat(c: Option<C>) {{}}"
+        ));
         assert!(!opt.contains("alias_check"), "{opt}");
-        let list = emit_src(&format!("{decl}\n#[bridge(sync)] pub fn eat(c: Vec<C>) {{}}"));
+        let list = emit_src(&format!(
+            "{decl}\n#[bridge(sync)] pub fn eat(c: Vec<C>) {{}}"
+        ));
         assert!(list.contains("alias_check"), "{list}");
     }
 
@@ -6597,7 +6949,9 @@ mod tests {
             "{code}"
         );
         assert!(
-            code.contains("handle::arc_alias_entry(h_b, frustrate::__private::handle::Use::Consume)"),
+            code.contains(
+                "handle::arc_alias_entry(h_b, frustrate::__private::handle::Use::Consume)"
+            ),
             "{code}"
         );
         // One borrowed handle and nothing else keeps the code it always had.
@@ -6629,7 +6983,9 @@ mod tests {
         // The check must precede materialization: creating the second
         // reference is itself the flagged operation.
         let chk = code.find("handle::alias_check").expect("check emitted");
-        let deref = code.find("handle::confined_mut::<crate::api::Doc>").expect("deref emitted");
+        let deref = code
+            .find("handle::confined_mut::<crate::api::Doc>")
+            .expect("deref emitted");
         assert!(chk < deref, "check must precede the deref\n{code}");
     }
 
@@ -6660,7 +7016,9 @@ mod tests {
         );
         assert!(!code.contains("alias_check"), "{code}");
         assert!(
-            code.contains("let this = unsafe { handle::confined_mut::<crate::api::Doc>(r.read_handle()) };"),
+            code.contains(
+                "let this = unsafe { handle::confined_mut::<crate::api::Doc>(r.read_handle()) };"
+            ),
             "{code}"
         );
     }
@@ -6779,11 +7137,17 @@ mod tests {
             code.contains("frustrate::__private::executor::spawn(call_id, async move {"),
             "{code}"
         );
-        assert!(code.contains("let ret = crate::api::slow(x).await;"), "{code}");
+        assert!(
+            code.contains("let ret = crate::api::slow(x).await;"),
+            "{code}"
+        );
         assert!(!code.contains("block_on"), "{code}");
         // Portable: the glue is NOT cfg-gated off wasm (async fns run on the
         // executor on every platform now).
-        assert!(!code.contains("#[cfg(not(target_family = \"wasm\"))]"), "{code}");
+        assert!(
+            !code.contains("#[cfg(not(target_family = \"wasm\"))]"),
+            "{code}"
+        );
         // A plain (non-`async fn`) async member still runs on the pool.
         let plain = emit_src("#[bridge] pub fn slow2(x: i64) -> i64 { x }");
         assert!(
@@ -6803,7 +7167,10 @@ mod tests {
             }
             "#,
         );
-        assert!(code.contains("handle::confined_mut::<crate::api::Doc>"), "{code}");
+        assert!(
+            code.contains("handle::confined_mut::<crate::api::Doc>"),
+            "{code}"
+        );
         assert!(code.contains("crate::api::Doc::bump(this)"), "{code}");
         assert!(code.contains("frustrate_test_api_drop_Doc"), "{code}");
     }
@@ -6830,10 +7197,22 @@ mod tests {
             code.contains(r#"handle::resident_new::<crate::api::Scene>(ret, "Scene")"#),
             "{code}"
         );
-        assert!(code.contains("handle::resident_mut::<crate::api::Scene>"), "{code}");
-        assert!(code.contains("handle::resident_ref::<crate::api::Scene>"), "{code}");
-        assert!(code.contains("handle::resident_adopt::<crate::api::Scene>"), "{code}");
-        assert!(code.contains("handle::resident_drop::<crate::api::Scene>"), "{code}");
+        assert!(
+            code.contains("handle::resident_mut::<crate::api::Scene>"),
+            "{code}"
+        );
+        assert!(
+            code.contains("handle::resident_ref::<crate::api::Scene>"),
+            "{code}"
+        );
+        assert!(
+            code.contains("handle::resident_adopt::<crate::api::Scene>"),
+            "{code}"
+        );
+        assert!(
+            code.contains("handle::resident_drop::<crate::api::Scene>"),
+            "{code}"
+        );
         // Confined's accessors are for confined objects; a resident that
         // reached one would skip the thread check.
         assert!(!code.contains("confined_"), "{code}");
@@ -6888,10 +7267,19 @@ mod tests {
             "a locked member must not take the pool arm: {spawn}"
         );
         let pre_spawn = spawn.split("executor::spawn").next().unwrap();
-        assert!(pre_spawn.contains("locked_arc"), "arc clone must happen on caller: {spawn}");
-        assert!(!pre_spawn.contains(".write()"), "lock must NOT be taken on caller: {spawn}");
+        assert!(
+            pre_spawn.contains("locked_arc"),
+            "arc clone must happen on caller: {spawn}"
+        );
+        assert!(
+            !pre_spawn.contains(".write()"),
+            "lock must NOT be taken on caller: {spawn}"
+        );
         let in_future = spawn.split("executor::spawn").nth(1).unwrap();
-        assert!(in_future.contains(".write()"), "lock must be taken in the future: {spawn}");
+        assert!(
+            in_future.contains(".write()"),
+            "lock must be taken in the future: {spawn}"
+        );
         // The body is a plain `fn`; awaiting it would not compile.
         assert!(
             in_future.contains("let ret = crate::api::Cache::put(&mut *guard_this);"),
@@ -6923,8 +7311,14 @@ mod tests {
         );
         let call = code.split("fn call_#_probe").nth(1).unwrap();
         // Both guards are bound before the invocation names them.
-        assert!(call.contains("guard_this ="), "receiver guard must be bound: {call}");
-        assert!(call.contains("guard_other ="), "parameter guard must be bound: {call}");
+        assert!(
+            call.contains("guard_this ="),
+            "receiver guard must be bound: {call}"
+        );
+        assert!(
+            call.contains("guard_other ="),
+            "parameter guard must be bound: {call}"
+        );
         // And through the plan, since there are two acquisitions to order.
         assert!(call.contains("handle::lock_plan(&mut plan)"), "{call}");
         let invoke = call.find("Store::probe(").expect("invokes");
@@ -6954,12 +7348,18 @@ mod tests {
         // A free `async fn` (no lock) still reaches the same arm by the other
         // half of the condition.
         let free = emit_src("#[bridge] pub async fn f(x: i64) -> i64 { x }");
-        assert!(free.contains("frustrate::__private::executor::spawn"), "{free}");
+        assert!(
+            free.contains("frustrate::__private::executor::spawn"),
+            "{free}"
+        );
         assert!(free.contains("let ret = crate::api::f(x).await;"), "{free}");
         // A plain free function with no lock keeps the pool arm — the reroute
         // is scoped to locked members, not to every dispatched one.
         let plain = emit_src("#[bridge] pub fn g(x: i64) -> i64 { x }");
-        assert!(plain.contains("frustrate::__private::pool::spawn_call"), "{plain}");
+        assert!(
+            plain.contains("frustrate::__private::pool::spawn_call"),
+            "{plain}"
+        );
         assert!(!plain.contains("executor::spawn"), "{plain}");
     }
 
@@ -7000,7 +7400,9 @@ mod tests {
         let code = emit_src("#[bridge] pub async fn f(x: i64) {}");
         let body = code.split("fn spawn_#_f").nth(1).unwrap();
         let assert_at = body.find("r.assert_consumed();").expect("asserts consumed");
-        let spawn_at = body.find("executor::spawn").expect("spawns on the executor");
+        let spawn_at = body
+            .find("executor::spawn")
+            .expect("spawns on the executor");
         assert!(assert_at < spawn_at, "{body}");
     }
 
@@ -7031,8 +7433,12 @@ mod tests {
             .split("fn actor_#___frustrate_drop_Miner")
             .nth(1)
             .expect("the synthetic drop's glue");
-        let h_at = drop_body.find("let h = r.read_handle()").expect("decodes the handle");
-        let drop_assert = drop_body.find("r.assert_consumed();").expect("asserts consumed");
+        let h_at = drop_body
+            .find("let h = r.read_handle()")
+            .expect("decodes the handle");
+        let drop_assert = drop_body
+            .find("r.assert_consumed();")
+            .expect("asserts consumed");
         let free_at = drop_body.find("actor_drop").expect("drops");
         assert!(h_at < drop_assert && drop_assert < free_at, "{drop_body}");
     }
@@ -7053,7 +7459,9 @@ mod tests {
             "#,
         );
         let body = code.split("fn call_#_peek").nth(1).unwrap();
-        let contention_at = body.find("Outcome::Contention").expect("bails on contention");
+        let contention_at = body
+            .find("Outcome::Contention")
+            .expect("bails on contention");
         let assert_at = body.find("r.assert_consumed();").expect("asserts consumed");
         assert!(contention_at < assert_at, "{body}");
     }
@@ -7164,7 +7572,10 @@ mod tests {
             code.contains("handle::frozen_ref::<Box<dyn crate::api::Store>>"),
             "{code}"
         );
-        assert!(code.contains("crate::api::Store::get(&**this, key)"), "{code}");
+        assert!(
+            code.contains("crate::api::Store::get(&**this, key)"),
+            "{code}"
+        );
         // async method returning a trait object: Arc clone on the caller,
         // handle minted from the returned Box.
         assert!(
@@ -7184,10 +7595,7 @@ mod tests {
         );
         assert!(code.contains("crate::api::report(store)"), "{code}");
         // drop/finalize exports over the boxed dyn type
-        assert!(
-            code.contains("frustrate_test_api_drop_Store"),
-            "{code}"
-        );
+        assert!(code.contains("frustrate_test_api_drop_Store"), "{code}");
         assert!(
             code.contains("handle::frozen_drop::<Box<dyn crate::api::Store>>"),
             "{code}"
@@ -7241,7 +7649,10 @@ mod tests {
             ),
             "{code}"
         );
-        assert!(code.contains("let this = match own_this.take_dyn() {"), "{code}");
+        assert!(
+            code.contains("let this = match own_this.take_dyn() {"),
+            "{code}"
+        );
         // A by-value parameter takes the same way, on the pool arm.
         assert!(
             code.contains(
@@ -7266,18 +7677,28 @@ mod tests {
              #[bridge(sync)] pub fn f(ps: Vec<(&mut D, D)>) {}",
         );
         // Both halves of every element are staged in one wire order.
-        assert!(code.contains("out.push((r.read_handle(), r.read_handle()));"), "{code}");
+        assert!(
+            code.contains("out.push((r.read_handle(), r.read_handle()));"),
+            "{code}"
+        );
         // The lent ids come off the staged value, before the adoption moves it.
         let gather = code.find("ids_ps_0.push((*g0).0);").expect("gather");
         let adopt = code.find("let owned_ps =").expect("adopt");
-        assert!(gather < adopt, "the ids are read before the adoption\n{code}");
+        assert!(
+            gather < adopt,
+            "the ids are read before the adoption\n{code}"
+        );
         // Both positions join the duplicate check, with different uses.
         assert!(
-            code.contains("alias_entry::<crate::api::D>(*h, frustrate::__private::handle::Use::Mut)"),
+            code.contains(
+                "alias_entry::<crate::api::D>(*h, frustrate::__private::handle::Use::Mut)"
+            ),
             "{code}"
         );
         assert!(
-            code.contains("alias_entry::<crate::api::D>(*g1_1, frustrate::__private::handle::Use::Consume)"),
+            code.contains(
+                "alias_entry::<crate::api::D>(*g1_1, frustrate::__private::handle::Use::Consume)"
+            ),
             "{code}"
         );
         // The argument moves out of the taken value, destructuring rather than
@@ -7329,7 +7750,9 @@ mod tests {
              m: std::collections::BTreeMap<String, D>) {{}}"
         ));
         assert!(
-            taken.contains("let staged_s = { let n = r.read_len(); let mut out = Vec::with_capacity"),
+            taken.contains(
+                "let staged_s = { let n = r.read_len(); let mut out = Vec::with_capacity"
+            ),
             "{taken}"
         );
         assert!(taken.contains("out.push((k, v));"), "{taken}");
@@ -7355,14 +7778,20 @@ mod tests {
             ),
             "{lent}"
         );
-        assert!(lent.contains("collect::<std::collections::HashMap<_, _>>()"), "{lent}");
+        assert!(
+            lent.contains("collect::<std::collections::HashMap<_, _>>()"),
+            "{lent}"
+        );
 
         // A set or a map with no handle in it decodes as itself, as it always
         // has: the flat staging is for the handle case and nothing else.
         let plain = emit_src(
             "#[bridge(sync)] pub fn h(s: std::collections::HashSet<i64>) -> usize { s.len() }",
         );
-        assert!(plain.contains("std::collections::HashSet::with_capacity"), "{plain}");
+        assert!(
+            plain.contains("std::collections::HashSet::with_capacity"),
+            "{plain}"
+        );
     }
 
     /// A trait handle inside a container carries a **per-element** tag: the
@@ -7378,7 +7807,10 @@ mod tests {
         let lent = emit_src(&format!(
             "{decl} #[bridge] pub fn f(xs: Vec<&dyn S>) -> i64 {{ 0 }}"
         ));
-        assert!(lent.contains("out.push((r.read_u8(), r.read_handle()));"), "{lent}");
+        assert!(
+            lent.contains("out.push((r.read_u8(), r.read_handle()));"),
+            "{lent}"
+        );
         assert!(lent.contains("tags_xs_0.push((*g0).0);"), "{lent}");
         assert!(lent.contains("ids_xs_0.push((*g0).1);"), "{lent}");
         assert!(
@@ -7389,7 +7821,10 @@ mod tests {
         );
         // The lock plan reads the ids alone: a trait position is planned like
         // any other, because which registry answered does not change the id.
-        assert!(lent.contains("for (k, &h) in ids_xs_0.iter().enumerate()"), "{lent}");
+        assert!(
+            lent.contains("for (k, &h) in ids_xs_0.iter().enumerate()"),
+            "{lent}"
+        );
         assert!(lent.contains(".as_dyn()"), "{lent}");
 
         // A confined trait needs nothing that outlives the call, so the tag is
@@ -7448,7 +7883,10 @@ mod tests {
             code.contains("handle::confined_new::<Box<dyn crate::api::Counter>>(ret)"),
             "{code}"
         );
-        assert!(code.contains("crate::api::Counter::bump(&mut **this)"), "{code}");
+        assert!(
+            code.contains("crate::api::Counter::bump(&mut **this)"),
+            "{code}"
+        );
     }
 
     #[test]
@@ -7487,17 +7925,33 @@ mod tests {
         // frozen async: carrier enum unifies Arc<Box<dyn>> and Arc<Robot>
         assert!(code.contains("enum __FrArc_Greeter {"), "{code}");
         assert!(
-            code.contains("__FrArc_Greeter::Robot(unsafe { handle::frozen_arc::<crate::api::Robot>(__h_g) })"),
+            code.contains(
+                "__FrArc_Greeter::Robot(unsafe { handle::frozen_arc::<crate::api::Robot>(__h_g) })"
+            ),
             "{code}"
         );
         assert!(code.contains("crate::api::crowd(g.as_dyn())"), "{code}");
         // locked async mut: arc-lock carrier + write guard in the body
         assert!(code.contains("enum __FrArcLock_Store {"), "{code}");
-        assert!(code.contains("let mut guard_s = arc_s.write_dyn().await;"), "{code}");
-        assert!(code.contains("crate::api::fill(guard_s.as_dyn_mut(), v)"), "{code}");
+        assert!(
+            code.contains("let mut guard_s = arc_s.write_dyn().await;"),
+            "{code}"
+        );
+        assert!(
+            code.contains("crate::api::fill(guard_s.as_dyn_mut(), v)"),
+            "{code}"
+        );
         // locked sync: try-read per arm with the contention contract
-        assert!(code.contains("=> match unsafe { handle::locked_ref::<crate::api::Vault>(__h_s) }.try_read() {"), "{code}");
-        assert!(code.contains("crate::api::peek(guard_s.as_dyn())"), "{code}");
+        assert!(
+            code.contains(
+                "=> match unsafe { handle::locked_ref::<crate::api::Vault>(__h_s) }.try_read() {"
+            ),
+            "{code}"
+        );
+        assert!(
+            code.contains("crate::api::peek(guard_s.as_dyn())"),
+            "{code}"
+        );
         // unknown tags fail loudly and attributably
         assert!(
             code.contains("panic!(\"frustrate: unknown impl tag {other} for trait `Greeter`\")"),
@@ -7599,7 +8053,10 @@ mod tests {
             code.contains("<crate::api::Doc as crate::api::Renderable>::render(this)"),
             "{code}"
         );
-        assert!(code.contains("handle::confined_ref::<crate::api::Doc>"), "{code}");
+        assert!(
+            code.contains("handle::confined_ref::<crate::api::Doc>"),
+            "{code}"
+        );
     }
 
     /// Each non-actor opaque gets its model's bound stated as a named
@@ -7694,7 +8151,10 @@ mod tests {
             }
             "#,
         );
-        assert!(code.contains("handle::frozen_new::<crate::api::Snap>(ret)"), "{code}");
+        assert!(
+            code.contains("handle::frozen_new::<crate::api::Snap>(ret)"),
+            "{code}"
+        );
     }
 
     #[test]
@@ -7735,10 +8195,16 @@ mod tests {
                 && !code.contains(&format!("{gate}\n{}fn call_#_try_get", super::ALLOW)),
             "{code}"
         );
-        assert!(code.contains("\n        # => Some(call_#_try_get),"), "{code}");
+        assert!(
+            code.contains("\n        # => Some(call_#_try_get),"),
+            "{code}"
+        );
         // The dispatched sibling stays ungated: its guard is taken and dropped
         // on the executor, wherever that runs.
-        assert!(code.contains("\n        # => Some(spawn_#_read),"), "{code}");
+        assert!(
+            code.contains("\n        # => Some(spawn_#_read),"),
+            "{code}"
+        );
         assert!(
             !code.contains(&format!("{gate}\n{}fn spawn_#_read", super::ALLOW)),
             "{code}"
@@ -7766,7 +8232,10 @@ mod tests {
             code.contains(&format!("{gate}\n        # => Some(call_#_dial),")),
             "{code}"
         );
-        assert!(code.contains("\n        # => Some(call_#_portable),"), "{code}");
+        assert!(
+            code.contains("\n        # => Some(call_#_portable),"),
+            "{code}"
+        );
         assert!(
             !code.contains(&format!("{gate}\n{}fn call_#_portable", super::ALLOW)),
             "{code}"
@@ -7897,7 +8366,9 @@ mod tests {
         // bookkeeping to keep the two sides agreeing.
         let spawn = code.split("fn spawn_#_track").nth(1).unwrap();
         let sink_at = spawn
-            .find("frustrate::dart::r#async::stream_controller::<crate::api::Point>(r.read_handle()")
+            .find(
+                "frustrate::dart::r#async::stream_controller::<crate::api::Point>(r.read_handle()",
+            )
             .expect("constructs the mirror from its inline id");
         let n_at = spawn.find("let n = r.read_i64()").expect("decodes n");
         assert!(sink_at < n_at, "{spawn}");
@@ -8028,7 +8499,10 @@ mod tests {
             code.contains(&format!("{gate}\n{}fn spawn_#_t", super::ALLOW)),
             "{code}"
         );
-        assert!(code.contains("frustrate::callback::callback::<()>"), "{code}");
+        assert!(
+            code.contains("frustrate::callback::callback::<()>"),
+            "{code}"
+        );
         // The portable sibling stays ungated.
         assert!(
             !code.contains(&format!("{gate}\n{}fn spawn_#_ping", super::ALLOW)),
@@ -8091,7 +8565,10 @@ mod tests {
         // wasm worker path rides the ordinary async export, native does not.
         assert!(code.contains("#[cfg(target_family = \"wasm\")]"), "{code}");
         // no drop export: disposal is the dispatched synthetic drop.
-        assert!(!code.contains("extern \"C\" fn frustrate_test_api_drop_A"), "{code}");
+        assert!(
+            !code.contains("extern \"C\" fn frustrate_test_api_drop_A"),
+            "{code}"
+        );
     }
 
     /// The `enc_<name>` function body of a struct codec, so wire-encode paths
@@ -8125,8 +8602,14 @@ mod tests {
             "HashMap and BTreeMap must encode on the identical wire codec"
         );
         // Decode reconstructs the right concrete container.
-        assert!(hash.contains("std::collections::HashMap::with_capacity"), "{hash}");
-        assert!(btree.contains("std::collections::BTreeMap::new()"), "{btree}");
+        assert!(
+            hash.contains("std::collections::HashMap::with_capacity"),
+            "{hash}"
+        );
+        assert!(
+            btree.contains("std::collections::BTreeMap::new()"),
+            "{btree}"
+        );
         assert!(!btree.contains("HashMap"), "{btree}");
     }
 
@@ -8146,7 +8629,10 @@ mod tests {
              } #[bridge(sync)] pub fn mk() -> S { todo!() }",
         );
         assert!(code.contains("std::collections::BTreeSet::new()"), "{code}");
-        assert!(code.contains("std::collections::VecDeque::with_capacity"), "{code}");
+        assert!(
+            code.contains("std::collections::VecDeque::with_capacity"),
+            "{code}"
+        );
         assert!(code.contains(".push_back("), "{code}");
     }
 
@@ -8167,8 +8653,14 @@ mod tests {
             code.contains("{ let n = r.read_len(); r.read_f64_vec(n) }"),
             "{code}"
         );
-        assert!(!code.contains("w.write_f64(*it"), "no element loop left: {code}");
-        assert!(!code.contains("out.push(r.read_f64())"), "no push loop left: {code}");
+        assert!(
+            !code.contains("w.write_f64(*it"),
+            "no element loop left: {code}"
+        );
+        assert!(
+            !code.contains("out.push(r.read_f64())"),
+            "no push loop left: {code}"
+        );
     }
 
     #[test]
@@ -8184,7 +8676,10 @@ mod tests {
             let code = emit_src(&format!(
                 "#[bridge(sync)] pub fn f(xs: Vec<{ty}>) -> Vec<{ty}> {{ xs }}"
             ));
-            assert!(code.contains(&format!("w.write_{ty}_slice(&ret[..]);")), "{ty}: {code}");
+            assert!(
+                code.contains(&format!("w.write_{ty}_slice(&ret[..]);")),
+                "{ty}: {code}"
+            );
             assert!(
                 code.contains(&format!("{{ let n = r.read_len(); r.read_{ty}_vec(n) }}")),
                 "{ty}: {code}"
@@ -8245,7 +8740,10 @@ mod tests {
             let code = emit_src(&format!(
                 "#[bridge(sync)] pub fn f(xs: Vec<{ty}>) -> Vec<{ty}> {{ xs }}"
             ));
-            assert!(code.contains(&format!("out.push({reader});")), "{ty}: {code}");
+            assert!(
+                code.contains(&format!("out.push({reader});")),
+                "{ty}: {code}"
+            );
             // `_slice(&` rather than `_slice(`: the dispatch preamble has a
             // `request_slice(req, req_len)` that is nothing to do with this.
             assert!(!code.contains("_slice(&"), "{ty}: {code}");
@@ -8271,11 +8769,12 @@ mod tests {
              #[bridge(sync)] pub fn f(s: S) -> S { s }",
         );
         assert!(s.contains("w.write_f64_slice(&v.xs[..]);"), "{s}");
-        assert!(s.contains("{ let n = r.read_len(); r.read_f64_vec(n) }"), "{s}");
-
-        let o = emit_src(
-            "#[bridge(sync)] pub fn f(x: Option<Vec<f64>>) -> Option<Vec<f64>> { x }",
+        assert!(
+            s.contains("{ let n = r.read_len(); r.read_f64_vec(n) }"),
+            "{s}"
         );
+
+        let o = emit_src("#[bridge(sync)] pub fn f(x: Option<Vec<f64>>) -> Option<Vec<f64>> { x }");
         assert!(o.contains("w.write_f64_slice(&(*x1)[..]);"), "{o}");
         assert!(
             o.contains("Some({ let n = r.read_len(); r.read_f64_vec(n) })"),
@@ -8286,9 +8785,7 @@ mod tests {
     #[test]
     fn tuple_emits_record_shaped_positional_codec() {
         // A param is decoded, a return is encoded: exercise both paths.
-        let code = emit_src(
-            "#[bridge(sync)] pub fn echo(t: (i32, String)) -> (i32, String) { t }",
-        );
+        let code = emit_src("#[bridge(sync)] pub fn echo(t: (i32, String)) -> (i32, String) { t }");
         // Decode is a positional tuple literal, elements read in order.
         assert!(
             code.contains("(r.read_i32(), r.read_string())"),
@@ -8304,15 +8801,17 @@ mod tests {
     fn nested_tuples_recurse_through_list_and_tuple() {
         // `((i32, i32), i32)` and `Vec<(i32, i32)>` as params: decode nesting
         // reuses the same recursion at every level.
-        let code = emit_src(
-            "#[bridge(sync)] pub fn f(a: ((i32, i32), i32), b: Vec<(i32, i32)>) {}",
-        );
+        let code =
+            emit_src("#[bridge(sync)] pub fn f(a: ((i32, i32), i32), b: Vec<(i32, i32)>) {}");
         assert!(
             code.contains("((r.read_i32(), r.read_i32()), r.read_i32())"),
             "nested tuple decode: {code}"
         );
         // A tuple inside a Vec element decodes on the shared list codec.
-        assert!(code.contains("out.push((r.read_i32(), r.read_i32()));"), "{code}");
+        assert!(
+            code.contains("out.push((r.read_i32(), r.read_i32()));"),
+            "{code}"
+        );
     }
 
     /// The deferred glue's load-bearing shape, all three seams:
@@ -8337,7 +8836,10 @@ mod tests {
             "#,
         );
         let here = "frustrate::Addr::<crate::api::Job>::__here()";
-        assert!(code.contains(&format!("crate::api::Job::new({here})")), "{code}");
+        assert!(
+            code.contains(&format!("crate::api::Job::new({here})")),
+            "{code}"
+        );
         let start = code
             .split("crate::api::Job::start(")
             .nth(1)
@@ -8363,11 +8865,15 @@ mod tests {
             "#,
         );
         // Glue fn: takes call_id, prefix decodes/asserts/invokes before spawn.
-        let body = code.split("fn actor_#_slow(r: &mut ByteReader, call_id: u64)").nth(1)
+        let body = code
+            .split("fn actor_#_slow(r: &mut ByteReader, call_id: u64)")
+            .nth(1)
             .expect("deferred glue takes the call id");
         let body = body.split("\n\n").next().unwrap();
         let assert_at = body.find("r.assert_consumed();").expect("asserts consumed");
-        let invoke_at = body.find("crate::api::Miner::slow").expect("invokes in the prefix");
+        let invoke_at = body
+            .find("crate::api::Miner::slow")
+            .expect("invokes in the prefix");
         let spawn_at = body
             .find("frustrate::deferred::spawn_deferred(call_id, async move {")
             .expect("hands off under the call's own id");
@@ -8383,19 +8889,24 @@ mod tests {
             "{code}"
         );
         assert!(code.contains("Ok(()) => None,"), "{code}");
-        assert!(code.contains("Err(p) => Some(envelope::panic_envelope(p)),"), "{code}");
+        assert!(
+            code.contains("Err(p) => Some(envelope::panic_envelope(p)),"),
+            "{code}"
+        );
         // The sync sibling still responds from the loop.
-        assert!(code.contains("# => Some(envelope::run(|| actor_#_poke(&mut r))),"), "{code}");
+        assert!(
+            code.contains("# => Some(envelope::run(|| actor_#_poke(&mut r))),"),
+            "{code}"
+        );
 
         // Wasm arm: call_id through, and NOT the inline-respond form — a
         // deferred completion is the first post an actor instance makes
         // outside its dispatch turn.
+        assert!(code.contains("# => Some(actor_#_slow),"), "{code}");
         assert!(
-            code.contains("# => Some(actor_#_slow),"),
-            "{code}"
-        );
-        assert!(
-            !code.contains("frustrate::__private::post::respond(call_id, envelope::run(|| actor_#_slow"),
+            !code.contains(
+                "frustrate::__private::post::respond(call_id, envelope::run(|| actor_#_slow"
+            ),
             "the deferred arm must not respond inline: {code}"
         );
     }
@@ -8418,7 +8929,6 @@ mod tests {
             emit_src(&format!("#[bridge(data)]{body}"))
         );
     }
-
 
     /// The two halves of one Rust struct reach `self` in different ways, and
     /// the dispatch arm is where that is decided: the value half decodes the
@@ -8484,7 +8994,10 @@ mod tests {
             "{LENT} #[bridge(sync)] pub fn f(ds: Vec<&D>) -> i64 {{ ds.len() as i64 }}"
         ));
         let arm = arm_of(&code, "call_#_f");
-        assert!(arm.contains("let staged_ds = { let n = r.read_len();"), "{arm}");
+        assert!(
+            arm.contains("let staged_ds = { let n = r.read_len();"),
+            "{arm}"
+        );
         assert!(
             arm.contains(
                 "let lent_ds = staged_ds.iter().map(|a0| unsafe { handle::frozen_ref::\
@@ -8516,7 +9029,10 @@ mod tests {
             ),
             "{arm}"
         );
-        assert!(arm.contains("format!(\"{}[{}]\", NAMES[pos as usize], idx)"), "{arm}");
+        assert!(
+            arm.contains("format!(\"{}[{}]\", NAMES[pos as usize], idx)"),
+            "{arm}"
+        );
     }
 
     /// The `Arc` clone a pool arm needs happens on the calling thread, while
@@ -8528,7 +9044,9 @@ mod tests {
             "{LENT} #[bridge] pub async fn f(ds: Vec<&D>) -> i64 {{ ds.len() as i64 }}"
         ));
         let arm = arm_of(&code, "spawn_#_f");
-        let clone = arm.find("handle::frozen_arc::<crate::api::D>").expect("cloned");
+        let clone = arm
+            .find("handle::frozen_arc::<crate::api::D>")
+            .expect("cloned");
         let spawn = arm.find("executor::spawn").expect("spawned");
         assert!(clone < spawn, "{arm}");
         assert!(arm.contains("let mut it_ds_0 = acq_ds_0.iter();"), "{arm}");
@@ -8544,13 +9062,28 @@ mod tests {
             "{LENT} #[bridge] pub async fn f(vs: Vec<&V>) -> i64 {{ vs.len() as i64 }}"
         ));
         let arm = arm_of(&code, "spawn_#_f");
-        assert!(arm.contains("let mut plan: Vec<(u64, u32)> = Vec::new();"), "{arm}");
-        assert!(arm.contains("frustrate::__private::handle::lock_plan(&mut plan[..])"), "{arm}");
+        assert!(
+            arm.contains("let mut plan: Vec<(u64, u32)> = Vec::new();"),
+            "{arm}"
+        );
+        assert!(
+            arm.contains("frustrate::__private::handle::lock_plan(&mut plan[..])"),
+            "{arm}"
+        );
         let plan = arm.find("lock_plan").expect("planned");
         let spawn = arm.find("executor::spawn").expect("spawned");
-        assert!(plan < spawn, "the plan is refused on the calling thread: {arm}");
-        assert!(arm.contains("slots_vs_0[k] = Some(acq_vs_0[k].read().await)"), "{arm}");
-        assert!(arm.contains("let mut it_vs_0 = guards_vs_0.iter();"), "{arm}");
+        assert!(
+            plan < spawn,
+            "the plan is refused on the calling thread: {arm}"
+        );
+        assert!(
+            arm.contains("slots_vs_0[k] = Some(acq_vs_0[k].read().await)"),
+            "{arm}"
+        );
+        assert!(
+            arm.contains("let mut it_vs_0 = guards_vs_0.iter();"),
+            "{arm}"
+        );
     }
 
     /// A locked receiver beside a lent locked container is one plan over both,
@@ -8561,10 +9094,19 @@ mod tests {
             "{LENT} #[bridge] impl V {{ pub async fn f(&mut self, vs: Vec<&mut V>) {{ let _ = vs; }} }}"
         ));
         let arm = arm_of(&code, "spawn_#_f");
-        assert!(arm.contains("plan.push((h_this, plan_at.len() as u32));"), "{arm}");
+        assert!(
+            arm.contains("plan.push((h_this, plan_at.len() as u32));"),
+            "{arm}"
+        );
         assert!(arm.contains("plan_at.push((1, k as u32));"), "{arm}");
-        assert!(arm.contains("0 => slot_this = Some(arc_this.write().await)"), "{arm}");
-        assert!(arm.contains("1 => slots_vs_0[k] = Some(acq_vs_0[k].write().await)"), "{arm}");
+        assert!(
+            arm.contains("0 => slot_this = Some(arc_this.write().await)"),
+            "{arm}"
+        );
+        assert!(
+            arm.contains("1 => slots_vs_0[k] = Some(acq_vs_0[k].write().await)"),
+            "{arm}"
+        );
     }
 
     /// A member with two single locked handles keeps the fixed-size array it
@@ -8576,7 +9118,10 @@ mod tests {
             "{LENT} #[bridge] pub async fn f(a: &mut V, b: &mut V) {{ let _ = (a, b); }}"
         ));
         let arm = arm_of(&code, "spawn_#_f");
-        assert!(arm.contains("let mut plan = [(h_a, 0), (h_b, 1)];"), "{arm}");
+        assert!(
+            arm.contains("let mut plan = [(h_a, 0), (h_b, 1)];"),
+            "{arm}"
+        );
         assert!(!arm.contains("plan_at"), "{arm}");
     }
 
@@ -8591,9 +9136,15 @@ mod tests {
             "{code}"
         );
         let code = emit_src("#[bridge(sync)] pub fn f(x: Option<&str>) -> bool { x.is_some() }");
-        assert!(code.contains("crate::api::f(x.as_ref().map(|a0| (*a0).as_str()))"), "{code}");
+        assert!(
+            code.contains("crate::api::f(x.as_ref().map(|a0| (*a0).as_str()))"),
+            "{code}"
+        );
         let code = emit_src("#[bridge(sync)] pub fn f(x: Option<&[u8]>) -> bool { x.is_some() }");
-        assert!(code.contains("crate::api::f(x.as_ref().map(|a0| (*a0).as_slice()))"), "{code}");
+        assert!(
+            code.contains("crate::api::f(x.as_ref().map(|a0| (*a0).as_slice()))"),
+            "{code}"
+        );
         let code = emit_src("#[bridge(sync)] pub fn f(xs: Vec<&String>) -> usize { xs.len() }");
         assert!(
             code.contains("crate::api::f(xs.iter().map(|a0| &(*a0)).collect::<Vec<_>>())"),
@@ -8622,5 +9173,4 @@ mod tests {
         let end = rest.find("\n}\n").expect("arm ends") + 3;
         &rest[..end]
     }
-
 }

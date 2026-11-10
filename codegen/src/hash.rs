@@ -226,10 +226,13 @@ mod tests {
     /// happens when two *different* members land on one id.)
     #[test]
     fn a_collision_is_resolved_rather_than_reported() {
-        let iface = check(parse_source(
-            "#[bridge(sync)] pub fn a(x: i32) -> i32 { x }",
-            "crate::api",
-        ).unwrap())
+        let iface = check(
+            parse_source(
+                "#[bridge(sync)] pub fn a(x: i32) -> i32 { x }",
+                "crate::api",
+            )
+            .unwrap(),
+        )
         .unwrap();
         let mut functions = iface.functions.clone();
         functions.push(functions[0].clone());
@@ -242,10 +245,13 @@ mod tests {
     /// pair, declared in either order, gets the same pair of ids.
     #[test]
     fn collision_resolution_is_position_independent() {
-        let iface = check(parse_source(
-            "#[bridge(sync)] pub fn a(x: i32) -> i32 { x } #[bridge(sync)] pub fn b() {}",
-            "crate::api",
-        ).unwrap())
+        let iface = check(
+            parse_source(
+                "#[bridge(sync)] pub fn a(x: i32) -> i32 { x } #[bridge(sync)] pub fn b() {}",
+                "crate::api",
+            )
+            .unwrap(),
+        )
         .unwrap();
         let (a, b) = (iface.functions[0].clone(), iface.functions[1].clone());
         let forward = member_ids(&[a.clone(), a.clone(), b.clone()]);
@@ -298,8 +304,12 @@ mod tests {
         let decl = "#[bridge(confined)] pub struct D { n: i64 } \
                     #[bridge] impl D { #[bridge(sync)] pub fn new() -> Self { todo!() } ";
         assert_ne!(
-            hash_src(&format!("{decl} #[bridge(sync)] pub fn n(&self) -> i64 {{ 0 }} }}")),
-            hash_src(&format!("{decl} #[bridge(sync)] pub fn n(self) -> i64 {{ 0 }} }}")),
+            hash_src(&format!(
+                "{decl} #[bridge(sync)] pub fn n(&self) -> i64 {{ 0 }} }}"
+            )),
+            hash_src(&format!(
+                "{decl} #[bridge(sync)] pub fn n(self) -> i64 {{ 0 }} }}"
+            )),
         );
         // `self` and `self: Box<Self>` carry one handle either way, so this
         // pair moves the fingerprint further than the wire requires — see
@@ -307,7 +317,9 @@ mod tests {
         // cost is one rebuild after an edit nobody makes twice, and the
         // alternative is splitting one syntactic fact across two IR fields.
         assert_ne!(
-            hash_src(&format!("{decl} #[bridge(sync)] pub fn n(self) -> i64 {{ 0 }} }}")),
+            hash_src(&format!(
+                "{decl} #[bridge(sync)] pub fn n(self) -> i64 {{ 0 }} }}"
+            )),
             hash_src(&format!(
                 "{decl} #[bridge(sync)] pub fn n(self: Box<Self>) -> i64 {{ 0 }} }}"
             )),
@@ -345,10 +357,14 @@ mod tests {
         // `#[bridge(no_eq)]` changes only the generated Dart class body, never
         // the wire, so it must stay out of the schema fingerprint (it is
         // `#[serde(skip)]` on the IR). Same for structs and data enums.
-        let plain_s = hash_src("#[bridge(data)] pub struct S { x: i64 } #[bridge(sync)] pub fn f(s: S) -> S { s }");
+        let plain_s = hash_src(
+            "#[bridge(data)] pub struct S { x: i64 } #[bridge(sync)] pub fn f(s: S) -> S { s }",
+        );
         let no_eq_s = hash_src("#[bridge(data, no_eq)] pub struct S { x: i64 } #[bridge(sync)] pub fn f(s: S) -> S { s }");
         assert_eq!(plain_s, no_eq_s);
-        let plain_e = hash_src("#[bridge(data)] pub enum E { A(i64) } #[bridge(sync)] pub fn f(e: E) -> E { e }");
+        let plain_e = hash_src(
+            "#[bridge(data)] pub enum E { A(i64) } #[bridge(sync)] pub fn f(e: E) -> E { e }",
+        );
         let no_eq_e = hash_src("#[bridge(data, no_eq)] pub enum E { A(i64) } #[bridge(sync)] pub fn f(e: E) -> E { e }");
         assert_eq!(plain_e, no_eq_e);
         // Including on a type that carries a **handle**, which gets the same
@@ -394,14 +410,16 @@ mod tests {
         // with it: the same member, with and without the keyword, is not
         // checkable both ways — so the flag is compared on the finalized IR of
         // one accepted program against itself with the flag flipped by hand.
-        let mut iface = check(parse_source(
-            &format!(
-                "{handle} #[bridge(data, inbound)] pub struct W {{ pub doc: Doc }} \
+        let mut iface = check(
+            parse_source(
+                &format!(
+                    "{handle} #[bridge(data, inbound)] pub struct W {{ pub doc: Doc }} \
                  #[bridge(sync)] pub fn f(bundle: W) {{}}"
-            ),
-            "crate::api",
+                ),
+                "crate::api",
+            )
+            .unwrap(),
         )
-        .unwrap())
         .unwrap();
         let with = schema_hash(&iface);
         iface.structs.iter_mut().for_each(|s| s.inbound = false);
@@ -415,7 +433,9 @@ mod tests {
     /// invalidating every binding already built against it.
     #[test]
     fn an_enum_discriminant_is_carried_and_does_not_move_the_wire() {
-        let plain = hash_src("#[bridge(data)] pub enum E { A, B } #[bridge(sync)] pub fn f(e: E) -> E { e }");
+        let plain = hash_src(
+            "#[bridge(data)] pub enum E { A, B } #[bridge(sync)] pub fn f(e: E) -> E { e }",
+        );
         let numbered = hash_src("#[bridge(data)] pub enum E { A = 100, B = 404 } #[bridge(sync)] pub fn f(e: E) -> E { e }");
         assert_eq!(plain, numbered);
         // Reordering the variants still moves it: the position IS the tag.
@@ -429,9 +449,8 @@ mod tests {
         // renaming what an item lands under in Dart must leave two halves
         // interoperable — including one generated before the rename.
         let plain = hash_src("#[bridge(sync)] pub fn f(x: i64) -> i64 { x }");
-        let named = hash_src(
-            "#[bridge(sync, dart_identifier = \"g\")] pub fn f(x: i64) -> i64 { x }",
-        );
+        let named =
+            hash_src("#[bridge(sync, dart_identifier = \"g\")] pub fn f(x: i64) -> i64 { x }");
         assert_eq!(plain, named);
         // Same for a field, a variant and a type declaration.
         let plain = hash_src(
@@ -443,7 +462,9 @@ mod tests {
              #[bridge(sync)] pub fn f(s: S) -> S { s }",
         );
         assert_eq!(plain, named);
-        let plain = hash_src("#[bridge(data)] pub enum E { A(i64) } #[bridge(sync)] pub fn f(e: E) -> E { e }");
+        let plain = hash_src(
+            "#[bridge(data)] pub enum E { A(i64) } #[bridge(sync)] pub fn f(e: E) -> E { e }",
+        );
         let named = hash_src(
             "#[bridge(data)] pub enum E { #[bridge(dart_identifier = \"EOnlyA\")] A(i64) } \
              #[bridge(sync)] pub fn f(e: E) -> E { e }",
@@ -632,10 +653,8 @@ mod tests {
         assert_ne!(four, hash_src("#[bridge(sync)] pub fn f(a: Vec<i32>) {}"));
 
         let json = serde_json::to_string(
-            &check(
-                parse_source("#[bridge(sync)] pub fn f(a: [u8; 32]) {}", "crate::api").unwrap(),
-            )
-            .unwrap(),
+            &check(parse_source("#[bridge(sync)] pub fn f(a: [u8; 32]) {}", "crate::api").unwrap())
+                .unwrap(),
         )
         .unwrap();
         assert!(json.contains(r#"{"byte_array":32}"#), "{json}");
@@ -715,8 +734,12 @@ mod tests {
 
     #[test]
     fn a_changed_enum_tag_order_changes_the_hash() {
-        let a = hash_src("#[bridge(data)] pub enum E { A, B } #[bridge(sync)] pub fn mk() -> E { todo!() }");
-        let b = hash_src("#[bridge(data)] pub enum E { B, A } #[bridge(sync)] pub fn mk() -> E { todo!() }");
+        let a = hash_src(
+            "#[bridge(data)] pub enum E { A, B } #[bridge(sync)] pub fn mk() -> E { todo!() }",
+        );
+        let b = hash_src(
+            "#[bridge(data)] pub enum E { B, A } #[bridge(sync)] pub fn mk() -> E { todo!() }",
+        );
         assert_ne!(a, b);
     }
 
@@ -750,7 +773,6 @@ mod tests {
         );
     }
 
-
     /// A member's *representation* is wire-relevant: at one `fn_id` the value
     /// half decodes the receiver out of the request and the handle half reads
     /// a handle id. Two halves of a binding that disagree about which must not
@@ -779,8 +801,11 @@ mod tests {
     fn lending_rather_than_taking_a_contained_handle_changes_the_hash() {
         let decl = "#[bridge(confined)] pub struct D { n: i64 } \
                     #[bridge] impl D { #[bridge(sync)] pub fn new() -> Self { todo!() } }";
-        let mk =
-            |p: &str| hash_src(&format!("{decl} #[bridge(sync)] pub fn f(d: {p}) {{ let _ = d; }}"));
+        let mk = |p: &str| {
+            hash_src(&format!(
+                "{decl} #[bridge(sync)] pub fn f(d: {p}) {{ let _ = d; }}"
+            ))
+        };
         assert_ne!(mk("Vec<&D>"), mk("Vec<D>"));
         assert_ne!(mk("Option<&D>"), mk("Option<D>"));
         assert_ne!(mk("(&D, i64)"), mk("(D, i64)"));
@@ -820,5 +845,4 @@ mod tests {
             hash_src("#[bridge(sync)] pub fn f(xs: Vec<&str>) {}"),
         );
     }
-
 }

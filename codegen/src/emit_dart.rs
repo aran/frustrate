@@ -157,12 +157,19 @@ fn emit_surface(iface: &Interface, web: bool, dart_package: &str) -> String {
          \x20       LeakedChannelError;\n",
         iface.crate_name,
         if web { "web" } else { "native" },
-        ffi_import = if web { "" } else { "import 'dart:ffi' as ffi;\n" },
+        ffi_import = if web {
+            ""
+        } else {
+            "import 'dart:ffi' as ffi;\n"
+        },
     );
     // Bridge-external types: import the user-declared homes of their Dart
     // classes (deduplicated, stable order).
-    let mut extern_imports: Vec<&str> =
-        iface.externs.iter().map(|e| e.dart_import.as_str()).collect();
+    let mut extern_imports: Vec<&str> = iface
+        .externs
+        .iter()
+        .map(|e| e.dart_import.as_str())
+        .collect();
     extern_imports.sort_unstable();
     extern_imports.dedup();
     for uri in extern_imports {
@@ -307,20 +314,32 @@ fn emit_bridge_library(out: &mut String, iface: &Interface, dart_package: &str) 
              external void _fs{declared}();\n\n"
         );
         declared += 1;
-        format!("ffi.Native.addressOf<ffi.NativeFunction<ffi.Void Function()>>(_fs{}).cast()", declared - 1)
+        format!(
+            "ffi.Native.addressOf<ffi.NativeFunction<ffi.Void Function()>>(_fs{}).cast()",
+            declared - 1
+        )
     };
     let mut fixed = Vec::new();
     for value in RUNTIME_EXPORTS {
-        fixed.push((value.to_string(), declare(out, format!("RuntimeSymbol.{value}"))));
+        fixed.push((
+            value.to_string(),
+            declare(out, format!("RuntimeSymbol.{value}")),
+        ));
     }
     for (value, entry) in BRIDGE_ENTRIES {
-        fixed.push((value.to_string(), declare(out, format!("'{}'", iface.export_symbol(entry)))));
+        fixed.push((
+            value.to_string(),
+            declare(out, format!("'{}'", iface.export_symbol(entry))),
+        ));
     }
     let mut handles = Vec::new();
     for o in iface.opaques.iter().filter(|o| o.model != Model::Actor) {
         let drop_symbol = iface.export_symbol(&format!("drop_{}", o.name));
         let drop = declare(out, format!("'{drop_symbol}'"));
-        let finalize = declare(out, format!("'{}'", iface.export_symbol(&format!("finalize_{}", o.name))));
+        let finalize = declare(
+            out,
+            format!("'{}'", iface.export_symbol(&format!("finalize_{}", o.name))),
+        );
         handles.push((drop_symbol, drop, finalize));
     }
     let _ = write!(
@@ -344,7 +363,10 @@ fn emit_bridge_library(out: &mut String, iface: &Interface, dart_package: &str) 
          \x20 HandleExports handle(String dropSymbol) => switch (dropSymbol) {{\n"
     );
     for (symbol, drop, finalize) in &handles {
-        let _ = writeln!(out, "    '{symbol}' => (drop: {drop}, finalize: {finalize}),");
+        let _ = writeln!(
+            out,
+            "    '{symbol}' => (drop: {drop}, finalize: {finalize}),"
+        );
     }
     let _ = write!(
         out,
@@ -555,7 +577,9 @@ pub(crate) fn data_class(iface: &Interface, name: &str) -> String {
 /// The Dart class name for the **handle** half of a declared type — its
 /// opaque declaration, concrete or `dyn_trait`. See [`data_class`].
 pub(crate) fn handle_class(iface: &Interface, name: &str) -> String {
-    let declared = iface.opaque(name).and_then(|d| d.dart_identifier.as_deref());
+    let declared = iface
+        .opaque(name)
+        .and_then(|d| d.dart_identifier.as_deref());
     declared.unwrap_or(name).to_string()
 }
 
@@ -740,7 +764,9 @@ fn instance_token(iface: &Interface, ty: &Type) -> String {
         Type::Option(t) => one("Opt", t),
         Type::Tuple(ts) => join(
             &format!("Tup{}", ts.len()),
-            &ts.iter().map(|t| instance_token(iface, t)).collect::<Vec<_>>(),
+            &ts.iter()
+                .map(|t| instance_token(iface, t))
+                .collect::<Vec<_>>(),
         ),
         // Transparent to the instantiation's identity (`rust_display` renders
         // through both), so transparent here.
@@ -769,7 +795,10 @@ fn instance_token(iface: &Interface, ty: &Type) -> String {
         // panic inside codegen is the one failure an author cannot act on.
         Type::App(n, args) => join(
             &data_class(iface, n),
-            &args.iter().map(|t| instance_token(iface, t)).collect::<Vec<_>>(),
+            &args
+                .iter()
+                .map(|t| instance_token(iface, t))
+                .collect::<Vec<_>>(),
         ),
         Type::DartObject(spec) => {
             let head = match spec.mirror {
@@ -781,12 +810,11 @@ fn instance_token(iface: &Interface, ty: &Type) -> String {
             };
             // Arity varies with which of the three are declared, so it is in
             // the token, exactly as `Tup{n}`'s is.
-            let parts: Vec<String> =
-                [spec.item.as_ref(), spec.ret.as_ref(), spec.err.as_ref()]
-                    .into_iter()
-                    .flatten()
-                    .map(|t| instance_token(iface, t))
-                    .collect();
+            let parts: Vec<String> = [spec.item.as_ref(), spec.ret.as_ref(), spec.err.as_ref()]
+                .into_iter()
+                .flatten()
+                .map(|t| instance_token(iface, t))
+                .collect();
             join(&format!("{head}{}", parts.len()), &parts)
         }
     }
@@ -850,7 +878,6 @@ pub(crate) fn fake_variant_class(iface: &Interface, e: &EnumDecl, v: &Variant) -
     format!("Fake{}", variant_class(iface, e, v))
 }
 
-
 /// Where a minted name has to be unique.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum Scope {
@@ -890,7 +917,12 @@ pub(crate) fn minted_names(iface: &Interface) -> Vec<Minted> {
     // A free fn rather than a closure: several loops below push directly, and
     // a closure holding `out` would keep the only mutable borrow.
     fn lib(out: &mut Vec<Minted>, name: String, origin: String) {
-        out.push(Minted { scope: Scope::Library, name, origin, decl: None });
+        out.push(Minted {
+            scope: Scope::Library,
+            name,
+            origin,
+            decl: None,
+        });
     }
     /// [`lib`], for the class name a *type declaration* mints. Carries the
     /// declared type's Rust name so a collision between the two halves of one
@@ -907,8 +939,13 @@ pub(crate) fn minted_names(iface: &Interface) -> Vec<Minted> {
         use heck::ToUpperCamelCase;
         iface.crate_name.to_upper_camel_case()
     };
-    lib(&mut out, format!("Fake{stem}"), format!("the crate fake for `{}`", iface.crate_name));
-    lib(&mut out,
+    lib(
+        &mut out,
+        format!("Fake{stem}"),
+        format!("the crate fake for `{}`", iface.crate_name),
+    );
+    lib(
+        &mut out,
         format!("Fake{stem}Bridge"),
         format!("the fake bridge for `{}`", iface.crate_name),
     );
@@ -947,9 +984,18 @@ pub(crate) fn minted_names(iface: &Interface) -> Vec<Minted> {
     // helpers it does emit are keyed on a stem no author name can equal.
     for s in iface.class_structs() {
         let cls = data_class(iface, &s.name);
-        decl(&mut out, cls.clone(), format!("struct `{}`", s.name), &s.name);
+        decl(
+            &mut out,
+            cls.clone(),
+            format!("struct `{}`", s.name),
+            &s.name,
+        );
         if decl_has_handle(iface, &s.name) || decl_owns_handles(iface, &s.name) {
-            lib(&mut out, fake_data_class(iface, &s.name), format!("the fake mirror of struct `{}`", s.name));
+            lib(
+                &mut out,
+                fake_data_class(iface, &s.name),
+                format!("the fake mirror of struct `{}`", s.name),
+            );
         }
         for f in &s.fields {
             out.push(Minted {
@@ -967,7 +1013,11 @@ pub(crate) fn minted_names(iface: &Interface) -> Vec<Minted> {
         let unit_only = e.variants.iter().all(|v| v.fields.is_empty());
         let mirrored = decl_has_handle(iface, &e.name) || decl_owns_handles(iface, &e.name);
         if mirrored {
-            lib(&mut out, fake_data_class(iface, &e.name), format!("the fake mirror of enum `{}`", e.name));
+            lib(
+                &mut out,
+                fake_data_class(iface, &e.name),
+                format!("the fake mirror of enum `{}`", e.name),
+            );
         }
         for v in &e.variants {
             if unit_only {
@@ -982,9 +1032,14 @@ pub(crate) fn minted_names(iface: &Interface) -> Vec<Minted> {
                 continue;
             }
             let vcls = variant_class(iface, e, v);
-            lib(&mut out, vcls.clone(), format!("enum `{}`, variant `{}`", e.name, v.name));
+            lib(
+                &mut out,
+                vcls.clone(),
+                format!("enum `{}`, variant `{}`", e.name, v.name),
+            );
             if mirrored {
-                lib(&mut out, 
+                lib(
+                    &mut out,
                     fake_variant_class(iface, e, v),
                     format!("the fake mirror of `{}::{}`", e.name, v.name),
                 );
@@ -994,7 +1049,10 @@ pub(crate) fn minted_names(iface: &Interface) -> Vec<Minted> {
                     decl: None,
                     scope: Scope::Class(vcls.clone()),
                     name: field_name(f),
-                    origin: format!("enum `{}`, variant `{}`, field `{}`", e.name, v.name, f.name),
+                    origin: format!(
+                        "enum `{}`, variant `{}`, field `{}`",
+                        e.name, v.name, f.name
+                    ),
                 });
             }
         }
@@ -1008,16 +1066,19 @@ pub(crate) fn minted_names(iface: &Interface) -> Vec<Minted> {
             format!("{kind} `{}`", o.name),
             &o.name,
         );
-        lib(&mut out, fake_handle_class(iface, &o.name), format!("the fake of `{}`", o.name));
+        lib(
+            &mut out,
+            fake_handle_class(iface, &o.name),
+            format!("the fake of `{}`", o.name),
+        );
         // The extension is a top-level declaration like a class, so a user
         // type named `DocConsumed` collides with it — and would do so inside
         // generated code, where nobody could see why.
-        if iface
-            .functions
-            .iter()
-            .any(|f| f.parent.as_deref() == Some(o.name.as_str()) && on_consumed_extension(iface, f))
-        {
-            lib(&mut out,
+        if iface.functions.iter().any(|f| {
+            f.parent.as_deref() == Some(o.name.as_str()) && on_consumed_extension(iface, f)
+        }) {
+            lib(
+                &mut out,
                 consumed_extension(iface, &o.name),
                 format!("the consuming members of `{}`", o.name),
             );
@@ -1033,7 +1094,11 @@ pub(crate) fn minted_names(iface: &Interface) -> Vec<Minted> {
     error_stems.sort_unstable();
     error_stems.dedup();
     for stem in error_stems {
-        lib(&mut out, format!("{stem}Exception"), format!("the typed error `{stem}`"));
+        lib(
+            &mut out,
+            format!("{stem}Exception"),
+            format!("the typed error `{stem}`"),
+        );
     }
 
     for f in iface.functions.iter().filter(|f| !f.is_actor_drop) {
@@ -1081,7 +1146,9 @@ pub(crate) fn minted_names(iface: &Interface) -> Vec<Minted> {
 /// interpolation of an undefined name — generated Dart that does not compile.
 /// A `'` is escaped for the ordinary reason.
 pub(crate) fn dart_literal(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('$', "\\$").replace('\'', "\\'")
+    s.replace('\\', "\\\\")
+        .replace('$', "\\$")
+        .replace('\'', "\\'")
 }
 
 /// Dart identifier for a Rust snake_case name, with reserved words escaped by
@@ -1096,10 +1163,10 @@ pub(crate) fn dart_literal(s: &str) -> String {
 /// check would pass and the *generated Dart* would fail to compile.
 pub(crate) fn dart_name(rust_name: &str) -> String {
     const RESERVED: &[&str] = &[
-        "assert", "break", "case", "catch", "class", "const", "continue", "default", "do",
-        "else", "enum", "extends", "false", "final", "finally", "for", "if", "in", "is",
-        "new", "null", "rethrow", "return", "super", "switch", "this", "throw", "true",
-        "try", "var", "void", "while", "with",
+        "assert", "break", "case", "catch", "class", "const", "continue", "default", "do", "else",
+        "enum", "extends", "false", "final", "finally", "for", "if", "in", "is", "new", "null",
+        "rethrow", "return", "super", "switch", "this", "throw", "true", "try", "var", "void",
+        "while", "with",
     ];
     // A Rust raw identifier (`r#type`) names a word that is a Rust keyword. heck
     // splits on `#`, so `r#type` would camel-case to `rType` — silently the
@@ -1415,7 +1482,10 @@ pub(crate) fn is_consumed(iface: &Interface, name: &str, web: bool) -> bool {
     iface.opaques.iter().any(|t| {
         t.dyn_trait
             && consumed_by_name(iface, &t.name, web)
-            && iface.trait_implementors(&t.name).iter().any(|c| c.name == name)
+            && iface
+                .trait_implementors(&t.name)
+                .iter()
+                .any(|c| c.name == name)
     })
 }
 
@@ -1426,18 +1496,19 @@ pub(crate) fn is_consumed(iface: &Interface, name: &str, web: bool) -> bool {
 /// moves a decoded local and gives up no handle, so it must not make the
 /// handle class declare a `take()` nothing would spend.
 fn consumed_by_name(iface: &Interface, name: &str, web: bool) -> bool {
-    iface.functions.iter().filter(|f| !matches!(web_fate(f, web), WebFate::Omit)).any(|f| {
-        let recv = matches!(f.receiver, Some(Receiver::Value | Receiver::Boxed))
-            && f.parent.as_deref() == Some(name)
-            && iface.receiver_handle(f).is_some();
-        recv || f
-            .params
-            .iter()
-            .any(|p: &Param| {
+    iface
+        .functions
+        .iter()
+        .filter(|f| !matches!(web_fate(f, web), WebFate::Omit))
+        .any(|f| {
+            let recv = matches!(f.receiver, Some(Receiver::Value | Receiver::Boxed))
+                && f.parent.as_deref() == Some(name)
+                && iface.receiver_handle(f).is_some();
+            recv || f.params.iter().any(|p: &Param| {
                 consumed_param(iface, p)
                     && crate::check::taken_handles(iface, &p.ty).contains(&name)
             })
-    })
+        })
 }
 
 /// The Dart type a data class declares for one of its own fields — the whole
@@ -2177,8 +2248,24 @@ fn encode_stmts_consumed_opt(
                 out,
                 "{pad}w.writeLen({expr}.length);\n{pad}{expr}.forEach((k{depth}, v{depth}) {{\n"
             );
-            encode_stmts_consumed_opt(out, iface, k, &format!("k{depth}"), depth + 1, false, member);
-            encode_stmts_consumed_opt(out, iface, v, &format!("v{depth}"), depth + 1, false, member);
+            encode_stmts_consumed_opt(
+                out,
+                iface,
+                k,
+                &format!("k{depth}"),
+                depth + 1,
+                false,
+                member,
+            );
+            encode_stmts_consumed_opt(
+                out,
+                iface,
+                v,
+                &format!("v{depth}"),
+                depth + 1,
+                false,
+                member,
+            );
             let _ = write!(out, "{pad}}});\n");
         }
         Type::Tuple(ts) => {
@@ -2234,7 +2321,11 @@ fn encode_stmts_consumed_opt(
         // call, and the message a later use of the handle gets has to name the
         // member that took it, not the struct that carried it.
         Type::Struct(n) if crate::check::inbound_struct(iface, n).is_some() => {
-            let port = if decl_has_handle(iface, n) { ", scope" } else { "" };
+            let port = if decl_has_handle(iface, n) {
+                ", scope"
+            } else {
+                ""
+            };
             let _ = write!(
                 out,
                 "{pad}_enc{}(w, {expr}, {member}{port});\n",
@@ -2379,7 +2470,16 @@ fn encode_stmts_opt(
                 out,
                 "{pad}w.checkArrayLength({expr}.length, {n});\n{pad}for (final it{depth} in {expr}) {{\n"
             );
-            encode_stmts_opt(out, iface, inner, &format!("it{depth}"), depth + 1, false, port, side);
+            encode_stmts_opt(
+                out,
+                iface,
+                inner,
+                &format!("it{depth}"),
+                depth + 1,
+                false,
+                port,
+                side,
+            );
             let _ = write!(out, "{pad}}}\n");
         }
         // Vec and VecDeque are both a Dart `List` on the same length-prefixed
@@ -2400,7 +2500,16 @@ fn encode_stmts_opt(
                 out,
                 "{pad}w.writeLen({expr}.length);\n{pad}for (final it{depth} in {expr}) {{\n"
             );
-            encode_stmts_opt(out, iface, inner, &format!("it{depth}"), depth + 1, false, port, side);
+            encode_stmts_opt(
+                out,
+                iface,
+                inner,
+                &format!("it{depth}"),
+                depth + 1,
+                false,
+                port,
+                side,
+            );
             let _ = write!(out, "{pad}}}\n");
         }
         // Same length-prefixed wire form as a list; the Dart value is a Set
@@ -2410,7 +2519,16 @@ fn encode_stmts_opt(
                 out,
                 "{pad}w.writeLen({expr}.length);\n{pad}for (final it{depth} in {expr}) {{\n"
             );
-            encode_stmts_opt(out, iface, inner, &format!("it{depth}"), depth + 1, false, port, side);
+            encode_stmts_opt(
+                out,
+                iface,
+                inner,
+                &format!("it{depth}"),
+                depth + 1,
+                false,
+                port,
+                side,
+            );
             let _ = write!(out, "{pad}}}\n");
         }
         // A tuple encodes as a struct-shaped positional value: each element in
@@ -2418,7 +2536,16 @@ fn encode_stmts_opt(
         // the per-element recursion; no new wire primitive.
         Type::Tuple(ts) => {
             for (i, elem) in ts.iter().enumerate() {
-                encode_stmts_opt(out, iface, elem, &format!("{expr}.${}", i + 1), depth, false, port, side);
+                encode_stmts_opt(
+                    out,
+                    iface,
+                    elem,
+                    &format!("{expr}.${}", i + 1),
+                    depth,
+                    false,
+                    port,
+                    side,
+                );
             }
         }
         Type::Map(k, v, _) => {
@@ -2426,8 +2553,26 @@ fn encode_stmts_opt(
                 out,
                 "{pad}w.writeLen({expr}.length);\n{pad}{expr}.forEach((k{depth}, v{depth}) {{\n"
             );
-            encode_stmts_opt(out, iface, k, &format!("k{depth}"), depth + 1, false, port, side);
-            encode_stmts_opt(out, iface, v, &format!("v{depth}"), depth + 1, false, port, side);
+            encode_stmts_opt(
+                out,
+                iface,
+                k,
+                &format!("k{depth}"),
+                depth + 1,
+                false,
+                port,
+                side,
+            );
+            encode_stmts_opt(
+                out,
+                iface,
+                v,
+                &format!("v{depth}"),
+                depth + 1,
+                false,
+                port,
+                side,
+            );
             let _ = write!(out, "{pad}}});\n");
         }
         // Invisible: encode what the `Box` points at, in whatever shape it
@@ -2455,7 +2600,16 @@ fn encode_stmts_opt(
                 out,
                 "{pad}{{\n{pad}final opt{depth} = {expr};\n{pad}if (opt{depth} is NestedNone) {{\n{pad}  w.writeU8(0);\n{pad}}} else {{\n{pad}  w.writeU8(1);\n{pad}  final some{depth} = (opt{depth} as NestedSome<{it}>).value;\n"
             );
-            encode_stmts_opt(out, iface, inner, &format!("some{depth}"), depth + 1, true, port, side);
+            encode_stmts_opt(
+                out,
+                iface,
+                inner,
+                &format!("some{depth}"),
+                depth + 1,
+                true,
+                port,
+                side,
+            );
             let _ = write!(out, "{pad}}}\n{pad}}}\n");
         }
         Type::Option(inner) => {
@@ -2463,7 +2617,16 @@ fn encode_stmts_opt(
                 out,
                 "{pad}{{\n{pad}final opt{depth} = {expr};\n{pad}if (opt{depth} == null) {{\n{pad}  w.writeU8(0);\n{pad}}} else {{\n{pad}  w.writeU8(1);\n"
             );
-            encode_stmts_opt(out, iface, inner, &format!("opt{depth}"), depth + 1, true, port, side);
+            encode_stmts_opt(
+                out,
+                iface,
+                inner,
+                &format!("opt{depth}"),
+                depth + 1,
+                true,
+                port,
+                side,
+            );
             let _ = write!(out, "{pad}}}\n{pad}}}\n");
         }
         // A type that owns handles is return-only, so the client emits no
@@ -2473,7 +2636,11 @@ fn encode_stmts_opt(
             // `_fakeWire` is a local of the dispatch arm, so it is threaded
             // explicitly the way `_fakeResolve*` threads it — a top-level
             // encoder has no ambient wire to reach for.
-            let _ = write!(out, "{pad}_fakeEnc{}(w, _fakeWire, {expr});\n", iface.codec_stem(n));
+            let _ = write!(
+                out,
+                "{pad}_fakeEnc{}(w, _fakeWire, {expr});\n",
+                iface.codec_stem(n)
+            );
         }
         Type::Struct(n) | Type::Enum(n) => {
             let arg = if decl_has_handle(iface, n) {
@@ -2485,7 +2652,10 @@ fn encode_stmts_opt(
         }
         // Bridge-external: the user codec produces the byte payload.
         Type::Extern(n) => {
-            let enc = &iface.extern_decl(n).expect("extern in finalized IR").dart_encode;
+            let enc = &iface
+                .extern_decl(n)
+                .expect("extern in finalized IR")
+                .dart_encode;
             let _ = write!(out, "{pad}w.writeBytes({expr}.{enc}());\n");
         }
         // A fake answers with the object its user returned, so the raw is
@@ -2566,9 +2736,16 @@ fn emit_handle_binding(
     // Rust has already minted — everywhere else the argument is absent and the
     // registration keeps nothing past cancel. The walk is `decoded`'s own,
     // disposing where it would have handed the wrapper on (`Side::Reclaim`).
-    let reclaim = spec.item.as_ref().filter(|t| crate::check::reaches_opaque(iface, t)).map(
-        |t| format!("(r) => ({})", decode_expr_opt(iface, t, false, Side::Reclaim)),
-    );
+    let reclaim = spec
+        .item
+        .as_ref()
+        .filter(|t| crate::check::reaches_opaque(iface, t))
+        .map(|t| {
+            format!(
+                "(r) => ({})",
+                decode_expr_opt(iface, t, false, Side::Reclaim)
+            )
+        });
     let label = match method {
         Some(m) => format!("'${{{port}.label}} {m}'"),
         None => format!("{port}.label"),
@@ -2606,10 +2783,7 @@ fn emit_handle_binding(
                     // `Result<(), E>`: nothing to encode, but the reply frame
                     // still exists — that is what the refusal rides.
                     None => {
-                        let _ = write!(
-                            out,
-                            "{pad}    t({decoded});\n{pad}    final w = {ctor};\n"
-                        );
+                        let _ = write!(out, "{pad}    t({decoded});\n{pad}    final w = {ctor};\n");
                     }
                 }
                 let _ = write!(out, "{pad}    return w;\n{pad}  }}");
@@ -2734,7 +2908,11 @@ fn emit_handle_binding(
         // absent — the list stays the same shape as the dispatch table.
         let reclaim = match &reclaim {
             Some(r) => {
-                let error_slot = if spec.mirror.has_add_error() { ", null" } else { "" };
+                let error_slot = if spec.mirror.has_add_error() {
+                    ", null"
+                } else {
+                    ""
+                };
                 format!("\n{pad}      reclaim: [{r}{error_slot}],")
             }
             None => String::new(),
@@ -2829,7 +3007,11 @@ fn emit_error_classes(out: &mut String, iface: &Interface) {
 /// `Result<T, E>` and a `DartFunction<T, Result<R, E>>`'s `E`. Post-resolution,
 /// so these are `Struct`/`Enum`.
 fn typed_errors(iface: &Interface) -> Vec<&Type> {
-    let mut out: Vec<&Type> = iface.functions.iter().filter_map(|f| f.err.as_ref()).collect();
+    let mut out: Vec<&Type> = iface
+        .functions
+        .iter()
+        .filter_map(|f| f.err.as_ref())
+        .collect();
     out.extend(closure_errors(iface));
     out
 }
@@ -2925,7 +3107,11 @@ fn decode_expr_fake_consumed_opt(iface: &Interface, ty: &Type, in_option: bool) 
         // consumed in order — the fake resolves by raw and has one registry.
         Type::Opaque(n) => format!(
             "{}<{}>(_fakeWire, r)",
-            if is_dyn(iface, n) { "_fakeTakeTagged" } else { "_fakeTake" },
+            if is_dyn(iface, n) {
+                "_fakeTakeTagged"
+            } else {
+                "_fakeTake"
+            },
             fake_handle_class(iface, n)
         ),
         Type::List(inner, _) => format!(
@@ -2956,7 +3142,11 @@ fn decode_expr_fake_consumed_opt(iface: &Interface, ty: &Type, in_option: bool) 
         // handle arm, which takes the object out of the fake's registry where
         // the ordinary one would look up a live handle.
         Type::Struct(n) if crate::check::inbound_struct(iface, n).is_some() => {
-            let req = if decl_has_handle(iface, n) { ", _fakeReq" } else { "" };
+            let req = if decl_has_handle(iface, n) {
+                ", _fakeReq"
+            } else {
+                ""
+            };
             format!("_fakeDec{}(r, _fakeWire{req})", iface.codec_stem(n))
         }
         Type::Option(inner) if in_option => {
@@ -3015,9 +3205,7 @@ fn decode_expr_opt(iface: &Interface, ty: &Type, in_option: bool, side: Side) ->
         // A declaration that carries opaques gets its own reclaim, emitted
         // beside its decoder from the same field list. One that carries none
         // decodes ordinarily — that is how the reader is advanced past it.
-        Type::Struct(n) | Type::Enum(n)
-            if side == Side::Reclaim && decl_owns_handles(iface, n) =>
-        {
+        Type::Struct(n) | Type::Enum(n) if side == Side::Reclaim && decl_owns_handles(iface, n) => {
             format!("_reclaim{}(r)", iface.codec_stem(n))
         }
         Type::Opaque(n) if side == Side::Fake && is_dyn(iface, n) => {
@@ -3032,9 +3220,7 @@ fn decode_expr_opt(iface: &Interface, ty: &Type, in_option: bool, side: Side) ->
         // A struct or enum that reaches a Dart-object handle has no client
         // decoder at all (FR0031); the fake is the only side that decodes one,
         // into its own mirror class.
-        Type::Struct(n) | Type::Enum(n)
-            if side == Side::Fake && decl_has_handle(iface, n) =>
-        {
+        Type::Struct(n) | Type::Enum(n) if side == Side::Fake && decl_has_handle(iface, n) => {
             format!("_fakeDec{}(r, _fakeReq)", iface.codec_stem(n))
         }
         // Unreachable by construction: FR0031 makes handles argument-only,
@@ -3151,7 +3337,10 @@ fn decode_expr_opt(iface: &Interface, ty: &Type, in_option: bool, side: Side) ->
         Type::Struct(n) | Type::Enum(n) => format!("_dec{}(r)", iface.codec_stem(n)),
         Type::Extern(n) => format!(
             "{}(r.readBytes())",
-            iface.extern_decl(n).expect("extern in finalized IR").dart_decode
+            iface
+                .extern_decl(n)
+                .expect("extern in finalized IR")
+                .dart_decode
         ),
         // A returned trait object is always the dyn registry's handle; its
         // Dart class is the generated private implementor of the interface.
@@ -3254,8 +3443,13 @@ fn emit_copy_with(
 /// compare and hash by value, not identity.
 fn emit_eq_members(out: &mut String, class_name: &str, fields: &[Field]) {
     let names: Vec<String> = fields.iter().map(field_name).collect();
-    out.push_str("  @override\n  bool operator ==(Object other) =>\n      identical(this, other) ||\n");
-    let _ = write!(out, "      other is {class_name} && runtimeType == other.runtimeType");
+    out.push_str(
+        "  @override\n  bool operator ==(Object other) =>\n      identical(this, other) ||\n",
+    );
+    let _ = write!(
+        out,
+        "      other is {class_name} && runtimeType == other.runtimeType"
+    );
     for n in &names {
         let _ = write!(out, " &&\n          frDeepEquals({n}, other.{n})");
     }
@@ -3351,12 +3545,15 @@ fn emit_dart_interface(out: &mut String, iface: &Interface, s: &StructDecl) {
         s.name
     );
     emit_doc_comment(out, &s.docs, "");
-    let _ = write!(out, "abstract interface class {} {{\n", data_class(iface, &s.name));
+    let _ = write!(
+        out,
+        "abstract interface class {} {{\n",
+        data_class(iface, &s.name)
+    );
     for f in &s.fields {
-        let spec = f
-            .ty
-            .as_dart_object()
-            .expect("FR0050: every dart_interface field is a closure mirror");
+        let spec =
+            f.ty.as_dart_object()
+                .expect("FR0050: every dart_interface field is a closure mirror");
         emit_doc_comment(out, &f.docs, "  ");
         // Dart has no checked exceptions, and the `EFallible<F>` alias that
         // carries a closure parameter's declared refusal cannot wrap a *method*
@@ -3384,10 +3581,9 @@ fn emit_dart_interface(out: &mut String, iface: &Interface, s: &StructDecl) {
         data_class(iface, &s.name)
     );
     for f in &s.fields {
-        let spec = f
-            .ty
-            .as_dart_object()
-            .expect("FR0050: every dart_interface field is a closure mirror");
+        let spec =
+            f.ty.as_dart_object()
+                .expect("FR0050: every dart_interface field is a closure mirror");
         let method = field_name(f);
         emit_handle_binding(
             out,
@@ -3410,12 +3606,7 @@ fn emit_dart_interface(out: &mut String, iface: &Interface, s: &StructDecl) {
 /// walks the declaration graph — so nothing on this surface can want it.
 ///
 /// Returns `true` when the declaration was omitted and the caller should stop.
-fn emit_native_only_decl_note(
-    out: &mut String,
-    iface: &Interface,
-    name: &str,
-    kind: &str,
-) -> bool {
+fn emit_native_only_decl_note(out: &mut String, iface: &Interface, name: &str, kind: &str) -> bool {
     let Some(handle) = crate::check::decl_native_only(iface, name) else {
         return false;
     };
@@ -3560,15 +3751,7 @@ fn emit_struct_class(out: &mut String, iface: &Interface, s: &StructDecl, web: b
     } else {
         let _ = write!(out, "  const {}({{{}}});\n", ctor, params.join(", "));
     }
-    emit_value_members(
-        out,
-        iface,
-        &scls,
-        &s.fields,
-        tuple,
-        s.no_eq,
-        s.inbound,
-    );
+    emit_value_members(out, iface, &scls, &s.fields, tuple, s.no_eq, s.inbound);
     emit_data_members(out, iface, &s.name, web);
     out.push_str("}\n\n");
 }
@@ -3593,7 +3776,11 @@ fn emit_struct_codec(out: &mut String, iface: &Interface, s: &StructDecl) {
     // handle intact. That is why the member's name is threaded in: `peekFor`
     // names it in the message a later use of the handle gets.
     if s.inbound {
-        let port_param = if decl_has_handle(iface, &s.name) { PORT_PARAM } else { "" };
+        let port_param = if decl_has_handle(iface, &s.name) {
+            PORT_PARAM
+        } else {
+            ""
+        };
         let _ = write!(
             out,
             "void _enc{stem}(BinaryWriter w, {scls} v, String _member{port_param}) {{\n"
@@ -3619,13 +3806,24 @@ fn emit_struct_codec(out: &mut String, iface: &Interface, s: &StructDecl) {
     // decode is what builds the one Dart wrapper that must dispose it, so it
     // gets a decoder and no encoder.
     if !decl_owns_handles(iface, &s.name) {
-        let port_param = if decl_has_handle(iface, &s.name) { PORT_PARAM } else { "" };
+        let port_param = if decl_has_handle(iface, &s.name) {
+            PORT_PARAM
+        } else {
+            ""
+        };
         let _ = write!(
             out,
             "void _enc{stem}(BinaryWriter w, {scls} v{port_param}) {{\n"
         );
         for f in &s.fields {
-            encode_stmts(out, iface, &f.ty, &format!("v.{}", field_name(f)), 1, "scope");
+            encode_stmts(
+                out,
+                iface,
+                &f.ty,
+                &format!("v.{}", field_name(f)),
+                1,
+                "scope",
+            );
         }
         out.push_str("}\n");
     }
@@ -3656,7 +3854,11 @@ fn emit_struct_decoder(
     tuple: bool,
     side: Side,
 ) {
-    let prefix = if side == Side::Reclaim { "_reclaim" } else { "_dec" };
+    let prefix = if side == Side::Reclaim {
+        "_reclaim"
+    } else {
+        "_dec"
+    };
     let _ = write!(out, "{scls} {prefix}{stem}(BinaryReader r) {{\n");
     // Field order must match the wire; named-arg evaluation order in Dart is
     // textual, so decode into locals first to be explicit. Each local is the
@@ -3754,7 +3956,11 @@ fn emit_enum_class(out: &mut String, iface: &Interface, e: &EnumDecl, web: bool)
         if members.is_empty() {
             let _ = write!(out, "enum {head} {{ {} }}\n\n", names.join(", "));
         } else {
-            let _ = write!(out, "enum {head} {{\n  {};\n\n{members}}}\n\n", names.join(", "));
+            let _ = write!(
+                out,
+                "enum {head} {{\n  {};\n\n{members}}}\n\n",
+                names.join(", ")
+            );
         }
         return;
     }
@@ -3763,7 +3969,10 @@ fn emit_enum_class(out: &mut String, iface: &Interface, e: &EnumDecl, web: bool)
     // the encoder switches on the variant, so one declaration covers them all.
     let mut members = String::new();
     emit_data_members(&mut members, iface, &e.name, web);
-    let _ = write!(out, "sealed class {head} {{\n  const {ecls}();\n{members}}}\n");
+    let _ = write!(
+        out,
+        "sealed class {head} {{\n  const {ecls}();\n{members}}}\n"
+    );
     for v in &e.variants {
         let cls = variant_class(iface, e, v);
         // A variant of a generic enum is generic in the same parameters and
@@ -3779,7 +3988,12 @@ fn emit_enum_class(out: &mut String, iface: &Interface, e: &EnumDecl, web: bool)
         let _ = write!(out, "final class {vhead} extends {head} {{\n");
         for f in &v.fields {
             emit_doc_comment(out, &f.docs, "  ");
-            let _ = write!(out, "  final {} {};\n", dart_type(iface, &f.ty), field_name(f));
+            let _ = write!(
+                out,
+                "  final {} {};\n",
+                dart_type(iface, &f.ty),
+                field_name(f)
+            );
         }
         if v.fields.is_empty() {
             let _ = write!(out, "  const {cls}();\n");
@@ -3799,12 +4013,7 @@ fn emit_enum_class(out: &mut String, iface: &Interface, e: &EnumDecl, web: bool)
             let _ = write!(out, "  const {cls}({{{}}});\n", params.join(", "));
         }
         emit_value_members(
-            out,
-            iface,
-            &vhead,
-            &v.fields,
-            v.tuple,
-            e.no_eq,
+            out, iface, &vhead, &v.fields, v.tuple, e.no_eq,
             // An enum has no `inbound` (FR0004 at the declaration says why),
             // so a variant's fields are always return-shaped.
             false,
@@ -3856,14 +4065,28 @@ fn emit_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
     // encode — see `emit_struct_codec` for why the two handle kinds decide
     // which half of the codec exists.
     if !decl_owns_handles(iface, &e.name) {
-        let port_param = if decl_has_handle(iface, &e.name) { PORT_PARAM } else { "" };
-        let _ = write!(out, "void _enc{stem}(BinaryWriter w, {ecls} v{port_param}) {{\n");
+        let port_param = if decl_has_handle(iface, &e.name) {
+            PORT_PARAM
+        } else {
+            ""
+        };
+        let _ = write!(
+            out,
+            "void _enc{stem}(BinaryWriter w, {ecls} v{port_param}) {{\n"
+        );
         for (idx, v) in e.variants.iter().enumerate() {
             let cls = vtype(&variant_class(iface, e, v));
             let kw = if idx == 0 { "if" } else { "} else if" };
             let _ = write!(out, "  {kw} (v is {cls}) {{\n    w.writeU32({idx});\n");
             for f in &v.fields {
-                encode_stmts(out, iface, &f.ty, &format!("v.{}", field_name(f)), 2, "scope");
+                encode_stmts(
+                    out,
+                    iface,
+                    &f.ty,
+                    &format!("v.{}", field_name(f)),
+                    2,
+                    "scope",
+                );
             }
         }
         let _ = write!(
@@ -3876,7 +4099,11 @@ fn emit_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
         return;
     }
     let mut decoder = |side: Side| {
-        let prefix = if side == Side::Reclaim { "_reclaim" } else { "_dec" };
+        let prefix = if side == Side::Reclaim {
+            "_reclaim"
+        } else {
+            "_dec"
+        };
         let _ = write!(
             out,
             "{ecls} {prefix}{stem}(BinaryReader r) {{\n  final idx = r.readU32();\n  switch (idx) {{\n"
@@ -3896,7 +4123,10 @@ fn emit_enum_codec(out: &mut String, iface: &Interface, e: &EnumDecl) {
                     );
                 }
                 let args: Vec<String> = if v.tuple {
-                    v.fields.iter().map(|f| format!("${}", field_name(f))).collect()
+                    v.fields
+                        .iter()
+                        .map(|f| format!("${}", field_name(f)))
+                        .collect()
                 } else {
                     v.fields
                         .iter()
@@ -3951,7 +4181,10 @@ fn emit_take(out: &mut String, iface: &Interface, o: &OpaqueDecl, web: bool) {
     }
     let cls = handle_class(iface, &o.name);
     out.push_str(&take_doc(iface, o));
-    let _ = write!(out, "  Consumed<{cls}> take() => Consumed<{cls}>(this);\n\n");
+    let _ = write!(
+        out,
+        "  Consumed<{cls}> take() => Consumed<{cls}>(this);\n\n"
+    );
 }
 
 /// Which of the transport's two drop hooks a model's handles are minted with.
@@ -3973,7 +4206,8 @@ fn drop_hook(model: Model) -> &'static str {
 /// does not know that will read a leak as a bug in the bridge.
 fn reclaim_doc(model: Model) -> &'static str {
     match model {
-        Model::Resident => "\n\
+        Model::Resident => {
+            "\n\
              ///\n\
              /// Reclaim is bound to the **thread** that built the object, which is\n\
              /// the one rule this model asks of you: a resident has no `Send`, so\n\
@@ -3984,7 +4218,8 @@ fn reclaim_doc(model: Model) -> &'static str {
              /// and a collection strands the object instead of freeing it. An\n\
              /// isolate that exits (a Flutter hot restart is the usual way) leaks\n\
              /// whatever it still held. Everything stranded is counted by type\n\
-             /// name in the runtime's resident leak report.",
+             /// name in the runtime's resident leak report."
+        }
         _ => "",
     }
 }
@@ -4169,7 +4404,11 @@ fn emit_trait(out: &mut String, iface: &Interface, o: &OpaqueDecl, web: bool) {
     // than inheriting it. Every implementor gets the two members from
     // `OpaqueHandleBase`, so nothing has to be written twice.
     let consumed = is_consumed(iface, n, web);
-    let consumable = if consumed { " implements Consumable" } else { "" };
+    let consumable = if consumed {
+        " implements Consumable"
+    } else {
+        ""
+    };
     let _ = write!(
         out,
         "/// Rust trait `{n}` ({model} concurrency model).\n\
@@ -4244,7 +4483,10 @@ fn emit_trait(out: &mut String, iface: &Interface, o: &OpaqueDecl, web: bool) {
     // come from one codegen run, so the numbering has no cross-version
     // contract, and generated opaque classes are `final` with private
     // constructors, so the runtime class is always one listed here.
-    let _ = write!(out, "int _implTag{n}({cls} v) {{\n  if (v is _Dyn{n}) return 0;\n");
+    let _ = write!(
+        out,
+        "int _implTag{n}({cls} v) {{\n  if (v is _Dyn{n}) return 0;\n"
+    );
     for (i, c) in iface.trait_implementors(n).iter().enumerate() {
         let _ = write!(out, "  if (v is {}) return {};\n", c.name, i + 1);
     }
@@ -4270,7 +4512,11 @@ fn emit_member_signature(out: &mut String, iface: &Interface, f: &Function, dept
         Exec::Sync => ret_inner,
         Exec::Async => format!("Future<{ret_inner}>"),
     };
-    let _ = write!(out, "{pad}{};\n", member_header(f.getter, &ret, &name, &params));
+    let _ = write!(
+        out,
+        "{pad}{};\n",
+        member_header(f.getter, &ret, &name, &params)
+    );
 }
 
 fn emit_actor(out: &mut String, iface: &Interface, o: &OpaqueDecl, web: bool) {
@@ -4692,7 +4938,11 @@ fn emit_function(out: &mut String, iface: &Interface, f: &Function, depth: usize
     } else {
         "_host"
     };
-    let port = if parent_is_actor { host } else { "Frustrate.of(_frustrateBridge)" };
+    let port = if parent_is_actor {
+        host
+    } else {
+        "Frustrate.of(_frustrateBridge)"
+    };
     // A **data** receiver is the value itself, encoded ahead of the
     // parameters by the same codec a parameter of that type would use. It is
     // not a handle: there is nothing to read out of `this`, nothing to keep
@@ -4704,7 +4954,11 @@ fn emit_function(out: &mut String, iface: &Interface, f: &Function, depth: usize
     // A data receiver contributes nothing: a struct has no width `SizeHint`
     // can know, exactly as a struct *parameter* has none, and the hint is a
     // lower bound.
-    let recv_bytes = if f.receiver.is_some() && data_recv.is_none() { 8 } else { 0 };
+    let recv_bytes = if f.receiver.is_some() && data_recv.is_none() {
+        8
+    } else {
+        0
+    };
     // The receiver's handle is read into a LOCAL, outside the encode closure,
     // and the closure writes the local. Reading `handleValue` (or `_handle`)
     // from inside the closure would make the closure capture `this` — and a
@@ -4793,7 +5047,11 @@ fn emit_function(out: &mut String, iface: &Interface, f: &Function, depth: usize
     // then would be a second failure the caller never asked for.
     let releases_actor = consuming && parent_is_actor;
     let wrapped = opens || restack || releases_actor;
-    let body = if wrapped { format!("{pad}  ") } else { pad.to_string() };
+    let body = if wrapped {
+        format!("{pad}  ")
+    } else {
+        pad.to_string()
+    };
     if wrapped {
         let _ = write!(out, "{pad}  try {{\n");
     }
@@ -4815,7 +5073,11 @@ fn emit_function(out: &mut String, iface: &Interface, f: &Function, depth: usize
         // already owns, and the closure holding them for the length of one
         // call is what every value parameter does.
         (true, Some(parent)) => {
-            let port = if decl_has_handle(iface, parent) { ", scope" } else { "" };
+            let port = if decl_has_handle(iface, parent) {
+                ", scope"
+            } else {
+                ""
+            };
             // `codec_stem`, not the parent name: an instantiation is named
             // `Page<Item>`, which is not an identifier, and its codec is named
             // for the stem like every other reference to it.
@@ -4847,7 +5109,14 @@ fn emit_function(out: &mut String, iface: &Interface, f: &Function, depth: usize
                 &format!("'{member_label}'"),
             );
         } else {
-            encode_stmts(&mut enc, iface, &p.ty, &dart_name(&p.name), enc_depth, "scope");
+            encode_stmts(
+                &mut enc,
+                iface,
+                &p.ty,
+                &dart_name(&p.name),
+                enc_depth,
+                "scope",
+            );
         }
     }
     emit_spends(&mut enc, iface, f, enc_depth, &member_label);
@@ -4970,8 +5239,14 @@ mod tests {
         assert!(code.contains("Page<Item> a()"), "{code}");
         assert!(code.contains("int b({required Page<int> p})"), "{code}");
         // Two codecs, each against the instantiation's own Dart type.
-        assert!(code.contains("Page<Item> _dec16Page_3c_Item_3e_(BinaryReader r)"), "{code}");
-        assert!(code.contains("void _enc15Page_3c_i32_3e_(BinaryWriter w, Page<int> v)"), "{code}");
+        assert!(
+            code.contains("Page<Item> _dec16Page_3c_Item_3e_(BinaryReader r)"),
+            "{code}"
+        );
+        assert!(
+            code.contains("void _enc15Page_3c_i32_3e_(BinaryWriter w, Page<int> v)"),
+            "{code}"
+        );
         // …and the numeric instantiation still takes the typed-list fast path,
         // against a field the class declares `List<T>`.
         assert!(code.contains("w.writeI32List(v.items);"), "{code}");
@@ -5003,18 +5278,30 @@ mod tests {
         let class = &code[code.find("class Page<T> {").unwrap()..];
         let class = &class[..class.find("\n}\n").unwrap()];
         assert!(!class.contains("int n()"), "{class}");
-        assert!(code.contains("extension Page$Item on Page<Item> {"), "{code}");
-        assert!(code.contains("extension Page$String on Page<String> {"), "{code}");
+        assert!(
+            code.contains("extension Page$Item on Page<Item> {"),
+            "{code}"
+        );
+        assert!(
+            code.contains("extension Page$String on Page<String> {"),
+            "{code}"
+        );
         // The receiver is the value itself, encoded by the instantiation's own
         // codec ahead of the parameters — two members, two ids, two codecs.
         assert!(code.contains("_enc16Page_3c_Item_3e_(w, this);"), "{code}");
-        assert!(code.contains("_enc18Page_3c_String_3e_(w, this);"), "{code}");
+        assert!(
+            code.contains("_enc18Page_3c_String_3e_(w, this);"),
+            "{code}"
+        );
         // A static rides the extension and is reached through its name.
         assert!(code.contains("  static Page<Item> empty() {"), "{code}");
         // The fake answers each on the crate fake, stem-named — and `$` is
         // escaped where the name is written into a Dart string literal, or it
         // would be read as an interpolation.
-        assert!(code.contains("int page$ItemN({required Page<Item> self})"), "{code}");
+        assert!(
+            code.contains("int page$ItemN({required Page<Item> self})"),
+            "{code}"
+        );
         assert!(
             code.contains("'FakeTestApi.page\\$ItemN is not implemented"),
             "{code}"
@@ -5032,10 +5319,16 @@ mod tests {
              #[bridge(sync)] pub fn f(e: Either<i64, String>) -> i64 { 0 }",
         );
         assert!(code.contains("sealed class Either<L, R> {"), "{code}");
-        assert!(code.contains("final class EitherLeft<L, R> extends Either<L, R> {"), "{code}");
+        assert!(
+            code.contains("final class EitherLeft<L, R> extends Either<L, R> {"),
+            "{code}"
+        );
         assert!(code.contains("  final L field0;"), "{code}");
         assert!(code.contains("if (v is EitherLeft<int, String>)"), "{code}");
-        assert!(code.contains("return EitherLeft<int, String>($field0);"), "{code}");
+        assert!(
+            code.contains("return EitherLeft<int, String>($field0);"),
+            "{code}"
+        );
         assert!(!code.contains("Either<i64"), "{code}");
     }
 
@@ -5061,15 +5354,19 @@ mod tests {
             "{handle} #[bridge(data)] pub struct Bag {{ pub docs: Vec<Doc> }} \
              #[bridge(sync)] pub fn out() -> Bag {{ todo!() }}"
         ));
-        assert!(inside.contains("frDeepEquals(docs, other.docs)"), "{inside}");
+        assert!(
+            inside.contains("frDeepEquals(docs, other.docs)"),
+            "{inside}"
+        );
         // A generic class one of whose instantiations carries a handle. The
         // class is the same class either way, so no note names an
         // instantiation.
         let src = "#[bridge(data)] pub struct P<T> { pub x: T } \
                    #[bridge(sync)] pub fn plain(p: P<i64>) -> i64 { 0 }";
         let plain = emit_src(&format!("{handle}{src}"));
-        let with_handle =
-            emit_src(&format!("{handle}{src} #[bridge(sync)] pub fn out() -> P<Doc> {{ todo!() }}"));
+        let with_handle = emit_src(&format!(
+            "{handle}{src} #[bridge(sync)] pub fn out() -> P<Doc> {{ todo!() }}"
+        ));
         for code in [&plain, &with_handle] {
             assert!(code.contains("      other is P<T> && runtimeType == other.runtimeType &&\n          frDeepEquals(x, other.x)"), "{code}");
         }
@@ -5088,11 +5385,17 @@ mod tests {
              #[bridge(sync)] pub fn f(x: i64) -> Result<i64, Refusal<i64>> { Ok(x) } \
              #[bridge(sync)] pub fn g(x: i64) -> Result<i64, Refusal<String>> { Ok(x) }",
         );
-        assert!(code.contains("class RefusalException<T> extends BridgeException {"), "{code}");
+        assert!(
+            code.contains("class RefusalException<T> extends BridgeException {"),
+            "{code}"
+        );
         assert_eq!(code.matches("class RefusalException").count(), 1, "{code}");
         assert!(code.contains("final Refusal<T> error;"), "{code}");
         assert!(code.contains("return RefusalException<int>(_e);"), "{code}");
-        assert!(code.contains("return RefusalException<String>(_e);"), "{code}");
+        assert!(
+            code.contains("return RefusalException<String>(_e);"),
+            "{code}"
+        );
         assert!(!code.contains("Refusal<i64>Exception"), "{code}");
     }
 
@@ -5122,7 +5425,10 @@ mod tests {
         );
         assert!(code.contains("enum Colour { red, green }"), "{code}");
         assert!(code.contains("sealed class Form {"), "{code}");
-        assert!(code.contains("final class FormDot extends Form {"), "{code}");
+        assert!(
+            code.contains("final class FormDot extends Form {"),
+            "{code}"
+        );
         assert!(!code.contains("enum Color "), "{code}");
         assert!(!code.contains("class Shape "), "{code}");
     }
@@ -5147,7 +5453,9 @@ mod tests {
     fn without_bridge_library(native: &str) -> String {
         let start = native.find("@ffi.Native").expect("a bridge library");
         let end_marker = "Library = _";
-        let end = native.find(end_marker).expect("the bridge library constant");
+        let end = native
+            .find(end_marker)
+            .expect("the bridge library constant");
         let end = end + native[end..].find("\n\n").unwrap() + 2;
         let mut out = String::from(&native[..start]);
         out.push_str(&native[end..]);
@@ -5200,7 +5508,8 @@ mod tests {
             "#,
         );
         assert!(
-            confined.contains("Frustrate.of(_frustrateBridge).handleDrop('frustrate_test_api_drop_D')"),
+            confined
+                .contains("Frustrate.of(_frustrateBridge).handleDrop('frustrate_test_api_drop_D')"),
             "{confined}"
         );
         assert!(!confined.contains("residentHandleDrop"), "{confined}");
@@ -5229,8 +5538,14 @@ mod tests {
         assert!(code.contains("void f({required B b})"), "{code}");
         assert!(code.contains("void g({required List<B> bs})"), "{code}");
         // An encoder that peeks, and no decoder at all.
-        assert!(code.contains("void _encB(BinaryWriter w, B v, String _member)"), "{code}");
-        assert!(code.contains("w.writeHandle(v.d.peekFor(_member));"), "{code}");
+        assert!(
+            code.contains("void _encB(BinaryWriter w, B v, String _member)"),
+            "{code}"
+        );
+        assert!(
+            code.contains("w.writeHandle(v.d.peekFor(_member));"),
+            "{code}"
+        );
         assert!(!code.contains("_decB("), "{code}");
     }
 
@@ -5247,7 +5562,9 @@ mod tests {
              #[bridge(data, inbound)] pub struct B { pub d: Doc } \
              #[bridge(sync)] pub fn f(b: B, n: u64) {}",
         );
-        let body = &code[code.find("void f({required B b, required BigInt n})").expect("member")..];
+        let body = &code[code
+            .find("void f({required B b, required BigInt n})")
+            .expect("member")..];
         let enc = body.find("_encB(w, b, 'f');").expect("encode");
         let n = body.find("w.writeU64(n);").expect("the other parameter");
         let spend = body.find("b.d.spend('f');").expect("spend");
@@ -5275,7 +5592,10 @@ mod tests {
              #[bridge(sync)] pub fn f(b: B) {}",
         );
         assert!(code.contains("final FakeDoc d;"), "{code}");
-        assert!(code.contains("FakeB _fakeDecB(BinaryReader r, FakeWire _fakeWire)"), "{code}");
+        assert!(
+            code.contains("FakeB _fakeDecB(BinaryReader r, FakeWire _fakeWire)"),
+            "{code}"
+        );
         assert!(code.contains("_fakeTake<FakeDoc>(_fakeWire, r)"), "{code}");
         assert!(!code.contains("_fakeEncB("), "{code}");
     }
@@ -5295,14 +5615,18 @@ mod tests {
 
         // A sink: slot 0 is `add`, slot 1 is `addError`, which carries a string
         // whatever the item is — so it is explicitly empty rather than absent.
-        let code = emit_src(&format!("{decls} #[bridge] pub fn f(s: StreamSink<Doc>) {{}}"));
+        let code = emit_src(&format!(
+            "{decls} #[bridge] pub fn f(s: StreamSink<Doc>) {{}}"
+        ));
         assert!(
             code.contains("reclaim: [(r) => ((Doc._(r.readHandle())..dispose())), null],"),
             "{code}"
         );
 
         // Through a container: the same walk the item decode does.
-        let code = emit_src(&format!("{decls} #[bridge] pub fn f(s: StreamSink<Vec<Doc>>) {{}}"));
+        let code = emit_src(&format!(
+            "{decls} #[bridge] pub fn f(s: StreamSink<Vec<Doc>>) {{}}"
+        ));
         assert!(
             code.contains(
                 "reclaim: [(r) => (List.generate(r.readLen(), \
@@ -5328,17 +5652,28 @@ mod tests {
              #[bridge] pub fn f(s: StreamSink<Wrap>) {{}}"
         ));
         assert!(code.contains("Wrap _decWrap(BinaryReader r) {"), "{code}");
-        assert!(code.contains("Wrap _reclaimWrap(BinaryReader r) {"), "{code}");
         assert!(
-            code.contains("  final $d = (Doc._(r.readHandle())..dispose());\n  final $tag = r.readString();"),
+            code.contains("Wrap _reclaimWrap(BinaryReader r) {"),
             "{code}"
         );
-        assert!(code.contains("reclaim: [(r) => (_reclaimWrap(r)), null],"), "{code}");
+        assert!(
+            code.contains(
+                "  final $d = (Doc._(r.readHandle())..dispose());\n  final $tag = r.readString();"
+            ),
+            "{code}"
+        );
+        assert!(
+            code.contains("reclaim: [(r) => (_reclaimWrap(r)), null],"),
+            "{code}"
+        );
 
         // A value channel keeps nothing: no reclaim argument anywhere, and no
         // reclaim twin.
         let plain = emit_src("#[bridge] pub fn f(s: StreamSink<i64>, c: DartCallback<String>) {}");
-        assert!(!without_bridge_library(&plain).contains("reclaim"), "{plain}");
+        assert!(
+            !without_bridge_library(&plain).contains("reclaim"),
+            "{plain}"
+        );
     }
 
     /// A member's rustdoc reaches **both** surfaces, verbatim.
@@ -5366,8 +5701,14 @@ mod tests {
     #[test]
     fn sync_free_function() {
         let code = emit_src("#[bridge(sync)] pub fn add(a: i32, b: i32) -> i32 { a + b }");
-        assert!(code.contains("int add({required int a, required int b}) {"), "{code}");
-        assert!(code.contains("Frustrate.of(_frustrateBridge).callSync(#, 8, (w) {"), "{code}");
+        assert!(
+            code.contains("int add({required int a, required int b}) {"),
+            "{code}"
+        );
+        assert!(
+            code.contains("Frustrate.of(_frustrateBridge).callSync(#, 8, (w) {"),
+            "{code}"
+        );
         // The response value is decoded into a local, the buffer asserted
         // fully consumed (trailing-byte defense), then returned.
         assert!(code.contains("final _ret = r.readI32();"), "{code}");
@@ -5443,7 +5784,11 @@ mod tests {
             .map(|f| format!("{}: {}", f.fn_id, super::channel_label(f)))
             .collect();
         expected.sort_by_key(|e| {
-            e.split_once(':').unwrap().0.parse::<u32>().expect("an id prefix")
+            e.split_once(':')
+                .unwrap()
+                .0
+                .parse::<u32>()
+                .expect("an id prefix")
         });
         // The fixture is only meaningful if it really does omit something on
         // web and really does synthesize a drop; assert both rather than
@@ -5473,13 +5818,20 @@ mod tests {
             assert_eq!(got, expected, "{label}: {code}");
         }
         // ...and the web surface really did omit the member it still names.
-        assert!(!bindings.web.contains("void onlyOnNative()"), "{}", bindings.web);
+        assert!(
+            !bindings.web.contains("void onlyOnNative()"),
+            "{}",
+            bindings.web
+        );
     }
 
     #[test]
     fn an_untyped_error_generates_no_class_and_no_decoder() {
         let code = emit_src("#[bridge(sync)] pub fn f() -> anyhow::Result<i64> { Ok(0) }");
-        assert!(!code.contains("Exception extends BridgeException"), "{code}");
+        assert!(
+            !code.contains("Exception extends BridgeException"),
+            "{code}"
+        );
         assert!(!code.contains("typedError:"), "{code}");
     }
 
@@ -5501,7 +5853,10 @@ mod tests {
             ] {
                 assert!(surface.contains(name), "{label}: missing {name}");
             }
-            assert!(!surface.contains("export 'package:frustrate/frustrate.dart';"), "{label}");
+            assert!(
+                !surface.contains("export 'package:frustrate/frustrate.dart';"),
+                "{label}"
+            );
         }
     }
 
@@ -5519,13 +5874,23 @@ mod tests {
             assert!(surface.contains(&literal), "{label}: expected {literal}");
             assert!(
                 surface.contains("void checkFrustrateSchema() =>")
-                    && surface.contains("Frustrate.of(_frustrateBridge).checkSchemaHash(frustrateSchemaHash)"),
+                    && surface.contains(
+                        "Frustrate.of(_frustrateBridge).checkSchemaHash(frustrateSchemaHash)"
+                    ),
                 "{label}: {surface}"
             );
         }
         // Both surfaces of one interface agree on the value (single source).
-        let native_line = bindings.native.lines().find(|l| l.contains("frustrateSchemaHash =")).unwrap();
-        let web_line = bindings.web.lines().find(|l| l.contains("frustrateSchemaHash =")).unwrap();
+        let native_line = bindings
+            .native
+            .lines()
+            .find(|l| l.contains("frustrateSchemaHash ="))
+            .unwrap();
+        let web_line = bindings
+            .web
+            .lines()
+            .find(|l| l.contains("frustrateSchemaHash ="))
+            .unwrap();
         assert_eq!(native_line, web_line);
     }
 
@@ -5558,8 +5923,14 @@ mod tests {
             ),
             "{native}"
         );
-        assert!(native.contains("String get name => 'package:my_app/test_api';"), "{native}");
-        assert!(native.contains("const BridgeLibrary testApiLibrary = _TestApiLibrary();"), "{native}");
+        assert!(
+            native.contains("String get name => 'package:my_app/test_api';"),
+            "{native}"
+        );
+        assert!(
+            native.contains("const BridgeLibrary testApiLibrary = _TestApiLibrary();"),
+            "{native}"
+        );
         assert!(
             native.contains("_ => throw StateError('frustrate: the test_api bindings have no '"),
             "{native}"
@@ -5569,7 +5940,8 @@ mod tests {
         // code reaches its runtime, whatever the platform.
         for surface in [native, web] {
             assert!(
-                surface.contains("const FrustrateBridge testApiBridge = FrustrateBridge('test_api');"),
+                surface
+                    .contains("const FrustrateBridge testApiBridge = FrustrateBridge('test_api');"),
                 "{surface}"
             );
         }
@@ -5588,11 +5960,19 @@ mod tests {
         let native = emit_all(HANDLE_SHAPES).native;
         let arms: Vec<&str> = native
             .lines()
-            .filter_map(|l| l.trim().strip_prefix("NativeExport.")?.split_once(" => ").map(|(v, _)| v))
+            .filter_map(|l| {
+                l.trim()
+                    .strip_prefix("NativeExport.")?
+                    .split_once(" => ")
+                    .map(|(v, _)| v)
+            })
             .collect();
         for value in super::RUNTIME_EXPORTS {
             assert!(arms.contains(value), "no arm for {value}: {arms:?}");
-            assert!(native.contains(&format!("(symbol: RuntimeSymbol.{value}, ")), "{value} undeclared");
+            assert!(
+                native.contains(&format!("(symbol: RuntimeSymbol.{value}, ")),
+                "{value} undeclared"
+            );
         }
         // The bridge's own entries are under its crate name, which is what
         // lets two bridges' tables point into one library.
@@ -5603,24 +5983,39 @@ mod tests {
                 "{entry} undeclared"
             );
         }
-        assert!(native.contains("FrustrateBridge get bridge => testApiBridge;"), "{native}");
+        assert!(
+            native.contains("FrustrateBridge get bridge => testApiBridge;"),
+            "{native}"
+        );
         let handles: Vec<&str> = native
             .lines()
-            .filter_map(|l| l.trim().strip_prefix("'frustrate_test_api_drop_")?.split_once("' => (drop: "))
+            .filter_map(|l| {
+                l.trim()
+                    .strip_prefix("'frustrate_test_api_drop_")?
+                    .split_once("' => (drop: ")
+            })
             .map(|(ty, _)| ty)
             .collect();
         assert_eq!(handles, ["Doc", "Scene", "Store"], "{native}");
         for ty in &handles {
             for prefix in ["frustrate_test_api_drop_", "frustrate_test_api_finalize_"] {
-                assert!(native.contains(&format!("(symbol: '{prefix}{ty}', ")), "{prefix}{ty} undeclared");
+                assert!(
+                    native.contains(&format!("(symbol: '{prefix}{ty}', ")),
+                    "{prefix}{ty} undeclared"
+                );
             }
         }
         // An actor drops through its executor: no per-type export to name.
-        assert!(!native.contains("frustrate_test_api_drop_Miner"), "an actor has no drop export: {native}");
+        assert!(
+            !native.contains("frustrate_test_api_drop_Miner"),
+            "an actor has no drop export: {native}"
+        );
         // Every drop symbol a handle class passes to the runtime has an arm.
         let mut passed = 0;
         for line in native.lines() {
-            let Some((_, rest)) = line.split_once("Drop('frustrate_test_api_drop_") else { continue };
+            let Some((_, rest)) = line.split_once("Drop('frustrate_test_api_drop_") else {
+                continue;
+            };
             let ty = rest.split('\'').next().unwrap();
             passed += 1;
             assert!(handles.contains(&ty), "no handle arm for {ty}");
@@ -5630,14 +6025,21 @@ mod tests {
         let declared = native.matches("external void _fs").count();
         assert_eq!(declared, arms.len() + 2 * handles.len(), "{native}");
         for i in 0..declared {
-            assert_eq!(native.matches(&format!("(_fs{i}).cast()")).count(), 1, "_fs{i}");
+            assert_eq!(
+                native.matches(&format!("(_fs{i}).cast()")).count(),
+                1,
+                "_fs{i}"
+            );
         }
     }
 
     #[test]
     fn u64_maps_to_bigint_not_int() {
         let code = emit_src("#[bridge(sync)] pub fn next(x: u64) -> u64 { x }");
-        assert!(code.contains("BigInt next({required BigInt x}) {"), "{code}");
+        assert!(
+            code.contains("BigInt next({required BigInt x}) {"),
+            "{code}"
+        );
         assert!(code.contains("w.writeU64(x);"), "{code}");
         assert!(code.contains("final _ret = r.readU64();"), "{code}");
     }
@@ -5645,7 +6047,10 @@ mod tests {
     #[test]
     fn i128_u128_map_to_bigint_via_dedicated_codec() {
         let code = emit_src("#[bridge(sync)] pub fn f(a: i128, b: u128) -> i128 { a }");
-        assert!(code.contains("BigInt f({required BigInt a, required BigInt b}) {"), "{code}");
+        assert!(
+            code.contains("BigInt f({required BigInt a, required BigInt b}) {"),
+            "{code}"
+        );
         assert!(code.contains("w.writeI128(a);"), "{code}");
         assert!(code.contains("w.writeU128(b);"), "{code}");
         assert!(code.contains("final _ret = r.readI128();"), "{code}");
@@ -5663,8 +6068,9 @@ mod tests {
 
     #[test]
     fn char_composes_in_collections() {
-        let code =
-            emit_src("#[bridge(sync)] pub fn seen() -> std::collections::HashSet<char> { todo!() }");
+        let code = emit_src(
+            "#[bridge(sync)] pub fn seen() -> std::collections::HashSet<char> { todo!() }",
+        );
         assert!(code.contains("Set<String> seen() {"), "{code}");
         assert!(code.contains("r.readChar()"), "{code}");
     }
@@ -5674,7 +6080,10 @@ mod tests {
         // Param AND return of `Vec<i32>` are both `Int32List` (symmetric).
         // The decode collects into the typed container.
         let code = emit_src("#[bridge(sync)] pub fn f(xs: Vec<i32>) -> Vec<i32> { xs }");
-        assert!(code.contains("Int32List f({required Int32List xs}) {"), "{code}");
+        assert!(
+            code.contains("Int32List f({required Int32List xs}) {"),
+            "{code}"
+        );
         assert!(
             code.contains("final _ret = r.readI32List(r.readLen());"),
             "{code}"
@@ -5693,7 +6102,10 @@ mod tests {
         let code = emit_src("#[bridge(sync)] pub fn f(xs: Vec<i32>) -> Vec<i32> { xs }");
         assert!(code.contains("w.writeLen(xs.length);"), "{code}");
         assert!(code.contains("w.writeI32List(xs);"), "{code}");
-        assert!(!code.contains("w.writeI32(it"), "no element loop left: {code}");
+        assert!(
+            !code.contains("w.writeI32(it"),
+            "no element loop left: {code}"
+        );
         assert!(
             !code.contains("List.generate(r.readLen(), (_) => r.readI32())"),
             "no List.generate left: {code}"
@@ -5726,7 +6138,10 @@ mod tests {
             let code = emit_src(&format!(
                 "#[bridge(sync)] pub fn f(xs: Vec<{rust}>) -> Vec<{rust}> {{ xs }}"
             ));
-            assert!(code.contains(&format!("{dart} f({{required {dart} xs}}) {{")), "{rust}: {code}");
+            assert!(
+                code.contains(&format!("{dart} f({{required {dart} xs}}) {{")),
+                "{rust}: {code}"
+            );
             assert!(
                 code.contains(&format!("r.{bulk}(r.readLen())")),
                 "{rust}: {code}"
@@ -5749,13 +6164,19 @@ mod tests {
         // `I64List`, not `Int64List`: dart2js and DDC cannot construct an
         // `Int64List`, and one generated file serves every backend; the build
         // picks what the typedef names.
-        assert!(code.contains("I64List f({required I64List xs}) {"), "{code}");
+        assert!(
+            code.contains("I64List f({required I64List xs}) {"),
+            "{code}"
+        );
         assert!(!code.contains("Int64List"), "{code}");
         assert!(code.contains("w.writeI64List(xs);"), "{code}");
         // The reader returns the declared type, so the decode is the bare call.
         assert!(code.contains("r.readI64List(r.readLen())"), "{code}");
         assert!(!code.contains("toI64List("), "{code}");
-        assert!(!code.contains("w.writeI64(it"), "no element loop left: {code}");
+        assert!(
+            !code.contains("w.writeI64(it"),
+            "no element loop left: {code}"
+        );
         assert!(
             !code.contains("Int64List.fromList(List.generate("),
             "no List.generate left: {code}"
@@ -5770,7 +6191,10 @@ mod tests {
         assert!(code.contains("w.checkArrayLength(xs.length, 4);"), "{code}");
         assert!(code.contains("w.writeI64List(xs);"), "{code}");
         assert!(code.contains("r.readI64List(4)"), "{code}");
-        assert!(code.contains("I64List f({required I64List xs}) {"), "{code}");
+        assert!(
+            code.contains("I64List f({required I64List xs}) {"),
+            "{code}"
+        );
     }
 
     #[test]
@@ -5790,7 +6214,10 @@ mod tests {
             "#,
         );
         assert!(!code.contains("Int64List"), "{code}");
-        assert!(code.contains("List<I64List> vv({required List<I64List> x}) {"), "{code}");
+        assert!(
+            code.contains("List<I64List> vv({required List<I64List> x}) {"),
+            "{code}"
+        );
         assert!(code.contains("I64List? o({I64List? x}) {"), "{code}");
         assert!(code.contains("Map<String, I64List> m("), "{code}");
         assert!(code.contains("final I64List xs;"), "{code}");
@@ -5835,9 +6262,7 @@ mod tests {
         );
 
         // HashMap<String, Vec<f64>> -> Map<String, Float64List>.
-        let m = emit_src(
-            "#[bridge(sync)] pub fn f() -> HashMap<String, Vec<f64>> { todo!() }",
-        );
+        let m = emit_src("#[bridge(sync)] pub fn f() -> HashMap<String, Vec<f64>> { todo!() }");
         assert!(m.contains("Map<String, Float64List> f() {"), "{m}");
         assert!(m.contains("r.readF64List(r.readLen())"), "{m}");
 
@@ -5876,7 +6301,12 @@ mod tests {
             code.contains("Future<List<String>> fetchAll({required I64List ids}) async {"),
             "{code}"
         );
-        assert!(code.contains("await Frustrate.of(_frustrateBridge).callAsync(#, 8 + ids.length * 8, (w) {"), "{code}");
+        assert!(
+            code.contains(
+                "await Frustrate.of(_frustrateBridge).callAsync(#, 8 + ids.length * 8, (w) {"
+            ),
+            "{code}"
+        );
         assert!(
             code.contains("List.generate(r.readLen(), (_) => r.readString())"),
             "{code}"
@@ -5901,7 +6331,10 @@ mod tests {
         );
         // The public name is the interface; app signatures use it.
         assert!(code.contains("abstract interface class Store {"), "{code}");
-        assert!(code.contains("  String? get({required String key});"), "{code}");
+        assert!(
+            code.contains("  String? get({required String key});"),
+            "{code}"
+        );
         assert!(code.contains("  Future<int> refresh();"), "{code}");
         assert!(code.contains("  void dispose();"), "{code}");
         // Dyn handles decode into the private implementor.
@@ -5909,8 +6342,14 @@ mod tests {
             code.contains("final class _DynStore extends OpaqueHandle implements Store {"),
             "{code}"
         );
-        assert!(code.contains("Future<Store> open({required String kind}) async {"), "{code}");
-        assert!(code.contains("final _ret = _DynStore._(r.readHandle());"), "{code}");
+        assert!(
+            code.contains("Future<Store> open({required String kind}) async {"),
+            "{code}"
+        );
+        assert!(
+            code.contains("final _ret = _DynStore._(r.readHandle());"),
+            "{code}"
+        );
         // Trait-typed params are tagged before the handle.
         assert!(code.contains("w.writeU8(_implTagStore(s));"), "{code}");
         assert!(code.contains("w.writeHandle(s.handleValue);"), "{code}");
@@ -5963,7 +6402,10 @@ mod tests {
         // type is not mutable in place.
         assert!(code.contains("final double x;"), "{code}");
         assert!(code.contains("final int deleteCount;"), "{code}");
-        assert!(code.contains("void _encPoint(BinaryWriter w, Point v)"), "{code}");
+        assert!(
+            code.contains("void _encPoint(BinaryWriter w, Point v)"),
+            "{code}"
+        );
     }
 
     #[test]
@@ -5978,7 +6420,9 @@ mod tests {
             "#,
         );
         assert!(
-            code.contains("Point copyWith({Object? x = copyWithUnset, Object? label = copyWithUnset}) =>"),
+            code.contains(
+                "Point copyWith({Object? x = copyWithUnset, Object? label = copyWithUnset}) =>"
+            ),
             "{code}"
         );
         assert!(
@@ -6047,7 +6491,10 @@ mod tests {
         let ticket = ticket.split("_encTicket").next().unwrap();
         assert!(!ticket.contains("operator =="), "eq leaked: {ticket}");
         assert!(!ticket.contains("hashCode"), "hashCode leaked: {ticket}");
-        assert!(!ticket.contains("frDeepEquals"), "frDeepEquals leaked: {ticket}");
+        assert!(
+            !ticket.contains("frDeepEquals"),
+            "frDeepEquals leaked: {ticket}"
+        );
         // Kept:
         assert!(ticket.contains("Ticket copyWith("), "{ticket}");
         assert!(ticket.contains("String toString() =>"), "{ticket}");
@@ -6092,10 +6539,7 @@ mod tests {
         // attributable codec error naming the enum — never a bare RangeError
         // from `values[idx]` on a corrupt tag.
         assert!(code.contains("final i = r.readU32();"), "{code}");
-        assert!(
-            code.contains("if (i >= Color.values.length) {"),
-            "{code}"
-        );
+        assert!(code.contains("if (i >= Color.values.length) {"), "{code}");
         assert!(
             code.contains(
                 "throw StateError('frustrate codec: invalid variant index $i for Color');"
@@ -6119,7 +6563,10 @@ mod tests {
             "#[bridge(data)] pub enum Level { Low = 1, Mid, High = 9, Neg = -3 } \
              #[bridge(sync)] pub fn f(l: Level) -> i64 { 0 }",
         );
-        assert!(code.contains("int get discriminant => switch (this) {"), "{code}");
+        assert!(
+            code.contains("int get discriminant => switch (this) {"),
+            "{code}"
+        );
         for arm in [
             "        Level.low => 1,",
             "        Level.mid => 2,",
@@ -6129,7 +6576,10 @@ mod tests {
             assert!(code.contains(arm), "{arm}: {code}");
         }
         // The wire is unmoved: still the ordinal, both directions.
-        assert!(code.contains("void _encLevel(BinaryWriter w, Level v) => w.writeU32(v.index);"), "{code}");
+        assert!(
+            code.contains("void _encLevel(BinaryWriter w, Level v) => w.writeU32(v.index);"),
+            "{code}"
+        );
         assert!(code.contains("return Level.values[i];"), "{code}");
         // `dart_identifier` on the declaration renames the class the switch
         // scrutinee is written with, like every other reference to it.
@@ -6157,7 +6607,10 @@ mod tests {
             code.contains("final class PatchDelete extends Patch {"),
             "{code}"
         );
-        assert!(code.contains("const PatchDelete({required this.index, required this.length});"), "{code}");
+        assert!(
+            code.contains("const PatchDelete({required this.index, required this.length});"),
+            "{code}"
+        );
         assert!(code.contains("const PatchInsert(this.field0);"), "{code}");
         assert!(code.contains("return const PatchClear();"), "{code}");
     }
@@ -6235,15 +6688,15 @@ mod tests {
             "#,
         );
         for present in [
-            "class Vec2 {",              // data class
-            "final double across;",      // renamed field
-            "Vec2 copyWith(",            // and everything generated from it
-            "final class ShapeOnlyDot",  // variant class
-            "final class Document extends OpaqueHandle", // handle class
-            "abstract interface class Counting",         // trait interface
+            "class Vec2 {",                                   // data class
+            "final double across;",                           // renamed field
+            "Vec2 copyWith(",                                 // and everything generated from it
+            "final class ShapeOnlyDot",                       // variant class
+            "final class Document extends OpaqueHandle",      // handle class
+            "abstract interface class Counting",              // trait interface
             "class RefusalException extends BridgeException", // error class
-            "int length()",              // renamed method
-            "class FakeDocument",        // the fake mirror follows the type
+            "int length()",                                   // renamed method
+            "class FakeDocument",                             // the fake mirror follows the type
             "as FakeCounting",
             "int _implTagTally(Counting v)", // helper keeps the Rust name, arg the Dart one
             // A handle is *constructed* by name at every decode site, and an
@@ -6331,12 +6784,18 @@ mod tests {
         let native = &b.native;
         // Free function, and a static (constructor) plus an instance method on
         // an opaque handle class — all three go through `emit_function`.
-        assert!(native.contains("/// A free function.\nvoid free() {"), "{native}");
+        assert!(
+            native.contains("/// A free function.\nvoid free() {"),
+            "{native}"
+        );
         assert!(
             native.contains("  /// Builds one.\n  static Cache new_() {"),
             "{native}"
         );
-        assert!(native.contains("  /// Reads it.\n  int read() {"), "{native}");
+        assert!(
+            native.contains("  /// Reads it.\n  int read() {"),
+            "{native}"
+        );
         // The trait's pure interface (`emit_member_signature`) and the private
         // dyn implementor that satisfies it.
         assert!(
@@ -6374,7 +6833,8 @@ mod tests {
         // The web surface's runtime-throwing stub is a real member and gets
         // them too, so the two surfaces document the member identically.
         assert!(
-            b.web.contains("  /// Blocks, but is opted onto web.\n  int blockingRead() {"),
+            b.web
+                .contains("  /// Blocks, but is opted onto web.\n  int blockingRead() {"),
             "{}",
             b.web
         );
@@ -6474,11 +6934,16 @@ mod tests {
             "#,
         );
         assert!(
-            b.native.contains("/// Blocks a pool worker per item.\nFuture<int> mapIt("),
+            b.native
+                .contains("/// Blocks a pool worker per item.\nFuture<int> mapIt("),
             "{}",
             b.native
         );
-        assert!(!b.web.contains("/// Blocks a pool worker per item."), "{}", b.web);
+        assert!(
+            !b.web.contains("/// Blocks a pool worker per item."),
+            "{}",
+            b.web
+        );
         assert!(b.web.contains("`mapIt` is native-only"), "{}", b.web);
         // The next member still gets its own, unpolluted.
         assert!(b.web.contains("/// Does not.\nvoid quick() {"), "{}", b.web);
@@ -6524,7 +6989,10 @@ mod tests {
             #[bridge] impl Cache { #[bridge(sync)] pub fn new() -> Self { todo!() } }
             "#,
         );
-        assert!(bare.contains("\n/// Opaque handle to Rust `Cache`"), "{bare}");
+        assert!(
+            bare.contains("\n/// Opaque handle to Rust `Cache`"),
+            "{bare}"
+        );
         assert!(!bare.contains("///\n/// Opaque handle"), "{bare}");
     }
 
@@ -6598,7 +7066,10 @@ mod tests {
             }
             "#,
         );
-        assert!(code.contains("final class Doc extends OpaqueHandle {"), "{code}");
+        assert!(
+            code.contains("final class Doc extends OpaqueHandle {"),
+            "{code}"
+        );
         // The drop hook is read from the ACTIVE transport at every mint, not
         // once into a per-class static. A static is evaluated the first time
         // any handle of the type is made and never re-read, so after a bridge
@@ -6659,7 +7130,10 @@ mod tests {
         assert!(code.contains("Map<String, int> m"), "{code}");
         assert!(code.contains("double? o"), "{code}");
         // Presence tag routes through the validating readBool, not readU8()==1.
-        assert!(code.contains("r.readBool() ? r.readString() : null"), "{code}");
+        assert!(
+            code.contains("r.readBool() ? r.readString() : null"),
+            "{code}"
+        );
         assert!(!code.contains("r.readU8() == 1"), "{code}");
     }
 
@@ -6668,7 +7142,10 @@ mod tests {
         let code = emit_src(
             "#[bridge(sync)] pub fn f(s: std::collections::HashSet<i64>) -> std::collections::HashSet<String> { todo!() }",
         );
-        assert!(code.contains("Set<String> f({required Set<int> s}) {"), "{code}");
+        assert!(
+            code.contains("Set<String> f({required Set<int> s}) {"),
+            "{code}"
+        );
         // Encode reuses the list wire form (length + elements).
         assert!(code.contains("w.writeLen(s.length);"), "{code}");
         assert!(code.contains("for (final it2 in s) {"), "{code}");
@@ -6684,11 +7161,20 @@ mod tests {
         let code = emit_src(
             "#[bridge(sync)] pub fn f(d: std::time::Duration, t: std::time::SystemTime) -> std::time::Duration { d }",
         );
-        assert!(code.contains("Duration f({required Duration d, required DateTime t}) {"), "{code}");
+        assert!(
+            code.contains("Duration f({required Duration d, required DateTime t}) {"),
+            "{code}"
+        );
         // The std peer is unsigned, so its encode is the checking writer.
         assert!(code.contains("w.writeUnsignedDuration(d);"), "{code}");
-        assert!(code.contains("w.writeI64(t.toUtc().microsecondsSinceEpoch);"), "{code}");
-        assert!(code.contains("final _ret = Duration(microseconds: r.readI64());"), "{code}");
+        assert!(
+            code.contains("w.writeI64(t.toUtc().microsecondsSinceEpoch);"),
+            "{code}"
+        );
+        assert!(
+            code.contains("final _ret = Duration(microseconds: r.readI64());"),
+            "{code}"
+        );
         // A SystemTime return decodes as a UTC DateTime.
         let code = emit_src("#[bridge(sync)] pub fn now() -> std::time::SystemTime { todo!() }");
         assert!(
@@ -6716,7 +7202,10 @@ mod tests {
         // A signed peer takes the plain writer: a negative span is data there.
         assert!(code.contains("w.writeI64(d.inMicroseconds);"), "{code}");
         assert!(!code.contains("writeUnsignedDuration"), "{code}");
-        assert!(code.contains("w.writeI64(t.toUtc().microsecondsSinceEpoch);"), "{code}");
+        assert!(
+            code.contains("w.writeI64(t.toUtc().microsecondsSinceEpoch);"),
+            "{code}"
+        );
         assert!(
             code.contains(
                 "final _ret = DateTime.fromMicrosecondsSinceEpoch(r.readI64(), isUtc: true);"
@@ -6732,12 +7221,18 @@ mod tests {
         );
         // Top-level Option stays nullable; the inner Option becomes NestedOption
         // (never the invalid `int??`).
-        assert!(code.contains("NestedOption<int>? nest({NestedOption<int>? x}) {"), "{code}");
+        assert!(
+            code.contains("NestedOption<int>? nest({NestedOption<int>? x}) {"),
+            "{code}"
+        );
         assert!(!code.contains("int??"), "{code}");
         // Encode: outer null-check, inner NestedNone/NestedSome discrimination.
         assert!(code.contains("if (opt2 == null) {"), "{code}");
         assert!(code.contains("if (opt3 is NestedNone) {"), "{code}");
-        assert!(code.contains("final some3 = (opt3 as NestedSome<int>).value;"), "{code}");
+        assert!(
+            code.contains("final some3 = (opt3 as NestedSome<int>).value;"),
+            "{code}"
+        );
         // Decode: outer value-or-null, inner NestedSome/NestedNone.
         assert!(
             code.contains("r.readBool() ? NestedSome<int>(r.readI64()) : NestedNone<int>()"),
@@ -6751,7 +7246,10 @@ mod tests {
         let code = emit_src("#[bridge(sync)] pub fn f(x: Option<i64>) -> Option<String> { None }");
         assert!(code.contains("String? f({int? x}) {"), "{code}");
         assert!(!code.contains("NestedOption"), "{code}");
-        assert!(code.contains("r.readBool() ? r.readString() : null"), "{code}");
+        assert!(
+            code.contains("r.readBool() ? r.readString() : null"),
+            "{code}"
+        );
     }
 
     #[test]
@@ -6761,8 +7259,14 @@ mod tests {
              #[bridge(data)] pub enum S { Circle { r: f64 }, Square(f64) } \
              #[bridge(sync)] pub fn f(p: P, s: S) -> (P, S) { (p, s) }",
         );
-        assert!(code.contains("  final $r = r.readF64();\n  return P(r: $r);"), "{code}");
-        assert!(code.contains("      final $r = r.readF64();\n      return SCircle(r: $r);"), "{code}");
+        assert!(
+            code.contains("  final $r = r.readF64();\n  return P(r: $r);"),
+            "{code}"
+        );
+        assert!(
+            code.contains("      final $r = r.readF64();\n      return SCircle(r: $r);"),
+            "{code}"
+        );
         assert!(code.contains("      return SSquare($field0);"), "{code}");
     }
 
@@ -6770,7 +7274,8 @@ mod tests {
     fn entry_is_a_conditional_export() {
         let b = emit_all("#[bridge(sync)] pub fn add(a: i32, b: i32) -> i32 { a + b }");
         assert!(
-            b.entry.contains("export 'src/test_api.frustrate.native.dart'"),
+            b.entry
+                .contains("export 'src/test_api.frustrate.native.dart'"),
             "{}",
             b.entry
         );
@@ -6846,7 +7351,8 @@ mod tests {
         // the member — never a bridge call.
         assert!(b.web.contains("int blockingRead() {"), "{}", b.web);
         assert!(
-            b.web.contains("throw UnsupportedError('blockingRead is not available on web"),
+            b.web
+                .contains("throw UnsupportedError('blockingRead is not available on web"),
             "{}",
             b.web
         );
@@ -6866,7 +7372,10 @@ mod tests {
             .split_once("\n  }")
             .expect("the stub's body ends")
             .0;
-        assert!(!stub.contains("callSync("), "stub must not dispatch: {stub}");
+        assert!(
+            !stub.contains("callSync("),
+            "stub must not dispatch: {stub}"
+        );
         // The un-opted sibling stays the default: compile-time absent, breadcrumb.
         assert!(!b.web.contains("int blockingGet() {"), "{}", b.web);
         assert!(b.web.contains("`blockingGet` is native-only"), "{}", b.web);
@@ -6881,12 +7390,14 @@ mod tests {
             "#[bridge(web_stub)] pub fn transform(f: DartFunction<i64, i64>) -> i64 { 0 }",
         );
         assert!(
-            b.web.contains("Future<int> transform({required int Function(int) f}) async {"),
+            b.web
+                .contains("Future<int> transform({required int Function(int) f}) async {"),
             "{}",
             b.web
         );
         assert!(
-            b.web.contains("throw UnsupportedError('transform is not available on web"),
+            b.web
+                .contains("throw UnsupportedError('transform is not available on web"),
             "{}",
             b.web
         );
@@ -6958,8 +7469,14 @@ mod tests {
         // cannot strand them for the life of the isolate.
         assert!(code.contains("scope.failAllOpened(e, st);"), "{code}");
         assert!(code.contains("rethrow;"), "{code}");
-        assert!(code.contains("Frustrate.of(_frustrateBridge).callSync(#, 8, (w) {"), "{code}");
-        assert!(code.contains("Frustrate.of(_frustrateBridge).callAsync(#, 8, (w) {"), "{code}");
+        assert!(
+            code.contains("Frustrate.of(_frustrateBridge).callSync(#, 8, (w) {"),
+            "{code}"
+        );
+        assert!(
+            code.contains("Frustrate.of(_frustrateBridge).callAsync(#, 8, (w) {"),
+            "{code}"
+        );
         // The caller's controller binds through the ordinary handle path.
         assert!(code.contains("final t = sink;"), "{code}");
         assert!(
@@ -6976,9 +7493,7 @@ mod tests {
         );
         // frustrate owns all three seams and rejects a preset one loudly.
         assert!(
-            code.contains(
-                "if (t.onCancel != null || t.onPause != null || t.onResume != null) {"
-            ),
+            code.contains("if (t.onCancel != null || t.onPause != null || t.onResume != null) {"),
             "{code}"
         );
         // Backpressure rides the same controller: onPause/onResume park and
@@ -6995,8 +7510,7 @@ mod tests {
         // The guards must precede openObject: a throw after registration would
         // orphan the handle and pin the isolate.
         assert!(
-            code.find("if (t.stream.isBroadcast)").unwrap()
-                < code.find("openObject").unwrap(),
+            code.find("if (t.stream.isBroadcast)").unwrap() < code.find("openObject").unwrap(),
             "broadcast/handler guards must run before openObject: {code}"
         );
         // Streams carry no native-only fact: both surfaces are identical.
@@ -7071,7 +7585,10 @@ mod tests {
             "a sync binding gained a handler it cannot improve on: {sync_body}"
         );
 
-        let async_body = code.split("Future<int> later({required int x}) async {").nth(1).unwrap();
+        let async_body = code
+            .split("Future<int> later({required int x}) async {")
+            .nth(1)
+            .unwrap();
         let async_body = async_body.split("\n}\n").next().unwrap();
         assert!(async_body.contains("try {"), "{async_body}");
         assert!(
@@ -7101,10 +7618,17 @@ mod tests {
         // The user's Dart class appears in the signature; the import is
         // emitted once despite two externs sharing it.
         assert!(code.contains("Plan bump({required Plan p}) {"), "{code}");
-        assert_eq!(code.matches("import 'package:app/plan.pb.dart';").count(), 1, "{code}");
+        assert_eq!(
+            code.matches("import 'package:app/plan.pb.dart';").count(),
+            1,
+            "{code}"
+        );
         // Protobuf-convention defaults and explicit overrides.
         assert!(code.contains("w.writeBytes(p.writeToBuffer());"), "{code}");
-        assert!(code.contains("final _ret = Plan.fromBuffer(r.readBytes());"), "{code}");
+        assert!(
+            code.contains("final _ret = Plan.fromBuffer(r.readBytes());"),
+            "{code}"
+        );
         assert!(code.contains("w.writeBytes(it3.toWire());"), "{code}");
         assert!(code.contains("Note.parse(r.readBytes())"), "{code}");
         // Externs are value types: identical on both surfaces.
@@ -7131,7 +7655,10 @@ mod tests {
         let code = &b.native;
         // Callback params stay in the Dart signature as function types, at
         // their declared positions.
-        assert!(code.contains("void onChange({required void Function(int) cb}) {"), "{code}");
+        assert!(
+            code.contains("void onChange({required void Function(int) cb}) {"),
+            "{code}"
+        );
         assert!(
             code.contains(
                 "Future<void> notify({required void Function(int) cb, required int n, required void Function() done}) async {"
@@ -7182,11 +7709,17 @@ mod tests {
         // Native: full surface; the registration envelopes the closure's
         // result for the blocked Rust worker, on the actor's own channel.
         assert!(
-            b.native.contains("Future<int> refine({required int x, required int Function(int) f}) async {"),
+            b.native.contains(
+                "Future<int> refine({required int x, required int Function(int) f}) async {"
+            ),
             "{}",
             b.native
         );
-        assert!(b.native.contains("FrustrateOpenScope(_host,"), "{}", b.native);
+        assert!(
+            b.native.contains("FrustrateOpenScope(_host,"),
+            "{}",
+            b.native
+        );
         assert!(
             b.native.contains("scope.channel.openFunction((r) {"),
             "{}",
@@ -7194,14 +7727,26 @@ mod tests {
         );
         // Attribution: the scope carries the member name into the
         // registration, so a leak report can say which call opened it.
-        assert!(b.native.contains("FrustrateOpenScope(_host, 'A.refine')"), "{}", b.native);
-        assert!(b.native.contains("}, label: scope.label));"), "{}", b.native);
-        assert!(b.native.contains("final ret = t(r.readI64());"), "{}", b.native);
+        assert!(
+            b.native.contains("FrustrateOpenScope(_host, 'A.refine')"),
+            "{}",
+            b.native
+        );
+        assert!(
+            b.native.contains("}, label: scope.label));"),
+            "{}",
+            b.native
+        );
+        assert!(
+            b.native.contains("final ret = t(r.readI64());"),
+            "{}",
+            b.native
+        );
         assert!(b.native.contains("w.writeI64(ret);"), "{}", b.native);
         // Web: omitted with the breadcrumb; the sibling member survives.
         assert!(!b.web.contains("refine("), "{}", b.web);
         assert!(b.web.contains("`refine` is native-only"), "{}", b.web);
-        assert!(b.web.contains("Future<int> get(") , "{}", b.web);
+        assert!(b.web.contains("Future<int> get("), "{}", b.web);
     }
 
     /// A fallible closure wears its contract in the Dart type, and an
@@ -7268,10 +7813,7 @@ mod tests {
         );
         // The binding tests for the declared type and encodes it; returning
         // null for anything else is what keeps an undeclared throw loud.
-        assert!(
-            code.contains("}, onDeclaredError: (e) {"),
-            "{code}"
-        );
+        assert!(code.contains("}, onDeclaredError: (e) {"), "{code}");
         assert!(
             code.contains("if (e is! RefusalException) return null;"),
             "{code}"
@@ -7315,7 +7857,10 @@ mod tests {
         let enc = &enc[..enc.find("\n}\n").unwrap_or(enc.len())];
         assert_eq!(enc.matches("openFunction((r) {").count(), 2, "{enc}");
         assert_eq!(enc.matches("onDeclaredError:").count(), 1, "{enc}");
-        assert!(enc.contains("if (e is! RefusalException) return null;"), "{enc}");
+        assert!(
+            enc.contains("if (e is! RefusalException) return null;"),
+            "{enc}"
+        );
     }
 
     #[test]
@@ -7405,7 +7950,10 @@ mod tests {
              #[bridge] impl D { #[bridge(sync)] pub fn into_n(self) -> i64 { self.n } }\n\
              #[bridge] impl E { #[bridge(sync)] pub fn n(&self) -> i64 { self.n } }",
         );
-        assert!(code.contains("Consumed<D> take() => Consumed<D>(this);"), "{code}");
+        assert!(
+            code.contains("Consumed<D> take() => Consumed<D>(this);"),
+            "{code}"
+        );
         assert!(!code.contains("Consumed<E> take()"), "{code}");
     }
 
@@ -7420,11 +7968,19 @@ mod tests {
                #[bridge(sync)] pub fn into_n(self) -> i64 { self.n }\n\
              }",
         );
-        let cls = &code[code.find("final class D extends OpaqueHandle").expect("class")..];
+        let cls = &code[code
+            .find("final class D extends OpaqueHandle")
+            .expect("class")..];
         let cls = &cls[..cls.find("\n}\n").expect("class end")];
         assert!(cls.contains("int n()"), "{cls}");
-        assert!(!cls.contains("int intoN()"), "the consuming member is not on the class\n{cls}");
-        assert!(code.contains("extension DConsumed on Consumed<D> {"), "{code}");
+        assert!(
+            !cls.contains("int intoN()"),
+            "the consuming member is not on the class\n{cls}"
+        );
+        assert!(
+            code.contains("extension DConsumed on Consumed<D> {"),
+            "{code}"
+        );
         let ext = &code[code.find("extension DConsumed").expect("ext")..];
         assert!(ext.contains("int intoN()"), "{ext}");
         assert!(ext.contains("peekFor('D.into_n')"), "{ext}");
@@ -7445,14 +8001,25 @@ mod tests {
              #[bridge(sync)] pub fn eat(t: Box<dyn T>) -> i64 { 0 }",
         );
         // The interface can hold a token at all, and declares the move.
-        assert!(code.contains("abstract interface class T implements Consumable {"), "{code}");
+        assert!(
+            code.contains("abstract interface class T implements Consumable {"),
+            "{code}"
+        );
         assert!(code.contains("  Consumed<T> take();"), "{code}");
-        assert!(code.contains("Consumed<T> take() => Consumed<T>(this);"), "{code}");
+        assert!(
+            code.contains("Consumed<T> take() => Consumed<T>(this);"),
+            "{code}"
+        );
         // The consuming receiver: tag read out of the token, ahead of the raw,
         // and both outside the encode closure.
-        let ext = &code[code.find("extension TConsumed on Consumed<T> {").expect("ext")..];
+        let ext = &code[code
+            .find("extension TConsumed on Consumed<T> {")
+            .expect("ext")..];
         assert!(ext.contains("final _recvTag = _implTagT(handle);"), "{ext}");
-        assert!(ext.contains("w.writeU8(_recvTag);\n      w.writeHandle(_recv);"), "{ext}");
+        assert!(
+            ext.contains("w.writeU8(_recvTag);\n      w.writeHandle(_recv);"),
+            "{ext}"
+        );
         // The by-value parameter: same tag, same order.
         let eat = &code[code.find("int eat({required Consumed<T> t})").expect("eat")..];
         assert!(
@@ -7460,10 +8027,18 @@ mod tests {
             "{eat}"
         );
         // A **borrowed** receiver stays untagged.
-        let dyn_cls = &code[code.find("final class _DynT extends OpaqueHandle").expect("dyn")..];
-        assert!(!dyn_cls[..dyn_cls.find("\n}\n").expect("end")].contains("_recvTag"), "{dyn_cls}");
+        let dyn_cls = &code[code
+            .find("final class _DynT extends OpaqueHandle")
+            .expect("dyn")..];
+        assert!(
+            !dyn_cls[..dyn_cls.find("\n}\n").expect("end")].contains("_recvTag"),
+            "{dyn_cls}"
+        );
         // An implementor answers the interface's `take()` with its own token.
-        assert!(code.contains("Consumed<C> take() => Consumed<C>(this);"), "{code}");
+        assert!(
+            code.contains("Consumed<C> take() => Consumed<C>(this);"),
+            "{code}"
+        );
     }
 
     /// The first local a generated body declares twice in one scope, if any.
@@ -7512,7 +8087,10 @@ mod tests {
             for kw in ["final ", "var "] {
                 let Some(at) = t.find(kw) else { continue };
                 let rest = &t[at + kw.len()..];
-                let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
                 if name.is_empty() || !rest[name.len()..].trim_start().starts_with('=') {
                     continue;
                 }
@@ -7584,7 +8162,9 @@ mod tests {
         );
         // Two sibling blocks are two scopes.
         assert_eq!(
-            redeclared_local("void f() {\n  {\n  final o0 = a;\n  }\n  {\n  final o0 = b;\n  }\n}\n"),
+            redeclared_local(
+                "void f() {\n  {\n  final o0 = a;\n  }\n  {\n  final o0 = b;\n  }\n}\n"
+            ),
             None
         );
         // Two sibling `for` headers likewise.
@@ -7699,8 +8279,10 @@ mod tests {
             for kw in ["final ", "var "] {
                 let Some(at) = t.find(kw) else { continue };
                 let rest = &t[at + kw.len()..];
-                let name: String =
-                    rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
                 if name.is_empty() || !rest[name.len()..].trim_start().starts_with('=') {
                     continue;
                 }
@@ -7708,7 +8290,10 @@ mod tests {
                 // the initializer that names it again is that read.
                 let past_decl = &full[full.find(&name).map_or(full.len(), |i| i + name.len())..];
                 let read = mentions(past_decl, &name);
-                scopes.last_mut().expect("one scope always").push((name, read));
+                scopes
+                    .last_mut()
+                    .expect("one scope always")
+                    .push((name, read));
             }
         }
         while let Some(open) = scopes.pop() {
@@ -7815,14 +8400,29 @@ mod tests {
         );
         assert!(code.contains("void a({required Consumed<D> d})"), "{code}");
         assert!(code.contains("void b({Consumed<D>? d})"), "{code}");
-        assert!(code.contains("void c({required List<Consumed<D>> d})"), "{code}");
-        assert!(code.contains("void e({required (Consumed<D>, int) d})"), "{code}");
+        assert!(
+            code.contains("void c({required List<Consumed<D>> d})"),
+            "{code}"
+        );
+        assert!(
+            code.contains("void e({required (Consumed<D>, int) d})"),
+            "{code}"
+        );
         assert!(code.contains("void f({required D d})"), "{code}");
         // A set of tokens, and a map with the token as key or as value. A
         // *lent* set keeps the ordinary spelling, like every other borrow.
-        assert!(code.contains("void g({required Set<Consumed<D>> d})"), "{code}");
-        assert!(code.contains("void h({required Map<Consumed<D>, int> d})"), "{code}");
-        assert!(code.contains("void i({required Map<String, Consumed<D>> d})"), "{code}");
+        assert!(
+            code.contains("void g({required Set<Consumed<D>> d})"),
+            "{code}"
+        );
+        assert!(
+            code.contains("void h({required Map<Consumed<D>, int> d})"),
+            "{code}"
+        );
+        assert!(
+            code.contains("void i({required Map<String, Consumed<D>> d})"),
+            "{code}"
+        );
         assert!(code.contains("void j({required Set<D> d})"), "{code}");
         // Every element is spent, and the refusal names the entry.
         let g = &code[code.find("void g(").expect("g")..];
@@ -7868,21 +8468,28 @@ mod tests {
             "#[bridge(confined)] pub struct D { n: i64 }\n\
              #[bridge(sync)] pub fn eat(d: Option<Option<D>>) {}",
         );
-        assert!(code.contains("void eat({NestedOption<Consumed<D>>? d})"), "{code}");
+        assert!(
+            code.contains("void eat({NestedOption<Consumed<D>>? d})"),
+            "{code}"
+        );
         let body = &code[code.find("void eat(").expect("member")..];
         assert!(body.contains("as NestedSome<Consumed<D>>).value"), "{body}");
         // The fake decodes the same shape, or the harness and the client
         // disagree about a wire they both write.
-        assert!(code.contains("NestedSome<FakeD>(_fakeTake<FakeD>("), "{code}");
+        assert!(
+            code.contains("NestedSome<FakeD>(_fakeTake<FakeD>("),
+            "{code}"
+        );
     }
 
     #[test]
     fn tuple_maps_to_a_positional_record() {
-        let code = emit_src(
-            "#[bridge(sync)] pub fn echo(t: (i32, String)) -> (i32, String) { t }",
-        );
+        let code = emit_src("#[bridge(sync)] pub fn echo(t: (i32, String)) -> (i32, String) { t }");
         // The Dart signature uses a positional record type.
-        assert!(code.contains("(int, String) echo({required (int, String) t})"), "{code}");
+        assert!(
+            code.contains("(int, String) echo({required (int, String) t})"),
+            "{code}"
+        );
         // Encode reads the record's positional getters `$1`, `$2`.
         assert!(code.contains("t.$1"), "{code}");
         assert!(code.contains("t.$2"), "{code}");
@@ -7909,9 +8516,7 @@ mod tests {
 
     #[test]
     fn nested_tuple_in_list_maps_to_list_of_records() {
-        let code = emit_src(
-            "#[bridge(sync)] pub fn f(a: Vec<(i32, String)>) {}",
-        );
+        let code = emit_src("#[bridge(sync)] pub fn f(a: Vec<(i32, String)>) {}");
         assert!(code.contains("List<(int, String)> a"), "{code}");
     }
 
@@ -7922,9 +8527,7 @@ mod tests {
         // Bytes and String are a length prefix plus their own bytes; a
         // `Vec<f64>` is a prefix plus 8 per element. All three lengths are
         // O(1) reads, so the expression stays cheap.
-        let code = emit_src(
-            "#[bridge(sync)] pub fn f(a: Vec<u8>, s: String, v: Vec<f64>) {}",
-        );
+        let code = emit_src("#[bridge(sync)] pub fn f(a: Vec<u8>, s: String, v: Vec<f64>) {}");
         assert!(
             code.contains("callSync(#, 24 + a.length + s.length + v.length * 8, (w) {"),
             "{code}"
@@ -7968,7 +8571,10 @@ mod tests {
         );
         // Counted: the option's presence byte, three 8-byte length prefixes
         // (map, set, nested list), and `big`'s prefix plus its length.
-        assert!(code.contains("callSync(#, 33 + big.length, (w) {"), "{code}");
+        assert!(
+            code.contains("callSync(#, 33 + big.length, (w) {"),
+            "{code}"
+        );
         assert!(!code.contains("o.length"), "{code}");
         assert!(!code.contains("m.length +"), "{code}");
         assert!(!code.contains("s.length +"), "{code}");
@@ -7988,7 +8594,10 @@ mod tests {
             }
             "#,
         );
-        assert!(code.contains("callSync(#, 16 + data.length, (w) {"), "{code}");
+        assert!(
+            code.contains("callSync(#, 16 + data.length, (w) {"),
+            "{code}"
+        );
     }
 
     /// A deferred member flags its call so the host can cancel it at
@@ -8008,13 +8617,18 @@ mod tests {
             "#,
         );
         assert!(
-            code.contains("Future<int> slow({required int x, FrustrateCancelToken? cancel}) async {"),
+            code.contains(
+                "Future<int> slow({required int x, FrustrateCancelToken? cancel}) async {"
+            ),
             "{code}"
         );
         // `slow` is fn_id 2: receiver handle + one i64 = a 16-byte hint, and
         // the flag rides after the encode closure.
         assert!(code.contains("await _host.call(#, 16, (w) {"), "{code}");
-        assert!(code.contains("}, deferred: true, cancel: cancel);"), "{code}");
+        assert!(
+            code.contains("}, deferred: true, cancel: cancel);"),
+            "{code}"
+        );
         assert!(code.contains("/// Deferred completion:"), "{code}");
         // The plain sibling is NOT flagged: dispose must not cancel it.
         assert!(code.contains("await _host.call(#, 8, (w) {\n"), "{code}");
@@ -8064,18 +8678,29 @@ mod tests {
         // …and it is actually threaded through to the transport, which is what
         // binds the call to the token.
         assert!(code.contains("}, cancel: cancel);"), "{code}");
-        assert!(code.contains("Future<int> pooled({required int x}) async {"), "{code}");
+        assert!(
+            code.contains("Future<int> pooled({required int x}) async {"),
+            "{code}"
+        );
         assert!(code.contains("int immediate({required int x}) {"), "{code}");
         // The actor shape that parks a task on an executor takes one too, in
         // the same words the free function uses.
         assert!(
-            code.contains("Future<int> dig({required int x, FrustrateCancelToken? cancel}) async {"),
+            code.contains(
+                "Future<int> dig({required int x, FrustrateCancelToken? cancel}) async {"
+            ),
             "{code}"
         );
-        assert!(code.contains("}, deferred: true, cancel: cancel);"), "{code}");
+        assert!(
+            code.contains("}, deferred: true, cancel: cancel);"),
+            "{code}"
+        );
         // …and its plain sibling does not: no suspension window, nothing to
         // claim, so no parameter that would be accepted and ignored.
-        assert!(code.contains("Future<int> poke({required int x}) async {"), "{code}");
+        assert!(
+            code.contains("Future<int> poke({required int x}) async {"),
+            "{code}"
+        );
         // Two signatures, two forwardings.
         assert_eq!(code.matches("FrustrateCancelToken").count(), 2, "{code}");
     }
@@ -8174,17 +8799,29 @@ mod tests {
     #[test]
     fn a_dart_interface_emits_an_interface_not_a_class() {
         let code = emit_src(IFACE);
-        assert!(code.contains("abstract interface class Auditor {"), "{code}");
+        assert!(
+            code.contains("abstract interface class Auditor {"),
+            "{code}"
+        );
         assert!(!code.contains("\nclass Auditor {"), "no data class: {code}");
         assert!(!code.contains("const Auditor("), "no constructor: {code}");
         assert!(!code.contains("Auditor copyWith("), "{code}");
         assert!(!code.contains("'Auditor("), "no generated toString: {code}");
         // Doc comments ride onto the interface and its methods.
-        assert!(code.contains("/// An auditor.\nabstract interface"), "{code}");
-        assert!(code.contains("  /// Record a note.\n  void note("), "{code}");
+        assert!(
+            code.contains("/// An auditor.\nabstract interface"),
+            "{code}"
+        );
+        assert!(
+            code.contains("  /// Record a note.\n  void note("),
+            "{code}"
+        );
         // Handle-bearing, so argument-only: an encoder and no decoder, exactly
         // as a struct of the same fields gets (FR0031).
-        assert!(code.contains("void _encAuditor(BinaryWriter w, Auditor v, FrustrateOpenScope scope)"), "{code}");
+        assert!(
+            code.contains("void _encAuditor(BinaryWriter w, Auditor v, FrustrateOpenScope scope)"),
+            "{code}"
+        );
         assert!(!code.contains("_decAuditor"), "{code}");
     }
 
@@ -8199,7 +8836,10 @@ mod tests {
         assert!(code.contains("final t = v.approve;"), "{code}");
         // Void methods take the object path, returning ones the invocation
         // path — the same two the built-in mirrors take.
-        assert!(code.contains("openObject([\n      (r) => t(r.readString()),"), "{code}");
+        assert!(
+            code.contains("openObject([\n      (r) => t(r.readString()),"),
+            "{code}"
+        );
         assert!(code.contains("openFunction((r) {"), "{code}");
         // Zero-argument method: no argument to decode.
         assert!(code.contains("(_) => t(),"), "{code}");
@@ -8232,16 +8872,28 @@ mod tests {
     #[test]
     fn a_tuple_item_spreads_into_a_real_multi_argument_method() {
         let code = emit_src(IFACE);
-        assert!(code.contains("bool approve(int arg1, String arg2);"), "{code}");
-        assert!(code.contains("final ret = t(r.readI64(), r.readString());"), "{code}");
+        assert!(
+            code.contains("bool approve(int arg1, String arg2);"),
+            "{code}"
+        );
+        assert!(
+            code.contains("final ret = t(r.readI64(), r.readString());"),
+            "{code}"
+        );
         // Only the top level. A nested tuple is still a record, on both sides.
         let nested = emit_src(
             "#[bridge(data, dart_interface)] pub struct W { \
                  pub f: DartCallback<(i64, (i64, String))> } \
              #[bridge] pub fn g(a: W) {}",
         );
-        assert!(nested.contains("void f(int arg1, (int, String) arg2);"), "{nested}");
-        assert!(nested.contains("t(r.readI64(), (r.readI64(), r.readString()))"), "{nested}");
+        assert!(
+            nested.contains("void f(int arg1, (int, String) arg2);"),
+            "{nested}"
+        );
+        assert!(
+            nested.contains("t(r.readI64(), (r.readI64(), r.readString()))"),
+            "{nested}"
+        );
         // And never the return: a Dart method returns one value.
         let ret = emit_src(
             "#[bridge(data, dart_interface)] pub struct W { \
@@ -8265,12 +8917,18 @@ mod tests {
              }\n\
              #[bridge] pub async fn f(a: W) {}",
         );
-        assert!(code.contains("/// Throw [RefusalException] to refuse"), "{code}");
+        assert!(
+            code.contains("/// Throw [RefusalException] to refuse"),
+            "{code}"
+        );
         assert!(code.contains("  int reserve(int arg);"), "{code}");
         // The binding still supplies the declared-error hook, unchanged: it is
         // what keeps an *undeclared* throw on the loud path.
         assert!(code.contains("onDeclaredError: (e) {"), "{code}");
-        assert!(code.contains("if (e is! RefusalException) return null;"), "{code}");
+        assert!(
+            code.contains("if (e is! RefusalException) return null;"),
+            "{code}"
+        );
     }
 
     /// The interface composes as data, like every other handle: nested in an
@@ -8286,7 +8944,6 @@ mod tests {
         assert!(code.contains("final List<W> ws;"), "{code}");
         assert!(code.contains("_encW(w, it1, scope);"), "{code}");
     }
-
 
     /// A borrowed container is the ordinary Dart type: `Vec<&Doc>` is
     /// `List<Doc>`, and nothing about the call site says the objects were lent
@@ -8333,10 +8990,12 @@ mod tests {
             "#[bridge(sync)] pub fn a(xs: Vec<&str>) {} \
              #[bridge(sync)] pub fn b(x: Option<&[u8]>) {}",
         );
-        assert!(code.contains("void a({required List<String> xs})"), "{code}");
+        assert!(
+            code.contains("void a({required List<String> xs})"),
+            "{code}"
+        );
         assert!(code.contains("void b({Uint8List? x})"), "{code}");
     }
-
 
     /// The duplicate check runs before anything is spent, and it has to see a
     /// lent container's elements as well as the tokens: Rust's own check fires
@@ -8372,7 +9031,6 @@ mod tests {
         assert!(!code.contains("final _acq ="), "{code}");
     }
 
-
     /// One Rust struct crossing as two Dart classes: the value class carries
     /// its fields and its half's members, the handle class extends
     /// `OpaqueHandle` and carries the other half's.
@@ -8401,14 +9059,14 @@ mod tests {
             "#,
         );
         for present in [
-            "class DocValue {",                       // the value class
-            "final class Doc extends OpaqueHandle",   // the handle class
-            "  int len() {",                          // a value member
-            "  static DocValue empty() {",            // a value static
-            "    _encDoc(w, this);",                  // the value receiver
-            "    final _recv = handleValue;",         // the handle receiver
-            "  Future<DocValue> snapshot() async {",  // a cross-half return
-            "class FakeDoc {",                        // the handle's fake
+            "class DocValue {",                      // the value class
+            "final class Doc extends OpaqueHandle",  // the handle class
+            "  int len() {",                         // a value member
+            "  static DocValue empty() {",           // a value static
+            "    _encDoc(w, this);",                 // the value receiver
+            "    final _recv = handleValue;",        // the handle receiver
+            "  Future<DocValue> snapshot() async {", // a cross-half return
+            "class FakeDoc {",                       // the handle's fake
         ] {
             assert!(code.contains(present), "missing `{present}`:\n{code}");
         }
@@ -8472,7 +9130,10 @@ mod tests {
             .nth(1)
             .and_then(|s| s.split("\n}\n").next())
             .expect("the handle class");
-        for member in ["Future<void> put({required String k})", "Future<int> hint()"] {
+        for member in [
+            "Future<void> put({required String k})",
+            "Future<int> hint()",
+        ] {
             assert!(
                 handle_class.contains(member),
                 "`{member}` on the handle class:\n{handle_class}"
@@ -8483,7 +9144,10 @@ mod tests {
             .nth(1)
             .and_then(|s| s.split("\n}\n").next())
             .expect("the value class");
-        assert!(!value_class.contains("put("), "not on the value class:\n{value_class}");
+        assert!(
+            !value_class.contains("put("),
+            "not on the value class:\n{value_class}"
+        );
         // The value half's own `hint` is there, and is not the trait's: the
         // trait's is `Future<int>`, and this one is the author's.
         assert!(

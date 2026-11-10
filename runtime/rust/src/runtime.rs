@@ -310,7 +310,7 @@ mod native {
 }
 
 #[cfg(not(target_family = "wasm"))]
-pub use native::{set_context, clear_context};
+pub use native::{clear_context, set_context};
 
 #[cfg(not(target_family = "wasm"))]
 pub(crate) use native::enter;
@@ -396,9 +396,8 @@ pub fn spawn(future: impl std::future::Future<Output = ()> + Send + 'static) {
 }
 
 /// The timer that is set: what [`sleep`] awaits.
-type Timer = dyn Fn(std::time::Duration) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = ()> + Send>,
-    > + Send
+type Timer = dyn Fn(std::time::Duration) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+    + Send
     + Sync
     + 'static;
 
@@ -455,9 +454,8 @@ static TIMER: crate::hook::Hook<Timer> = crate::hook::Hook::new();
 ///   isolate; the displaced closure is dropped outside the slot's critical
 ///   section, exactly as [`crate::panic::set_listener`]'s is.
 pub fn set_timer(
-    timer: impl Fn(std::time::Duration) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = ()> + Send>,
-        > + Send
+    timer: impl Fn(std::time::Duration) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+        + Send
         + Sync
         + 'static,
 ) {
@@ -554,7 +552,8 @@ struct TimerSlot {
 /// the browser main thread takes it — a `#[bridge(sync)]` `fire_timer` runs
 /// there — and a futex-parking lock traps on that thread. Critical sections
 /// here are a map insert or remove.
-static PENDING: TimerRegistry = TimerRegistry(crate::bounded::Lock::new(std::collections::BTreeMap::new()));
+static PENDING: TimerRegistry =
+    TimerRegistry(crate::bounded::Lock::new(std::collections::BTreeMap::new()));
 static NEXT_TIMER: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1);
 
 /// The pending timers. An entry is [`crate::bounded::Outside`]: the last
@@ -571,7 +570,9 @@ impl TimerRegistry {
     }
 
     fn remove(&self, id: i64) -> Option<std::sync::Arc<crate::bounded::Lock<TimerSlot>>> {
-        self.0.with(|m| m.remove(&id)).map(crate::bounded::Outside::into_inner)
+        self.0
+            .with(|m| m.remove(&id))
+            .map(crate::bounded::Outside::into_inner)
     }
 }
 
@@ -1238,7 +1239,10 @@ mod tests {
              the poll but not the drop, and a real teardown would have aborted \
              the process here rather than failed this assertion"
         );
-        assert!(log.lock().unwrap().is_empty(), "a cancelled task never completes");
+        assert!(
+            log.lock().unwrap().is_empty(),
+            "a cancelled task never completes"
+        );
     }
 
     /// Proves the sensor the test above leans on actually fires. Without this,
@@ -1377,8 +1381,7 @@ mod tests {
     /// A timer of the shape an embedder sets: a foreign thread that fires
     /// the waker, exactly like a real one (tokio's wheel, Dart's event loop).
     fn thread_timer(
-    ) -> impl Fn(Duration) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync
-    {
+    ) -> impl Fn(Duration) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync {
         |d: Duration| {
             Box::pin(async move {
                 let fired = Arc::new(AtomicBool::new(false));

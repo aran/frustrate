@@ -477,7 +477,11 @@ pub fn alias_check(entries: &[(Option<u64>, Use)]) -> Result<(), Aliased> {
             } else {
                 "borrows one handle twice, and at least one of them mutably"
             };
-            return Err(Aliased { a: i as u32, b: j as u32, why });
+            return Err(Aliased {
+                a: i as u32,
+                b: j as u32,
+                why,
+            });
         }
     }
     Ok(())
@@ -812,14 +816,20 @@ mod tests {
 
     #[test]
     fn alias_check_allows_distinct_handles() {
-        let e = [alias_entry::<i32>(1, Use::Mut), alias_entry::<i32>(2, Use::Shared)];
+        let e = [
+            alias_entry::<i32>(1, Use::Mut),
+            alias_entry::<i32>(2, Use::Shared),
+        ];
         assert_eq!(alias_check(&e), Ok(()));
     }
 
     /// Two shared borrows of one object are ordinary Rust and stay legal.
     #[test]
     fn alias_check_allows_a_shared_duplicate() {
-        let e = [alias_entry::<i32>(7, Use::Shared), alias_entry::<i32>(7, Use::Shared)];
+        let e = [
+            alias_entry::<i32>(7, Use::Shared),
+            alias_entry::<i32>(7, Use::Shared),
+        ];
         assert_eq!(alias_check(&e), Ok(()));
     }
 
@@ -858,7 +868,10 @@ mod tests {
         let a = confined_new(Zst);
         let b = confined_new(Zst);
         assert_eq!(a, b, "the premise: distinct ZST handles collide");
-        let e = [alias_entry::<Zst>(a, Use::Consume), alias_entry::<Zst>(b, Use::Consume)];
+        let e = [
+            alias_entry::<Zst>(a, Use::Consume),
+            alias_entry::<Zst>(b, Use::Consume),
+        ];
         assert_eq!(alias_check(&e), Ok(()));
         unsafe {
             confined_drop::<Zst>(a);
@@ -919,7 +932,10 @@ mod tests {
     #[test]
     fn alias_check_refuses_a_duplicate_involving_a_consume() {
         for other in [Use::Shared, Use::Mut, Use::Consume] {
-            let e = [alias_entry::<i32>(7, Use::Consume), alias_entry::<i32>(7, other)];
+            let e = [
+                alias_entry::<i32>(7, Use::Consume),
+                alias_entry::<i32>(7, other),
+            ];
             let d = alias_check(&e).expect_err("consume beside {other:?}");
             assert_eq!((d.a, d.b), (0, 1));
             assert!(d.why.contains("consumes"), "{}", d.why);
@@ -936,7 +952,10 @@ mod tests {
         let a = frozen_new(Zst);
         let b = frozen_new(Zst);
         assert_ne!(a, b, "the premise: distinct frozen ZST handles differ");
-        let e = [arc_alias_entry(a, Use::Consume), arc_alias_entry(b, Use::Consume)];
+        let e = [
+            arc_alias_entry(a, Use::Consume),
+            arc_alias_entry(b, Use::Consume),
+        ];
         assert_eq!(alias_check(&e), Ok(()));
         unsafe {
             frozen_drop::<Zst>(a);

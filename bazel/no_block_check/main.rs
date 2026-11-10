@@ -124,9 +124,9 @@ use wasmparser::{
 
 mod budget;
 mod io;
-mod provenance;
 mod ir;
 mod libc;
+mod provenance;
 mod silences;
 mod symbol;
 
@@ -827,7 +827,10 @@ impl Claims {
                          An allow row is `allow <fn_id> <name>`."
                     ));
                 };
-                c.allow.entry(id.to_string()).or_default().push(what.to_string());
+                c.allow
+                    .entry(id.to_string())
+                    .or_default()
+                    .push(what.to_string());
                 continue;
             }
             let mut f = line.split(' ');
@@ -875,7 +878,11 @@ impl Claims {
                 "declared" => c.declared.push(name.to_string()),
                 "artifact" => {
                     let sym = root;
-                    let segs = member.unwrap_or_default().split("::").map(str::to_string).collect();
+                    let segs = member
+                        .unwrap_or_default()
+                        .split("::")
+                        .map(str::to_string)
+                        .collect();
                     c.member_paths.insert(sym.clone(), segs);
                     c.artifact.push((sym, name.to_string()));
                 }
@@ -927,7 +934,11 @@ impl Claims {
             }
             let qualified = |id: &String| format!("{krate}:{id}");
             for (key, id) in c.ids {
-                let key = if c.crate_of.contains_key(&key) { key } else { format!("{krate}::{key}") };
+                let key = if c.crate_of.contains_key(&key) {
+                    key
+                } else {
+                    format!("{krate}::{key}")
+                };
                 all.ids.insert(key, qualified(&id));
             }
             for (id, names) in c.allow {
@@ -1016,7 +1027,10 @@ impl Claims {
             [one] => format!("`{one}`"),
             many => format!(
                 "the bridges {}",
-                many.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ")
+                many.iter()
+                    .map(|k| format!("`{k}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         }
     }
@@ -1104,7 +1118,11 @@ fn claims_only(label: &str, c: &Claims) -> Result<String, String> {
     let silences: Vec<String> = c
         .allow
         .iter()
-        .flat_map(|(id, names)| names.iter().map(move |w| format!("  `{w}` on {}", c.display_of(id))))
+        .flat_map(|(id, names)| {
+            names
+                .iter()
+                .map(move |w| format!("  `{w}` on {}", c.display_of(id)))
+        })
         .collect();
     if !silences.is_empty() {
         return Err(format!(
@@ -1300,7 +1318,9 @@ fn run_with(
                 if let Some(name) = m.names.get(&func) {
                     let path = own_path(name);
                     kinds.extend(
-                        sinks.paths.iter()
+                        sinks
+                            .paths
+                            .iter()
                             .filter(|p| p.matches(&path))
                             .map(|p| format!("named slow by `{}`", p.text())),
                     );
@@ -1326,11 +1346,19 @@ fn run_with(
         if !kinds.is_empty() {
             // Not `waits`: that marks a wait instruction, which only the start
             // function's own barrier may hold.
-            waits.push(Finding { func: f as u32, kinds, waits: false });
+            waits.push(Finding {
+                func: f as u32,
+                kinds,
+                waits: false,
+            });
         }
     }
 
-    let called: BTreeSet<u32> = m.bodies.iter().flat_map(|s| s.calls.iter().copied()).collect();
+    let called: BTreeSet<u32> = m
+        .bodies
+        .iter()
+        .flat_map(|s| s.calls.iter().copied())
+        .collect();
     let exported: BTreeSet<u32> = m
         .exports
         .iter()
@@ -1486,7 +1514,11 @@ fn run_with(
     let empty: Vec<String> = Vec::new();
     let member_allow = |sym: &str| -> (&str, &Vec<String>) {
         claims
-            .and_then(|c| c.ids.get(sym).and_then(|id| c.allow.get(id).map(|a| (id.as_str(), a))))
+            .and_then(|c| {
+                c.ids
+                    .get(sym)
+                    .and_then(|id| c.allow.get(id).map(|a| (id.as_str(), a)))
+            })
             .unwrap_or(("", &empty))
     };
     let mut applied = silences::Applied::default();
@@ -1509,10 +1541,17 @@ fn run_with(
             let key = ir::marked_key(m.names.get(k).map(String::as_str).unwrap_or(""));
             let mut inside = stops.clone();
             inside.remove(k);
-            let live = reach(&m, &[*k], &inside).iter().any(|f| findable.contains(f));
+            let live = reach(&m, &[*k], &inside)
+                .iter()
+                .any(|f| findable.contains(f));
             *marks.entry(key).or_default() |= live;
         }
-        used_target.extend(closure.iter().filter(|f| target_silenced.contains(f)).map(|f| key_of(*f)));
+        used_target.extend(
+            closure
+                .iter()
+                .filter(|f| target_silenced.contains(f))
+                .map(|f| key_of(*f)),
+        );
         let (id, mine) = member_allow(sym);
         let mut used_mine: BTreeSet<String> = BTreeSet::new();
         let reached: BTreeSet<u32> = closure
@@ -1530,7 +1569,9 @@ fn run_with(
             .collect();
         for w in mine.iter().filter(|w| used_mine.contains(*w)) {
             listed.push(format!("  `{w}` in {}", display(sym)));
-            applied.silences.insert(silences::Silence::Member(id.to_string(), w.clone()));
+            applied
+                .silences
+                .insert(silences::Silence::Member(id.to_string(), w.clone()));
         }
         if let Some(path) = witness(&m, &[*r], &reached, &stops) {
             members.push((display(sym), path, reached.len()));
@@ -1541,22 +1582,33 @@ fn run_with(
         Some(st) => reach(&m, &[st], &stops),
         None => BTreeSet::new(),
     };
-    used_target.extend(from_start.iter().filter(|f| target_silenced.contains(f)).map(|f| key_of(*f)));
+    used_target.extend(
+        from_start
+            .iter()
+            .filter(|f| target_silenced.contains(f))
+            .map(|f| key_of(*f)),
+    );
     let start_red: Vec<&&Finding> = red
         .iter()
         .filter(|w| findable.contains(&w.func) && from_start.contains(&w.func))
         .collect();
     for (path, live) in marks {
         if live {
-            listed.push(format!("  `{path}` in every claim (`#[frustrate::no_block(allow)]`)"));
+            listed.push(format!(
+                "  `{path}` in every claim (`#[frustrate::no_block(allow)]`)"
+            ));
             applied.silences.insert(silences::Silence::Mark(path));
         } else {
             applied.idle_marks.insert(path);
         }
     }
     for w in sinks.allowed.iter().filter(|w| used_target.contains(*w)) {
-        listed.push(format!("  `{w}` in every claim (the check target's `allow`)"));
-        applied.silences.insert(silences::Silence::Target(w.clone()));
+        listed.push(format!(
+            "  `{w}` in every claim (the check target's `allow`)"
+        ));
+        applied
+            .silences
+            .insert(silences::Silence::Target(w.clone()));
     }
 
     let slow_note = if sinks.is_empty() {
@@ -1623,12 +1675,20 @@ fn run_with(
             msg.push_str(&format!("  {who} — reaches {}\n", m.label(last)));
             continue;
         }
-        msg.push_str(&format!("  {who}\n      reaches {} — {}\n", m.label(last), kinds_of(last)));
+        msg.push_str(&format!(
+            "  {who}\n      reaches {} — {}\n",
+            m.label(last),
+            kinds_of(last)
+        ));
         if *sites > 1 {
             msg.push_str(&format!("      and {} other site(s)\n", sites - 1));
         }
         for (d, f) in path.iter().enumerate() {
-            msg.push_str(&format!("        {}{}\n", "  ".repeat(d.min(8)), m.label(*f)));
+            msg.push_str(&format!(
+                "        {}{}\n",
+                "  ".repeat(d.min(8)),
+                m.label(*f)
+            ));
         }
         msg.push('\n');
     }
@@ -1727,7 +1787,11 @@ fn match_census(root_names: &[String], claims: Option<&Claims>, label: &str) -> 
                      target's `bridge`; it is checked against {}), or the module \
                      and the censuses were generated from different sources — \
                      rebuild both.",
-                    extra.iter().map(|n| attribute(n)).collect::<Vec<_>>().join("\n"),
+                    extra
+                        .iter()
+                        .map(|n| attribute(n))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
                     c.who()
                 ));
             }
@@ -1865,7 +1929,10 @@ fn classify_export(name: &str) -> ExportKind {
         ExportKind::Describe
     } else if INTRINSICS.contains(&name) || name.starts_with("__externref_") {
         ExportKind::Intrinsic
-    } else if name.starts_with("__wbindgen") || name.starts_with("__wbg_") || name.starts_with("intounderlying") {
+    } else if name.starts_with("__wbindgen")
+        || name.starts_with("__wbg_")
+        || name.starts_with("intounderlying")
+    {
         ExportKind::Bindgen
     } else if name.starts_with("__wasm_") {
         ExportKind::Linker
@@ -1961,7 +2028,10 @@ fn backward_tree(
     let pad = "  ".repeat(indent + 3);
     for c in callers.iter().take(TREE_FANOUT) {
         if cut.contains(c) {
-            out.push_str(&format!("{pad}{}  [fatal entry — the ordinary graph stops here]\n", m.label(*c)));
+            out.push_str(&format!(
+                "{pad}{}  [fatal entry — the ordinary graph stops here]\n",
+                m.label(*c)
+            ));
             continue;
         }
         if !seen.insert(*c) {
@@ -1972,7 +2042,10 @@ fn backward_tree(
         backward_tree(m, rev, *c, cut, depth - 1, indent + 1, seen, out);
     }
     if callers.len() > TREE_FANOUT {
-        out.push_str(&format!("{pad}… {} more caller(s)\n", callers.len() - TREE_FANOUT));
+        out.push_str(&format!(
+            "{pad}… {} more caller(s)\n",
+            callers.len() - TREE_FANOUT
+        ));
     }
 }
 
@@ -2015,7 +2088,12 @@ fn report(path: &str, label: &str) -> Result<String, String> {
     out.push_str(&format!(
         "  {} function export(s): {}\n",
         fexports.len(),
-        histogram(&fexports.iter().map(|(n, _)| classify_export(n)).collect::<Vec<_>>())
+        histogram(
+            &fexports
+                .iter()
+                .map(|(n, _)| classify_export(n))
+                .collect::<Vec<_>>()
+        )
     ));
     out.push_str(&format!(
         "  {} function(s) table-resident (element segment, global initialiser or ref.func)\n",
@@ -2030,7 +2108,10 @@ fn report(path: &str, label: &str) -> Result<String, String> {
         if cut.is_empty() {
             "none".to_string()
         } else {
-            cut.iter().map(|f| m.label(*f)).collect::<Vec<_>>().join(", ")
+            cut.iter()
+                .map(|f| m.label(*f))
+                .collect::<Vec<_>>()
+                .join(", ")
         }
     ));
     if !m.names.values().any(|n| n.contains(SENTINEL)) {
@@ -2065,10 +2146,16 @@ fn report(path: &str, label: &str) -> Result<String, String> {
     for (n, w) in waits.iter().enumerate() {
         let full = back_reach(&rev, w.func, &BTreeSet::new());
         let ordinary = back_reach(&rev, w.func, &cut);
-        let alive: Vec<(&str, u32)> =
-            fexports.iter().filter(|(_, i)| full.contains(i)).copied().collect();
-        let ordinary_exports: Vec<(&str, u32)> =
-            fexports.iter().filter(|(_, i)| ordinary.contains(i)).copied().collect();
+        let alive: Vec<(&str, u32)> = fexports
+            .iter()
+            .filter(|(_, i)| full.contains(i))
+            .copied()
+            .collect();
+        let ordinary_exports: Vec<(&str, u32)> = fexports
+            .iter()
+            .filter(|(_, i)| ordinary.contains(i))
+            .copied()
+            .collect();
         let resident = side_condition(&m, &rev, w.func, &cut);
 
         out.push_str(&format!(
@@ -2079,7 +2166,11 @@ fn report(path: &str, label: &str) -> Result<String, String> {
         ));
         out.push_str(&format!(
             "    table-resident: {}\n",
-            if m.table.contains(&w.func) { "yes — an indirect call can enter it, so direct edges are not complete for it" } else { "no" }
+            if m.table.contains(&w.func) {
+                "yes — an indirect call can enter it, so direct edges are not complete for it"
+            } else {
+                "no"
+            }
         ));
         out.push_str(&format!(
             "    is the start function: {}\n",
@@ -2103,13 +2194,21 @@ fn report(path: &str, label: &str) -> Result<String, String> {
             out.push_str(&format!(
                 "      kept alive by {} export(s): {}\n",
                 ordinary_exports.len(),
-                histogram(&ordinary_exports.iter().map(|(e, _)| classify_export(e)).collect::<Vec<_>>())
+                histogram(
+                    &ordinary_exports
+                        .iter()
+                        .map(|(e, _)| classify_export(e))
+                        .collect::<Vec<_>>()
+                )
             ));
             for (name, _) in ordinary_exports.iter().take(MEMBER_CAP) {
                 out.push_str(&format!("        {name}\n"));
             }
             if ordinary_exports.len() > MEMBER_CAP {
-                out.push_str(&format!("        … {} more\n", ordinary_exports.len() - MEMBER_CAP));
+                out.push_str(&format!(
+                    "        … {} more\n",
+                    ordinary_exports.len() - MEMBER_CAP
+                ));
             }
             // Which *members* — the glue names one, the dispatch export does not.
             let glue: Vec<u32> = ordinary
@@ -2145,7 +2244,9 @@ fn report(path: &str, label: &str) -> Result<String, String> {
                     .map(|(n, i)| (format!("{} `{n}`", classify_export(n).label()), *i))
                     .collect()
             } else {
-                glue.iter().map(|g| (format!("member entry {}", m.label(*g)), *g)).collect()
+                glue.iter()
+                    .map(|g| (format!("member entry {}", m.label(*g)), *g))
+                    .collect()
             };
             sources.truncate(WITNESS_CAP);
             for (what, idx) in sources {
@@ -2153,7 +2254,11 @@ fn report(path: &str, label: &str) -> Result<String, String> {
                 match witness(&m, &[idx], &BTreeSet::from([w.func]), &cut) {
                     Some(p) => {
                         for (d, f) in p.iter().enumerate() {
-                            out.push_str(&format!("        {}{}\n", "  ".repeat(d.min(8)), m.label(*f)));
+                            out.push_str(&format!(
+                                "        {}{}\n",
+                                "  ".repeat(d.min(8)),
+                                m.label(*f)
+                            ));
                         }
                     }
                     None => out.push_str("        (no path — the source is the site itself)\n"),
@@ -2378,7 +2483,9 @@ fn main() -> ExitCode {
          \x20      no_block_check [--allow <name>]... --silences <census> <applied>... <label> <marker-out>\n\
          \x20      no_block_check --report <module.wasm> [label]";
     let censuses = |first: &String| -> Vec<String> {
-        std::iter::once(first.clone()).chain(also_claims.iter().cloned()).collect()
+        std::iter::once(first.clone())
+            .chain(also_claims.iter().cloned())
+            .collect()
     };
     let (verdict, marker) = match args.get(1).map(String::as_str) {
         Some("--claims") if args.len() >= 5 => {
@@ -2417,29 +2524,42 @@ fn main() -> ExitCode {
         // analyses wrote with `--applied` (silences.rs).
         Some("--silences") if args.len() >= 5 => {
             let n = args.len();
-            let v = Claims::read(&censuses(&args[2]))
-                .and_then(|c| {
-                    let checks = args[3..n - 2]
-                        .iter()
-                        .map(|p| {
-                            std::fs::read_to_string(p)
-                                .map_err(|e| format!("no_block_check: {p}: {e}"))
-                                .and_then(|t| silences::Applied::parse(&t, p))
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    silences::judge(&args[n - 2], &c, &slow.allowed, &checks)
-                });
-            (v.map(|text| Green { text, applied: silences::Applied::default() }), args.get(n - 1))
+            let v = Claims::read(&censuses(&args[2])).and_then(|c| {
+                let checks = args[3..n - 2]
+                    .iter()
+                    .map(|p| {
+                        std::fs::read_to_string(p)
+                            .map_err(|e| format!("no_block_check: {p}: {e}"))
+                            .and_then(|t| silences::Applied::parse(&t, p))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                silences::judge(&args[n - 2], &c, &slow.allowed, &checks)
+            });
+            (
+                v.map(|text| Green {
+                    text,
+                    applied: silences::Applied::default(),
+                }),
+                args.get(n - 1),
+            )
         }
         Some("--claims-only") if args.len() >= 4 => {
             let v = Claims::read(&censuses(&args[2])).and_then(|c| claims_only(&args[3], &c));
-            (v.map(|text| Green { text, applied: silences::Applied::default() }), args.get(4))
+            (
+                v.map(|text| Green {
+                    text,
+                    applied: silences::Applied::default(),
+                }),
+                args.get(4),
+            )
         }
         Some(flag) if flag.starts_with("--") => {
             eprintln!("{usage}");
             return ExitCode::FAILURE;
         }
-        _ if args.len() >= 3 && ir_mode => (ir::run_ir(&args[1], &args[2], None, &slow), args.get(3)),
+        _ if args.len() >= 3 && ir_mode => {
+            (ir::run_ir(&args[1], &args[2], None, &slow), args.get(3))
+        }
         _ if args.len() >= 3 => (run_with(&args[1], &args[2], None, &slow), args.get(3)),
         _ => {
             eprintln!("{usage}");
@@ -2451,7 +2571,10 @@ fn main() -> ExitCode {
         _ => args.get(2),
     };
     match verdict {
-        Ok(Green { text: report, applied }) => {
+        Ok(Green {
+            text: report,
+            applied,
+        }) => {
             println!("{report}");
             if let (Some(out), Some(label)) = (&applied_out, label) {
                 if let Err(e) = std::fs::write(out, applied.text(label)) {
@@ -2687,7 +2810,9 @@ mod tests {
             let mut added = 0;
             for (name, kind, idx) in self.exports.iter() {
                 let Some(rest) = name.strip_prefix(ROOT_PREFIX).and_then(|r| {
-                    ["fixture_", "other_"].iter().find_map(|k| r.strip_prefix(k))
+                    ["fixture_", "other_"]
+                        .iter()
+                        .find_map(|k| r.strip_prefix(k))
                 }) else {
                     continue;
                 };
@@ -2695,7 +2820,10 @@ mod tests {
                     continue;
                 }
                 let glue = format!("call_{rest}");
-                let sym = format!("_RNvNtCs1_7fixture19frustrate_generated{}{glue}", glue.len());
+                let sym = format!(
+                    "_RNvNtCs1_7fixture19frustrate_generated{}{glue}",
+                    glue.len()
+                );
                 b.funcs.push(fun(&sym, vec![0x01]));
                 let at = *idx as usize - b.imports.len();
                 let mut code = call(base + added);
@@ -2737,7 +2865,8 @@ mod tests {
         fn report(&self) -> Result<String, String> {
             use std::sync::atomic::{AtomicU64, Ordering};
             static NEXT: AtomicU64 = AtomicU64::new(0);
-            let dir = std::env::temp_dir().join(format!("wasm_block_report_{}", std::process::id()));
+            let dir =
+                std::env::temp_dir().join(format!("wasm_block_report_{}", std::process::id()));
             std::fs::create_dir_all(&dir).unwrap();
             let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
             std::fs::write(&p, self.wasm()).unwrap();
@@ -2749,7 +2878,8 @@ mod tests {
         fn check_claims(&self, rows: &str) -> Result<String, String> {
             use std::sync::atomic::{AtomicU64, Ordering};
             static NEXT: AtomicU64 = AtomicU64::new(0);
-            let dir = std::env::temp_dir().join(format!("wasm_block_claims_{}", std::process::id()));
+            let dir =
+                std::env::temp_dir().join(format!("wasm_block_claims_{}", std::process::id()));
             std::fs::create_dir_all(&dir).unwrap();
             let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
             std::fs::write(&p, self.with_glue().wasm()).unwrap();
@@ -2762,7 +2892,13 @@ mod tests {
                     c.who()
                 ));
             }
-            run_with(p.to_str().unwrap(), "//pkg:target.wasm", Some(&c), &Sinks::default()).map(|g| g.text)
+            run_with(
+                p.to_str().unwrap(),
+                "//pkg:target.wasm",
+                Some(&c),
+                &Sinks::default(),
+            )
+            .map(|g| g.text)
         }
     }
 
@@ -2789,13 +2925,20 @@ mod tests {
         fn check_linked(&self, bridges: &[(&str, &str)]) -> Result<String, String> {
             use std::sync::atomic::{AtomicU64, Ordering};
             static NEXT: AtomicU64 = AtomicU64::new(0);
-            let dir = std::env::temp_dir().join(format!("wasm_block_linked_{}", std::process::id()));
+            let dir =
+                std::env::temp_dir().join(format!("wasm_block_linked_{}", std::process::id()));
             std::fs::create_dir_all(&dir).unwrap();
             let p = dir.join(format!("m{}.wasm", NEXT.fetch_add(1, Ordering::Relaxed)));
             std::fs::write(&p, self.with_glue().wasm()).unwrap();
             let c = linked(bridges)?;
             c.refuse_empty("//pkg:target.wasm")?;
-            run_with(p.to_str().unwrap(), "//pkg:target.wasm", Some(&c), &Sinks::default()).map(|g| g.text)
+            run_with(
+                p.to_str().unwrap(),
+                "//pkg:target.wasm",
+                Some(&c),
+                &Sinks::default(),
+            )
+            .map(|g| g.text)
         }
     }
 
@@ -2875,7 +3018,10 @@ mod tests {
         let mut b = b;
         b.funcs[1].code = call(3);
         let e = b.check().unwrap_err();
-        assert!(e.contains("test_api::api::lock_it"), "names the caller: {e}");
+        assert!(
+            e.contains("test_api::api::lock_it"),
+            "names the caller: {e}"
+        );
         assert!(e.contains("futex_wait"), "names the wait site: {e}");
         assert!(e.contains("memory.atomic.wait32"), "{e}");
         assert!(e.contains("Three ways out"), "offers a way out: {e}");
@@ -2888,7 +3034,10 @@ mod tests {
             readable("_ZN3std6thread4park17h6d5c1c9d4f1a2b3cE"),
             "std::thread::park"
         );
-        assert_eq!(readable(FUTEX_WAIT), "std::sys::pal::wasm::futex::futex_wait");
+        assert_eq!(
+            readable(FUTEX_WAIT),
+            "std::sys::pal::wasm::futex::futex_wait"
+        );
         // v0's trailing instantiating crate (`…CsbOwqmHKCkC2_3std`) is not
         // part of the name.
         assert_eq!(
@@ -2922,7 +3071,10 @@ mod tests {
     fn notify_is_not_a_wait() {
         let b = Build {
             funcs: vec![
-                fun(ROOT, vec![0x41, 0x00, 0x41, 0x01, 0xfe, 0x00, 0x02, 0x00, 0x1a]),
+                fun(
+                    ROOT,
+                    vec![0x41, 0x00, 0x41, 0x01, 0xfe, 0x00, 0x02, 0x00, 0x1a],
+                ),
                 fun(PANIC_FMT, vec![0x01]),
             ],
             exports: vec![root_export(0)],
@@ -2938,7 +3090,10 @@ mod tests {
         let b = panic_shaped(call(1));
         let ok = b.check().unwrap();
         assert!(ok.contains("clean"), "{ok}");
-        assert!(ok.contains("1 site(s) exempt on the fatal-path rule"), "{ok}");
+        assert!(
+            ok.contains("1 site(s) exempt on the fatal-path rule"),
+            "{ok}"
+        );
     }
 
     /// The discrimination that makes the rule worth having: the same wait site,
@@ -3047,7 +3202,10 @@ mod tests {
     #[test]
     fn an_unrelated_table_resident_function_does_not_break_the_exemption() {
         let mut b = panic_shaped(call(1));
-        b.funcs.push(fun("_ZN8test_api3api7unused17h0b1b2c3d4e5f6071E", vec![0x01]));
+        b.funcs.push(fun(
+            "_ZN8test_api3api7unused17h0b1b2c3d4e5f6071E",
+            vec![0x01],
+        ));
         b.elements = vec![5];
         assert!(b.check().unwrap().contains("clean"));
     }
@@ -3131,7 +3289,10 @@ mod tests {
     #[test]
     fn names_without_mangled_rust_symbols_are_an_error_too() {
         let b = Build {
-            funcs: vec![fun(ROOT, vec![0x01]), fun("core::panicking::panic_fmt", vec![0x01])],
+            funcs: vec![
+                fun(ROOT, vec![0x01]),
+                fun("core::panicking::panic_fmt", vec![0x01]),
+            ],
             exports: vec![root_export(0)],
             ..Default::default()
         };
@@ -3251,7 +3412,10 @@ mod tests {
         };
         let e = b.check().unwrap_err();
         assert!(e.contains("futex_wait"), "{e}");
-        assert!(e.contains("not panic paths"), "read as a finding, not as a parse failure: {e}");
+        assert!(
+            e.contains("not panic paths"),
+            "read as a finding, not as a parse failure: {e}"
+        );
     }
 
     #[test]
@@ -3405,16 +3569,34 @@ mod tests {
     #[test]
     fn the_export_classes_are_read_off_the_raw_symbol() {
         assert!(matches!(classify_export(ROOT), ExportKind::CheckRoot));
-        assert!(matches!(classify_export("frustrate_call_sync"), ExportKind::Dispatch));
+        assert!(matches!(
+            classify_export("frustrate_call_sync"),
+            ExportKind::Dispatch
+        ));
         assert!(matches!(
             classify_export("__wbindgen_describe_intounderlyingsource_pull"),
             ExportKind::Describe
         ));
-        assert!(matches!(classify_export("__wbindgen_malloc"), ExportKind::Intrinsic));
-        assert!(matches!(classify_export("__externref_table_dealloc"), ExportKind::Intrinsic));
-        assert!(matches!(classify_export("intounderlyingsource_pull"), ExportKind::Bindgen));
-        assert!(matches!(classify_export("__wbg_intounderlyingsink_free"), ExportKind::Bindgen));
-        assert!(matches!(classify_export("__wasm_init_tls"), ExportKind::Linker));
+        assert!(matches!(
+            classify_export("__wbindgen_malloc"),
+            ExportKind::Intrinsic
+        ));
+        assert!(matches!(
+            classify_export("__externref_table_dealloc"),
+            ExportKind::Intrinsic
+        ));
+        assert!(matches!(
+            classify_export("intounderlyingsource_pull"),
+            ExportKind::Bindgen
+        ));
+        assert!(matches!(
+            classify_export("__wbg_intounderlyingsink_free"),
+            ExportKind::Bindgen
+        ));
+        assert!(matches!(
+            classify_export("__wasm_init_tls"),
+            ExportKind::Linker
+        ));
         assert!(matches!(
             classify_export("ring_core_0_17_14__bn_mul_mont"),
             ExportKind::Other
@@ -3441,9 +3623,18 @@ mod tests {
             ..Default::default()
         };
         let r = b.report().unwrap();
-        assert!(r.contains("frustrate dispatch 1, bindgen describe 1"), "{r}");
-        assert!(r.contains("kept alive by 1 export(s): frustrate dispatch 1"), "{r}");
-        assert!(r.contains("bridged member entries in that ancestry (1)"), "{r}");
+        assert!(
+            r.contains("frustrate dispatch 1, bindgen describe 1"),
+            "{r}"
+        );
+        assert!(
+            r.contains("kept alive by 1 export(s): frustrate dispatch 1"),
+            "{r}"
+        );
+        assert!(
+            r.contains("bridged member entries in that ancestry (1)"),
+            "{r}"
+        );
         assert!(
             r.contains("via member entry iroh_rust::frustrate_generated::actor_2_connect"),
             "{r}"
@@ -3466,8 +3657,14 @@ mod tests {
         assert!(r.contains("full ancestry"), "{r}");
         assert!(r.contains("kept alive by 1 export(s): check root 1"), "{r}");
         // And the tree shows where the ordinary graph stops.
-        assert!(r.contains("[fatal entry — the ordinary graph stops here]"), "{r}");
-        assert!(r.contains("1 site(s) with no export in their ordinary ancestry"), "{r}");
+        assert!(
+            r.contains("[fatal entry — the ordinary graph stops here]"),
+            "{r}"
+        );
+        assert!(
+            r.contains("1 site(s) with no export in their ordinary ancestry"),
+            "{r}"
+        );
     }
 
     /// Table-residency is the side condition's input, so the report has to
@@ -3491,7 +3688,10 @@ mod tests {
             ..Default::default()
         };
         let gate = b.check().unwrap_err();
-        assert!(gate.contains("that are not `frustrate_check_block_*`"), "{gate}");
+        assert!(
+            gate.contains("that are not `frustrate_check_block_*`"),
+            "{gate}"
+        );
         let r = b.report().unwrap();
         assert!(r.contains("1 wait site(s)"), "{r}");
         assert!(r.contains("kept alive by 1 export(s): other 1"), "{r}");
@@ -3534,13 +3734,22 @@ mod tests {
         assert!(torn.contains("<settlement> <fn_id> <name>"), "{torn}");
         let unnumbered = census("artifact x tag_join").unwrap_err();
         assert!(unnumbered.contains("no numeric fn id"), "{unnumbered}");
-        let crateless = Claims::parse(&format!("{CENSUS_HEADER}\nartifact 0 tag_join m::tag_join"), "x.claims")
-            .unwrap_err();
+        let crateless = Claims::parse(
+            &format!("{CENSUS_HEADER}\nartifact 0 tag_join m::tag_join"),
+            "x.claims",
+        )
+        .unwrap_err();
         assert!(crateless.contains("before a `crate` row"), "{crateless}");
         let pathless = census("artifact 0 tag_join").unwrap_err();
-        assert!(pathless.contains("carries the member's function path"), "{pathless}");
+        assert!(
+            pathless.contains("carries the member's function path"),
+            "{pathless}"
+        );
         let future = census("proven 0 tag_join").unwrap_err();
-        assert!(future.contains("is not a settlement this tool knows"), "{future}");
+        assert!(
+            future.contains("is not a settlement this tool knows"),
+            "{future}"
+        );
     }
 
     /// Comments, the crate line and blank lines are structure, not rows.
@@ -3559,7 +3768,10 @@ mod tests {
         let e = clean()
             .check_claims("artifact 0 tag_join m::tag_join\nartifact 7 withdraw m::withdraw")
             .unwrap_err();
-        assert!(e.contains("withdraw — expected `frustrate_check_block_fixture_7_withdraw`"), "{e}");
+        assert!(
+            e.contains("withdraw — expected `frustrate_check_block_fixture_7_withdraw`"),
+            "{e}"
+        );
         assert!(e.contains("never reached rustc"), "{e}");
         // The claim that IS rooted must not be reported as missing.
         assert!(!e.contains("tag_join —"), "{e}");
@@ -3577,9 +3789,14 @@ mod tests {
             ],
             ..clean()
         };
-        let e = b.check_claims("artifact 0 tag_join m::tag_join").unwrap_err();
+        let e = b
+            .check_claims("artifact 0 tag_join m::tag_join")
+            .unwrap_err();
         assert!(e.contains("no linked bridge's census claims"), "{e}");
-        assert!(e.contains("frustrate_check_block_fixture_4_elsewhere"), "{e}");
+        assert!(
+            e.contains("frustrate_check_block_fixture_4_elsewhere"),
+            "{e}"
+        );
     }
 
     const OTHER_ROOT: &str = "frustrate_check_block_other_0_tag_join";
@@ -3587,7 +3804,11 @@ mod tests {
     /// Two linked bridges, one root each, which each own census claims.
     fn two_bridges() -> Build {
         Build {
-            funcs: vec![fun(ROOT, vec![0x01]), fun(OTHER_ROOT, vec![0x01]), fun(PANIC_FMT, vec![0x01])],
+            funcs: vec![
+                fun(ROOT, vec![0x01]),
+                fun(OTHER_ROOT, vec![0x01]),
+                fun(PANIC_FMT, vec![0x01]),
+            ],
             exports: vec![root_export(0), (OTHER_ROOT.to_string(), 0, 1)],
             ..Default::default()
         }
@@ -3601,7 +3822,10 @@ mod tests {
         let ok = two_bridges()
             .check_linked(&[
                 ("fixture", "artifact 0 tag_join m::tag_join"),
-                ("other", "artifact 0 tag_join n::tag_join\nplacement 3 Node::send"),
+                (
+                    "other",
+                    "artifact 0 tag_join n::tag_join\nplacement 3 Node::send",
+                ),
             ])
             .unwrap();
         assert!(ok.contains("is clean"), "{ok}");
@@ -3618,8 +3842,18 @@ mod tests {
             .check_linked(&[("fixture", "artifact 0 tag_join m::tag_join")])
             .unwrap_err();
         assert!(e.contains("no linked bridge's census claims"), "{e}");
-        assert!(e.contains("frustrate_check_block_other_0_tag_join — carries the crate of none of `fixture`"), "{e}");
-        assert!(e.contains("every linked bridge's `frustrate_bridge` goes in the check target's `bridge`"), "{e}");
+        assert!(
+            e.contains(
+                "frustrate_check_block_other_0_tag_join — carries the crate of none of `fixture`"
+            ),
+            "{e}"
+        );
+        assert!(
+            e.contains(
+                "every linked bridge's `frustrate_bridge` goes in the check target's `bridge`"
+            ),
+            "{e}"
+        );
     }
 
     /// A claim whose root is missing is named with the symbol its bridge's
@@ -3633,15 +3867,27 @@ mod tests {
             ])
             .unwrap_err();
         assert!(e.contains("missing the check root"), "{e}");
-        assert!(e.contains("elsewhere — expected `frustrate_check_block_other_4_elsewhere`"), "{e}");
+        assert!(
+            e.contains("elsewhere — expected `frustrate_check_block_other_4_elsewhere`"),
+            "{e}"
+        );
     }
 
     #[test]
     fn a_stray_root_of_a_named_bridge_names_the_bridge() {
-        let c = linked(&[("fixture", "artifact 0 tag_join m::tag_join"), ("other", "placement 1 x")]).unwrap();
+        let c = linked(&[
+            ("fixture", "artifact 0 tag_join m::tag_join"),
+            ("other", "placement 1 x"),
+        ])
+        .unwrap();
         let roots = vec![ROOT.to_string(), OTHER_ROOT.to_string()];
         let e = match_census(&roots, Some(&c), "//pkg:t").unwrap_err();
-        assert!(e.contains("frustrate_check_block_other_0_tag_join — of `other`, which claims no such member"), "{e}");
+        assert!(
+            e.contains(
+                "frustrate_check_block_other_0_tag_join — of `other`, which claims no such member"
+            ),
+            "{e}"
+        );
         assert!(!e.contains(&format!("  {ROOT} —")), "{e}");
     }
 
@@ -3671,24 +3917,36 @@ mod tests {
 
     #[test]
     fn a_census_set_that_cannot_attribute_its_roots_is_refused() {
-        let twice = linked(&[("fixture", "placement 1 a"), ("fixture", "placement 1 b")]).unwrap_err();
-        assert!(twice.contains("both censuses of crate `fixture`"), "{twice}");
+        let twice =
+            linked(&[("fixture", "placement 1 a"), ("fixture", "placement 1 b")]).unwrap_err();
+        assert!(
+            twice.contains("both censuses of crate `fixture`"),
+            "{twice}"
+        );
         let crateless = Claims::merge(vec![
-            ("a.claims".into(), census_of("fixture", "placement 1 a").unwrap()),
+            (
+                "a.claims".into(),
+                census_of("fixture", "placement 1 a").unwrap(),
+            ),
             (
                 "b.claims".into(),
                 Claims::parse(&format!("{CENSUS_HEADER}\nplacement 1 b"), "b.claims").unwrap(),
             ),
         ])
         .unwrap_err();
-        assert!(crateless.contains("b.claims names no `crate`"), "{crateless}");
+        assert!(
+            crateless.contains("b.claims names no `crate`"),
+            "{crateless}"
+        );
     }
 
     /// Nothing for any bridge to prove is still the empty state, however
     /// many bridges say it.
     #[test]
     fn linked_bridges_that_claim_nothing_are_still_refused() {
-        let e = two_bridges().check_linked(&[("fixture", ""), ("other", "")]).unwrap_err();
+        let e = two_bridges()
+            .check_linked(&[("fixture", ""), ("other", "")])
+            .unwrap_err();
         assert!(e.contains("claims nothing this check can settle"), "{e}");
     }
 
@@ -3697,7 +3955,10 @@ mod tests {
     #[test]
     fn a_silence_belongs_to_the_bridge_whose_census_wrote_it() {
         let c = linked(&[
-            ("fixture", "artifact 0 tag_join m::tag_join\nallow 0 nanosleep"),
+            (
+                "fixture",
+                "artifact 0 tag_join m::tag_join\nallow 0 nanosleep",
+            ),
             ("other", "artifact 0 tag_join n::tag_join"),
         ])
         .unwrap();
@@ -3714,7 +3975,9 @@ mod tests {
     fn a_qualified_name_matches_its_bare_root_symbol() {
         let c = census("artifact 0 Tag::tag_join m::Tag::tag_join").unwrap();
         assert_eq!(c.artifact[0].0, ROOT);
-        let ok = clean().check_claims("artifact 0 Tag::tag_join m::Tag::tag_join").unwrap();
+        let ok = clean()
+            .check_claims("artifact 0 Tag::tag_join m::Tag::tag_join")
+            .unwrap();
         assert!(ok.contains("is clean"), "{ok}");
     }
 
@@ -3723,7 +3986,9 @@ mod tests {
     #[test]
     fn a_mixed_claim_set_reports_both_halves() {
         let r = clean()
-            .check_claims("artifact 0 tag_join m::tag_join\nplacement 5 Node::send\nplacement 6 Node::ticket")
+            .check_claims(
+                "artifact 0 tag_join m::tag_join\nplacement 5 Node::send\nplacement 6 Node::ticket",
+            )
             .unwrap();
         assert!(r.contains("1 `no_block` root(s)"), "{r}");
         assert!(r.contains("2 settled by placement"), "{r}");
@@ -3737,7 +4002,10 @@ mod tests {
         let r = clean()
             .check_claims("artifact 0 tag_join m::tag_join\ndeclared 9 read_file")
             .unwrap();
-        assert!(r.contains("1 native-only, so absent from the web surface"), "{r}");
+        assert!(
+            r.contains("1 native-only, so absent from the web surface"),
+            "{r}"
+        );
     }
 
     /// Three silences that must not read alike. Nothing to prove, nothing
@@ -3757,7 +4025,13 @@ mod tests {
         let e = claims_only("//pkg:demo", &none).unwrap_err();
         assert!(e.contains("claims nothing this check can settle"), "{e}");
         assert!(e.contains("Claim a member"), "{e}");
-        assert!(clean().check_claims("").unwrap_err().contains("claims nothing"), "gate");
+        assert!(
+            clean()
+                .check_claims("")
+                .unwrap_err()
+                .contains("claims nothing"),
+            "gate"
+        );
 
         // Only native-only claims: there are claims, and none of them is
         // settleable here. Its own wording, not "claim a member".
@@ -3788,8 +4062,14 @@ mod tests {
     fn dispatch_placement_settles_without_an_artifact_and_says_so_apart() {
         let c = census("placement 5 Node::send\nplacement-dispatch 7 find_snapshot").unwrap();
         let ok = claims_only("//pkg:demo", &c).unwrap();
-        assert!(ok.contains("2 `no_block` claim(s), none needing an artifact"), "{ok}");
-        assert!(ok.contains("1 settled by placement (an actor member"), "{ok}");
+        assert!(
+            ok.contains("2 `no_block` claim(s), none needing an artifact"),
+            "{ok}"
+        );
+        assert!(
+            ok.contains("1 settled by placement (an actor member"),
+            "{ok}"
+        );
         assert!(ok.contains("1 settled by dispatch placement"), "{ok}");
         // On its own it is still a claim set worth having, not an empty one.
         let alone = census("placement-dispatch 7 find_snapshot").unwrap();
@@ -3805,20 +4085,30 @@ mod tests {
     /// set, which the two kinds share. What differs is the sentence it earns.
     #[test]
     fn a_residue_claim_is_rooted_like_an_artifact_claim_and_reported_apart() {
-        let ok = clean().check_claims("artifact-residue 0 Tag::tag_join").unwrap();
+        let ok = clean()
+            .check_claims("artifact-residue 0 Tag::tag_join")
+            .unwrap();
         assert!(ok.contains("1 `no_block` root(s)"), "{ok}");
         assert!(ok.contains("dispatched with a caller-side residue"), "{ok}");
         // Missing in the artifact: named, like any other claimed root.
         let e = clean()
             .check_claims("artifact-residue 0 tag_join\nartifact-residue 7 take")
             .unwrap_err();
-        assert!(e.contains("take — expected `frustrate_check_block_fixture_7_take`"), "{e}");
+        assert!(
+            e.contains("take — expected `frustrate_check_block_fixture_7_take`"),
+            "{e}"
+        );
         // A claims-only target cannot carry one: there is something to scan.
         let c = census("artifact-residue 0 tag_join").unwrap();
         let refused = claims_only("//pkg:demo", &c).unwrap_err();
         assert!(refused.contains("need artifact evidence"), "{refused}");
-        assert!(refused.contains("whose `from_bytes` \
-             runs on the caller"), "{refused}");
+        assert!(
+            refused.contains(
+                "whose `from_bytes` \
+             runs on the caller"
+            ),
+            "{refused}"
+        );
     }
 
     /// A census does not weaken the predicate: a reachable wait is still red,
@@ -3834,11 +4124,19 @@ mod tests {
             exports: vec![root_export(0)],
             ..Default::default()
         };
-        let e = b.check_claims("artifact 0 tag_join m::tag_join\nplacement 5 Node::send").unwrap_err();
-        assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a wait"), "{e}");
+        let e = b
+            .check_claims("artifact 0 tag_join m::tag_join\nplacement 5 Node::send")
+            .unwrap_err();
+        assert!(
+            e.contains("1 `#[bridge(no_block)]` member(s) reach a wait"),
+            "{e}"
+        );
         // The census names the member; the path still starts at its root.
         assert!(e.contains("  tag_join\n      reaches "), "{e}");
-        assert!(e.contains("        frustrate_check_block_fixture_0_tag_join\n"), "{e}");
+        assert!(
+            e.contains("        frustrate_check_block_fixture_0_tag_join\n"),
+            "{e}"
+        );
     }
 
     // ---- slow paths ---------------------------------------------------
@@ -3857,13 +4155,19 @@ mod tests {
             "alloc::raw_vec::RawVecInner::grow_amortized"
         );
         // v0 generic instance: the function, without its type arguments.
-        assert_eq!(p("_RINvNtCs1_4mine3api7processNtNtCs2_3std2fs4FileE"), "mine::api::process");
+        assert_eq!(
+            p("_RINvNtCs1_4mine3api7processNtNtCs2_3std2fs4FileE"),
+            "mine::api::process"
+        );
         // Legacy trait impl and generic type, by the type's path.
         assert_eq!(
             p("_ZN47_$LT$std..fs..File$u20$as$u20$std..io..Read$GT$4read17h0123456789abcdefE"),
             "std::fs::File::read"
         );
-        assert_eq!(p("_ZN5alloc3vec16Vec$LT$T$C$A$GT$4push17h0123456789abcdefE"), "alloc::vec::Vec::push");
+        assert_eq!(
+            p("_ZN5alloc3vec16Vec$LT$T$C$A$GT$4push17h0123456789abcdefE"),
+            "alloc::vec::Vec::push"
+        );
     }
 
     #[test]
@@ -3879,7 +4183,14 @@ mod tests {
 
     #[test]
     fn a_slow_path_that_cannot_name_a_symbol_is_refused() {
-        for bad in ["crate::io::save", "self::x", "::std::fs", "std::fs::read<T>", "std::", ""] {
+        for bad in [
+            "crate::io::save",
+            "self::x",
+            "::std::fs",
+            "std::fs::read<T>",
+            "std::",
+            "",
+        ] {
             assert!(SlowPath::parse(bad).is_err(), "{bad}");
         }
     }
@@ -3913,14 +4224,25 @@ mod tests {
             .unwrap_err();
         assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a wait instruction or a function named slow"), "{e}");
         assert!(e.contains("  Doc::render\n      reaches example::main_thread::slow — named slow by `example::main_thread::slow`"), "{e}");
-        assert!(e.contains("example::access::judge"), "the path runs through the caller: {e}");
-        assert!(!e.contains("Doc::title"), "the clean member is not listed: {e}");
+        assert!(
+            e.contains("example::access::judge"),
+            "the path runs through the caller: {e}"
+        );
+        assert!(
+            !e.contains("Doc::title"),
+            "the clean member is not listed: {e}"
+        );
     }
 
     #[test]
     fn a_module_prefix_names_everything_under_it() {
-        let e = two_members(call(2)).check_slow(&["example::access"], None).unwrap_err();
-        assert!(e.contains("reaches example::access::judge — named slow by `example::access`"), "{e}");
+        let e = two_members(call(2))
+            .check_slow(&["example::access"], None)
+            .unwrap_err();
+        assert!(
+            e.contains("reaches example::access::judge — named slow by `example::access`"),
+            "{e}"
+        );
     }
 
     #[test]
@@ -3932,8 +4254,14 @@ mod tests {
         b.funcs[4].code = call(5);
         let ok = b.check_slow(&["example::main_thread::slow"], None).unwrap();
         assert!(ok.contains("clean"), "{ok}");
-        assert!(ok.contains("checked against 1 slow name(s) (`example::main_thread::slow`)"), "{ok}");
-        assert!(ok.contains("1 site(s) exempt on the fatal-path rule"), "{ok}");
+        assert!(
+            ok.contains("checked against 1 slow name(s) (`example::main_thread::slow`)"),
+            "{ok}"
+        );
+        assert!(
+            ok.contains("1 site(s) exempt on the fatal-path rule"),
+            "{ok}"
+        );
     }
 
     #[test]
@@ -3947,10 +4275,18 @@ mod tests {
         // judge is table-resident and nothing calls it: a `dyn` method.
         let mut b = two_members(vec![0x01]);
         b.elements = vec![2];
-        let e = b.check_slow(&["example::main_thread::slow"], None).unwrap_err();
+        let e = b
+            .check_slow(&["example::main_thread::slow"], None)
+            .unwrap_err();
         assert!(e.contains("cannot verify"), "{e}");
-        assert!(e.contains("example::main_thread::slow` (named slow by"), "{e}");
-        assert!(e.contains("Indirectly callable functions that call down to it"), "{e}");
+        assert!(
+            e.contains("example::main_thread::slow` (named slow by"),
+            "{e}"
+        );
+        assert!(
+            e.contains("Indirectly callable functions that call down to it"),
+            "{e}"
+        );
         assert!(e.contains("  example::access::judge"), "{e}");
     }
 
@@ -3959,9 +4295,14 @@ mod tests {
         let mut b = two_members(call(2));
         b.funcs[1].code = call(5);
         b.funcs.push(fun(FUTEX_WAIT, wait()));
-        let e = b.check_slow(&["example::main_thread::slow"], None).unwrap_err();
+        let e = b
+            .check_slow(&["example::main_thread::slow"], None)
+            .unwrap_err();
         assert!(e.contains("2 `#[bridge(no_block)]` member(s)"), "{e}");
-        assert!(e.contains("reaches std::sys::pal::wasm::futex::futex_wait — memory.atomic.wait32"), "{e}");
+        assert!(
+            e.contains("reaches std::sys::pal::wasm::futex::futex_wait — memory.atomic.wait32"),
+            "{e}"
+        );
     }
 
     // ---- slow imports and modules without atomics ----------------------
@@ -3987,9 +4328,18 @@ mod tests {
         let e = wasi_shaped(call(2))
             .check_slow(&["files"], None)
             .unwrap_err();
-        assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a function named slow."), "{e}");
-        assert!(e.contains("imports `wasi_snapshot_preview1.path_open`, IO `files`"), "{e}");
-        assert!(e.contains("std::sys::fs::unix::File::open"), "the path runs through std: {e}");
+        assert!(
+            e.contains("1 `#[bridge(no_block)]` member(s) reach a function named slow."),
+            "{e}"
+        );
+        assert!(
+            e.contains("imports `wasi_snapshot_preview1.path_open`, IO `files`"),
+            "{e}"
+        );
+        assert!(
+            e.contains("std::sys::fs::unix::File::open"),
+            "the path runs through std: {e}"
+        );
     }
 
     #[test]
@@ -4002,7 +4352,10 @@ mod tests {
         b.funcs[2].code = call(4);
         let ok = b.check_slow(&["files"], None).unwrap();
         assert!(ok.contains("clean"), "{ok}");
-        assert!(ok.contains("built without `+atomics`, so it can hold no wait instruction"), "{ok}");
+        assert!(
+            ok.contains("built without `+atomics`, so it can hold no wait instruction"),
+            "{ok}"
+        );
     }
 
     #[test]
@@ -4017,7 +4370,10 @@ mod tests {
         b.imports = vec![("wasi_snapshot_preview1", "poll_oneoff")];
         let e = b.check_slow(&["wasi"], None).unwrap_err();
         assert!(e.contains("reach a wait or a function named slow"), "{e}");
-        assert!(e.contains("imports `wasi_snapshot_preview1.poll_oneoff`, which waits"), "{e}");
+        assert!(
+            e.contains("imports `wasi_snapshot_preview1.poll_oneoff`, which waits"),
+            "{e}"
+        );
         // Without the import, the same module is clean, and says what it checked.
         let ok = wasi_shaped(vec![0x01]).check_slow(&["wasi"], None).unwrap();
         assert!(ok.contains("its waits are `poll_oneoff`"), "{ok}");
@@ -4028,7 +4384,10 @@ mod tests {
         let mut b = clean();
         b.features = Some(&["atomics", "bulk-memory"]);
         let ok = b.check().unwrap();
-        assert!(ok.contains("clean") && !ok.contains("without `+atomics`"), "{ok}");
+        assert!(
+            ok.contains("clean") && !ok.contains("without `+atomics`"),
+            "{ok}"
+        );
     }
 
     #[test]
@@ -4095,14 +4454,22 @@ mod tests {
     #[test]
     fn a_wait_names_what_silences_it() {
         let e = check_allowing(&silenced(false, false), ROW, &[]).unwrap_err();
-        assert!(e.contains("(silence it as `std::sys::pal::wasm::futex::futex_wait`)"), "{e}");
+        assert!(
+            e.contains("(silence it as `std::sys::pal::wasm::futex::futex_wait`)"),
+            "{e}"
+        );
     }
 
     #[test]
     fn a_member_silence_is_applied_and_recorded() {
         let rows = format!("{ROW}allow 0 std::sys::pal::wasm::futex::futex_wait\n");
         let g = check_allowing(&silenced(false, false), &rows, &[]).unwrap();
-        assert!(g.text.contains("`std::sys::pal::wasm::futex::futex_wait` in tag_join"), "{}", g.text);
+        assert!(
+            g.text
+                .contains("`std::sys::pal::wasm::futex::futex_wait` in tag_join"),
+            "{}",
+            g.text
+        );
         assert!(g.applied.silences.contains(&silences::Silence::Member(
             "0".into(),
             "std::sys::pal::wasm::futex::futex_wait".into()
@@ -4111,12 +4478,21 @@ mod tests {
 
     #[test]
     fn a_target_silence_is_applied_and_recorded() {
-        let g = check_allowing(&silenced(false, false), ROW, &["std::sys::pal::wasm::futex::futex_wait"]).unwrap();
-        assert!(g.text.contains("in every claim (the check target's `allow`)"), "{}", g.text);
-        assert!(g
-            .applied
-            .silences
-            .contains(&silences::Silence::Target("std::sys::pal::wasm::futex::futex_wait".into())));
+        let g = check_allowing(
+            &silenced(false, false),
+            ROW,
+            &["std::sys::pal::wasm::futex::futex_wait"],
+        )
+        .unwrap();
+        assert!(
+            g.text
+                .contains("in every claim (the check target's `allow`)"),
+            "{}",
+            g.text
+        );
+        assert!(g.applied.silences.contains(&silences::Silence::Target(
+            "std::sys::pal::wasm::futex::futex_wait".into()
+        )));
     }
 
     /// A silence that matches nothing here is not an error here: another
@@ -4131,8 +4507,16 @@ mod tests {
     #[test]
     fn a_marked_function_is_a_stop_point() {
         let g = check_allowing(&silenced(true, false), ROW, &[]).unwrap();
-        assert!(g.text.contains("`fixture::wrap` in every claim (`#[frustrate::no_block(allow)]`)"), "{}", g.text);
-        assert!(g.applied.silences.contains(&silences::Silence::Mark("fixture::wrap".into())));
+        assert!(
+            g.text
+                .contains("`fixture::wrap` in every claim (`#[frustrate::no_block(allow)]`)"),
+            "{}",
+            g.text
+        );
+        assert!(g
+            .applied
+            .silences
+            .contains(&silences::Silence::Mark("fixture::wrap".into())));
         // The same wait reached around the marked function is still a finding.
         let e = check_allowing(&silenced(true, true), ROW, &[]).unwrap_err();
         assert!(e.contains("futex_wait"), "{e}");
@@ -4144,7 +4528,11 @@ mod tests {
         b.funcs[3].code = vec![0x01];
         let g = check_allowing(&b, ROW, &[]).unwrap();
         assert!(g.applied.silences.is_empty(), "{:?}", g.applied);
-        assert!(g.applied.idle_marks.contains("fixture::wrap"), "{:?}", g.applied);
+        assert!(
+            g.applied.idle_marks.contains("fixture::wrap"),
+            "{:?}",
+            g.applied
+        );
     }
 
     /// An import is silenced by its field, as a C function is natively.
@@ -4169,7 +4557,16 @@ mod tests {
         };
         let e = run_with(p.to_str().unwrap(), "//pkg:t", None, &sinks(&[])).unwrap_err();
         assert!(e.contains("(silence it as `poll_oneoff`)"), "{e}");
-        let g = run_with(p.to_str().unwrap(), "//pkg:t", None, &sinks(&["poll_oneoff"])).unwrap();
-        assert!(g.applied.silences.contains(&silences::Silence::Target("poll_oneoff".into())));
+        let g = run_with(
+            p.to_str().unwrap(),
+            "//pkg:t",
+            None,
+            &sinks(&["poll_oneoff"]),
+        )
+        .unwrap();
+        assert!(g
+            .applied
+            .silences
+            .contains(&silences::Silence::Target("poll_oneoff".into())));
     }
 }

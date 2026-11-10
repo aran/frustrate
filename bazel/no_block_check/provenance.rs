@@ -100,7 +100,11 @@ struct Path {
 
 impl Path {
     fn shifted(&self, by: i64) -> Path {
-        Path { param: self.param, loads: self.loads.clone(), delta: shift(self.delta, by) }
+        Path {
+            param: self.param,
+            loads: self.loads.clone(),
+            delta: shift(self.delta, by),
+        }
     }
 
     fn loaded(&self) -> Path {
@@ -110,7 +114,11 @@ impl Path {
         } else if let Some(l) = loads.last_mut() {
             *l = ANY;
         }
-        Path { param: self.param, loads, delta: 0 }
+        Path {
+            param: self.param,
+            loads,
+            delta: 0,
+        }
     }
 }
 
@@ -172,7 +180,10 @@ fn covers(a: &Path, b: &Path) -> bool {
 /// never names every offset of a position, so each change is growth and a
 /// value grows a bounded number of times.
 fn add_paths(a: &mut BTreeSet<Path>, b: &BTreeSet<Path>) -> bool {
-    let fresh: Vec<&Path> = b.iter().filter(|p| !a.range(param_range(p.param)).any(|q| covers(q, p))).collect();
+    let fresh: Vec<&Path> = b
+        .iter()
+        .filter(|p| !a.range(param_range(p.param)).any(|q| covers(q, p)))
+        .collect();
     if fresh.is_empty() {
         return false;
     }
@@ -182,8 +193,11 @@ fn add_paths(a: &mut BTreeSet<Path>, b: &BTreeSet<Path>) -> bool {
         a.insert(p.clone());
     }
     for (param, depth) in groups {
-        let mut group: Vec<Path> =
-            a.range(param_range(param)).filter(|p| p.loads.len() == depth).cloned().collect();
+        let mut group: Vec<Path> = a
+            .range(param_range(param))
+            .filter(|p| p.loads.len() == depth)
+            .cloned()
+            .collect();
         for p in &group {
             a.remove(p);
         }
@@ -193,7 +207,13 @@ fn add_paths(a: &mut BTreeSet<Path>, b: &BTreeSet<Path>) -> bool {
             // The position with the most distinct offsets: a load's, or the
             // delta's (index `depth`).
             let widest = (0..=depth)
-                .max_by_key(|i| group.iter().map(|p| at(p, *i)).collect::<BTreeSet<i64>>().len())
+                .max_by_key(|i| {
+                    group
+                        .iter()
+                        .map(|p| at(p, *i))
+                        .collect::<BTreeSet<i64>>()
+                        .len()
+                })
                 .unwrap_or(depth);
             for p in group.iter_mut() {
                 if widest == depth {
@@ -216,14 +236,32 @@ fn antichain(mut group: Vec<Path>) -> Vec<Path> {
     let keep: Vec<bool> = group
         .iter()
         .enumerate()
-        .map(|(i, p)| !group.iter().enumerate().any(|(j, q)| j != i && covers(q, p)))
+        .map(|(i, p)| {
+            !group
+                .iter()
+                .enumerate()
+                .any(|(j, q)| j != i && covers(q, p))
+        })
         .collect();
-    group.into_iter().zip(keep).filter(|(_, k)| *k).map(|(p, _)| p).collect()
+    group
+        .into_iter()
+        .zip(keep)
+        .filter(|(_, k)| *k)
+        .map(|(p, _)| p)
+        .collect()
 }
 
 /// Every path from `param`.
 fn param_range(param: u32) -> std::ops::RangeInclusive<Path> {
-    Path { param, loads: Vec::new(), delta: i64::MIN }..=Path { param, loads: vec![i64::MAX; MAX_PATH + 1], delta: i64::MAX }
+    Path {
+        param,
+        loads: Vec::new(),
+        delta: i64::MIN,
+    }..=Path {
+        param,
+        loads: vec![i64::MAX; MAX_PATH + 1],
+        delta: i64::MAX,
+    }
 }
 
 /// Add `b`'s stack places to `a`, answering whether `a` now names more. A
@@ -234,8 +272,11 @@ fn add_places(a: &mut BTreeSet<(u32, i64)>, b: &BTreeSet<(u32, i64)>) -> bool {
     if a.contains(&(FRAME, ANY)) {
         return false;
     }
-    let fresh: Vec<(u32, i64)> =
-        b.iter().copied().filter(|(s, o)| !a.contains(&(*s, ANY)) && !a.contains(&(*s, *o))).collect();
+    let fresh: Vec<(u32, i64)> = b
+        .iter()
+        .copied()
+        .filter(|(s, o)| !a.contains(&(*s, ANY)) && !a.contains(&(*s, *o)))
+        .collect();
     if fresh.is_empty() {
         return false;
     }
@@ -277,14 +318,21 @@ impl Info {
 
     /// The value as stored: without the parameters it derives from.
     fn stored(&self) -> Info {
-        Info { params: BTreeSet::new(), ..self.clone() }
+        Info {
+            params: BTreeSet::new(),
+            ..self.clone()
+        }
     }
 
     fn shifted(&self, by: i64) -> Info {
         Info {
             from: self.from.clone(),
             through: self.through.clone(),
-            stack: self.stack.iter().map(|(s, o)| (*s, shift(*o, by))).collect(),
+            stack: self
+                .stack
+                .iter()
+                .map(|(s, o)| (*s, shift(*o, by)))
+                .collect(),
             sym: self.sym.iter().map(|p| p.shifted(by)).collect(),
             params: self.params.clone(),
         }
@@ -343,7 +391,8 @@ fn store(stack: &mut Stack, at: &BTreeSet<(u32, i64)>, v: &Info) -> bool {
                 changed |= e.join(v);
             }
         } else if !stack.contains_key(&(s, off))
-            && (stack.contains_key(&(s, ANY)) || stack.range((s, i64::MIN)..=(s, i64::MAX)).count() >= WIDTH)
+            && (stack.contains_key(&(s, ANY))
+                || stack.range((s, i64::MIN)..=(s, i64::MAX)).count() >= WIDTH)
         {
             off = ANY;
         }
@@ -356,7 +405,9 @@ fn store(stack: &mut Stack, at: &BTreeSet<(u32, i64)>, v: &Info) -> bool {
 fn instantiate(paths: &BTreeSet<Path>, args: &[Info], stack: &Stack) -> Info {
     let mut r = Info::default();
     for p in paths {
-        let Some(mut v) = args.get(p.param as usize).cloned() else { continue };
+        let Some(mut v) = args.get(p.param as usize).cloned() else {
+            continue;
+        };
         v.params.clear();
         for off in &p.loads {
             v = deref(&v.shifted(*off), stack);
@@ -446,7 +497,11 @@ fn byte_offset(parts: &[&str]) -> Option<i64> {
     if parts.len() != 3 {
         return None;
     }
-    let ty = parts[0].trim().trim_start_matches("inbounds ").trim_start_matches("nuw ").trim();
+    let ty = parts[0]
+        .trim()
+        .trim_start_matches("inbounds ")
+        .trim_start_matches("nuw ")
+        .trim();
     if ty != "i8" {
         return None;
     }
@@ -467,7 +522,11 @@ const KEY_STORAGE: &str = "thread-locals kept in pthread keys";
 
 /// `known(path)` names the statics whose contents frustrate vouches for
 /// ([`super::ir::KNOWN_SLOTS`]): a load from one is not a slot.
-pub(crate) fn foreign_calls(text: &str, analysed: &HashSet<String>, known: &dyn Fn(&str) -> bool) -> Calls {
+pub(crate) fn foreign_calls(
+    text: &str,
+    analysed: &HashSet<String>,
+    known: &dyn Fn(&str) -> bool,
+) -> Calls {
     let (sites, _, tables) = analyse(text, analysed, known);
     Calls { sites, tables }
 }
@@ -489,7 +548,12 @@ fn analyse(
 ) -> (Vec<Site>, Vec<Summary>, BTreeMap<String, BTreeSet<String>>) {
     let (funcs, globals_text, declared) = split_module(text);
     let tables = dispatch_tables(&funcs, &globals_text);
-    let mut g = Globals { names: Vec::new(), index: HashMap::new(), mutable: Vec::new(), init: Vec::new() };
+    let mut g = Globals {
+        names: Vec::new(),
+        index: HashMap::new(),
+        mutable: Vec::new(),
+        init: Vec::new(),
+    };
     for gl in &globals_text {
         let i = g.id(&gl.name);
         g.mutable[i as usize] = gl.mutable && !tables.contains_key(&gl.name);
@@ -525,13 +589,17 @@ fn analyse(
         let mut slots = Vec::new();
         for line in &f.body {
             let (lhs, rhs) = match line.find(" = ") {
-                Some(eq) if line.starts_with('%') => {
-                    (refs(&line[..eq]).into_iter().next().map(|(_, n)| n), &line[eq + 3..])
-                }
+                Some(eq) if line.starts_with('%') => (
+                    refs(&line[..eq]).into_iter().next().map(|(_, n)| n),
+                    &line[eq + 3..],
+                ),
                 _ => (None, line.as_str()),
             };
             let dst = lhs.map(|n| local(&n, &mut locals));
-            let rhs = rhs.trim_start_matches("tail ").trim_start_matches("musttail ").trim_start_matches("notail ");
+            let rhs = rhs
+                .trim_start_matches("tail ")
+                .trim_start_matches("musttail ")
+                .trim_start_matches("notail ");
             let opname = rhs.split(' ').next().unwrap_or("");
             let rest = &rhs[opname.len()..];
             match opname {
@@ -543,7 +611,11 @@ fn analyse(
                 }
                 "load" => {
                     let parts = split_top(rest);
-                    let addr = parts.iter().find(|p| p.trim_start().starts_with("ptr ")).copied().unwrap_or("");
+                    let addr = parts
+                        .iter()
+                        .find(|p| p.trim_start().starts_with("ptr "))
+                        .copied()
+                        .unwrap_or("");
                     if let Some(d) = dst {
                         body.push(Inst::Load(d, op(addr, &mut locals, &mut g)));
                     }
@@ -551,7 +623,10 @@ fn analyse(
                 "store" => {
                     let parts = split_top(rest);
                     if parts.len() >= 2 {
-                        body.push(Inst::Store(op(parts[0], &mut locals, &mut g), op(parts[1], &mut locals, &mut g)));
+                        body.push(Inst::Store(
+                            op(parts[0], &mut locals, &mut g),
+                            op(parts[1], &mut locals, &mut g),
+                        ));
                     }
                 }
                 "cmpxchg" | "atomicrmw" => {
@@ -564,42 +639,70 @@ fn analyse(
                     let parts = split_top(rest);
                     if let Some(d) = dst {
                         let off = byte_offset(&parts).unwrap_or(ANY);
-                        body.push(Inst::Gep(d, op(parts.get(1).copied().unwrap_or(""), &mut locals, &mut g), off));
+                        body.push(Inst::Gep(
+                            d,
+                            op(parts.get(1).copied().unwrap_or(""), &mut locals, &mut g),
+                            off,
+                        ));
                     }
                 }
                 "ret" => body.push(Inst::Ret(op(rest, &mut locals, &mut g))),
                 "landingpad" => {}
                 "call" | "invoke" => {
-                    let Some(open) = callee_open(rhs) else { continue };
+                    let Some(open) = callee_open(rhs) else {
+                        continue;
+                    };
                     let callee = refs(&rhs[..open]).into_iter().last();
                     let returns_ptr = rhs[..open].split_whitespace().any(|w| w == "ptr");
                     let args_text = group(rhs, open);
                     let args: Vec<Op> = if args_text.trim().is_empty() {
                         Vec::new()
                     } else {
-                        split_top(args_text).iter().map(|a| op(a, &mut locals, &mut g)).collect()
+                        split_top(args_text)
+                            .iter()
+                            .map(|a| op(a, &mut locals, &mut g))
+                            .collect()
                     };
                     match callee {
                         Some((true, name)) => {
-                            if name.starts_with("llvm.memcpy") || name.starts_with("llvm.memmove") || name == "memcpy" || name == "memmove" {
+                            if name.starts_with("llvm.memcpy")
+                                || name.starts_with("llvm.memmove")
+                                || name == "memcpy"
+                                || name == "memmove"
+                            {
                                 if args.len() >= 2 {
                                     let t = local(&format!("\u{0}copy{}", body.len()), &mut locals);
                                     let mut it = args.into_iter();
                                     let d = it.next().unwrap();
                                     let s = it.next().unwrap();
                                     body.push(Inst::Load(t, s));
-                                    body.push(Inst::Store(Op { locals: vec![t], globals: vec![] }, d));
+                                    body.push(Inst::Store(
+                                        Op {
+                                            locals: vec![t],
+                                            globals: vec![],
+                                        },
+                                        d,
+                                    ));
                                 }
                                 continue;
                             }
                             if name == "pthread_getspecific" {
                                 if let Some(d) = dst {
-                                    body.push(Inst::Copy(d, Op { locals: vec![], globals: vec![key_storage] }));
+                                    body.push(Inst::Copy(
+                                        d,
+                                        Op {
+                                            locals: vec![],
+                                            globals: vec![key_storage],
+                                        },
+                                    ));
                                 }
                                 continue;
                             }
                             if name.starts_with("llvm.") {
-                                if !(name.starts_with("llvm.memset") || name.starts_with("llvm.lifetime") || name.starts_with("llvm.dbg")) {
+                                if !(name.starts_with("llvm.memset")
+                                    || name.starts_with("llvm.lifetime")
+                                    || name.starts_with("llvm.dbg"))
+                                {
                                     if let Some(d) = dst {
                                         let mut all = Op::default();
                                         for a in args {
@@ -639,7 +742,13 @@ fn analyse(
                 }
             }
         }
-        parsed.push(Function { name: f.name.clone(), params, locals: locals.len() as u32, body, slots });
+        parsed.push(Function {
+            name: f.name.clone(),
+            params,
+            locals: locals.len() as u32,
+            body,
+            slots,
+        });
     }
 
     let fn_of_global: HashMap<u32, u32> = parsed
@@ -670,16 +779,25 @@ fn analyse(
             && !declared.contains(name.as_str())
             && !known(&super::own_path(name).join("::"))
         {
-            static_slot.insert(gid, source(format!("loaded from `{}`", super::readable(name))));
+            static_slot.insert(
+                gid,
+                source(format!("loaded from `{}`", super::readable(name))),
+            );
         }
     }
     let mut ext_slot: HashMap<u32, u32> = HashMap::new();
 
-    let mut values: Vec<Vec<Info>> = parsed.iter().map(|f| vec![Info::default(); f.locals as usize]).collect();
+    let mut values: Vec<Vec<Info>> = parsed
+        .iter()
+        .map(|f| vec![Info::default(); f.locals as usize])
+        .collect();
     let mut stacks: Vec<Stack> = vec![Stack::new(); parsed.len()];
     let mut sums: Vec<Summary> = parsed
         .iter()
-        .map(|f| Summary { writes: vec![Info::default(); f.params.len()], ..Summary::default() })
+        .map(|f| Summary {
+            writes: vec![Info::default(); f.params.len()],
+            ..Summary::default()
+        })
         .collect();
 
     // Each function's direct callers in the set, to revisit when its summary
@@ -709,7 +827,11 @@ fn analyse(
             let f = &parsed[fi];
             for (pi, p) in f.params.iter().enumerate() {
                 let mut i = Info::default();
-                i.sym.insert(Path { param: pi as u32, loads: Vec::new(), delta: 0 });
+                i.sym.insert(Path {
+                    param: pi as u32,
+                    loads: Vec::new(),
+                    delta: 0,
+                });
                 i.params.insert(pi as u32);
                 changed |= values[fi][*p as usize].join(&i);
             }
@@ -751,7 +873,8 @@ fn analyse(
                         sum_changed |= sums[fi].ret.join(&r);
                     }
                     Inst::Call(d, callee, args, returns_ptr) => {
-                        let arg_infos: Vec<Info> = args.iter().map(|a| read(a, &values[fi])).collect();
+                        let arg_infos: Vec<Info> =
+                            args.iter().map(|a| read(a, &values[fi])).collect();
                         let mut result = Info::default();
                         match callee {
                             Callee::Direct(gid) => {
@@ -759,17 +882,21 @@ fn analyse(
                                 if let Some(t) = fn_of_global.get(gid) {
                                     let t = *t as usize;
                                     let callee_sum = sums[t].clone();
-                                    result = instantiate_info(&callee_sum.ret, &arg_infos, &stacks[fi]);
+                                    result =
+                                        instantiate_info(&callee_sum.ret, &arg_infos, &stacks[fi]);
                                     for (pi, w) in callee_sum.writes.iter().enumerate() {
                                         let Some(a) = arg_infos.get(pi) else { continue };
-                                        let wv = instantiate_info(w, &arg_infos, &stacks[fi]).stored();
-                                        let at: BTreeSet<(u32, i64)> = a.stack.iter().map(|(s, _)| (*s, ANY)).collect();
+                                        let wv =
+                                            instantiate_info(w, &arg_infos, &stacks[fi]).stored();
+                                        let at: BTreeSet<(u32, i64)> =
+                                            a.stack.iter().map(|(s, _)| (*s, ANY)).collect();
                                         changed |= store(&mut stacks[fi], &at, &wv);
                                         for p in &a.params {
                                             sum_changed |= sums[fi].writes[*p as usize].join(&wv);
                                         }
                                     }
-                                    let v = instantiate(&callee_sum.pending, &arg_infos, &stacks[fi]);
+                                    let v =
+                                        instantiate(&callee_sum.pending, &arg_infos, &stacks[fi]);
                                     sum_changed |= add_paths(&mut sums[fi].pending, &v.sym);
                                 } else if declared.contains(name.as_str()) {
                                     let path = super::own_path(name);
@@ -777,27 +904,35 @@ fn analyse(
                                         if let Some(a) = arg_infos.first() {
                                             result = a.clone();
                                         }
-                                    } else if !is_allocator(name, &path) && !is_inert_external(name) {
-                                        let s = *ext_slot
-                                            .entry(*gid)
-                                            .or_insert_with(|| source(format!("returned by `{name}`")));
+                                    } else if !is_allocator(name, &path) && !is_inert_external(name)
+                                    {
+                                        let s = *ext_slot.entry(*gid).or_insert_with(|| {
+                                            source(format!("returned by `{name}`"))
+                                        });
                                         if *returns_ptr {
                                             result.from.insert(s);
                                             result.through.insert(s);
                                         }
-                                        let w = Info { from: BTreeSet::from([s]), through: BTreeSet::from([s]), ..Info::default() };
+                                        let w = Info {
+                                            from: BTreeSet::from([s]),
+                                            through: BTreeSet::from([s]),
+                                            ..Info::default()
+                                        };
                                         for a in &arg_infos {
-                                            let at: BTreeSet<(u32, i64)> = a.stack.iter().map(|(s, _)| (*s, ANY)).collect();
+                                            let at: BTreeSet<(u32, i64)> =
+                                                a.stack.iter().map(|(s, _)| (*s, ANY)).collect();
                                             changed |= store(&mut stacks[fi], &at, &w);
                                             for p in &a.params {
-                                                sum_changed |= sums[fi].writes[*p as usize].join(&w);
+                                                sum_changed |=
+                                                    sums[fi].writes[*p as usize].join(&w);
                                             }
                                         }
                                     }
                                 }
                             }
                             Callee::Indirect(c) => {
-                                sum_changed |= add_paths(&mut sums[fi].pending, &values[fi][*c as usize].sym);
+                                sum_changed |=
+                                    add_paths(&mut sums[fi].pending, &values[fi][*c as usize].sym);
                             }
                         }
                         if let Some(d) = d {
@@ -824,7 +959,13 @@ fn analyse(
     // With the values and summaries settled, each function's calls through a
     // slot's value: its own, and those below a callee that it hands one. Only
     // these are traced down to the functions that make the calls.
-    let a = Analysis { funcs: &parsed, values: &values, stacks: &stacks, sums: &sums, fn_of_global: &fn_of_global };
+    let a = Analysis {
+        funcs: &parsed,
+        values: &values,
+        stacks: &stacks,
+        sums: &sums,
+        fn_of_global: &fn_of_global,
+    };
     let read = |o: &Op, vals: &Vec<Info>| read(o, vals, &static_slot, &g);
     let mut explained: HashMap<(usize, Path), BTreeSet<u32>> = HashMap::new();
     let mut out = Vec::new();
@@ -839,7 +980,9 @@ fn analyse(
                     }
                 }
                 Inst::Call(_, Callee::Direct(gid), args, _) => {
-                    let Some(t) = fn_of_global.get(gid) else { continue };
+                    let Some(t) = fn_of_global.get(gid) else {
+                        continue;
+                    };
                     let t = *t as usize;
                     let arg_infos: Vec<Info> = args.iter().map(|a| read(a, &values[fi])).collect();
                     for e in &sums[t].pending {
@@ -847,7 +990,9 @@ fn analyse(
                         if v.from.is_empty() {
                             continue;
                         }
-                        let sites = explained.entry((t, e.clone())).or_insert_with(|| a.explain(t, e, &read));
+                        let sites = explained
+                            .entry((t, e.clone()))
+                            .or_insert_with(|| a.explain(t, e, &read));
                         for site in sites.iter() {
                             add_slots(found.entry(*site).or_default(), &v.from);
                         }
@@ -860,7 +1005,10 @@ fn analyse(
             out.push(Site {
                 at: f.name.clone(),
                 func: parsed[site as usize].name.clone(),
-                sources: labels.iter().map(|i| sources[*i as usize].clone()).collect(),
+                sources: labels
+                    .iter()
+                    .map(|i| sources[*i as usize].clone())
+                    .collect(),
             });
         }
     }
@@ -880,12 +1028,25 @@ fn analyse(
 /// another initialiser), or a stored value this cannot follow to functions,
 /// and the static is not one.
 fn dispatch_tables(funcs: &[Func], globals: &[Global]) -> BTreeMap<String, BTreeSet<String>> {
-    let func_index: HashMap<&str, usize> = funcs.iter().enumerate().map(|(i, f)| (f.name.as_str(), i)).collect();
+    let func_index: HashMap<&str, usize> = funcs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.name.as_str(), i))
+        .collect();
     let mut candidates: HashMap<&str, BTreeSet<String>> = globals
         .iter()
         .filter(|gl| gl.internal && gl.mutable && gl.holds_pointer && gl.init.len() == 1)
-        .filter(|gl| gl.init.iter().all(|(global, n)| *global && func_index.contains_key(n.as_str())))
-        .map(|gl| (gl.name.as_str(), gl.init.iter().map(|(_, n)| n.clone()).collect()))
+        .filter(|gl| {
+            gl.init
+                .iter()
+                .all(|(global, n)| *global && func_index.contains_key(n.as_str()))
+        })
+        .map(|gl| {
+            (
+                gl.name.as_str(),
+                gl.init.iter().map(|(_, n)| n.clone()).collect(),
+            )
+        })
         .collect();
     if candidates.is_empty() {
         return BTreeMap::new();
@@ -899,7 +1060,10 @@ fn dispatch_tables(funcs: &[Func], globals: &[Global]) -> BTreeMap<String, BTree
         }
     }
     let mut failed: HashSet<String> = HashSet::new();
-    let reader = Reader { funcs, func_index: &func_index };
+    let reader = Reader {
+        funcs,
+        func_index: &func_index,
+    };
     for (fi, f) in funcs.iter().enumerate() {
         for line in &f.body {
             if !line.contains('@') {
@@ -963,7 +1127,14 @@ struct Reader<'a> {
 impl Reader<'_> {
     /// The functions `line` of function `fi` stores through `p`, if every way
     /// it uses `p` is one [`dispatch_tables`] reads: none for a load.
-    fn use_of(&self, fi: usize, line: &str, p: &Operand, ctx: &mut Passed, depth: usize) -> Option<BTreeSet<String>> {
+    fn use_of(
+        &self,
+        fi: usize,
+        line: &str,
+        p: &Operand,
+        ctx: &mut Passed,
+        depth: usize,
+    ) -> Option<BTreeSet<String>> {
         if depth > MAX_FOLLOW {
             return None;
         }
@@ -971,7 +1142,10 @@ impl Reader<'_> {
             Some(eq) if line.starts_with('%') => &line[eq + 3..],
             _ => line,
         };
-        let rhs = rhs.trim_start_matches("tail ").trim_start_matches("musttail ").trim_start_matches("notail ");
+        let rhs = rhs
+            .trim_start_matches("tail ")
+            .trim_start_matches("musttail ")
+            .trim_start_matches("notail ");
         let opname = rhs.split(' ').next().unwrap_or("");
         let rest = &rhs[opname.len()..];
         let parts = split_top(rest);
@@ -979,22 +1153,39 @@ impl Reader<'_> {
         let mentions = |part: &str| refs(part).iter().any(|r| p.is(r));
         match opname {
             "load" => {
-                let addr = parts.iter().position(|x| x.trim_start().starts_with("ptr "))?;
-                (only(parts[addr]) && !parts.iter().enumerate().any(|(i, x)| i != addr && mentions(x)))
-                    .then(BTreeSet::new)
+                let addr = parts
+                    .iter()
+                    .position(|x| x.trim_start().starts_with("ptr "))?;
+                (only(parts[addr])
+                    && !parts
+                        .iter()
+                        .enumerate()
+                        .any(|(i, x)| i != addr && mentions(x)))
+                .then(BTreeSet::new)
             }
             "store" => {
-                if parts.len() < 2 || !only(parts[1]) || mentions(parts[0]) || parts[2..].iter().any(|x| mentions(x)) {
+                if parts.len() < 2
+                    || !only(parts[1])
+                    || mentions(parts[0])
+                    || parts[2..].iter().any(|x| mentions(x))
+                {
                     return None;
                 }
                 self.functions(fi, parts[0], ctx, depth + 1)
             }
             "atomicrmw" => {
-                let op = parts.first()?.split_whitespace().find(|w| *w != "volatile")?;
+                let op = parts
+                    .first()?
+                    .split_whitespace()
+                    .find(|w| *w != "volatile")?;
                 if op != "xchg" || parts.len() < 2 || mentions(parts[1]) {
                     return None;
                 }
-                let addr = parts[0].trim_start().trim_start_matches("volatile ").trim_start().strip_prefix("xchg ")?;
+                let addr = parts[0]
+                    .trim_start()
+                    .trim_start_matches("volatile ")
+                    .trim_start()
+                    .strip_prefix("xchg ")?;
                 only(addr).then_some(())?;
                 self.functions(fi, parts[1], ctx, depth + 1)
             }
@@ -1002,7 +1193,10 @@ impl Reader<'_> {
                 if parts.len() < 3 || mentions(parts[1]) || mentions(parts[2]) {
                     return None;
                 }
-                let addr = parts[0].trim_start().trim_start_matches("weak ").trim_start_matches("volatile ");
+                let addr = parts[0]
+                    .trim_start()
+                    .trim_start_matches("weak ")
+                    .trim_start_matches("volatile ");
                 only(addr).then_some(())?;
                 self.functions(fi, parts[2], ctx, depth + 1)
             }
@@ -1013,8 +1207,13 @@ impl Reader<'_> {
                     return None;
                 }
                 let &ci = self.func_index.get(callee.as_str())?;
-                let args: Vec<String> = split_top(group(rhs, open)).iter().map(|a| a.trim().to_string()).collect();
-                if rhs[open..].len() > group(rhs, open).len() + 2 && mentions(&rhs[open + group(rhs, open).len() + 2..]) {
+                let args: Vec<String> = split_top(group(rhs, open))
+                    .iter()
+                    .map(|a| a.trim().to_string())
+                    .collect();
+                if rhs[open..].len() > group(rhs, open).len() + 2
+                    && mentions(&rhs[open + group(rhs, open).len() + 2..])
+                {
                     return None;
                 }
                 let mut out = BTreeSet::new();
@@ -1039,7 +1238,13 @@ impl Reader<'_> {
 
     /// The functions stored through parameter `param` of function `fi`, if
     /// every use of it there is one [`dispatch_tables`] reads.
-    fn uses_of_param(&self, fi: usize, param: &str, ctx: &mut Passed, depth: usize) -> Option<BTreeSet<String>> {
+    fn uses_of_param(
+        &self,
+        fi: usize,
+        param: &str,
+        ctx: &mut Passed,
+        depth: usize,
+    ) -> Option<BTreeSet<String>> {
         let p = Operand::Local(param);
         let mut out = BTreeSet::new();
         for line in &self.funcs[fi].body {
@@ -1053,7 +1258,13 @@ impl Reader<'_> {
     /// The functions defined here that the value of `operand` (a typed
     /// operand, `ptr %x`) in function `fi` may be, if this can follow it to
     /// nothing else.
-    fn functions(&self, fi: usize, operand: &str, ctx: &mut Passed, depth: usize) -> Option<BTreeSet<String>> {
+    fn functions(
+        &self,
+        fi: usize,
+        operand: &str,
+        ctx: &mut Passed,
+        depth: usize,
+    ) -> Option<BTreeSet<String>> {
         if depth > MAX_FOLLOW {
             return None;
         }
@@ -1066,18 +1277,31 @@ impl Reader<'_> {
             _ => return None,
         };
         let r = refs(value);
-        let [(global, name)] = r.as_slice() else { return None };
+        let [(global, name)] = r.as_slice() else {
+            return None;
+        };
         if *global {
-            return self.func_index.contains_key(name.as_str()).then(|| BTreeSet::from([name.clone()]));
+            return self
+                .func_index
+                .contains_key(name.as_str())
+                .then(|| BTreeSet::from([name.clone()]));
         }
         let f = &self.funcs[fi];
         if let Some(j) = f.params.iter().position(|q| q == name) {
             let (caller, args) = ctx.pop()?;
-            let r = args.get(j).cloned().and_then(|a| self.functions(caller, &a, ctx, depth + 1));
+            let r = args
+                .get(j)
+                .cloned()
+                .and_then(|a| self.functions(caller, &a, ctx, depth + 1));
             ctx.push((caller, args));
             return r;
         }
-        let def = f.body.iter().find(|l| l.starts_with('%') && refs(&l[..l.find(" = ").unwrap_or(0)]).first().is_some_and(|(g, n)| !g && n == name))?;
+        let def = f.body.iter().find(|l| {
+            l.starts_with('%')
+                && refs(&l[..l.find(" = ").unwrap_or(0)])
+                    .first()
+                    .is_some_and(|(g, n)| !g && n == name)
+        })?;
         let rhs = &def[def.find(" = ")? + 3..];
         let opname = rhs.split(' ').next().unwrap_or("");
         let rest = &rhs[opname.len()..];
@@ -1105,11 +1329,15 @@ impl Reader<'_> {
                 let parts = split_top(rest);
                 let addr = parts.iter().find(|x| x.trim_start().starts_with("ptr "))?;
                 let named = refs(addr);
-                let [(false, slot)] = named.as_slice() else { return None };
+                let [(false, slot)] = named.as_slice() else {
+                    return None;
+                };
                 let is_alloca = f.body.iter().any(|l| {
                     l.starts_with('%')
                         && l[l.find(" = ").map_or(l.len(), |e| e + 3)..].starts_with("alloca ")
-                        && refs(&l[..l.find(" = ").unwrap_or(0)]).first().is_some_and(|(g, n)| !g && n == slot)
+                        && refs(&l[..l.find(" = ").unwrap_or(0)])
+                            .first()
+                            .is_some_and(|(g, n)| !g && n == slot)
                 });
                 if !is_alloca {
                     return None;
@@ -1123,7 +1351,13 @@ impl Reader<'_> {
     /// The functions stored into stack slot `slot` (an `alloca` of function
     /// `fi`), if the function only loads from it, stores into it, and marks
     /// its lifetime.
-    fn stack_slot(&self, fi: usize, slot: &str, ctx: &mut Passed, depth: usize) -> Option<BTreeSet<String>> {
+    fn stack_slot(
+        &self,
+        fi: usize,
+        slot: &str,
+        ctx: &mut Passed,
+        depth: usize,
+    ) -> Option<BTreeSet<String>> {
         let p = Operand::Local(slot);
         let mut out = BTreeSet::new();
         for line in &self.funcs[fi].body {
@@ -1143,7 +1377,9 @@ impl Reader<'_> {
             let mentions = |part: &str| refs(part).iter().any(|r| p.is(r));
             match opname {
                 "load" => {
-                    let addr = parts.iter().position(|x| x.trim_start().starts_with("ptr "))?;
+                    let addr = parts
+                        .iter()
+                        .position(|x| x.trim_start().starts_with("ptr "))?;
                     if !only(parts[addr]) {
                         return None;
                     }
@@ -1223,11 +1459,18 @@ impl Analysis<'_> {
                         }
                     }
                     Inst::Call(_, Callee::Direct(gid), args, _) => {
-                        let Some(w) = self.fn_of_global.get(gid) else { continue };
+                        let Some(w) = self.fn_of_global.get(gid) else {
+                            continue;
+                        };
                         let w = *w as usize;
-                        let arg_infos: Vec<Info> = args.iter().map(|a| read(a, &self.values[u])).collect();
+                        let arg_infos: Vec<Info> =
+                            args.iter().map(|a| read(a, &self.values[u])).collect();
                         for e2 in &self.sums[w].pending {
-                            let v = instantiate(&BTreeSet::from([e2.clone()]), &arg_infos, &self.stacks[u]);
+                            let v = instantiate(
+                                &BTreeSet::from([e2.clone()]),
+                                &arg_infos,
+                                &self.stacks[u],
+                            );
                             if named(&v) {
                                 work.push((w, e2.clone()));
                             }
@@ -1244,7 +1487,8 @@ impl Analysis<'_> {
 /// Functions known to allocate fresh memory, by the demangled path's
 /// leading segments, and the C allocator.
 fn is_allocator(name: &str, path: &[String]) -> bool {
-    let rust = |f: &str| path.len() >= 3 && path[0] == "alloc" && path[1] == "alloc" && path[2] == f;
+    let rust =
+        |f: &str| path.len() >= 3 && path[0] == "alloc" && path[1] == "alloc" && path[2] == f;
     matches!(name, "malloc" | "calloc" | "aligned_alloc" | "valloc")
         || rust("alloc")
         || rust("alloc_zeroed")
@@ -1280,91 +1524,186 @@ fn returns_its_argument(name: &str, path: &[String]) -> bool {
 const INERT: &[(&[&str], &str)] = &[
     (
         &[
-            "memcmp", "bcmp", "memset", "bzero", "strlen", "strnlen", "strcmp", "strncmp",
-            "strerror_r", "__xpg_strerror_r", "gai_strerror",
+            "memcmp",
+            "bcmp",
+            "memset",
+            "bzero",
+            "strlen",
+            "strnlen",
+            "strcmp",
+            "strncmp",
+            "strerror_r",
+            "__xpg_strerror_r",
+            "gai_strerror",
         ],
         "compare, measure or fill memory the caller passes, write a message's bytes \
          into it, or point at a fixed message",
     ),
     (
         &[
-            "free", "malloc_size", "malloc_usable_size", "posix_memalign", "mmap", "mmap64", "munmap",
-            "mprotect", "madvise",
+            "free",
+            "malloc_size",
+            "malloc_usable_size",
+            "posix_memalign",
+            "mmap",
+            "mmap64",
+            "munmap",
+            "mprotect",
+            "madvise",
         ],
         "free memory, size it, or hand back fresh memory, which holds nothing of the program's",
     ),
     (
         &[
-            "pthread_mutex_unlock", "pthread_mutex_trylock", "pthread_mutex_init",
-            "pthread_mutex_destroy", "pthread_mutexattr_*", "pthread_cond_signal",
-            "pthread_cond_broadcast", "pthread_cond_init", "pthread_cond_destroy",
-            "pthread_condattr_*", "pthread_rwlock_unlock", "pthread_rwlock_tryrdlock",
-            "pthread_rwlock_trywrlock", "pthread_rwlock_init", "pthread_rwlock_destroy",
-            "os_unfair_lock_unlock", "os_unfair_lock_trylock", "dispatch_semaphore_signal",
-            "dispatch_release", "dispatch_retain", "dispatch_time", "__ulock_wake",
+            "pthread_mutex_unlock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_init",
+            "pthread_mutex_destroy",
+            "pthread_mutexattr_*",
+            "pthread_cond_signal",
+            "pthread_cond_broadcast",
+            "pthread_cond_init",
+            "pthread_cond_destroy",
+            "pthread_condattr_*",
+            "pthread_rwlock_unlock",
+            "pthread_rwlock_tryrdlock",
+            "pthread_rwlock_trywrlock",
+            "pthread_rwlock_init",
+            "pthread_rwlock_destroy",
+            "os_unfair_lock_unlock",
+            "os_unfair_lock_trylock",
+            "dispatch_semaphore_signal",
+            "dispatch_release",
+            "dispatch_retain",
+            "dispatch_time",
+            "__ulock_wake",
             "os_sync_wake_by_address_*",
         ],
         "change or read a lock's own state, or an integer setting",
     ),
     (
         &[
-            "pthread_threadid_np", "pthread_get_stacksize_np", "pthread_attr_init",
-            "pthread_attr_destroy", "pthread_attr_set*", "pthread_attr_getstacksize",
-            "pthread_attr_getguardsize", "pthread_attr_getstack", "pthread_detach",
-            "pthread_setname_np", "pthread_key_create", "pthread_key_delete", "pthread_setspecific",
+            "pthread_threadid_np",
+            "pthread_get_stacksize_np",
+            "pthread_attr_init",
+            "pthread_attr_destroy",
+            "pthread_attr_set*",
+            "pthread_attr_getstacksize",
+            "pthread_attr_getguardsize",
+            "pthread_attr_getstack",
+            "pthread_detach",
+            "pthread_setname_np",
+            "pthread_key_create",
+            "pthread_key_delete",
+            "pthread_setspecific",
             "_tlv_atexit",
-            "gettid", "sched_getaffinity",
+            "gettid",
+            "sched_getaffinity",
         ],
         "read a thread's integer state, set its attributes, keep a value for a \
          thread-local key, or register a destructor the OS runs at thread exit",
     ),
     (
         &[
-            "clock_gettime", "clock_gettime_nsec_np", "mach_absolute_time",
-            "mach_continuous_time", "mach_timebase_info", "gettimeofday", "time",
-            "getpid", "getppid", "getuid", "geteuid", "getgid", "getegid", "sysconf",
-            "_NSGetExecutablePath", "getauxval",
+            "clock_gettime",
+            "clock_gettime_nsec_np",
+            "mach_absolute_time",
+            "mach_continuous_time",
+            "mach_timebase_info",
+            "gettimeofday",
+            "time",
+            "getpid",
+            "getppid",
+            "getuid",
+            "geteuid",
+            "getgid",
+            "getegid",
+            "sysconf",
+            "_NSGetExecutablePath",
+            "getauxval",
         ],
         "read a clock, an id or a process constant as integers or bytes",
     ),
     (
         &[
-            "CCRandomGenerateBytes", "arc4random", "arc4random_buf", "arc4random_uniform", "getentropy",
+            "CCRandomGenerateBytes",
+            "arc4random",
+            "arc4random_buf",
+            "arc4random_uniform",
+            "getentropy",
             "getrandom",
         ],
         "write random bytes",
     ),
     (
         &[
-            "_Unwind_GetIP", "_Unwind_GetIPInfo", "_Unwind_GetCFA", "_Unwind_GetRegionStart",
-            "_Unwind_GetDataRelBase", "_Unwind_GetTextRelBase", "_Unwind_SetGR",
-            "_Unwind_SetIP", "_Unwind_DeleteException", "_Unwind_RaiseException",
-            "_Unwind_Resume", "_Unwind_GetLanguageSpecificData",
+            "_Unwind_GetIP",
+            "_Unwind_GetIPInfo",
+            "_Unwind_GetCFA",
+            "_Unwind_GetRegionStart",
+            "_Unwind_GetDataRelBase",
+            "_Unwind_GetTextRelBase",
+            "_Unwind_SetGR",
+            "_Unwind_SetIP",
+            "_Unwind_DeleteException",
+            "_Unwind_RaiseException",
+            "_Unwind_Resume",
+            "_Unwind_GetLanguageSpecificData",
         ],
         "read addresses as integers from the frame being unwound, or its exception \
          table, whose entries are offsets and type descriptors; write to the frame; \
          or unwind",
     ),
     (
-        &["__error", "__errno", "__errno_location", "_NSGetArgc", "_NSGetArgv", "_NSGetEnviron"],
+        &[
+            "__error",
+            "__errno",
+            "__errno_location",
+            "_NSGetArgc",
+            "_NSGetArgv",
+            "_NSGetEnviron",
+        ],
         "point at the thread's errno, or at the argument count and the argument \
          and environment strings",
     ),
     (
-        &["opendir", "fdopendir", "readdir", "readdir_r", "readdir64", "readdir64_r", "closedir"],
+        &[
+            "opendir",
+            "fdopendir",
+            "readdir",
+            "readdir_r",
+            "readdir64",
+            "readdir64_r",
+            "closedir",
+        ],
         "open, read or close a directory stream: the stream holds a descriptor, \
          a buffer and positions, and an entry holds a name and integers",
     ),
     (
-        &["stat", "fstat", "lstat", "fstatat", "stat64", "fstat64", "lstat64", "fstatat64", "statx"],
+        &[
+            "stat",
+            "fstat",
+            "lstat",
+            "fstatat",
+            "stat64",
+            "fstat64",
+            "lstat64",
+            "fstatat64",
+            "statx",
+        ],
         "fill the buffer the caller passes with a file's metadata, all integers",
     ),
-    (&["sigemptyset", "sigaddset", "pthread_sigmask"], "build or set a signal mask"),
+    (
+        &["sigemptyset", "sigaddset", "pthread_sigmask"],
+        "build or set a signal mask",
+    ),
     (&["abort", "_exit"], "end the process"),
 ];
 
 fn is_inert_external(name: &str) -> bool {
-    INERT.iter().any(|(names, _)| super::libc::listed(names, name))
+    INERT
+        .iter()
+        .any(|(names, _)| super::libc::listed(names, name))
 }
 
 /// `%name` and `@name` tokens in an operand string, with quoted names.
@@ -1401,7 +1740,9 @@ fn refs(s: &str) -> Vec<(bool, String)> {
                 s[start..j.min(b.len())].to_string()
             } else {
                 let start = i;
-                while i < b.len() && (b[i].is_ascii_alphanumeric() || matches!(b[i], b'-' | b'$' | b'.' | b'_')) {
+                while i < b.len()
+                    && (b[i].is_ascii_alphanumeric() || matches!(b[i], b'-' | b'$' | b'.' | b'_'))
+                {
                     i += 1;
                 }
                 s[start..i].to_string()
@@ -1509,13 +1850,19 @@ fn split_module(text: &str) -> (Vec<Func>, Vec<Global>, Vec<String>) {
                 None => continue,
             };
             let rest = &line[at..];
-            let Some((_, name)) = refs(rest).into_iter().next() else { continue };
+            let Some((_, name)) = refs(rest).into_iter().next() else {
+                continue;
+            };
             let open = at + rest.find('(').unwrap_or(0);
             let params: Vec<String> = split_top(group(line, open))
                 .iter()
                 .filter_map(|p| refs(p).into_iter().find(|(g, _)| !g).map(|(_, n)| n))
                 .collect();
-            let mut f = Func { name, params, body: Vec::new() };
+            let mut f = Func {
+                name,
+                params,
+                body: Vec::new(),
+            };
             if line.trim_end().ends_with('{') {
                 current = Some(f);
             } else {
@@ -1539,7 +1886,13 @@ fn split_module(text: &str) -> (Vec<Func>, Vec<Global>, Vec<String>) {
                 let internal = words.iter().any(|w| matches!(*w, "internal" | "private"));
                 // `global ptr @f`: a pointer, its initialiser one symbol.
                 let holds_pointer = words.windows(2).any(|w| w == ["global", "ptr"]);
-                globals.push(Global { name: name.clone(), mutable, internal, holds_pointer, init });
+                globals.push(Global {
+                    name: name.clone(),
+                    mutable,
+                    internal,
+                    holds_pointer,
+                    init,
+                });
             }
         }
     }
@@ -1575,7 +1928,9 @@ fn callee_open(rhs: &str) -> Option<usize> {
                 }
                 j += 1;
             } else {
-                while j < b.len() && (b[j].is_ascii_alphanumeric() || matches!(b[j], b'-' | b'$' | b'.' | b'_')) {
+                while j < b.len()
+                    && (b[j].is_ascii_alphanumeric() || matches!(b[j], b'-' | b'$' | b'.' | b'_'))
+                {
                     j += 1;
                 }
             }
@@ -1590,7 +1945,6 @@ fn callee_open(rhs: &str) -> Option<usize> {
     None
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1598,12 +1952,16 @@ mod tests {
     #[test]
     fn quoted_text_names_no_value() {
         // An AT&T asm template's registers and a `;` or `@` in it are data.
-        let line = r#"call void asm sideeffect "movq %rax, %rdi; call foo@PLT", "r,~{memory}"(ptr %p)"#;
+        let line =
+            r#"call void asm sideeffect "movq %rax, %rdi; call foo@PLT", "r,~{memory}"(ptr %p)"#;
         assert_eq!(refs(line), vec![(false, "p".to_string())]);
         let fake = r#"call void asm "jmp *%rax(", "r"(ptr %p)"#;
         assert_eq!(callee_open(fake), None);
         let named = r#"call void @"weird name"(ptr %p)"#;
-        assert_eq!(&named[..callee_open(named).unwrap()], r#"call void @"weird name""#);
+        assert_eq!(
+            &named[..callee_open(named).unwrap()],
+            r#"call void @"weird name""#
+        );
     }
 
     /// `depth` helpers, each calling through a field of what it is handed
@@ -1614,7 +1972,11 @@ mod tests {
              define void @root() {\n  %p = load ptr, ptr @SLOT\n  call void @l0(ptr %p)\n  ret void\n}\n",
         );
         for i in 0..depth {
-            let next = if i + 1 < depth { format!("  call void @l{}(ptr %p)\n", i + 1) } else { String::new() };
+            let next = if i + 1 < depth {
+                format!("  call void @l{}(ptr %p)\n", i + 1)
+            } else {
+                String::new()
+            };
             t.push_str(&format!(
                 "define internal void @l{i}(ptr %p) {{\n  %a = getelementptr inbounds i8, ptr %p, i64 {}\n  \
                  %f = load ptr, ptr %a\n  call void %f()\n{next}  ret void\n}}\n",
@@ -1632,12 +1994,15 @@ mod tests {
         let mut largest = Vec::new();
         for depth in [50, 400] {
             let text = chain(depth);
-            let analysed: HashSet<String> =
-                std::iter::once("root".to_string()).chain((0..depth).map(|i| format!("l{i}"))).collect();
+            let analysed: HashSet<String> = std::iter::once("root".to_string())
+                .chain((0..depth).map(|i| format!("l{i}")))
+                .collect();
             let (sites, sums, _) = analyse(&text, &analysed, &|_| false);
             let funcs: BTreeSet<&str> = sites.iter().map(|s| s.func.as_str()).collect();
             assert_eq!(funcs.len(), depth);
-            assert!(sites.iter().all(|s| s.at == "root" && s.sources == ["loaded from `SLOT`"]));
+            assert!(sites
+                .iter()
+                .all(|s| s.at == "root" && s.sources == ["loaded from `SLOT`"]));
             largest.push(sums.iter().map(|s| s.pending.len()).max().unwrap_or(0));
         }
         assert_eq!(largest[0], largest[1], "{largest:?}");
@@ -1645,8 +2010,11 @@ mod tests {
     }
     fn sites(text: &str, analysed: &[&str]) -> Vec<(String, String, Vec<String>)> {
         let analysed: HashSet<String> = analysed.iter().map(|s| s.to_string()).collect();
-        let mut out: Vec<_> =
-            analyse(text, &analysed, &|_| false).0.into_iter().map(|s| (s.at, s.func, s.sources)).collect();
+        let mut out: Vec<_> = analyse(text, &analysed, &|_| false)
+            .0
+            .into_iter()
+            .map(|s| (s.at, s.func, s.sources))
+            .collect();
         out.sort();
         out
     }
@@ -1661,19 +2029,28 @@ mod tests {
              call void %h(i32 2)\n  ret void\n}\n";
         assert_eq!(
             sites(text, &["root"]),
-            [("root".into(), "root".into(), vec!["returned by `sigaction`".into()])]
+            [(
+                "root".into(),
+                "root".into(),
+                vec!["returned by `sigaction`".into()]
+            )]
         );
     }
 
     /// `signal` returns the handler installed before.
     #[test]
     fn a_handler_returned_by_an_external_is_a_slot() {
-        let text = "declare ptr @signal(i32, ptr)\ndefine internal void @mine(i32 %s) {\n  ret void\n}\n\
+        let text =
+            "declare ptr @signal(i32, ptr)\ndefine internal void @mine(i32 %s) {\n  ret void\n}\n\
              define void @root() {\n  %prev = call ptr @signal(i32 2, ptr @mine)\n  \
              call void %prev(i32 2)\n  ret void\n}\n";
         assert_eq!(
             sites(text, &["root", "mine"]),
-            [("root".into(), "root".into(), vec!["returned by `signal`".into()])]
+            [(
+                "root".into(),
+                "root".into(),
+                vec!["returned by `signal`".into()]
+            )]
         );
     }
 
@@ -1688,7 +2065,11 @@ mod tests {
              %h = load ptr, ptr %old\n  call void %h(i32 2)\n  ret void\n}\n";
         assert_eq!(
             sites(text, &["root", "previous"]),
-            [("root".into(), "root".into(), vec!["returned by `sigaction`".into()])]
+            [(
+                "root".into(),
+                "root".into(),
+                vec!["returned by `sigaction`".into()]
+            )]
         );
     }
 
@@ -1697,8 +2078,14 @@ mod tests {
     #[test]
     fn a_result_into_the_argument_keeps_the_arguments_slots() {
         for (decl, call) in [
-            ("declare ptr @realloc(ptr, i64)", "call ptr @realloc(ptr %p, i64 64)"),
-            ("declare ptr @memchr(ptr, i32, i64)", "call ptr @memchr(ptr %p, i32 0, i64 64)"),
+            (
+                "declare ptr @realloc(ptr, i64)",
+                "call ptr @realloc(ptr %p, i64 64)",
+            ),
+            (
+                "declare ptr @memchr(ptr, i32, i64)",
+                "call ptr @memchr(ptr %p, i32 0, i64 64)",
+            ),
         ] {
             let text = format!(
                 "@SLOT = internal global ptr null\n{decl}\n\
@@ -1707,7 +2094,11 @@ mod tests {
             );
             assert_eq!(
                 sites(&text, &["root"]),
-                [("root".into(), "root".into(), vec!["loaded from `SLOT`".into()])],
+                [(
+                    "root".into(),
+                    "root".into(),
+                    vec!["loaded from `SLOT`".into()]
+                )],
                 "{decl}"
             );
         }
@@ -1729,7 +2120,8 @@ mod tests {
     /// stack beside a buffer it hands one stays the member's own.
     #[test]
     fn an_inert_external_leaves_the_stack_alone() {
-        let text = "declare i32 @clock_gettime(i32, ptr)\ndefine internal void @mine() {\n  ret void\n}\n\
+        let text =
+            "declare i32 @clock_gettime(i32, ptr)\ndefine internal void @mine() {\n  ret void\n}\n\
              define void @root() {\n  %s = alloca [32 x i8]\n  store ptr @mine, ptr %s\n  \
              %ts = getelementptr inbounds i8, ptr %s, i64 16\n  \
              %r = call i32 @clock_gettime(i32 6, ptr %ts)\n  %f = load ptr, ptr %s\n  \

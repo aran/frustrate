@@ -43,7 +43,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use frustrate::StreamSink;
-use iroh::endpoint::{presets, Builder, Connection, PathEvent, ReadExactError, RecvStream, SendStream};
+use iroh::endpoint::{
+    presets, Builder, Connection, PathEvent, ReadExactError, RecvStream, SendStream,
+};
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode, RelayUrl};
 use iroh_tickets::endpoint::EndpointTicket;
 use tokio::runtime::{Handle, Runtime};
@@ -346,9 +348,8 @@ impl Drop for Node {
         // obvious `rt.block_on(timeout(d, ep.close()))` panics with "there is
         // no reactor running", inside `Drop`, which Rust turns into a
         // process abort.
-        let _ = rt.block_on(async {
-            tokio::time::timeout(CLOSE_TIMEOUT, self.endpoint.close()).await
-        });
+        let _ =
+            rt.block_on(async { tokio::time::timeout(CLOSE_TIMEOUT, self.endpoint.close()).await });
         // Every task in this file is a loop, so a plain `Runtime::drop` — which
         // waits for all of them — would never return either.
         rt.shutdown_timeout(SHUTDOWN_TIMEOUT);
@@ -571,14 +572,26 @@ async fn adopt(conn: Connection, peers: Peers, events: Events, me: String, initi
 
     let hello = match proto::encode(&me) {
         Ok(frame) => frame,
-        Err(e) => return fail(&events, &peer, format!("our own nickname is unsendable: {e}")),
+        Err(e) => {
+            return fail(
+                &events,
+                &peer,
+                format!("our own nickname is unsendable: {e}"),
+            )
+        }
     };
     if let Err(e) = send.write_all(&hello).await {
         return fail(&events, &peer, e.to_string());
     }
     let nickname = match read_frame(&mut recv).await {
         Ok(Some(nickname)) => nickname,
-        Ok(None) => return fail(&events, &peer, "the peer left before saying hello".to_string()),
+        Ok(None) => {
+            return fail(
+                &events,
+                &peer,
+                "the peer left before saying hello".to_string(),
+            )
+        }
         Err(e) => return fail(&events, &peer, e),
     };
 
@@ -762,7 +775,11 @@ mod tests {
 
     #[test]
     fn a_relay_url_is_accepted_in_both_schemes() {
-        for text in ["http://localhost:3340", "https://relay.example.com", "  http://127.0.0.1:3340  "] {
+        for text in [
+            "http://localhost:3340",
+            "https://relay.example.com",
+            "  http://127.0.0.1:3340  ",
+        ] {
             assert!(parse_relay_url(text).is_ok(), "{text} should parse");
         }
         for preset in [Preset::Minimal, Preset::N0] {

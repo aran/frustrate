@@ -203,7 +203,6 @@ impl FramedWriter {
     pub fn event(status: u8, selector: u8) -> Self {
         Self::with_frame(&[status, selector])
     }
-
 }
 
 /// The two doors a test needs and production does not. Every shipped payload
@@ -1006,8 +1005,16 @@ mod tests {
         same!(write_u32_slice, write_u32, [0u32, 1, 2147483648, u32::MAX]);
         same!(write_i64_slice, write_i64, [i64::MIN, -1, 0, 1, i64::MAX]);
         same!(write_u64_slice, write_u64, [0u64, 1, 1 << 63, u64::MAX]);
-        same!(write_f32_slice, write_f32, [0.0f32, -0.0, 1.5, f32::MIN, f32::NAN]);
-        same!(write_f64_slice, write_f64, [0.0f64, -0.0, 1.5, f64::MIN, f64::NAN]);
+        same!(
+            write_f32_slice,
+            write_f32,
+            [0.0f32, -0.0, 1.5, f32::MIN, f32::NAN]
+        );
+        same!(
+            write_f64_slice,
+            write_f64,
+            [0.0f64, -0.0, 1.5, f64::MIN, f64::NAN]
+        );
     }
 
     /// The other direction: a bulk read must return exactly what the element
@@ -1029,24 +1036,60 @@ mod tests {
 
                 let mut loops = ByteReader::new(&buf);
                 let want: Vec<_> = (0..v.len()).map(|_| loops.$one()).collect();
-                assert_eq!(
-                    format!("{got:?}"),
-                    format!("{want:?}"),
-                    stringify!($bulk)
-                );
+                assert_eq!(format!("{got:?}"), format!("{want:?}"), stringify!($bulk));
             }};
         }
         same!(write_i8, read_i8_vec, read_i8, [i8::MIN, -1, 0, 1, i8::MAX]);
         same!(write_u8, read_u8_vec, read_u8, [0u8, 1, 127, 128, u8::MAX]);
-        same!(write_i16, read_i16_vec, read_i16, [i16::MIN, -1, 0, 1, i16::MAX]);
-        same!(write_u16, read_u16_vec, read_u16, [0u16, 1, 32768, u16::MAX]);
-        same!(write_i32, read_i32_vec, read_i32, [i32::MIN, -1, 0, 1, i32::MAX]);
-        same!(write_u32, read_u32_vec, read_u32, [0u32, 1, 2147483648, u32::MAX]);
-        same!(write_i64, read_i64_vec, read_i64, [i64::MIN, -1, 0, 1, i64::MAX]);
-        same!(write_u64, read_u64_vec, read_u64, [0u64, 1, 1 << 63, u64::MAX]);
+        same!(
+            write_i16,
+            read_i16_vec,
+            read_i16,
+            [i16::MIN, -1, 0, 1, i16::MAX]
+        );
+        same!(
+            write_u16,
+            read_u16_vec,
+            read_u16,
+            [0u16, 1, 32768, u16::MAX]
+        );
+        same!(
+            write_i32,
+            read_i32_vec,
+            read_i32,
+            [i32::MIN, -1, 0, 1, i32::MAX]
+        );
+        same!(
+            write_u32,
+            read_u32_vec,
+            read_u32,
+            [0u32, 1, 2147483648, u32::MAX]
+        );
+        same!(
+            write_i64,
+            read_i64_vec,
+            read_i64,
+            [i64::MIN, -1, 0, 1, i64::MAX]
+        );
+        same!(
+            write_u64,
+            read_u64_vec,
+            read_u64,
+            [0u64, 1, 1 << 63, u64::MAX]
+        );
         // NaN is compared through Debug above, so -0.0 and NaN both count.
-        same!(write_f32, read_f32_vec, read_f32, [0.0f32, -0.0, 1.5, f32::MIN, f32::NAN]);
-        same!(write_f64, read_f64_vec, read_f64, [0.0f64, -0.0, 1.5, f64::MIN, f64::NAN]);
+        same!(
+            write_f32,
+            read_f32_vec,
+            read_f32,
+            [0.0f32, -0.0, 1.5, f32::MIN, f32::NAN]
+        );
+        same!(
+            write_f64,
+            read_f64_vec,
+            read_f64,
+            [0.0f64, -0.0, 1.5, f64::MIN, f64::NAN]
+        );
     }
 
     /// Golden vectors; the Dart suite pins the same bytes

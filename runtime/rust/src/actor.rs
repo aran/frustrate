@@ -107,7 +107,9 @@ struct Node {
 
 impl Inbox {
     fn new() -> Self {
-        Inbox { head: AtomicPtr::new(null_mut()) }
+        Inbox {
+            head: AtomicPtr::new(null_mut()),
+        }
     }
 
     /// The closed sentinel: well aligned, never an allocation, never
@@ -118,7 +120,10 @@ impl Inbox {
 
     /// Queue `msg`, or hand it back if the inbox is closed.
     fn push(&self, msg: Msg) -> Result<(), Msg> {
-        let node = Box::into_raw(Box::new(Node { msg, next: null_mut() }));
+        let node = Box::into_raw(Box::new(Node {
+            msg,
+            next: null_mut(),
+        }));
         let mut head = self.head.load(Ordering::Relaxed);
         loop {
             if head == Self::closed() {
@@ -213,10 +218,7 @@ impl Host {
 
     /// Queue a closure the actor posted to itself, behind everything already
     /// queued. Hands it back if the host has stopped.
-    pub(crate) fn post_posted(
-        &self,
-        job: crate::addr::Posted,
-    ) -> Result<(), crate::addr::Posted> {
+    pub(crate) fn post_posted(&self, job: crate::addr::Posted) -> Result<(), crate::addr::Posted> {
         let msg = Msg::Posted {
             job,
             pending: crate::idle::Pending::begin(),
@@ -286,9 +288,9 @@ pub(crate) fn current_host_id() -> Option<u64> {
 /// The host this thread is. Panics off a host thread: an `Addr` is built only
 /// by generated glue running on its actor's executor.
 pub(crate) fn current() -> Arc<Host> {
-    CURRENT_HOST.with(|c| c.get().map(Arc::clone)).expect(
-        "frustrate: an Addr can only be made on its actor's executor — bridge bug",
-    )
+    CURRENT_HOST
+        .with(|c| c.get().map(Arc::clone))
+        .expect("frustrate: an Addr can only be made on its actor's executor — bridge bug")
 }
 
 static NEXT_HOST: AtomicU64 = AtomicU64::new(1);
@@ -411,7 +413,10 @@ pub(crate) fn spawn_owned(isolate: u32, owner: u64) -> Arc<Host> {
         thread,
         stopping: AtomicBool::new(false),
     });
-    handoff.store(Arc::into_raw(Arc::clone(&host)) as *mut Host, Ordering::Release);
+    handoff.store(
+        Arc::into_raw(Arc::clone(&host)) as *mut Host,
+        Ordering::Release,
+    );
     host.thread.unpark();
     host
 }
@@ -450,8 +455,15 @@ fn run(host: Arc<Host>) {
         let mut batch = batch.into_iter();
         while let Some(msg) = batch.next() {
             match msg {
-                Msg::Call { call_id, job, pending: _pending } => serve(call_id, job),
-                Msg::Posted { job, pending: _pending } => crate::addr::run(job, host.owner),
+                Msg::Call {
+                    call_id,
+                    job,
+                    pending: _pending,
+                } => serve(call_id, job),
+                Msg::Posted {
+                    job,
+                    pending: _pending,
+                } => crate::addr::run(job, host.owner),
                 Msg::Stop => {
                     stop(&host, batch);
                     return;
@@ -511,7 +523,10 @@ fn stop(host: &Host, behind: impl Iterator<Item = Msg>) {
             Msg::Call { call_id, .. } => refuse(host.id, call_id),
             // Behind the stop, so the actor is disposed or about to be
             // drained: dropped unrun, like a post that finds its root gone.
-            Msg::Posted { job, pending: _pending } => crate::addr::discard(job),
+            Msg::Posted {
+                job,
+                pending: _pending,
+            } => crate::addr::discard(job),
             Msg::Stop => {}
         }
     }
@@ -666,11 +681,11 @@ pub unsafe extern "C" fn frustrate_actor_reap(token: *mut c_void) {
 mod tests {
     use super::*;
     use crate::codec::FramedWriter;
-    use crate::test_wait::{Count, wait_until};
+    use crate::test_wait::{wait_until, Count};
     use std::cell::Cell;
-    use std::sync::Mutex;
     use std::sync::atomic::AtomicUsize;
     use std::sync::mpsc::channel;
+    use std::sync::Mutex;
 
     // One test fn, serialized with other post-using tests via
     // post::test_lock (the post callback is process-global).
@@ -679,8 +694,7 @@ mod tests {
         let _serial = crate::post::test_lock();
         static SEEN: Mutex<Vec<(u64, Vec<u8>)>> = Mutex::new(Vec::new());
         extern "C" fn record(call_id: u64, ptr: *mut u8, len: u64, cap: u64) {
-            let bytes =
-                unsafe { Vec::from_raw_parts(ptr, len as usize, cap as usize) };
+            let bytes = unsafe { Vec::from_raw_parts(ptr, len as usize, cap as usize) };
             SEEN.lock().unwrap().push((call_id, bytes));
         }
         crate::post::init(record);
@@ -701,7 +715,10 @@ mod tests {
         // A call to a stopped/unknown host responds with a loud panic
         // envelope, never silence.
         host.submit(11, || Some(FramedWriter::from_bytes(vec![])));
-        wait_until(|| SEEN.lock().unwrap().len() >= 11, "the stopped host's answer");
+        wait_until(
+            || SEEN.lock().unwrap().len() >= 11,
+            "the stopped host's answer",
+        );
         let seen = SEEN.lock().unwrap();
         let (id, bytes) = &seen[10];
         assert_eq!(*id, 11);
@@ -929,7 +946,11 @@ mod tests {
 
         let (tx, rx) = channel::<u64>();
         host.submit(0, move || {
-            tx.send(crate::__private::handle::actor_new(Counted(&DROPS), "Counted")).unwrap();
+            tx.send(crate::__private::handle::actor_new(
+                Counted(&DROPS),
+                "Counted",
+            ))
+            .unwrap();
             EXIT_MARK.with(|m| m.set(Some(Sentinel(&EXITS))));
             Some(FramedWriter::from_bytes(vec![]))
         });
@@ -1024,8 +1045,14 @@ mod tests {
         rx.recv().unwrap();
 
         // 102 completes naturally on the pool-driven executor.
-        wait_until(|| seen.lock().unwrap().contains(&102), "the fence call never answered");
-        assert!(seen.lock().unwrap().contains(&102), "the ready body answers");
+        wait_until(
+            || seen.lock().unwrap().contains(&102),
+            "the fence call never answered",
+        );
+        assert!(
+            seen.lock().unwrap().contains(&102),
+            "the ready body answers"
+        );
         assert!(
             !crate::executor::cancel(102),
             "an answered call must refuse the claim — dispose() would \
@@ -1068,7 +1095,10 @@ mod tests {
         rx.recv().unwrap();
 
         reap_via_backstop(&host);
-        REAPED_DROPS.wait_for(1, "reap must release the deferred future (nothing else can)");
+        REAPED_DROPS.wait_for(
+            1,
+            "reap must release the deferred future (nothing else can)",
+        );
         assert!(
             !seen.lock().unwrap().contains(&201),
             "no answer is owed to a reaped handle's call"
@@ -1102,8 +1132,7 @@ mod tests {
         let _serial = crate::post::test_lock();
         let seen = recording_posts();
         static QUEUED_DROPS: Count = Count::new();
-        static RAN: std::sync::atomic::AtomicBool =
-            std::sync::atomic::AtomicBool::new(false);
+        static RAN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         RAN.store(false, Ordering::SeqCst);
         let host = spawn_host(0);
 
@@ -1137,9 +1166,15 @@ mod tests {
 
         // 603's answer is FIFO-after 602's slot, so it proves the loop has
         // already passed (and dropped) the claimed job.
-        wait_until(|| seen.lock().unwrap().contains(&603), "the fence call never answered");
+        wait_until(
+            || seen.lock().unwrap().contains(&603),
+            "the fence call never answered",
+        );
         let seen = seen.lock().unwrap();
-        assert!(seen.contains(&603), "the uncancelled queued call must answer");
+        assert!(
+            seen.contains(&603),
+            "the uncancelled queued call must answer"
+        );
         assert!(
             !RAN.load(Ordering::SeqCst),
             "a claimed cancel must stop the job from running at all: a \
@@ -1196,7 +1231,10 @@ mod tests {
         // FIFO-after 701, so its answer proves the loop has already passed the
         // claimed one. Same fence the queued-cancel test uses.
         host.submit(702, || Some(FramedWriter::from_bytes(vec![0])));
-        wait_until(|| seen.lock().unwrap().contains(&702), "the fence call never answered");
+        wait_until(
+            || seen.lock().unwrap().contains(&702),
+            "the fence call never answered",
+        );
         let posted = seen.lock().unwrap();
         assert!(posted.contains(&702), "the uncancelled call must answer");
         assert!(!posted.contains(&701), "a claimed cancel owns the answer");
@@ -1296,7 +1334,10 @@ mod tests {
                         Some(FramedWriter::from_bytes(vec![0]))
                     })
                 };
-                wait_until(|| seen.lock().unwrap().contains(&801), "the call never answered");
+                wait_until(
+                    || seen.lock().unwrap().contains(&801),
+                    "the call never answered",
+                );
             })
         });
         host.request_stop();

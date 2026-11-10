@@ -17,7 +17,8 @@ class FakePlan {
   factory FakePlan.fromBuffer(List<int> bytes) {
     final data = ByteData.sublistView(Uint8List.fromList(bytes));
     // Two 32-bit halves, because dart2js has no `ByteData.getInt64`.
-    final revision = data.getInt32(4, Endian.little) * _2p32 +
+    final revision =
+        data.getInt32(4, Endian.little) * _2p32 +
         data.getUint32(0, Endian.little);
     return FakePlan(utf8.decode(bytes.sublist(8)), revision);
   }

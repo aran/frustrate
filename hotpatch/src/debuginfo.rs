@@ -222,7 +222,9 @@ fn display_name(nodes: &Nodes, composite: &str) -> Option<String> {
             .and_then(|s| s.strip_prefix('!'))
             .and_then(|id| nodes.get(id))
         {
-            Some(parent) if !parent.starts_with("!DIFile(") && !parent.starts_with("!DICompileUnit(") => {
+            Some(parent)
+                if !parent.starts_with("!DIFile(") && !parent.starts_with("!DICompileUnit(") =>
+            {
                 body = parent
             }
             _ => break,
@@ -245,7 +247,9 @@ fn fields(body: &str) -> HashMap<&str, &str> {
     let Some(open) = body.find('(') else {
         return out;
     };
-    let inner = body[open + 1..].strip_suffix(')').unwrap_or(&body[open + 1..]);
+    let inner = body[open + 1..]
+        .strip_suffix(')')
+        .unwrap_or(&body[open + 1..]);
     for part in split_top_level(inner) {
         if let Some((k, v)) = part.split_once(": ") {
             out.insert(k.trim(), v.trim());
@@ -327,9 +331,17 @@ mod tests {
         let reordered = layouts(module("!8, !9").lines());
         // An unnamed array changing size (a string literal's bytes, say) is not
         // a layout a running value has.
-        let longer = layouts(a.replace("DW_TAG_array_type, baseType: !3, size: 128", "DW_TAG_array_type, baseType: !3, size: 256").lines());
+        let longer = layouts(
+            a.replace(
+                "DW_TAG_array_type, baseType: !3, size: 128",
+                "DW_TAG_array_type, baseType: !3, size: 256",
+            )
+            .lines(),
+        );
         assert!(la.changed(&longer).is_empty(), "{:?}", la.changed(&longer));
         // Holder points at Point; only Point is reported.
-        assert!(!la.changed(&reordered).contains(&"fixture::api::Holder".to_string()));
+        assert!(!la
+            .changed(&reordered)
+            .contains(&"fixture::api::Holder".to_string()));
     }
 }

@@ -87,7 +87,9 @@ fn type_path(ty: &str) -> Vec<String> {
     // `dyn A + B`'s principal trait.
     let ty = split_top(ty, " + ").into_iter().next().unwrap_or("");
     let path_like = ty.starts_with('<')
-        || (ty.starts_with(|c: char| c.is_alphanumeric() || c == '_') && !ty.starts_with("fn(") && !ty.starts_with("unsafe "));
+        || (ty.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+            && !ty.starts_with("fn(")
+            && !ty.starts_with("unsafe "));
     if path_like {
         item_path(ty).0
     } else {
@@ -155,11 +157,18 @@ mod tests {
 
     #[test]
     fn a_trait_impls_method_is_its_types_and_its_traits() {
-        let legacy = "_ZN47_$LT$std..fs..File$u20$as$u20$std..io..Read$GT$4read17h0123456789abcdefE";
-        assert_eq!(trait_path(legacy).unwrap().join("::"), "std::io::Read::read");
+        let legacy =
+            "_ZN47_$LT$std..fs..File$u20$as$u20$std..io..Read$GT$4read17h0123456789abcdefE";
+        assert_eq!(
+            trait_path(legacy).unwrap().join("::"),
+            "std::io::Read::read"
+        );
         let v0 = "_RNvXs_NtCs1_7example3apiNtB4_6CircleNtB4_5Shape4area";
         assert_eq!(p(v0), "example::api::Circle::area");
-        assert_eq!(trait_path(v0).unwrap().join("::"), "example::api::Shape::area");
+        assert_eq!(
+            trait_path(v0).unwrap().join("::"),
+            "example::api::Shape::area"
+        );
         assert_eq!(trait_path("_RNvCs1_7example6render"), None);
     }
 
@@ -179,11 +188,26 @@ mod tests {
     #[test]
     fn the_split_ignores_separators_inside_brackets_and_literals() {
         assert_eq!(split_top("a::<b::c>::d", "::"), vec!["a", "<b::c>", "d"]);
-        assert_eq!(split_top("f::<fn() -> u8>::g", "::"), vec!["f", "<fn() -> u8>", "g"]);
-        assert_eq!(split_top(r#"f::<"::>">::g"#, "::"), vec!["f", r#"<"::>">"#, "g"]);
+        assert_eq!(
+            split_top("f::<fn() -> u8>::g", "::"),
+            vec!["f", "<fn() -> u8>", "g"]
+        );
+        assert_eq!(
+            split_top(r#"f::<"::>">::g"#, "::"),
+            vec!["f", r#"<"::>">"#, "g"]
+        );
         assert_eq!(split_top("f::<'<'>::g", "::"), vec!["f", "<'<'>", "g"]);
-        assert_eq!(split_top("f::<&'a u8>::g", "::"), vec!["f", "<&'a u8>", "g"]);
-        assert_eq!(item_path("<&mut [u8] as std::io::Read>::read").0, vec!["[u8]", "read"]);
-        assert_eq!(item_path("<dyn core::any::Any + Send>::is").0, vec!["core", "any", "Any", "is"]);
+        assert_eq!(
+            split_top("f::<&'a u8>::g", "::"),
+            vec!["f", "<&'a u8>", "g"]
+        );
+        assert_eq!(
+            item_path("<&mut [u8] as std::io::Read>::read").0,
+            vec!["[u8]", "read"]
+        );
+        assert_eq!(
+            item_path("<dyn core::any::Any + Send>::is").0,
+            vec!["core", "any", "Any", "is"]
+        );
     }
 }

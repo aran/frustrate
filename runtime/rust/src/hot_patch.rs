@@ -109,7 +109,8 @@ unsafe fn apply(patch_path: *const c_char, anchor: *const c_void) -> Result<(), 
     let mut filled = FILLED.lock().unwrap_or_else(|p| p.into_inner());
     if patch_path.is_null() {
         for &slot in filled.iter() {
-            unsafe { &*(slot as *const AtomicPtr<c_void>) }.store(std::ptr::null_mut(), Ordering::Release);
+            unsafe { &*(slot as *const AtomicPtr<c_void>) }
+                .store(std::ptr::null_mut(), Ordering::Release);
         }
         filled.clear();
         return Ok(());
@@ -119,15 +120,26 @@ unsafe fn apply(patch_path: *const c_char, anchor: *const c_void) -> Result<(), 
     let path = unsafe { CStr::from_ptr(patch_path) };
     let handle = unsafe { sys::dlopen(path.as_ptr(), sys::RTLD_NOW | sys::RTLD_LOCAL) };
     if handle.is_null() {
-        return Err(format!("could not load {}: {}", path.to_string_lossy(), sys::last_error()));
+        return Err(format!(
+            "could not load {}: {}",
+            path.to_string_lossy(),
+            sys::last_error()
+        ));
     }
-    let descriptor = unsafe { sys::dlsym(handle, c"frustrate_hot_patch_descriptor".as_ptr()) } as *const Descriptor;
+    let descriptor = unsafe { sys::dlsym(handle, c"frustrate_hot_patch_descriptor".as_ptr()) }
+        as *const Descriptor;
     if descriptor.is_null() {
-        return Err(format!("{} is not a frustrate patch", path.to_string_lossy()));
+        return Err(format!(
+            "{} is not a frustrate patch",
+            path.to_string_lossy()
+        ));
     }
     let d = unsafe { &*descriptor };
     if d.abi != ABI {
-        return Err(format!("the patch speaks patch ABI {}, this library speaks {ABI}", d.abi));
+        return Err(format!(
+            "the patch speaks patch ABI {}, this library speaks {ABI}",
+            d.abi
+        ));
     }
     let identity = &d.identity[..(d.identity_len as usize).min(32)];
     if identity.is_empty() || identity != own.identity.as_slice() {
@@ -142,7 +154,8 @@ unsafe fn apply(patch_path: *const c_char, anchor: *const c_void) -> Result<(), 
 
     // A patch that reads this library's thread-locals asks for the library's
     // thread-local storage module number, which only the running process knows.
-    let tls_module = unsafe { sys::dlsym(handle, c"frustrate_hot_tls_module".as_ptr()) } as *mut usize;
+    let tls_module =
+        unsafe { sys::dlsym(handle, c"frustrate_hot_tls_module".as_ptr()) } as *mut usize;
     if !tls_module.is_null() {
         if own.tls_module == 0 {
             return Err("the patch reads thread-locals, and this library has none".to_string());
@@ -159,11 +172,17 @@ unsafe fn apply(patch_path: *const c_char, anchor: *const c_void) -> Result<(), 
     for e in entries {
         let name = unsafe { CStr::from_ptr(e.slot) };
         if !name.to_bytes().starts_with(b"frustrate_hot_slot_") {
-            return Err(format!("the patch names `{}`, which is not a slot", name.to_string_lossy()));
+            return Err(format!(
+                "the patch names `{}`, which is not a slot",
+                name.to_string_lossy()
+            ));
         }
         let slot = unsafe { sys::dlsym(own.handle, name.as_ptr()) } as *const AtomicPtr<c_void>;
         if slot.is_null() {
-            return Err(format!("this library has no slot `{}`", name.to_string_lossy()));
+            return Err(format!(
+                "this library has no slot `{}`",
+                name.to_string_lossy()
+            ));
         }
         resolved.push((slot as usize, e.target));
     }
@@ -172,11 +191,13 @@ unsafe fn apply(patch_path: *const c_char, anchor: *const c_void) -> Result<(), 
     // back to the launched code.
     for &slot in filled.iter() {
         if !resolved.iter().any(|(s, _)| *s == slot) {
-            unsafe { &*(slot as *const AtomicPtr<c_void>) }.store(std::ptr::null_mut(), Ordering::Release);
+            unsafe { &*(slot as *const AtomicPtr<c_void>) }
+                .store(std::ptr::null_mut(), Ordering::Release);
         }
     }
     for &(slot, target) in &resolved {
-        unsafe { &*(slot as *const AtomicPtr<c_void>) }.store(target as *mut c_void, Ordering::Release);
+        unsafe { &*(slot as *const AtomicPtr<c_void>) }
+            .store(target as *mut c_void, Ordering::Release);
     }
     *filled = resolved.into_iter().map(|(s, _)| s).collect();
     Ok(())
@@ -245,7 +266,11 @@ mod sys {
             return Err(format!("could not reopen this library: {}", last_error()));
         }
         let (identity, tls_module) = identity(anchor, info.fname)?;
-        Ok(OwnImage { handle, identity, tls_module })
+        Ok(OwnImage {
+            handle,
+            identity,
+            tls_module,
+        })
     }
 
     #[cfg(target_vendor = "apple")]
@@ -278,7 +303,10 @@ mod sys {
             for _ in 0..unsafe { (*header).ncmds } {
                 let (kind, size) = unsafe { (*(cmd as *const u32), *(cmd.add(4) as *const u32)) };
                 if kind == LC_UUID {
-                    return Ok((unsafe { std::slice::from_raw_parts(cmd.add(8), 16) }.to_vec(), 0));
+                    return Ok((
+                        unsafe { std::slice::from_raw_parts(cmd.add(8), 16) }.to_vec(),
+                        0,
+                    ));
                 }
                 cmd = unsafe { cmd.add(size as usize) };
             }
@@ -342,7 +370,11 @@ mod sys {
             search.contained = true;
             // A loader too old to report the module number reports no
             // thread-locals, which `apply` says to a patch that needs them.
-            let tls_module = if size >= std::mem::size_of::<PhdrInfo>() { info.tls_modid } else { 0 };
+            let tls_module = if size >= std::mem::size_of::<PhdrInfo>() {
+                info.tls_modid
+            } else {
+                0
+            };
             for p in phdrs.iter().filter(|p| p.p_type == PT_NOTE) {
                 let mut at = info.addr + p.p_vaddr as usize;
                 let end = at + p.p_memsz as usize;
@@ -359,7 +391,11 @@ mod sys {
                     if kind == NT_GNU_BUILD_ID && namesz == 4 {
                         let owner = unsafe { std::slice::from_raw_parts(name as *const u8, 4) };
                         if owner == b"GNU\0" {
-                            search.found = Some((unsafe { std::slice::from_raw_parts(desc as *const u8, descsz) }.to_vec(), tls_module));
+                            search.found = Some((
+                                unsafe { std::slice::from_raw_parts(desc as *const u8, descsz) }
+                                    .to_vec(),
+                                tls_module,
+                            ));
                             return 1;
                         }
                     }

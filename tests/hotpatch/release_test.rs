@@ -8,13 +8,26 @@ fn a_release_build_has_no_patch_loader_and_no_slots() {
         .expect("runfiles");
     let paths = std::env::var("RELEASE_LIBRARY").expect("RELEASE_LIBRARY");
     // The library's extension is the platform's: .dylib on Mach-O, .so on ELF.
-    let extension = if cfg!(target_vendor = "apple") { "dylib" } else { "so" };
-    let libraries: Vec<&str> = paths.split_whitespace().filter(|p| p.ends_with(extension)).collect();
+    let extension = if cfg!(target_vendor = "apple") {
+        "dylib"
+    } else {
+        "so"
+    };
+    let libraries: Vec<&str> = paths
+        .split_whitespace()
+        .filter(|p| p.ends_with(extension))
+        .collect();
     let cases = [
-        (format!("libhotpatch_fixture.{extension}"), &["frustrate_hotpatch_fixture_call_sync"][..]),
+        (
+            format!("libhotpatch_fixture.{extension}"),
+            &["frustrate_hotpatch_fixture_call_sync"][..],
+        ),
         (
             format!("libcomposed.{extension}"),
-            &["frustrate_hotpatch_alpha_call_sync", "frustrate_hotpatch_beta_call_sync"][..],
+            &[
+                "frustrate_hotpatch_alpha_call_sync",
+                "frustrate_hotpatch_beta_call_sync",
+            ][..],
         ),
     ];
     for (file, entry_points) in cases {
@@ -33,8 +46,15 @@ fn a_release_build_has_no_patch_loader_and_no_slots() {
             .iter()
             .filter(|s| s.starts_with("flutter_hot_patch_") || s.starts_with("frustrate_hot_"))
             .collect();
-        assert!(patch_exports.is_empty(), "{file}: release exports {patch_exports:?}");
-        let slots = image.symbols.keys().filter(|s| s.contains("frustrate_hot_slot_")).count();
+        assert!(
+            patch_exports.is_empty(),
+            "{file}: release exports {patch_exports:?}"
+        );
+        let slots = image
+            .symbols
+            .keys()
+            .filter(|s| s.contains("frustrate_hot_slot_"))
+            .count();
         assert_eq!(slots, 0, "{file}: release defines hot patch slots");
     }
 }

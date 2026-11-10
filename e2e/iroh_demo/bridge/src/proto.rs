@@ -43,7 +43,10 @@ impl std::fmt::Display for FrameError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TooLong(n) => {
-                write!(f, "frame of {n} bytes exceeds the {MAX_BODY_LEN}-byte limit")
+                write!(
+                    f,
+                    "frame of {n} bytes exceeds the {MAX_BODY_LEN}-byte limit"
+                )
             }
             Self::NotUtf8 => f.write_str("frame body is not valid UTF-8"),
             Self::Truncated(want, got) => {

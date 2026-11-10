@@ -232,7 +232,8 @@ fn symbols(line: &str) -> Vec<(String, bool)> {
                 } else {
                     let start = i;
                     while i < b.len()
-                        && (b[i].is_ascii_alphanumeric() || matches!(b[i], b'-' | b'$' | b'.' | b'_'))
+                        && (b[i].is_ascii_alphanumeric()
+                            || matches!(b[i], b'-' | b'$' | b'.' | b'_'))
                     {
                         i += 1;
                     }
@@ -275,7 +276,10 @@ pub(crate) const KNOWN_ASM: &[(&str, &[&[&str]], &str)] = &[
 /// `arch`: its template's instructions, split at newlines and `;`, are
 /// exactly one of the sequences.
 fn known_asm(arch: &str, name: &str) -> bool {
-    let Some(template) = name.strip_prefix("asm \"").and_then(|t| t.strip_suffix('"')) else {
+    let Some(template) = name
+        .strip_prefix("asm \"")
+        .and_then(|t| t.strip_suffix('"'))
+    else {
         return false;
     };
     let insts: Vec<&str> = template
@@ -300,7 +304,9 @@ fn known_asm(arch: &str, name: &str) -> bool {
 fn inline_asm(line: &str) -> Option<&str> {
     let head = &line[..line.find('"')?];
     let words: Vec<&str> = head.split_whitespace().collect();
-    let is_call = words.iter().any(|w| matches!(*w, "call" | "invoke" | "callbr"));
+    let is_call = words
+        .iter()
+        .any(|w| matches!(*w, "call" | "invoke" | "callbr"));
     if !is_call || !words.contains(&"asm") {
         return None;
     }
@@ -421,7 +427,12 @@ enum Verdict {
 }
 
 /// What each function is as a sink, if anything.
-fn sink_kinds(ir: &Ir, libc: &Libc, paths: &[Vec<String>], sinks: &Sinks) -> BTreeMap<u32, (Verdict, String)> {
+fn sink_kinds(
+    ir: &Ir,
+    libc: &Libc,
+    paths: &[Vec<String>],
+    sinks: &Sinks,
+) -> BTreeMap<u32, (Verdict, String)> {
     let mut kinds = BTreeMap::new();
     // `f` indexes the IR's parallel tables, not just `paths`.
     #[allow(clippy::needless_range_loop)]
@@ -472,7 +483,10 @@ fn known_paths(ir: &Ir, paths: &[Vec<String>]) -> Vec<(u32, &'static [&'static s
         .filter(|f| ir.defined[*f])
         .filter_map(|f| {
             let p = paths[f].join("::");
-            KNOWN_PATHS.iter().find(|(k, _, _)| *k == p).map(|(_, ext, _)| (f as u32, *ext))
+            KNOWN_PATHS
+                .iter()
+                .find(|(k, _, _)| *k == p)
+                .map(|(_, ext, _)| (f as u32, *ext))
         })
         .collect()
 }
@@ -537,8 +551,14 @@ fn is_member(path: &[String], krate: &str, want: &[String], display: &[&str]) ->
     let Some((first, rest)) = path.split_first() else {
         return false;
     };
-    let ends = rest.len() >= display.len() && rest[rest.len() - display.len()..].iter().zip(display).all(|(a, b)| a == b);
-    first == krate && ends && (display.len() > 1 || rest.starts_with(module) && rest.len() == module.len() + 1)
+    let ends = rest.len() >= display.len()
+        && rest[rest.len() - display.len()..]
+            .iter()
+            .zip(display)
+            .all(|(a, b)| a == b);
+    first == krate
+        && ends
+        && (display.len() > 1 || rest.starts_with(module) && rest.len() == module.len() + 1)
 }
 
 /// A marked function's path, one for all its instances: [`own_path`] leaves
@@ -570,14 +590,20 @@ fn prove_bounded(
     let mut dirty = Vec::new();
     let own: BTreeSet<u32> = reach(acquire, &ir.refs, fatal)
         .into_iter()
-        .filter(|f| kinds.contains_key(f) && !libc.acquire_waits.contains(&ir.names[*f as usize].as_str()))
+        .filter(|f| {
+            kinds.contains_key(f) && !libc.acquire_waits.contains(&ir.names[*f as usize].as_str())
+        })
         .collect();
     if !own.is_empty() {
         let path = shortest(&ir.refs, &ir.calls, acquire, &own, fatal).expect("reached");
         let last = path.last().unwrap().0;
         dirty.push(DirtySection {
             section: acquire,
-            why: format!("the acquire itself reaches {} — {}", ir.label(last), kinds[&last].1),
+            why: format!(
+                "the acquire itself reaches {} — {}",
+                ir.label(last),
+                kinds[&last].1
+            ),
             path,
         });
     }
@@ -591,7 +617,9 @@ fn prove_bounded(
         let bad: BTreeSet<u32> = reached
             .iter()
             .copied()
-            .filter(|f| kinds.contains_key(f) || (*f != *s && ir.refs[*f as usize].contains(&acquire)))
+            .filter(|f| {
+                kinds.contains_key(f) || (*f != *s && ir.refs[*f as usize].contains(&acquire))
+            })
             .collect();
         if bad.is_empty() {
             continue;
@@ -607,7 +635,11 @@ fn prove_bounded(
                 ir.label(last)
             ),
         };
-        dirty.push(DirtySection { section: *s, path, why });
+        dirty.push(DirtySection {
+            section: *s,
+            path,
+            why,
+        });
     }
     dirty
 }
@@ -630,7 +662,11 @@ pub(crate) fn run_ir(
              library has to be drawn from its implementation before it can be \
              trusted.",
             ir.triple,
-            libc::KNOWN.iter().map(|l| l.name).collect::<Vec<_>>().join(", "),
+            libc::KNOWN
+                .iter()
+                .map(|l| l.name)
+                .collect::<Vec<_>>()
+                .join(", "),
         ));
     };
 
@@ -638,7 +674,9 @@ pub(crate) fn run_ir(
     // function has a body here; a Rust symbol that is only declared is code
     // this scan cannot see into, so a green over it would mean nothing.
     let missing: Vec<String> = (0..ir.names.len())
-        .filter(|f| !ir.defined[*f] && (ir.names[*f].starts_with("_R") || ir.names[*f].starts_with("_ZN")))
+        .filter(|f| {
+            !ir.defined[*f] && (ir.names[*f].starts_with("_R") || ir.names[*f].starts_with("_ZN"))
+        })
         .take(super::MEMBER_CAP)
         .map(|f| format!("  {}", ir.label(f as u32)))
         .collect();
@@ -692,7 +730,11 @@ pub(crate) fn run_ir(
     }
 
     let fatal: BTreeSet<u32> = (0..ir.names.len() as u32)
-        .filter(|f| FATAL_ENTRIES.iter().any(|e| e.matches(&ir.names[*f as usize])))
+        .filter(|f| {
+            FATAL_ENTRIES
+                .iter()
+                .any(|e| e.matches(&ir.names[*f as usize]))
+        })
         .collect();
     let acquire = ir
         .index
@@ -722,7 +764,12 @@ pub(crate) fn run_ir(
     // every function in a vtable that implements that trait method, named
     // `<Impl as Trait>::method` ([`trait_path`]): the root gets an edge to each.
     let address_taken: BTreeSet<u32> = (0..ir.names.len())
-        .flat_map(|g| ir.refs[g].difference(&ir.calls[g]).copied().collect::<Vec<_>>())
+        .flat_map(|g| {
+            ir.refs[g]
+                .difference(&ir.calls[g])
+                .copied()
+                .collect::<Vec<_>>()
+        })
         .collect();
     // Roots that do not reach their member's own function, with its path: a
     // finding of their own unless the root is red regardless.
@@ -744,7 +791,9 @@ pub(crate) fn run_ir(
                     let f = *f as usize;
                     ir.defined[f]
                         && (is_member(&paths[f], &k, want, &segs)
-                            || trait_paths[f].as_ref().is_some_and(|t| is_member(t, &k, want, &segs)))
+                            || trait_paths[f]
+                                .as_ref()
+                                .is_some_and(|t| is_member(t, &k, want, &segs)))
                 })
             });
             if reached {
@@ -756,9 +805,9 @@ pub(crate) fn run_ir(
                     .copied()
                     .filter(|f| {
                         ir.defined[*f as usize]
-                            && trait_paths[*f as usize]
-                                .as_ref()
-                                .is_some_and(|t| t.ends_with(&[segs[0].to_string(), segs[1].to_string()]))
+                            && trait_paths[*f as usize].as_ref().is_some_and(|t| {
+                                t.ends_with(&[segs[0].to_string(), segs[1].to_string()])
+                            })
                     })
                     .collect()
             } else {
@@ -820,7 +869,10 @@ pub(crate) fn run_ir(
     let mut kinds = sink_kinds(&ir, libc, &paths, sinks);
     let known = known_paths(&ir, &paths);
     for (s, why) in &unresolved {
-        kinds.insert(*s, (Verdict::CannotVerify, format!("its callee may be {why}")));
+        kinds.insert(
+            *s,
+            (Verdict::CannotVerify, format!("its callee may be {why}")),
+        );
     }
     // What a silence names: an external function by its symbol, an indirect
     // call by the path of the function that makes it.
@@ -884,7 +936,11 @@ pub(crate) fn run_ir(
     let empty: Vec<String> = Vec::new();
     let member_allow = |sym: &str| -> (&str, &Vec<String>) {
         claims
-            .and_then(|c| c.ids.get(sym).and_then(|id| c.allow.get(id).map(|a| (id.as_str(), a))))
+            .and_then(|c| {
+                c.ids
+                    .get(sym)
+                    .and_then(|id| c.allow.get(id).map(|a| (id.as_str(), a)))
+            })
             .unwrap_or(("", &empty))
     };
     let mut applied = Applied::default();
@@ -903,9 +959,14 @@ pub(crate) fn run_ir(
     let mut findings: Vec<Finding> = Vec::new();
     for (r, sym) in roots.iter().zip(&root_names) {
         let closure = reach_vouched(&ir, *r, &ir.refs, &stops, &known);
-        for m in marked.iter().filter(|m| closure.iter().any(|f| ir.refs[*f as usize].contains(m))) {
+        for m in marked
+            .iter()
+            .filter(|m| closure.iter().any(|f| ir.refs[*f as usize].contains(m)))
+        {
             let key = marked_key(&ir.names[*m as usize]);
-            let live = reach(*m, &ir.refs, &stops).iter().any(|f| kinds.contains_key(f));
+            let live = reach(*m, &ir.refs, &stops)
+                .iter()
+                .any(|f| kinds.contains_key(f));
             let held = marks.entry(key).or_default();
             *held |= live;
         }
@@ -931,12 +992,18 @@ pub(crate) fn run_ir(
             .collect();
         for w in mine.iter().filter(|w| used_mine.contains(w.as_str())) {
             silences.push(format!("  `{w}` in {}", display(sym)));
-            applied.silences.insert(Silence::Member(id.to_string(), w.clone()));
+            applied
+                .silences
+                .insert(Silence::Member(id.to_string(), w.clone()));
         }
         // Red ahead of unprovable: a wait is the finding when there is one.
         let worst = reached.iter().map(|f| kinds[f].0).min();
         if let Some(v) = worst {
-            let targets: BTreeSet<u32> = reached.iter().copied().filter(|f| kinds[f].0 == v).collect();
+            let targets: BTreeSet<u32> = reached
+                .iter()
+                .copied()
+                .filter(|f| kinds[f].0 == v)
+                .collect();
             let path = shortest(&ir.calls, &ir.calls, *r, &targets, &stops)
                 .or_else(|| shortest(&ir.refs, &ir.calls, *r, &targets, &stops))
                 .expect("a reached sink has a path");
@@ -989,14 +1056,18 @@ pub(crate) fn run_ir(
 
     for (path, live) in marks {
         if live {
-            silences.push(format!("  `{path}` in every claim (`#[frustrate::no_block(allow)]`)"));
+            silences.push(format!(
+                "  `{path}` in every claim (`#[frustrate::no_block(allow)]`)"
+            ));
             applied.silences.insert(Silence::Mark(path));
         } else {
             applied.idle_marks.insert(path);
         }
     }
     for w in sinks.allowed.iter().filter(|w| used_target.contains(*w)) {
-        silences.push(format!("  `{w}` in every claim (the check target's `allow`)"));
+        silences.push(format!(
+            "  `{w}` in every claim (the check target's `allow`)"
+        ));
         applied.silences.insert(Silence::Target(w.clone()));
     }
     let silence_note = if silences.is_empty() {
@@ -1028,12 +1099,19 @@ pub(crate) fn run_ir(
     }
 
     findings.sort_by_key(|f| f.verdict);
-    let red = findings.iter().filter(|f| f.verdict == Verdict::Red).count();
+    let red = findings
+        .iter()
+        .filter(|f| f.verdict == Verdict::Red)
+        .count();
     let mut msg = format!(
         "no_block_check: {label}: on `{}`, {red} `#[bridge(no_block)]` member(s) \
          reach a wait{} and {} cannot be verified.\n\n",
         ir.triple,
-        if sinks.is_empty() { "" } else { " or a function named slow or IO" },
+        if sinks.is_empty() {
+            ""
+        } else {
+            " or a function named slow or IO"
+        },
         findings.len() - red,
     );
     for (n, f) in findings.iter().enumerate() {
@@ -1058,16 +1136,27 @@ pub(crate) fn run_ir(
                 "        {}{}{}\n",
                 "  ".repeat(d.min(8)),
                 ir.label(*g),
-                if *call || d == 0 { "" } else { "   (address taken: a `dyn` or fn-pointer call)" }
+                if *call || d == 0 {
+                    ""
+                } else {
+                    "   (address taken: a `dyn` or fn-pointer call)"
+                }
             ));
         }
         let _ = last;
         msg.push('\n');
     }
     if let Some(d) = dirty.first() {
-        msg.push_str(&format!("The bounded lock's unproven section, {}:\n", ir.label(d.section)));
+        msg.push_str(&format!(
+            "The bounded lock's unproven section, {}:\n",
+            ir.label(d.section)
+        ));
         for (i, (g, _)) in d.path.iter().enumerate() {
-            msg.push_str(&format!("        {}{}\n", "  ".repeat(i.min(8)), ir.label(*g)));
+            msg.push_str(&format!(
+                "        {}{}\n",
+                "  ".repeat(i.min(8)),
+                ir.label(*g)
+            ));
         }
         if dirty.len() > 1 {
             msg.push_str("  and the others:\n");
@@ -1075,7 +1164,10 @@ pub(crate) fn run_ir(
                 msg.push_str(&format!("    {}\n      {}\n", ir.label(d.section), d.why));
             }
             if dirty.len() > super::WITNESSED + 1 {
-                msg.push_str(&format!("    and {} more\n", dirty.len() - super::WITNESSED - 1));
+                msg.push_str(&format!(
+                    "    and {} more\n",
+                    dirty.len() - super::WITNESSED - 1
+                ));
             }
         }
         msg.push('\n');
@@ -1136,7 +1228,6 @@ fn shortest(
     None
 }
 
-
 // Built only by :callgraph_test, which supplies the file and the cfg.
 #[cfg(callgraph_check)]
 #[path = "callgraph_check.rs"]
@@ -1164,8 +1255,14 @@ mod tests {
 
     fn sinks(slow: &[&str], io: &[&str], allowed: &[&str]) -> Sinks {
         Sinks {
-            paths: slow.iter().map(|t| super::super::SlowPath::parse(t).unwrap()).collect(),
-            io: io.iter().map(|t| super::super::io::parse(t).unwrap()).collect(),
+            paths: slow
+                .iter()
+                .map(|t| super::super::SlowPath::parse(t).unwrap())
+                .collect(),
+            io: io
+                .iter()
+                .map(|t| super::super::io::parse(t).unwrap())
+                .collect(),
             wasi: false,
             allowed: allowed.iter().map(|t| t.to_string()).collect(),
         }
@@ -1188,7 +1285,10 @@ mod tests {
             &[],
         )
         .unwrap_err();
-        assert!(e.contains("1 `#[bridge(no_block)]` member(s) reach a wait"), "{e}");
+        assert!(
+            e.contains("1 `#[bridge(no_block)]` member(s) reach a wait"),
+            "{e}"
+        );
         assert!(e.contains("reaches pthread_mutex_lock — waits"), "{e}");
         assert!(e.contains("example::render"), "{e}");
     }
@@ -1203,9 +1303,20 @@ mod tests {
         );
         let e = check(&body, &[], &[]).unwrap_err();
         assert!(e.contains("cannot verify: reaches sqlite3_step"), "{e}");
-        assert!(!e.contains("reaches malloc"), "malloc is known not to wait: {e}");
-        let ok = run_text(&format!("{HEAD}{body}"), None, &sinks(&[], &[], &["sqlite3_step"])).unwrap();
-        assert!(ok.contains("`sqlite3_step` in every claim (the check target's `allow`)"), "{ok}");
+        assert!(
+            !e.contains("reaches malloc"),
+            "malloc is known not to wait: {e}"
+        );
+        let ok = run_text(
+            &format!("{HEAD}{body}"),
+            None,
+            &sinks(&[], &[], &["sqlite3_step"]),
+        )
+        .unwrap();
+        assert!(
+            ok.contains("`sqlite3_step` in every claim (the check target's `allow`)"),
+            "{ok}"
+        );
     }
 
     /// A spin loop's yield is a wait, which the target's `allow` silences like any finding.
@@ -1217,8 +1328,16 @@ mod tests {
         );
         let e = check(&body, &[], &[]).unwrap_err();
         assert!(e.contains("reaches sched_yield — waits"), "{e}");
-        let ok = run_text(&format!("{HEAD}{body}"), None, &sinks(&[], &[], &["sched_yield"])).unwrap();
-        assert!(ok.contains("`sched_yield` in every claim (the check target's `allow`)"), "{ok}");
+        let ok = run_text(
+            &format!("{HEAD}{body}"),
+            None,
+            &sinks(&[], &[], &["sched_yield"]),
+        )
+        .unwrap();
+        assert!(
+            ok.contains("`sched_yield` in every claim (the check target's `allow`)"),
+            "{ok}"
+        );
     }
 
     #[test]
@@ -1272,12 +1391,20 @@ mod tests {
             &Sinks::default(),
         )
         .unwrap();
-        assert!(ok.contains("the bounded lock's sections are all proven"), "{ok}");
+        assert!(
+            ok.contains("the bounded lock's sections are all proven"),
+            "{ok}"
+        );
     }
 
     #[test]
     fn a_section_that_waits_is_red_through_the_member() {
-        let e = run_text(&bounded("  call i32 @nanosleep(ptr %0)\n", ""), None, &Sinks::default()).unwrap_err();
+        let e = run_text(
+            &bounded("  call i32 @nanosleep(ptr %0)\n", ""),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap_err();
         assert!(e.contains("reaches nanosleep — waits"), "{e}");
     }
 
@@ -1287,7 +1414,10 @@ mod tests {
     fn a_section_elsewhere_that_waits_makes_every_member_taking_the_lock_unprovable() {
         let elsewhere = "define void @_RNvCs1_9frustrate5other() {\n  call void @frustrate_bounded_lock_acquire()\n  call i32 @nanosleep(ptr %0)\n  ret void\n}\n";
         let e = run_text(&bounded("", elsewhere), None, &Sinks::default()).unwrap_err();
-        assert!(e.contains("cannot verify: takes the bounded lock, whose wait is unproven"), "{e}");
+        assert!(
+            e.contains("cannot verify: takes the bounded lock, whose wait is unproven"),
+            "{e}"
+        );
         assert!(e.contains("frustrate::other"), "{e}");
     }
 
@@ -1349,7 +1479,10 @@ mod tests {
         let syms = symbols(r#"  %3 = invoke i32 @"realpath$DARWIN_EXTSN"(ptr @x) to label %a"#);
         assert_eq!(
             syms,
-            vec![("realpath$DARWIN_EXTSN".to_string(), true), ("x".to_string(), false)]
+            vec![
+                ("realpath$DARWIN_EXTSN".to_string(), true),
+                ("x".to_string(), false)
+            ]
         );
     }
 
@@ -1368,7 +1501,10 @@ mod tests {
     fn an_asm_template_is_read_from_rustcs_lowering() {
         let line = r#"  %0 = call { i32, <2 x i64> } asm sideeffect alignstack "nop; bl ${1:c}", "={w0},={q0},s,~{memory}"(ptr @waiter), !srcloc !3"#;
         assert_eq!(inline_asm(line), Some("nop; bl ${1:c}"));
-        assert_eq!(inline_asm(r#"  call void asm sideeffect "", "~{memory}"(), !srcloc !59339"#), None);
+        assert_eq!(
+            inline_asm(r#"  call void asm sideeffect "", "~{memory}"(), !srcloc !59339"#),
+            None
+        );
         assert_eq!(inline_asm(r#"  store ptr @"asm \22x\22", ptr %p"#), None);
     }
 
@@ -1398,13 +1534,34 @@ mod tests {
                  {asm}\n  ret void\n}}\n"
             )
         };
-        let e = check(&body(r#"call void asm sideeffect "svc #0x80", "~{memory}"()"#), &[], &[]).unwrap_err();
-        assert!(e.contains(r#"cannot verify: reaches asm "svc #0x80""#), "{e}");
-        let e = check(&body(r#"%0 = call i32 asm sideeffect "bl _usleep", "={w0}"()"#), &[], &[]).unwrap_err();
+        let e = check(
+            &body(r#"call void asm sideeffect "svc #0x80", "~{memory}"()"#),
+            &[],
+            &[],
+        )
+        .unwrap_err();
+        assert!(
+            e.contains(r#"cannot verify: reaches asm "svc #0x80""#),
+            "{e}"
+        );
+        let e = check(
+            &body(r#"%0 = call i32 asm sideeffect "bl _usleep", "={w0}"()"#),
+            &[],
+            &[],
+        )
+        .unwrap_err();
         assert!(e.contains(r#"asm "bl _usleep""#), "{e}");
-        check(&body(r#"call void asm sideeffect "", "r,~{memory}"(ptr %p)"#), &[], &[]).unwrap();
+        check(
+            &body(r#"call void asm sideeffect "", "r,~{memory}"(ptr %p)"#),
+            &[],
+            &[],
+        )
+        .unwrap();
         let ok = run_text(
-            &format!("{HEAD}{}", body(r#"call void asm sideeffect "svc #0x80", "~{memory}"()"#)),
+            &format!(
+                "{HEAD}{}",
+                body(r#"call void asm sideeffect "svc #0x80", "~{memory}"()"#)
+            ),
             None,
             &sinks(&[], &[], &[r#"asm "svc #0x80""#]),
         )
@@ -1417,25 +1574,54 @@ mod tests {
     #[test]
     fn a_known_asm_template_passes_on_its_architecture_only() {
         let cpuid = r#"%0 = call i64 asm sideeffect inteldialect "mov ${0:q}, rbx\0Acpuid\0Axchg ${0:q}, rbx", "=r,={ax},={cx},={dx},0,1,2"(i32 0, i32 0)"#;
-        let ok = run_text(&linux("x86_64-unknown-linux-gnu", &format!("  {cpuid}\n")), None, &Sinks::default()).unwrap();
+        let ok = run_text(
+            &linux("x86_64-unknown-linux-gnu", &format!("  {cpuid}\n")),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap();
         assert!(ok.contains("is clean"), "{ok}");
         let more = cpuid.replace("\\0Axchg", "\\0Asyscall\\0Axchg");
-        let e = run_text(&linux("x86_64-unknown-linux-gnu", &format!("  {more}\n")), None, &Sinks::default()).unwrap_err();
-        assert!(e.contains(r#"cannot verify: reaches asm "mov ${0:q}, rbx\0Acpuid\0Asyscall"#), "{e}");
-        let e = run_text(&linux("aarch64-unknown-linux-gnu", &format!("  {cpuid}\n")), None, &Sinks::default()).unwrap_err();
-        assert!(e.contains(r#"cannot verify: reaches asm "mov ${0:q}, rbx\0Acpuid"#), "{e}");
+        let e = run_text(
+            &linux("x86_64-unknown-linux-gnu", &format!("  {more}\n")),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap_err();
+        assert!(
+            e.contains(r#"cannot verify: reaches asm "mov ${0:q}, rbx\0Acpuid\0Asyscall"#),
+            "{e}"
+        );
+        let e = run_text(
+            &linux("aarch64-unknown-linux-gnu", &format!("  {cpuid}\n")),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap_err();
+        assert!(
+            e.contains(r#"cannot verify: reaches asm "mov ${0:q}, rbx\0Acpuid"#),
+            "{e}"
+        );
     }
 
     /// zeroize's barrier is a comment on both architectures; a comment
     /// beside an instruction still leaves the instruction.
     #[test]
     fn a_template_of_comments_only_is_no_instruction() {
-        let line = |t: &str| format!(r#"  call void asm sideeffect "{t}", "r,~{{memory}}"(ptr %p), !srcloc !7"#);
+        let line = |t: &str| {
+            format!(r#"  call void asm sideeffect "{t}", "r,~{{memory}}"(ptr %p), !srcloc !7"#)
+        };
         assert_eq!(inline_asm(&line("# ${0}")), None);
         assert_eq!(inline_asm(&line("# ${0:q}")), None);
         assert_eq!(inline_asm(&line("// ${0}\\0A# ${0}")), None);
-        assert_eq!(inline_asm(&line("# ${0}\\0Asvc #0x80")), Some("# ${0}\\0Asvc #0x80"));
-        assert_eq!(inline_asm(&line("# ${0}; svc #0x80")), Some("# ${0}; svc #0x80"));
+        assert_eq!(
+            inline_asm(&line("# ${0}\\0Asvc #0x80")),
+            Some("# ${0}\\0Asvc #0x80")
+        );
+        assert_eq!(
+            inline_asm(&line("# ${0}; svc #0x80")),
+            Some("# ${0}; svc #0x80")
+        );
     }
 
     /// half's `fcvt` passes on aarch64 only, and only alone.
@@ -1443,9 +1629,19 @@ mod tests {
     fn halfs_fcvt_passes_on_aarch64() {
         for t in ["fcvt ${0:h}, ${1:d}", "fcvt ${0:d}, ${1:h}"] {
             let call = format!(r#"%0 = call double asm sideeffect "{t}", "=w,w"(half %h)"#);
-            let ok = run_text(&linux("aarch64-unknown-linux-gnu", &format!("  {call}\n")), None, &Sinks::default()).unwrap();
+            let ok = run_text(
+                &linux("aarch64-unknown-linux-gnu", &format!("  {call}\n")),
+                None,
+                &Sinks::default(),
+            )
+            .unwrap();
             assert!(ok.contains("is clean"), "{ok}");
-            let e = run_text(&linux("x86_64-unknown-linux-gnu", &format!("  {call}\n")), None, &Sinks::default()).unwrap_err();
+            let e = run_text(
+                &linux("x86_64-unknown-linux-gnu", &format!("  {call}\n")),
+                None,
+                &Sinks::default(),
+            )
+            .unwrap_err();
             assert!(e.contains("cannot verify"), "{e}");
         }
         // Apple's triple names the architecture `arm64`.
@@ -1456,8 +1652,14 @@ mod tests {
             &[],
         )
         .unwrap();
-        let more = r#"%0 = call double asm sideeffect "fcvt ${0:h}, ${1:d}\0Asvc #0", "=w,w"(half %h)"#;
-        let e = run_text(&linux("aarch64-unknown-linux-gnu", &format!("  {more}\n")), None, &Sinks::default()).unwrap_err();
+        let more =
+            r#"%0 = call double asm sideeffect "fcvt ${0:h}, ${1:d}\0Asvc #0", "=w,w"(half %h)"#;
+        let e = run_text(
+            &linux("aarch64-unknown-linux-gnu", &format!("  {more}\n")),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap_err();
         assert!(e.contains("cannot verify"), "{e}");
     }
 
@@ -1477,7 +1679,11 @@ mod tests {
     }
 
     fn census(rows: &str) -> Claims {
-        Claims::parse(&format!("{}\ncrate example\n{rows}\n", super::super::CENSUS_HEADER), "c").unwrap()
+        Claims::parse(
+            &format!("{}\ncrate example\n{rows}\n", super::super::CENSUS_HEADER),
+            "c",
+        )
+        .unwrap()
     }
 
     #[test]
@@ -1489,7 +1695,10 @@ mod tests {
              define void @_RNvNtCs1_7example19frustrate_generated13call_1_render() {{\n  ret void\n}}\n"
         );
         let e = run_text(&folded, Some(&claims), &Sinks::default()).unwrap_err();
-        assert!(e.contains("cannot verify: does not reach its own function `crate::api::render`"), "{e}");
+        assert!(
+            e.contains("cannot verify: does not reach its own function `crate::api::render`"),
+            "{e}"
+        );
         let kept = format!(
             "{HEAD}define void @frustrate_check_block_example_1_render(ptr %r, i64 %l, i64 %h) {{\n  call void @_RNvNtCs1_7example19frustrate_generated13call_1_render()\n  ret void\n}}\n\
              define void @_RNvNtCs1_7example19frustrate_generated13call_1_render() {{\n  call void @_RNvNtCs1_7example3api6render()\n  ret void\n}}\n\
@@ -1503,14 +1712,44 @@ mod tests {
     fn a_member_is_matched_by_its_path() {
         let v = |s: &str| s.split("::").map(str::to_string).collect::<Vec<_>>();
         let want = v("crate::api::render");
-        assert!(is_member(&v("example::api::render"), "example", &want, &["render"]));
-        assert!(!is_member(&v("example::other::render"), "example", &want, &["render"]));
-        assert!(!is_member(&v("example::api::render::{closure#0}"), "example", &want, &["render"]));
+        assert!(is_member(
+            &v("example::api::render"),
+            "example",
+            &want,
+            &["render"]
+        ));
+        assert!(!is_member(
+            &v("example::other::render"),
+            "example",
+            &want,
+            &["render"]
+        ));
+        assert!(!is_member(
+            &v("example::api::render::{closure#0}"),
+            "example",
+            &want,
+            &["render"]
+        ));
         // A method of a type defined outside the module holding its impl.
         let want = v("crate::api::Doc::render");
-        assert!(is_member(&v("example::model::Doc::render"), "example", &want, &["Doc", "render"]));
-        assert!(!is_member(&v("other::api::Doc::render"), "example", &want, &["Doc", "render"]));
-        assert!(!is_member(&v("example::api::Page::render"), "example", &want, &["Doc", "render"]));
+        assert!(is_member(
+            &v("example::model::Doc::render"),
+            "example",
+            &want,
+            &["Doc", "render"]
+        ));
+        assert!(!is_member(
+            &v("other::api::Doc::render"),
+            "example",
+            &want,
+            &["Doc", "render"]
+        ));
+        assert!(!is_member(
+            &v("example::api::Page::render"),
+            "example",
+            &want,
+            &["Doc", "render"]
+        ));
     }
 
     /// A `dyn` member's own function is wherever the handle's vtable points:
@@ -1526,9 +1765,11 @@ mod tests {
              declare i32 @nanosleep(ptr)\n"
         );
         let e = run_text(&text, Some(&claims), &Sinks::default()).unwrap_err();
-        assert!(e.contains("Shape::area\n      reaches nanosleep — waits"), "{e}");
+        assert!(
+            e.contains("Shape::area\n      reaches nanosleep — waits"),
+            "{e}"
+        );
     }
-
 
     /// The check target's silence names what the finding names, and the
     /// verdict lists it with its reason.
@@ -1541,7 +1782,10 @@ mod tests {
         let e = run_text(&text, None, &Sinks::default()).unwrap_err();
         assert!(e.contains("silence it as `sqlite3_step`"), "{e}");
         let ok = run_text(&text, None, &sinks_allowing(&["sqlite3_step"])).unwrap();
-        assert!(ok.contains("`sqlite3_step` in every claim (the check target's `allow`)"), "{ok}");
+        assert!(
+            ok.contains("`sqlite3_step` in every claim (the check target's `allow`)"),
+            "{ok}"
+        );
     }
 
     fn sinks_allowing(t: &[&str]) -> Sinks {
@@ -1555,7 +1799,8 @@ mod tests {
     /// analysis applies it is `--silences`' question.
     #[test]
     fn a_silence_that_silences_nothing_here_is_not_applied() {
-        let text = format!("{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n  ret void\n}}\n");
+        let text =
+            format!("{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n  ret void\n}}\n");
         let g = run_green(&text, None, &sinks_allowing(&["sqlite3_step"])).unwrap();
         assert!(!g.text.contains("Silenced"), "{}", g.text);
         assert!(g.applied.silences.is_empty());
@@ -1565,7 +1810,10 @@ mod tests {
             &sinks_allowing(&["sqlite3_step"]),
         )
         .unwrap();
-        assert!(g.applied.silences.contains(&Silence::Target("sqlite3_step".into())));
+        assert!(g
+            .applied
+            .silences
+            .contains(&Silence::Target("sqlite3_step".into())));
     }
 
     /// A member's own silence covers that member and no other.
@@ -1586,10 +1834,20 @@ mod tests {
                  define internal void @_RNvCs1_7example1{name}() {{\n  call i32 @sqlite3_step(ptr null)\n  ret void\n}}\n"
             )
         };
-        let text = format!("{HEAD}{}{}declare i32 @sqlite3_step(ptr)\n", root(1, "a"), root(2, "b"));
+        let text = format!(
+            "{HEAD}{}{}declare i32 @sqlite3_step(ptr)\n",
+            root(1, "a"),
+            root(2, "b")
+        );
         let e = run_text(&text, Some(&claims), &Sinks::default()).unwrap_err();
-        assert!(e.contains("0 `#[bridge(no_block)]` member(s) reach a wait and 1 cannot be verified"), "{e}");
-        assert!(e.contains("  b\n      cannot verify: reaches sqlite3_step"), "{e}");
+        assert!(
+            e.contains("0 `#[bridge(no_block)]` member(s) reach a wait and 1 cannot be verified"),
+            "{e}"
+        );
+        assert!(
+            e.contains("  b\n      cannot verify: reaches sqlite3_step"),
+            "{e}"
+        );
     }
 
     /// Two bridges linked into one program, each with a member `a` numbered 1
@@ -1615,17 +1873,34 @@ mod tests {
                  define internal void @_RNvCs1_{n}{krate}1a() {{\n  call i32 @sqlite3_step(ptr null)\n  ret void\n}}\n"
             )
         };
-        let text = format!("{HEAD}{}{}declare i32 @sqlite3_step(ptr)\n", root("example"), root("app"));
+        let text = format!(
+            "{HEAD}{}{}declare i32 @sqlite3_step(ptr)\n",
+            root("example"),
+            root("app")
+        );
         let merge = |example: Claims, app: Claims| {
-            Claims::merge(vec![("example.claims".into(), example), ("app.claims".into(), app)]).unwrap()
+            Claims::merge(vec![
+                ("example.claims".into(), example),
+                ("app.claims".into(), app),
+            ])
+            .unwrap()
         };
 
         // Only `example` silences it: `app`'s member, numbered the same, is
         // still the one finding, and is named with its bridge.
-        let claims = merge(bridge("example", "allow 1 sqlite3_step\n"), bridge("app", ""));
+        let claims = merge(
+            bridge("example", "allow 1 sqlite3_step\n"),
+            bridge("app", ""),
+        );
         let e = run_text(&text, Some(&claims), &Sinks::default()).unwrap_err();
-        assert!(e.contains("0 `#[bridge(no_block)]` member(s) reach a wait and 1 cannot be verified"), "{e}");
-        assert!(e.contains("  app: a\n      cannot verify: reaches sqlite3_step"), "{e}");
+        assert!(
+            e.contains("0 `#[bridge(no_block)]` member(s) reach a wait and 1 cannot be verified"),
+            "{e}"
+        );
+        assert!(
+            e.contains("  app: a\n      cannot verify: reaches sqlite3_step"),
+            "{e}"
+        );
         assert!(!e.contains("example: a"), "{e}");
 
         // Both silence their own, and each silence is applied under its own
@@ -1635,15 +1910,23 @@ mod tests {
             bridge("app", "allow 1 sqlite3_step\n"),
         );
         let g = run_green(&text, Some(&claims), &Sinks::default()).unwrap();
-        assert!(g.applied.silences.contains(&Silence::Member("example:1".into(), "sqlite3_step".into())));
-        assert!(g.applied.silences.contains(&Silence::Member("app:1".into(), "sqlite3_step".into())));
+        assert!(g
+            .applied
+            .silences
+            .contains(&Silence::Member("example:1".into(), "sqlite3_step".into())));
+        assert!(g
+            .applied
+            .silences
+            .contains(&Silence::Member("app:1".into(), "sqlite3_step".into())));
 
         // A root of a linked bridge that no census names is not a pass.
         let only = bridge("example", "allow 1 sqlite3_step\n");
         let e = run_text(&text, Some(&only), &Sinks::default()).unwrap_err();
-        assert!(e.contains("frustrate_check_block_app_1_a — carries the crate of none of `example`"), "{e}");
+        assert!(
+            e.contains("frustrate_check_block_app_1_a — carries the crate of none of `example`"),
+            "{e}"
+        );
     }
-
 
     /// `#[frustrate::no_block(allow)]`: a function that calls the marker first.
     const MARK: &str = "define void @frustrate_no_block_allow() {\n  ret void\n}\n";
@@ -1662,7 +1945,10 @@ mod tests {
         let call = "  call void @_RNvCs1_7example4wrap()\n";
         let ok = run_text(&marked(call, wait), None, &Sinks::default()).unwrap();
         assert!(ok.contains("clean"), "{ok}");
-        assert!(ok.contains("`example::wrap` in every claim (`#[frustrate::no_block(allow)]`)"), "{ok}");
+        assert!(
+            ok.contains("`example::wrap` in every claim (`#[frustrate::no_block(allow)]`)"),
+            "{ok}"
+        );
         // The same wait reached around the marked function is still a finding,
         // and the marker is never one itself.
         let both = format!("{call}{wait}");
@@ -1674,7 +1960,10 @@ mod tests {
     #[test]
     fn a_marked_function_whose_subtree_holds_no_finding_is_idle() {
         let g = run_green(
-            &marked("  call void @_RNvCs1_7example4wrap()\n", "  call ptr @malloc(i64 8)\n"),
+            &marked(
+                "  call void @_RNvCs1_7example4wrap()\n",
+                "  call ptr @malloc(i64 8)\n",
+            ),
             None,
             &Sinks::default(),
         )
@@ -1685,7 +1974,12 @@ mod tests {
 
     #[test]
     fn a_marked_function_no_claim_reaches_is_ignored() {
-        let ok = run_text(&marked("", "  call i32 @pthread_mutex_lock(ptr %0)\n"), None, &Sinks::default()).unwrap();
+        let ok = run_text(
+            &marked("", "  call i32 @pthread_mutex_lock(ptr %0)\n"),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap();
         assert!(ok.contains("clean"), "{ok}");
         assert!(!ok.contains("Silenced"), "{ok}");
     }
@@ -1701,7 +1995,11 @@ mod tests {
              {MARK}declare i32 @pthread_mutex_lock(ptr)\n"
         );
         let ok = run_text(&text, None, &Sinks::default()).unwrap();
-        assert_eq!(ok.matches("`example::wrap` in every claim").count(), 1, "{ok}");
+        assert_eq!(
+            ok.matches("`example::wrap` in every claim").count(),
+            1,
+            "{ok}"
+        );
     }
 
     /// The bounded lock's section proof stops at a marked function, as a
@@ -1715,7 +2013,10 @@ mod tests {
             ),
         );
         let ok = run_text(&text, None, &Sinks::default()).unwrap();
-        assert!(ok.contains("the bounded lock's sections are all proven"), "{ok}");
+        assert!(
+            ok.contains("the bounded lock's sections are all proven"),
+            "{ok}"
+        );
         assert!(ok.contains("`example::wrap` in every claim"), "{ok}");
     }
 
@@ -1729,7 +2030,10 @@ mod tests {
              define internal void @_RNvCs1_7example6render() {{\n  %f = load ptr, ptr @SLOT\n  call void %f()\n  ret void\n}}\n"
         );
         let e = run_text(&text, None, &Sinks::default()).unwrap_err();
-        assert!(e.contains("cannot verify: reaches an indirect call in example::render"), "{e}");
+        assert!(
+            e.contains("cannot verify: reaches an indirect call in example::render"),
+            "{e}"
+        );
         assert!(e.contains("loaded from `SLOT`"), "{e}");
         assert!(e.contains("silence it as `example::render`"), "{e}");
         let ok = run_text(&text, None, &sinks_allowing(&["example::render"])).unwrap();
@@ -1746,8 +2050,14 @@ mod tests {
              define internal void @_RNvCs1_7example6render() {\n  %b = call ptr @pthread_getspecific(i32 %k)\n  %f = load ptr, ptr %b\n  call void %f()\n  ret void\n}\n\
              declare ptr @pthread_getspecific(i32)\n";
         let e = run_text(text, None, &Sinks::default()).unwrap_err();
-        assert!(e.contains("cannot verify: reaches an indirect call in example::render"), "{e}");
-        assert!(e.contains("loaded from `thread-locals kept in pthread keys`"), "{e}");
+        assert!(
+            e.contains("cannot verify: reaches an indirect call in example::render"),
+            "{e}"
+        );
+        assert!(
+            e.contains("loaded from `thread-locals kept in pthread keys`"),
+            "{e}"
+        );
     }
 
     /// A pointer that may be any of more stack slots than the analysis names
@@ -1756,7 +2066,9 @@ mod tests {
     #[test]
     fn a_store_through_a_pointer_to_many_slots_reaches_every_load() {
         let n = 40;
-        let allocas: String = (0..n).map(|i| format!("  %a{i} = alloca [8 x i8], align 8\n")).collect();
+        let allocas: String = (0..n)
+            .map(|i| format!("  %a{i} = alloca [8 x i8], align 8\n"))
+            .collect();
         let phi: Vec<String> = (0..n).map(|i| format!("[ %a{i}, %start ]")).collect();
         let text = format!(
             "{HEAD}@SLOT = internal global ptr null\n\
@@ -1776,8 +2088,12 @@ mod tests {
     #[test]
     fn a_value_from_many_statics_cannot_be_verified() {
         let n = 20;
-        let statics: String = (0..n).map(|i| format!("@S{i} = internal global ptr null\n")).collect();
-        let loads: String = (0..n).map(|i| format!("  %v{i} = load ptr, ptr @S{i}\n")).collect();
+        let statics: String = (0..n)
+            .map(|i| format!("@S{i} = internal global ptr null\n"))
+            .collect();
+        let loads: String = (0..n)
+            .map(|i| format!("  %v{i} = load ptr, ptr @S{i}\n"))
+            .collect();
         let vs: Vec<String> = (0..n).map(|i| format!("ptr %v{i}")).collect();
         let text = format!(
             "{HEAD}{statics}\
@@ -1787,7 +2103,10 @@ mod tests {
         );
         let e = run_text(&text, None, &Sinks::default()).unwrap_err();
         assert!(e.contains("an indirect call in example::render"), "{e}");
-        assert!(e.contains("more than 16 statics and external functions"), "{e}");
+        assert!(
+            e.contains("more than 16 statics and external functions"),
+            "{e}"
+        );
     }
 
     /// A function pointer the member keeps in a local of its own is one it
@@ -1862,25 +2181,42 @@ mod tests {
             ("aarch64-unknown-linux-android", 98),
         ] {
             let wake = format!("  %1 = call i64 (i64, ...) @syscall(i64 noundef {futex}, ptr %0, i32 noundef 129, i32 noundef 1)\n");
-            assert!(run_text(&linux(triple, &wake), None, &Sinks::default()).is_ok(), "{triple}");
+            assert!(
+                run_text(&linux(triple, &wake), None, &Sinks::default()).is_ok(),
+                "{triple}"
+            );
             let wait = format!(
                 "  %2 = call i64 (i64, ...) @syscall(i64 noundef {futex}, ptr %0, i32 noundef 137, i32 noundef 0, ptr null, ptr null, i32 noundef -1)\n"
             );
-            let e = run_text(&linux(triple, &format!("{wake}{wait}")), None, &Sinks::default()).unwrap_err();
-            assert!(e.contains("reaches syscall::SYS_futex::FUTEX_WAIT_BITSET — waits"), "{triple}: {e}");
+            let e = run_text(
+                &linux(triple, &format!("{wake}{wait}")),
+                None,
+                &Sinks::default(),
+            )
+            .unwrap_err();
+            assert!(
+                e.contains("reaches syscall::SYS_futex::FUTEX_WAIT_BITSET — waits"),
+                "{triple}: {e}"
+            );
             let ok = run_text(
                 &linux(triple, &wait),
                 None,
                 &sinks(&[], &[], &["syscall::SYS_futex::FUTEX_WAIT_BITSET"]),
             );
-            assert!(ok.is_ok(), "{triple}: the finding is silenced by the name it gives");
+            assert!(
+                ok.is_ok(),
+                "{triple}: the finding is silenced by the name it gives"
+            );
         }
     }
 
     #[test]
     fn a_syscall_whose_number_is_not_a_constant_cannot_be_verified() {
         let e = run_text(
-            &linux("x86_64-unknown-linux-gnu", "  %1 = call i64 (i64, ...) @syscall(i64 noundef %n)\n"),
+            &linux(
+                "x86_64-unknown-linux-gnu",
+                "  %1 = call i64 (i64, ...) @syscall(i64 noundef %n)\n",
+            ),
             None,
             &Sinks::default(),
         )
@@ -1911,14 +2247,20 @@ mod tests {
              define void @_RNvCs1_9frustrate4with() {\n  call void @frustrate_bounded_lock_acquire()\n  %1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 129, i32 noundef 1)\n  ret void\n}\n\
              declare i64 @syscall(i64 noundef, ...)\n";
         let ok = run_text(text, None, &Sinks::default()).unwrap();
-        assert!(ok.contains("the bounded lock's sections are all proven"), "{ok}");
+        assert!(
+            ok.contains("the bounded lock's sections are all proven"),
+            "{ok}"
+        );
         // Apple's acquire wait is no exemption on Linux.
         let apple = text.replace(
             "%1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 137, i32 noundef 0, ptr null, ptr null, i32 noundef -1)",
             "%1 = call i32 @pthread_mutex_lock(ptr %0)",
         ) + "declare i32 @pthread_mutex_lock(ptr)\n";
         let e = run_text(&apple, None, &Sinks::default()).unwrap_err();
-        assert!(e.contains("the acquire itself reaches pthread_mutex_lock"), "{e}");
+        assert!(
+            e.contains("the acquire itself reaches pthread_mutex_lock"),
+            "{e}"
+        );
     }
 
     #[test]
@@ -1929,7 +2271,10 @@ mod tests {
             &Sinks::default(),
         )
         .unwrap_err();
-        assert!(e.contains("only for Apple's libSystem, Android's bionic, glibc"), "{e}");
+        assert!(
+            e.contains("only for Apple's libSystem, Android's bionic, glibc"),
+            "{e}"
+        );
     }
 
     /// std's `HashMap` keys on Linux: what std's fallback reaches is vouched
@@ -1966,7 +2311,10 @@ mod tests {
         assert!(e.contains("reaches read — IO `files`"), "{e}");
         // An external the vouch does not name is a finding beneath it too.
         let e = run_text(
-            &module("", &format!("{fallback}  %s = call i32 @nanosleep(ptr null, ptr null)\n")),
+            &module(
+                "",
+                &format!("{fallback}  %s = call i32 @nanosleep(ptr null, ptr null)\n"),
+            ),
             None,
             &Sinks::default(),
         )
@@ -1996,8 +2344,12 @@ mod tests {
 
     #[test]
     fn a_call_through_a_dispatch_table_follows_each_function_stored_in_it() {
-        let e = run_text(&dispatch("@FN = internal global ptr @detect, align 8", ""), None, &Sinks::default())
-            .unwrap_err();
+        let e = run_text(
+            &dispatch("@FN = internal global ptr @detect, align 8", ""),
+            None,
+            &Sinks::default(),
+        )
+        .unwrap_err();
         // Not "cannot verify": the stored functions are followed, so the one
         // that locks is the finding.
         assert!(!e.contains("cannot verify:"), "{e}");

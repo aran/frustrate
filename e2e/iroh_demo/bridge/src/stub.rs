@@ -327,7 +327,11 @@ async fn bind(
 /// identity (there are no direct addresses and no home relay yet), and once
 /// when the relay handshake completes and the address finally carries something
 /// another peer can dial. The second one is the ticket that actually works.
-fn publish_ticket(endpoint: &Endpoint, ticket: &Rc<RefCell<String>>, events: &StreamSink<PeerEvent>) {
+fn publish_ticket(
+    endpoint: &Endpoint,
+    ticket: &Rc<RefCell<String>>,
+    events: &StreamSink<PeerEvent>,
+) {
     let text = EndpointTicket::new(endpoint.addr()).to_string();
     *ticket.borrow_mut() = text.clone();
     events.add(PeerEvent::Listening { ticket: text });
@@ -340,7 +344,11 @@ fn publish_ticket(endpoint: &Endpoint, ticket: &Rc<RefCell<String>>, events: &St
 /// browser endpoint has none, so until the home relay is known its ticket names
 /// an identity and no way to reach it. `Online` is the moment the ticket becomes
 /// real, and the second `Listening` is how the app learns.
-async fn online_watch(endpoint: Endpoint, ticket: Rc<RefCell<String>>, events: StreamSink<PeerEvent>) {
+async fn online_watch(
+    endpoint: Endpoint,
+    ticket: Rc<RefCell<String>>,
+    events: StreamSink<PeerEvent>,
+) {
     endpoint.online().await;
     if !events.add(PeerEvent::Online) {
         return;
@@ -411,7 +419,13 @@ async fn dial(
 /// the honest one: in a browser the answer is a constant. Every path is a relay
 /// path, forever, so the badge is emitted once with `direct: false` rather than
 /// watched for a transition that cannot occur.
-async fn adopt(conn: Connection, peers: Peers, events: StreamSink<PeerEvent>, me: String, initiator: bool) {
+async fn adopt(
+    conn: Connection,
+    peers: Peers,
+    events: StreamSink<PeerEvent>,
+    me: String,
+    initiator: bool,
+) {
     let id = conn.remote_id();
     let peer = id.to_string();
 
@@ -427,14 +441,26 @@ async fn adopt(conn: Connection, peers: Peers, events: StreamSink<PeerEvent>, me
 
     let hello = match proto::encode(&me) {
         Ok(frame) => frame,
-        Err(e) => return fail(&events, &peer, format!("our own nickname is unsendable: {e}")),
+        Err(e) => {
+            return fail(
+                &events,
+                &peer,
+                format!("our own nickname is unsendable: {e}"),
+            )
+        }
     };
     if let Err(e) = send.write_all(&hello).await {
         return fail(&events, &peer, e.to_string());
     }
     let nickname = match read_frame(&mut recv).await {
         Ok(Some(nickname)) => nickname,
-        Ok(None) => return fail(&events, &peer, "the peer left before saying hello".to_string()),
+        Ok(None) => {
+            return fail(
+                &events,
+                &peer,
+                "the peer left before saying hello".to_string(),
+            )
+        }
         Err(e) => return fail(&events, &peer, e),
     };
 
@@ -485,7 +511,9 @@ async fn read_frame(recv: &mut RecvStream) -> Result<Option<String>, String> {
     }
     let len = proto::body_len(header).map_err(|e| e.to_string())?;
     let mut body = vec![0u8; len];
-    recv.read_exact(&mut body).await.map_err(|e| e.to_string())?;
+    recv.read_exact(&mut body)
+        .await
+        .map_err(|e| e.to_string())?;
     proto::decode_body(len, &body)
         .map(Some)
         .map_err(|e| e.to_string())

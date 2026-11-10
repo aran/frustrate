@@ -106,7 +106,11 @@ fn wire_shape(iface: &Interface, name: &str) -> Option<(String, serde_json::Valu
     };
     let mut value = value.expect("IR serializes");
     // A struct and an enum of one name are not one shape.
-    let kind = if iface.struct_decl(name).is_some() { "struct" } else { "enum" };
+    let kind = if iface.struct_decl(name).is_some() {
+        "struct"
+    } else {
+        "enum"
+    };
     let path = path.clone();
     if let Some(obj) = value.as_object_mut() {
         obj.insert("kind".into(), kind.into());
@@ -150,7 +154,10 @@ fn render(iface: &Interface, name: &str) -> String {
 /// — its Dart class is the model's and dispatches there — so this bridge's
 /// copies of them are dropped; a member only this bridge declares is refused,
 /// because it has no class to go on.
-pub fn apply(mut iface: Interface, models: &[ModelInterface]) -> Result<Interface, Vec<Diagnostic>> {
+pub fn apply(
+    mut iface: Interface,
+    models: &[ModelInterface],
+) -> Result<Interface, Vec<Diagnostic>> {
     let mut diags = vec![];
     let mut bridges: Vec<ModelBridge> = models
         .iter()
@@ -232,7 +239,10 @@ pub fn apply(mut iface: Interface, models: &[ModelInterface]) -> Result<Interfac
         }
         bridges[i].types.push(name.clone());
     }
-    iface.models = bridges.into_iter().filter(|b| !b.types.is_empty()).collect();
+    iface.models = bridges
+        .into_iter()
+        .filter(|b| !b.types.is_empty())
+        .collect();
 
     let mut keep = Vec::with_capacity(iface.functions.len());
     for f in std::mem::take(&mut iface.functions) {
@@ -408,7 +418,13 @@ mod tests {
         ModelInterface {
             iface: iface(
                 "a",
-                &[(shared, "shared::model"), ("#[bridge(sync)] pub fn make() -> Block { todo!() }", "crate::api")],
+                &[
+                    (shared, "shared::model"),
+                    (
+                        "#[bridge(sync)] pub fn make() -> Block { todo!() }",
+                        "crate::api",
+                    ),
+                ],
             ),
             import: "package:a_app/a.frustrate.models.dart".into(),
         }
@@ -419,8 +435,15 @@ mod tests {
         #[bridge(sync)] pub fn grow(g: Graph) -> Graph { g }
     ";
 
-    fn apply_b(shared: &str, api: &str, models: &[ModelInterface]) -> Result<Interface, Vec<Diagnostic>> {
-        apply(iface("b", &[(shared, "shared::model"), (api, "crate::api")]), models)
+    fn apply_b(
+        shared: &str,
+        api: &str,
+        models: &[ModelInterface],
+    ) -> Result<Interface, Vec<Diagnostic>> {
+        apply(
+            iface("b", &[(shared, "shared::model"), (api, "crate::api")]),
+            models,
+        )
     }
 
     fn codes(r: Result<Interface, Vec<Diagnostic>>) -> Vec<&'static str> {
@@ -433,14 +456,28 @@ mod tests {
         let out = crate::emit_dart::emit(&b, "b.frustrate", "b_app");
         for surface in [&out.native, &out.web] {
             let uri = "package:a_app/a.frustrate.models.dart";
-            assert!(surface.contains(&format!("import '{uri}' show Block, Graph, Shape, Mood;")), "{surface}");
-            let exported = "Block, Graph, Shape, ShapeCircle, ShapeSquare, ShapeEmpty, Mood";
-            assert!(surface.contains(&format!("export '{uri}' show {exported};")), "{surface}");
             assert!(
-                surface.contains(&format!("import '{uri}' as frustrate_model_a show $FrustrateModels;")),
+                surface.contains(&format!("import '{uri}' show Block, Graph, Shape, Mood;")),
                 "{surface}"
             );
-            for decl in ["class Block ", "class Shape ", "enum Mood ", "class Graph ", "class ShapeCircle "] {
+            let exported = "Block, Graph, Shape, ShapeCircle, ShapeSquare, ShapeEmpty, Mood";
+            assert!(
+                surface.contains(&format!("export '{uri}' show {exported};")),
+                "{surface}"
+            );
+            assert!(
+                surface.contains(&format!(
+                    "import '{uri}' as frustrate_model_a show $FrustrateModels;"
+                )),
+                "{surface}"
+            );
+            for decl in [
+                "class Block ",
+                "class Shape ",
+                "enum Mood ",
+                "class Graph ",
+                "class ShapeCircle ",
+            ] {
                 assert!(!surface.contains(decl), "{decl} declared again:\n{surface}");
             }
             assert!(
@@ -465,7 +502,12 @@ mod tests {
     fn a_bridge_offers_its_plain_codecs_and_its_entry_hides_them() {
         let a = bridge_a(SHARED).iface;
         let out = crate::emit_dart::emit(&a, "a.frustrate", "a_app");
-        assert!(out.entry.contains("'src/a.frustrate.web.dart'\n    hide $FrustrateModels;"), "{}", out.entry);
+        assert!(
+            out.entry
+                .contains("'src/a.frustrate.web.dart'\n    hide $FrustrateModels;"),
+            "{}",
+            out.entry
+        );
         assert!(
             out.models.contains(
                 "export 'src/a.frustrate.native.dart'\n    \
@@ -476,13 +518,18 @@ mod tests {
             out.models
         );
         for surface in [&out.native, &out.web] {
-            assert!(surface.contains("abstract final class $FrustrateModels {"), "{surface}");
+            assert!(
+                surface.contains("abstract final class $FrustrateModels {"),
+                "{surface}"
+            );
             assert!(
                 surface.contains("  static Block decBlock(BinaryReader r) => _decBlock(r);"),
                 "{surface}"
             );
             assert!(
-                surface.contains("  static void encShape(BinaryWriter w, Shape v) => _encShape(w, v);"),
+                surface.contains(
+                    "  static void encShape(BinaryWriter w, Shape v) => _encShape(w, v);"
+                ),
                 "{surface}"
             );
         }
@@ -490,7 +537,10 @@ mod tests {
 
     #[test]
     fn a_bridge_with_no_plain_data_hides_nothing() {
-        let a = iface("a", &[("#[bridge(sync)] pub fn f() -> i64 { 0 }", "crate::api")]);
+        let a = iface(
+            "a",
+            &[("#[bridge(sync)] pub fn f() -> i64 { 0 }", "crate::api")],
+        );
         let out = crate::emit_dart::emit(&a, "a.frustrate", "a_app");
         assert!(!out.entry.contains("hide"), "{}", out.entry);
         assert!(!out.models.contains("export"), "{}", out.models);
@@ -503,7 +553,11 @@ mod tests {
             iface: iface("a", &[(SHARED, "crate::model")]),
             import: "package:a_app/a.frustrate.models.dart".into(),
         };
-        let b = apply(iface("b", &[(SHARED, "a::model"), (B_API, "crate::api")]), &[a]).unwrap();
+        let b = apply(
+            iface("b", &[(SHARED, "a::model"), (B_API, "crate::api")]),
+            &[a],
+        )
+        .unwrap();
         assert_eq!(b.models[0].types, ["Block", "Graph", "Shape", "Mood"]);
     }
 
@@ -515,8 +569,16 @@ mod tests {
         let diags = r.expect_err("refused");
         assert_eq!(diags.len(), 1, "{diags:?}");
         assert_eq!(diags[0].code, "FR0080");
-        assert!(diags[0].message.contains("`b::api::Block`"), "{}", diags[0].message);
-        assert!(diags[0].message.contains("`shared::model::Block`"), "{}", diags[0].message);
+        assert!(
+            diags[0].message.contains("`b::api::Block`"),
+            "{}",
+            diags[0].message
+        );
+        assert!(
+            diags[0].message.contains("`shared::model::Block`"),
+            "{}",
+            diags[0].message
+        );
     }
 
     #[test]
@@ -532,10 +594,20 @@ mod tests {
         let r = apply_b(&grown, B_API, &[bridge_a(SHARED)]);
         let diags = r.expect_err("refused");
         assert_eq!(diags.iter().map(|d| d.code).collect::<Vec<_>>(), ["FR0081"]);
-        assert!(diags[0].message.contains("done: bool"), "{}", diags[0].message);
+        assert!(
+            diags[0].message.contains("done: bool"),
+            "{}",
+            diags[0].message
+        );
         // A struct where the model has an enum is a different shape too.
         let swapped = "#[bridge(data)] pub enum Block { A } #[bridge(sync)] pub fn f(b: Block) {}";
-        assert_eq!(codes(apply(iface("b", &[(swapped, "shared::model")]), &[bridge_a(SHARED)])), ["FR0081"]);
+        assert_eq!(
+            codes(apply(
+                iface("b", &[(swapped, "shared::model")]),
+                &[bridge_a(SHARED)]
+            )),
+            ["FR0081"]
+        );
     }
 
     #[test]
@@ -553,7 +625,11 @@ mod tests {
         let r = apply(iface("b", &[(shared, "shared::model")]), &[a]);
         let diags = r.expect_err("refused");
         assert_eq!(diags.iter().map(|d| d.code).collect::<Vec<_>>(), ["FR0082"]);
-        assert!(diags[0].message.contains("reaches a handle"), "{}", diags[0].message);
+        assert!(
+            diags[0].message.contains("reaches a handle"),
+            "{}",
+            diags[0].message
+        );
     }
 
     #[test]
@@ -562,11 +638,18 @@ mod tests {
             "{SHARED} #[bridge] impl Block {{ #[bridge(sync)] pub fn len(&self) -> i64 {{ 0 }} }}"
         );
         let b = apply_b(&shared, B_API, &[bridge_a(&shared)]).unwrap();
-        assert!(b.functions.iter().all(|f| f.parent.is_none()), "{:?}", b.functions);
+        assert!(
+            b.functions.iter().all(|f| f.parent.is_none()),
+            "{:?}",
+            b.functions
+        );
         let added = format!(
             "{B_API} #[bridge] impl Block {{ #[bridge(sync)] pub fn width(&self) -> i64 {{ 0 }} }}"
         );
-        assert_eq!(codes(apply_b(SHARED, &added, &[bridge_a(SHARED)])), ["FR0083"]);
+        assert_eq!(
+            codes(apply_b(SHARED, &added, &[bridge_a(SHARED)])),
+            ["FR0083"]
+        );
     }
 
     #[test]
@@ -574,14 +657,20 @@ mod tests {
         let grown = SHARED.replace("pub text: String }", "pub text: String, pub done: bool }");
         let before = apply_b(SHARED, B_API, &[bridge_a(SHARED)]).unwrap();
         let after = apply_b(&grown, B_API, &[bridge_a(&grown)]).unwrap();
-        assert_ne!(crate::hash::schema_hash(&before), crate::hash::schema_hash(&after));
+        assert_ne!(
+            crate::hash::schema_hash(&before),
+            crate::hash::schema_hash(&after)
+        );
     }
 
     #[test]
     fn the_model_interface_round_trips_through_its_json() {
         let a = bridge_a(SHARED).iface;
         let read: Interface = serde_json::from_str(&serde_json::to_string(&a).unwrap()).unwrap();
-        let model = ModelInterface { iface: read, import: "package:a_app/a.frustrate.models.dart".into() };
+        let model = ModelInterface {
+            iface: read,
+            import: "package:a_app/a.frustrate.models.dart".into(),
+        };
         assert!(apply_b(SHARED, B_API, &[model]).is_ok());
     }
 }

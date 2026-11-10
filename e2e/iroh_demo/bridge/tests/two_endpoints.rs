@@ -77,7 +77,10 @@ impl Probe {
                     pending.push(event);
                 }
                 Err(RecvTimeoutError::Timeout) => {
-                    panic!("timed out waiting for {what}; saw {:?}", described(&pending))
+                    panic!(
+                        "timed out waiting for {what}; saw {:?}",
+                        described(&pending)
+                    )
                 }
                 Err(RecvTimeoutError::Disconnected) => {
                     panic!(

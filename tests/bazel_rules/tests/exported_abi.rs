@@ -17,8 +17,8 @@
 //! survive into a linked binary rather than being dropped as unreferenced
 //! archive members.
 
-use frustrate::codec::{ByteReader, ByteWriter};
 use frustrate::__private::envelope::{STATUS_OK, STATUS_PANIC};
+use frustrate::codec::{ByteReader, ByteWriter};
 
 /// The dispatch id of a member, by the name the bridge declares it under.
 /// Ids are derived from each member's wire facts, so this is a lookup rather
@@ -74,7 +74,10 @@ fn the_bridged_function_is_callable_as_ordinary_rust() {
 fn a_bridge_call_round_trips_through_the_exported_c_abi() {
     let mut out = [0u8; 64];
     let n = unsafe { call_add(2, 3, out.as_mut_ptr(), out.len() as u64) };
-    assert!(n >= 0, "a 5-byte envelope must fit a 64-byte buffer, got {n}");
+    assert!(
+        n >= 0,
+        "a 5-byte envelope must fit a 64-byte buffer, got {n}"
+    );
 
     let mut r = ByteReader::new(&out[..n as usize]);
     assert_eq!(r.read_u8(), STATUS_OK, "response envelope status");
@@ -95,7 +98,14 @@ fn a_bridge_call_round_trips_through_the_exported_c_abi() {
 fn a_response_too_large_for_the_buffer_is_leased_back() {
     let mut out = [0u8; 24];
     let n = unsafe {
-        frustrate_rule_test_fixture_call_sync(4242, std::ptr::null(), 0, out.as_mut_ptr(), out.len() as u64, 0)
+        frustrate_rule_test_fixture_call_sync(
+            4242,
+            std::ptr::null(),
+            0,
+            out.as_mut_ptr(),
+            out.len() as u64,
+            0,
+        )
     };
     assert_eq!(n, -1, "the panic message must not have fitted 24 bytes");
 

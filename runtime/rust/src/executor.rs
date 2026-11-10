@@ -247,7 +247,9 @@ impl Executor {
             // `claimed` is this task's own join handle; dropping it while the
             // task is running is a flag-only operation in async_task (the
             // poll in progress finishes), and it happens outside the lock.
-            let claimed = for_complete.inner.with(|inner| inner.tasks.remove(&call_id));
+            let claimed = for_complete
+                .inner
+                .with(|inner| inner.tasks.remove(&call_id));
             if claimed.is_some() {
                 (for_complete.complete)(call_id, envelope::encode(outcome));
             } else {
@@ -841,9 +843,7 @@ mod tests {
         // way a delivery does: whatever the reply minted is the far side's now.
         let exec = Executor::new(
             || {},
-            move |id, reply: FramedWriter| {
-                sink.lock().unwrap().push((id, reply.delivered_bytes()))
-            },
+            move |id, reply: FramedWriter| sink.lock().unwrap().push((id, reply.delivered_bytes())),
         );
         (exec, log)
     }
@@ -1013,7 +1013,10 @@ mod tests {
             },
         );
         exec.drain_one(); // poll once -> Pending, Runnable consumed
-        assert!(!dropped.load(Ordering::SeqCst), "future still alive while parked");
+        assert!(
+            !dropped.load(Ordering::SeqCst),
+            "future still alive while parked"
+        );
         assert_eq!(exec.task_count(), 1);
 
         // Cancel removes the join handle. async_task then schedules one final
@@ -1023,7 +1026,10 @@ mod tests {
         assert_eq!(exec.task_count(), 0, "the task is gone from the registry");
         exec.drain_all();
         assert!(dropped.load(Ordering::SeqCst), "cancel dropped the future");
-        assert!(log.lock().unwrap().is_empty(), "a cancelled task never completes");
+        assert!(
+            log.lock().unwrap().is_empty(),
+            "a cancelled task never completes"
+        );
     }
 
     /// A reservation is claimable exactly like a task, and the hand-off that
@@ -1060,9 +1066,16 @@ mod tests {
             "a refused hand-off drops the body then and there — it was never \
              given to the executor, so no drain will ever reach it"
         );
-        assert_eq!(exec.task_count(), 0, "a refused spawn leaves nothing behind");
+        assert_eq!(
+            exec.task_count(),
+            0,
+            "a refused spawn leaves nothing behind"
+        );
         exec.drain_all();
-        assert!(log.lock().unwrap().is_empty(), "a claimed call never answers");
+        assert!(
+            log.lock().unwrap().is_empty(),
+            "a claimed call never answers"
+        );
 
         // Reservation intact: the hand-off takes it and the call answers once.
         exec.reserve(2);
@@ -1112,7 +1125,10 @@ mod tests {
         gate.wait(); // let the poll finish
         drainer.join().unwrap();
 
-        assert!(claimed, "the entry was live mid-poll, so the cancel claims it");
+        assert!(
+            claimed,
+            "the entry was live mid-poll, so the cancel claims it"
+        );
         assert!(
             log.lock().unwrap().is_empty(),
             "a claimed cancel owns the answer: the completion hook must not \
@@ -1233,8 +1249,7 @@ mod tests {
         // The future is dropped by async_task on the next drain of its final
         // runnable, which a pool worker runs. Nothing here drives it.
         let start = std::time::Instant::now();
-        while !dropped.load(Ordering::SeqCst)
-            && start.elapsed() < std::time::Duration::from_secs(5)
+        while !dropped.load(Ordering::SeqCst) && start.elapsed() < std::time::Duration::from_secs(5)
         {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
@@ -1276,11 +1291,24 @@ mod tests {
         // spawn (initial enqueue) and again when a wake re-enqueues.
         let count = Arc::new(AtomicU32::new(0));
         let c = count.clone();
-        let exec = Executor::new(move || { c.fetch_add(1, Ordering::SeqCst); }, |_, _| {});
+        let exec = Executor::new(
+            move || {
+                c.fetch_add(1, Ordering::SeqCst);
+            },
+            |_, _| {},
+        );
         exec.spawn(1, YieldOnce { yielded: false });
-        assert_eq!(count.load(Ordering::SeqCst), 1, "spawn schedules the first poll");
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            1,
+            "spawn schedules the first poll"
+        );
         exec.drain_one(); // Pending + self-wake re-enqueues -> schedule again
-        assert_eq!(count.load(Ordering::SeqCst), 2, "a wake schedules a re-poll");
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            2,
+            "a wake schedules a re-poll"
+        );
     }
 
     /// `drain_all` reports whether it polled anything. That bool is the only
@@ -1300,7 +1328,10 @@ mod tests {
              spawning anything and get a straight answer"
         );
         exec.spawn(1, ok_body(7));
-        assert!(exec.drain_all(), "a queued task means the drain polled something");
+        assert!(
+            exec.drain_all(),
+            "a queued task means the drain polled something"
+        );
         assert!(!exec.drain_all(), "and the queue is quiet once emptied");
         assert_eq!(log.lock().unwrap().len(), 1, "the task actually completed");
     }
@@ -1316,7 +1347,10 @@ mod tests {
         exec.spawn_detached(async move {
             r.fetch_add(1, Ordering::SeqCst);
         });
-        assert!(exec.drain_all(), "a detached task is runnable work like any other");
+        assert!(
+            exec.drain_all(),
+            "a detached task is runnable work like any other"
+        );
         assert_eq!(ran.load(Ordering::SeqCst), 1, "and it ran");
         assert!(!exec.drain_all(), "quiet once it is done");
         assert!(
@@ -1383,7 +1417,11 @@ mod tests {
                 _guard: DropFlag(dropped.clone()),
             },
         );
-        assert_eq!(frustrate_call_cancel(ID), 1, "a live task is the caller's to claim");
+        assert_eq!(
+            frustrate_call_cancel(ID),
+            1,
+            "a live task is the caller's to claim"
+        );
         assert!(
             !dropped.load(Ordering::SeqCst),
             "cancelling must not run the future's Drop on the caller's thread — \
@@ -1437,10 +1475,17 @@ mod tests {
             "the host's drain finds the task still queued and polls it"
         );
         let done = DONE.lock().unwrap();
-        assert_eq!(done.len(), 1, "one completion delivered, on the host's thread");
+        assert_eq!(
+            done.len(),
+            1,
+            "one completion delivered, on the host's thread"
+        );
         assert_eq!(done[0].0, 4242);
         assert_eq!(done[0].1[0], STATUS_OK);
-        assert_eq!(crate::codec::ByteReader::new(&done[0].1[1..]).read_i32(), 99);
+        assert_eq!(
+            crate::codec::ByteReader::new(&done[0].1[1..]).read_i32(),
+            99
+        );
         drop(done);
 
         assert_eq!(
@@ -1570,7 +1615,10 @@ mod tests {
             "spawning enqueues a poll; it does not run the body inline"
         );
         exec.drain_all();
-        assert!(ran.load(Ordering::SeqCst), "the drain polled it to completion");
+        assert!(
+            ran.load(Ordering::SeqCst),
+            "the drain polled it to completion"
+        );
         assert!(
             log.lock().unwrap().is_empty(),
             "a detached task has no call to answer, so nothing may be delivered"

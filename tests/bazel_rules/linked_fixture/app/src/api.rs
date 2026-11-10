@@ -15,11 +15,14 @@ pub fn add(a: i32, b: i32) -> i32 {
 /// Takes the `Mutex` itself, silenced by each analysis's name for the wait. The
 /// silence is this bridge's: `example` has no `Mutex`, and its members are
 /// numbered from the same 0.
-#[bridge(sync, no_block(allow(
-    pthread_mutex_lock,
-    syscall::SYS_futex::FUTEX_WAIT_BITSET,
-    std::sys::sync::mutex::futex::Mutex::lock_contended,
-)))]
+#[bridge(
+    sync,
+    no_block(allow(
+        pthread_mutex_lock,
+        syscall::SYS_futex::FUTEX_WAIT_BITSET,
+        std::sys::sync::mutex::futex::Mutex::lock_contended,
+    ))
+)]
 pub fn read() -> i64 {
     *TOTAL.lock().unwrap()
 }

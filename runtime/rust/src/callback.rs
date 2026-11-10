@@ -70,9 +70,7 @@ pub fn callback<T>(id: u64, encode: fn(T, &mut ByteWriter)) -> DartCallback<T> {
 // taking one is portable via `call_async`, so its glue is emitted on the web
 // surface too. Only the blocking `call` path needs a worker thread (its guard
 // is a runtime assert, not a cfg gate).
-pub use returning::{
-    enter_worker_context, fallible_function, function, CallFuture, DartFunction,
-};
+pub use returning::{enter_worker_context, fallible_function, function, CallFuture, DartFunction};
 
 /// Fail a dead isolate's outstanding callback invocations. Called by
 /// `post::deliver` when a post is refused; see [`returning`].
@@ -80,16 +78,16 @@ pub use returning::{
 pub(crate) use returning::fail_invocations_for;
 
 mod returning {
+    use crate::bounded::Lock;
+    use crate::bounded::Outside;
     use crate::codec::{ByteReader, ByteWriter, FramedWriter};
     use crate::envelope::{STATUS_CALLBACK_CALL, STATUS_ERROR, STATUS_OK, STATUS_TYPED_ERROR};
     use crate::stream::Inner;
     use std::cell::Cell;
-    use crate::bounded::Outside;
     use std::collections::BTreeMap;
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use crate::bounded::Lock;
     use std::sync::Arc;
     use std::task::{Context, Poll, Waker};
 
@@ -628,11 +626,7 @@ mod returning {
     // wasm even though the blocking `call` path beside it is not.
     #[cfg(not(all(frustrate_no_block_check, target_family = "wasm")))]
     #[unsafe(no_mangle)]
-    pub unsafe extern "C" fn frustrate_callback_respond(
-        invocation: u64,
-        ptr: *const u8,
-        len: u64,
-    ) {
+    pub unsafe extern "C" fn frustrate_callback_respond(invocation: u64, ptr: *const u8, len: u64) {
         let bytes = if ptr.is_null() || len == 0 {
             vec![]
         } else {
@@ -737,7 +731,10 @@ mod tests {
         let denied = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f.call(1)));
         let msg = panic_message(denied.unwrap_err());
         assert!(msg.contains("deadlock"), "{msg}");
-        assert!(msg.contains("DartCallback"), "must name the portable alternative: {msg}");
+        assert!(
+            msg.contains("DartCallback"),
+            "must name the portable alternative: {msg}"
+        );
 
         // Round trip from a (fake) worker thread: the "Dart side" here
         // reads the posted invocation, doubles the argument, and responds
@@ -764,7 +761,9 @@ mod tests {
         let mut w = ByteWriter::new();
         w.write_i64(arg * 2);
         resp.extend_from_slice(&w.take());
-        unsafe { returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64) };
+        unsafe {
+            returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64)
+        };
         assert_eq!(handle.join().unwrap(), 42);
 
         // A throwing closure (error response) becomes an attributable
@@ -789,7 +788,9 @@ mod tests {
         let mut w = ByteWriter::new();
         w.write_string("closure exploded");
         resp.extend_from_slice(&w.take());
-        unsafe { returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64) };
+        unsafe {
+            returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64)
+        };
         let msg = panic_message(handle.join().unwrap().unwrap_err());
         assert!(msg.contains("closure exploded"), "{msg}");
 
@@ -855,9 +856,10 @@ mod tests {
     fn recording_executor() -> (Executor, Delivered) {
         let log = Arc::new(Mutex::new(Vec::new()));
         let sink = log.clone();
-        let exec = Executor::new(|| {}, move |id, reply: FramedWriter| {
-            sink.lock().unwrap().push((id, reply.delivered_bytes()))
-        });
+        let exec = Executor::new(
+            || {},
+            move |id, reply: FramedWriter| sink.lock().unwrap().push((id, reply.delivered_bytes())),
+        );
         (exec, log)
     }
 
@@ -900,13 +902,23 @@ mod tests {
         // First poll posts the invocation and parks; nothing delivered yet.
         assert!(exec.drain_one());
         assert!(log.lock().unwrap().is_empty(), "parked, not completed");
-        assert_eq!(exec.task_count(), 1, "task suspended, awaiting the response");
-        assert_eq!(returning::invocation_count(), baseline + 1, "one waiter parked");
+        assert_eq!(
+            exec.task_count(),
+            1,
+            "task suspended, awaiting the response"
+        );
+        assert_eq!(
+            returning::invocation_count(),
+            baseline + 1,
+            "one waiter parked"
+        );
 
         // The Dart side answers; the wake re-enqueues the task.
         let invocation = posted_invocation(8100);
         let resp = ok_response(42);
-        unsafe { returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64) };
+        unsafe {
+            returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64)
+        };
 
         assert!(exec.drain_one(), "the wake re-enqueued the task");
         let log = log.lock().unwrap();
@@ -940,7 +952,9 @@ mod tests {
         let mut w = ByteWriter::new();
         w.write_string("closure exploded");
         resp.extend_from_slice(&w.take());
-        unsafe { returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64) };
+        unsafe {
+            returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64)
+        };
 
         assert!(exec.drain_one());
         let log = log.lock().unwrap();
@@ -1005,8 +1019,14 @@ mod tests {
 
         // A response for the now-dead invocation is silently dropped.
         let resp = ok_response(99);
-        unsafe { returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64) };
-        assert_eq!(returning::invocation_count(), baseline, "late respond is a no-op");
+        unsafe {
+            returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64)
+        };
+        assert_eq!(
+            returning::invocation_count(),
+            baseline,
+            "late respond is a no-op"
+        );
         drop(f);
     }
 
@@ -1034,12 +1054,21 @@ mod tests {
         exec.cancel(740);
         exec.drain_all();
         assert_eq!(exec.task_count(), 0);
-        assert_eq!(returning::invocation_count(), baseline, "cancel deregistered the waiter");
-        assert!(log.lock().unwrap().is_empty(), "a cancelled call never completes");
+        assert_eq!(
+            returning::invocation_count(),
+            baseline,
+            "cancel deregistered the waiter"
+        );
+        assert!(
+            log.lock().unwrap().is_empty(),
+            "a cancelled call never completes"
+        );
 
         // A late response after cancel is a no-op.
         let resp = ok_response(1);
-        unsafe { returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64) };
+        unsafe {
+            returning::frustrate_callback_respond(invocation, resp.as_ptr(), resp.len() as u64)
+        };
         assert!(log.lock().unwrap().is_empty());
     }
 
@@ -1052,12 +1081,7 @@ mod tests {
 
     /// The fixture error: an i64 payload, standing in for a bridged enum.
     fn fallible_fn(id: u64) -> DartFunction<i64, Result<i64, i64>> {
-        fallible_function::<i64, i64, i64>(
-            id,
-            enc_i64,
-            |r| Ok(r.read_i64()),
-            |r| Err(r.read_i64()),
-        )
+        fallible_function::<i64, i64, i64>(id, enc_i64, |r| Ok(r.read_i64()), |r| Err(r.read_i64()))
     }
 
     /// `[STATUS_TYPED_ERROR, <encoded E>]` — the reply a Dart closure sends

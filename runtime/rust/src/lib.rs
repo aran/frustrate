@@ -23,7 +23,10 @@ pub use frustrate_macros::no_block;
 #[doc(hidden)]
 #[cfg(frustrate_no_block_check)]
 #[inline(never)]
-#[cfg_attr(not(target_family = "wasm"), unsafe(export_name = "frustrate_no_block_allow"))]
+#[cfg_attr(
+    not(target_family = "wasm"),
+    unsafe(export_name = "frustrate_no_block_allow")
+)]
 pub fn __no_block_allow() {
     // An empty side effect, so no optimizer deletes the call as pure.
     core::hint::black_box(());
@@ -65,20 +68,20 @@ pub type Locked<T> = T;
 /// See [`Data`].
 pub type Actor<T> = T;
 
+/// What generated glue calls. Not API: it changes with the codegen of the
+/// same release, which is the only caller it serves.
+#[doc(hidden)]
+pub mod __private;
 #[cfg(not(target_family = "wasm"))]
 pub mod actor;
 /// `Addr<A>`: an actor's address for messages to itself.
 pub mod addr;
 pub mod codec;
-pub mod deferred;
 /// Rust handles to Dart objects — the dual of opaque handles. See the module
 /// docs for which mirror to take.
 pub mod dart;
+pub mod deferred;
 pub mod error;
-/// What generated glue calls. Not API: it changes with the codegen of the
-/// same release, which is the only caller it serves.
-#[doc(hidden)]
-pub mod __private;
 use __private::{envelope, executor, post};
 /// The async execution pool's width, and `block_on` for a plain bridged fn
 /// that waits on a future of its own.
@@ -87,6 +90,17 @@ pub mod pool {
     pub use crate::__private::pool::block_on;
     pub use crate::__private::pool::{declare_width, width, WidthError};
 }
+/// The bounded lock every registry of this runtime takes. Private: its
+/// sections are held to rules (bounded.rs) a bridge's own code does not keep.
+mod bounded;
+pub mod callback;
+/// An embedder's value, carried from where bridge work is queued to where it
+/// runs.
+pub mod carry;
+/// The one slot an embedder sets a value into, shared by every hook that
+/// offers one. Private: a bridge sees each hook's own `set_*`, never the
+/// primitive underneath.
+mod hook;
 /// Taking a patch into a running library. Present only in a library built with
 /// `--cfg=frustrate_hot_patch` (`frustrate_hot_patchable`, `-c dbg`).
 #[cfg(all(frustrate_hot_patch, not(target_family = "wasm")))]
@@ -94,20 +108,12 @@ pub mod hot_patch;
 /// The idle barrier's count of queued and running work. Its exports exist
 /// only under `--cfg=frustrate_idle_barrier` (`frustrate_idle_barrier_library`).
 mod idle;
-/// The one slot an embedder sets a value into, shared by every hook that
-/// offers one. Private: a bridge sees each hook's own `set_*`, never the
-/// primitive underneath.
-mod hook;
-/// The table of objects an actor's executor hosts, keyed by slot id. Private:
-/// generated glue reaches it through `handle::actor_*`.
-mod objects;
 /// Rust's `log` facade → a Dart `Stream`: set a sink and every
 /// `log::info!` in the crate graph becomes an item on it.
 pub mod logging;
-pub mod callback;
-/// An embedder's value, carried from where bridge work is queued to where it
-/// runs.
-pub mod carry;
+/// The table of objects an actor's executor hosts, keyed by slot id. Private:
+/// generated glue reaches it through `handle::actor_*`.
+mod objects;
 /// The panic listener: one process-global callback told about every Rust panic
 /// this runtime observes, so crash reporting can live on the Rust side.
 pub mod panic;
@@ -124,22 +130,19 @@ pub mod resident;
 /// The async-runtime hook: lend the cooperative executor a tokio/async-std
 /// context so a bridged `async fn` can `.await` that runtime's leaves.
 pub mod runtime;
-/// The bounded lock every registry of this runtime takes. Private: its
-/// sections are held to rules (bounded.rs) a bridge's own code does not keep.
-mod bounded;
-/// The non-parking primitives the bounded lock and the executor cell use on
-/// wasm with `+atomics`.
-mod spin;
 /// The `locked` model's read/write lock. Private: what a bridge names is
 /// [`__private::handle::LockedCell`] and its guards, which are re-exported there so
 /// generated glue reaches one module.
 mod rwlock;
-/// Which Dart zone hears a panic that answers no call.
-mod uncaught;
-pub mod testing;
+/// The non-parking primitives the bounded lock and the executor cell use on
+/// wasm with `+atomics`.
+mod spin;
 pub mod stream;
 #[cfg(test)]
 mod test_wait;
+pub mod testing;
+/// Which Dart zone hears a panic that answers no call.
+mod uncaught;
 
 /// One lock for the tests that touch a **process global**, so they cannot run
 /// beside each other.
@@ -161,15 +164,15 @@ mod test_wait;
 #[cfg(test)]
 pub(crate) fn serialize_globals() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    LOCK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+pub use addr::{Addr, Gone};
 pub use callback::{DartCallback, DartFunction};
 pub use codec::BytesCodec;
-pub use addr::{Addr, Gone};
 pub use deferred::Deferred;
 pub use stream::{StreamClosed, StreamSink};
-
 
 // --- no-block-check export gating ---------------------------------------------
 //

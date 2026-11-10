@@ -174,7 +174,11 @@ pub fn parse_source_reporting(
                         merge_allow(&mut attr.allow, &file_attr.allow);
                     }
                     reject_no_eq(&attr, "function", &f.sig.ident.to_string())?;
-                    reject_dart_interface(attr.dart_interface, "function", &f.sig.ident.to_string())?;
+                    reject_dart_interface(
+                        attr.dart_interface,
+                        "function",
+                        &f.sig.ident.to_string(),
+                    )?;
                     reject_inbound(
                         attr.inbound,
                         "function",
@@ -238,11 +242,7 @@ pub fn parse_source_reporting(
                             "a bytes(...) external type crosses by value through codecs \
                              the app supplies on both sides",
                         )?;
-                        reject_cfg_gated_data_type(
-                            attr.cfg_gated,
-                            "struct",
-                            &s.ident.to_string(),
-                        )?;
+                        reject_cfg_gated_data_type(attr.cfg_gated, "struct", &s.ident.to_string())?;
                         reject_generic_representation(
                             &s.generics,
                             "struct",
@@ -269,8 +269,7 @@ pub fn parse_source_reporting(
                         // *and* as a handle class, from one Rust struct. Both
                         // declarations are pushed; every rule below that
                         // differs between them is stated per half.
-                        let (data_id, model_id) =
-                            half_dart_identifiers(&attr, "struct", &name)?;
+                        let (data_id, model_id) = half_dart_identifiers(&attr, "struct", &name)?;
                         if let Some(model) = attr.model {
                             if attr.no_eq && !attr.data {
                                 bail!(
@@ -407,8 +406,7 @@ pub fn parse_source_reporting(
                          that exist on every target",
                     )?;
                     reject_cfg_gated_data_type(attr.cfg_gated, "enum", &e.ident.to_string())?;
-                    let (data_id, _) =
-                        half_dart_identifiers(&attr, "enum", &e.ident.to_string())?;
+                    let (data_id, _) = half_dart_identifiers(&attr, "enum", &e.ident.to_string())?;
                     // See the struct arm: a parameterized declaration is a
                     // template, and `check` expands its uses.
                     let decl = parse_enum(e, module_path, attr.no_eq, data_id)?;
@@ -581,7 +579,11 @@ fn report_rebound_time_name(bound: &str, source: &str, line: usize, out: &mut Ve
     // the message has to quote). Anything else is the divergence.
     let (owners, bare_means): (&[&str], &str) = match bound {
         "Duration" | "SystemTime" => (
-            &["std::time::Duration", "std::time::SystemTime", "core::time::Duration"],
+            &[
+                "std::time::Duration",
+                "std::time::SystemTime",
+                "core::time::Duration",
+            ],
             if bound == "Duration" {
                 "std::time::Duration"
             } else {
@@ -745,7 +747,14 @@ fn omission_warnings(file: &syn::File, iface: &Interface, module_path: &str) -> 
                 if f.sig.abi.is_some() || f.sig.unsafety.is_some() {
                     continue;
                 }
-                if !signature_is_bridgeable(&f.sig, None, module_path, &bridged, &opaques, &carriers) {
+                if !signature_is_bridgeable(
+                    &f.sig,
+                    None,
+                    module_path,
+                    &bridged,
+                    &opaques,
+                    &carriers,
+                ) {
                     continue;
                 }
                 let name = f.sig.ident.to_string();
@@ -768,17 +777,15 @@ fn omission_warnings(file: &syn::File, iface: &Interface, module_path: &str) -> 
                 });
             }
             syn::Item::Impl(im) => {
-                if let Some(w) =
-                    impl_omission(
-                        im,
-                        module_path,
-                        &bridged,
-                        &opaques,
-                        &carriers,
-                        &impl_targets,
-                        &duals,
-                    )
-                {
+                if let Some(w) = impl_omission(
+                    im,
+                    module_path,
+                    &bridged,
+                    &opaques,
+                    &carriers,
+                    &impl_targets,
+                    &duals,
+                ) {
                     out.push(w);
                 }
             }
@@ -992,10 +999,7 @@ fn signature_is_bridgeable(
     }
     // A receiver on a type that *reaches* a handle is decoded Dart → Rust and
     // refused by FR0004, for the same reason such a parameter is.
-    if parent_is_data
-        && f.receiver.is_some()
-        && parent.is_some_and(|p| carriers.contains(p))
-    {
+    if parent_is_data && f.receiver.is_some() && parent.is_some_and(|p| carriers.contains(p)) {
         return false;
     }
     // A borrowed return that reaches a handle cannot mint (FR0004 again): the
@@ -1197,9 +1201,8 @@ fn bridge_attr(attrs: &[syn::Attribute]) -> Result<Option<BridgeAttr>> {
         match &attr.meta {
             syn::Meta::Path(_) => {}
             syn::Meta::List(_) => {
-                let metas = attr.parse_args_with(
-                    Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
-                )?;
+                let metas = attr
+                    .parse_args_with(Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated)?;
                 for meta in metas {
                     parse_bridge_option(&meta, &mut out)?;
                 }
@@ -1300,9 +1303,7 @@ fn parse_bridge_file(file: &syn::File) -> Result<BridgeAttr> {
 
     let metas = m
         .mac
-        .parse_body_with(
-            syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
-        )
+        .parse_body_with(syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated)
         .map_err(|e| anyhow::anyhow!("could not parse `bridge_file!(...)`: {e}"))?;
     if metas.is_empty() {
         bail!(
@@ -1507,9 +1508,7 @@ fn parse_bridge_option(meta: &syn::Meta, out: &mut BridgeAttr) -> Result<()> {
             out.on_contention = Some(match s.value().as_str() {
                 "error" => OnContention::Error,
                 "block" => OnContention::Block,
-                other => bail!(
-                    "unknown on_contention `{other}`; expected \"error\" or \"block\""
-                ),
+                other => bail!("unknown on_contention `{other}`; expected \"error\" or \"block\""),
             });
         }
         other => bail!("unknown #[bridge] option: {}", quote_meta(other)),
@@ -2025,8 +2024,8 @@ fn parse_struct(
             None => format!("field{i}"),
         };
         let dart_identifier = field_dart_identifier(&f.attrs, "a field", &fname)?;
-        let mut ty = parse_type(&f.ty)
-            .with_context(|| format!("struct `{}`, field `{fname}`", s.ident))?;
+        let mut ty =
+            parse_type(&f.ty).with_context(|| format!("struct `{}`, field `{fname}`", s.ident))?;
         // `Self` in a field names the declaring type, exactly as it does in a
         // member signature — `struct Tree { children: Vec<Self> }` is the
         // idiomatic recursive spelling and compiles in Rust.
@@ -2200,8 +2199,7 @@ fn parse_enum(
                     .iter()
                     .map(|f| {
                         let fname = f.ident.as_ref().unwrap().to_string();
-                        let dart_identifier =
-                            field_dart_identifier(&f.attrs, "a field", &fname)?;
+                        let dart_identifier = field_dart_identifier(&f.attrs, "a field", &fname)?;
                         Ok(Field {
                             name: fname,
                             ty: parse_type(&f.ty)?,
@@ -2218,11 +2216,8 @@ fn parse_enum(
                     .iter()
                     .enumerate()
                     .map(|(i, f)| {
-                        let dart_identifier = field_dart_identifier(
-                            &f.attrs,
-                            "a field",
-                            &format!("field{i}"),
-                        )?;
+                        let dart_identifier =
+                            field_dart_identifier(&f.attrs, "a field", &format!("field{i}"))?;
                         Ok(Field {
                             name: format!("field{i}"),
                             ty: parse_type(&f.ty)?,
@@ -2234,8 +2229,7 @@ fn parse_enum(
                 true,
             ),
         };
-        let dart_identifier =
-            field_dart_identifier(&v.attrs, "a variant", &v.ident.to_string())?;
+        let dart_identifier = field_dart_identifier(&v.attrs, "a variant", &v.ident.to_string())?;
         // `Self` in a variant's field names the declaring enum, the same rule
         // a struct field takes.
         let mut fields = fields;
@@ -2434,8 +2428,7 @@ fn parse_impl(
                     path.segments.last().unwrap().ident
                 );
             }
-            let segs: Vec<String> =
-                path.segments.iter().map(|s| s.ident.to_string()).collect();
+            let segs: Vec<String> = path.segments.iter().map(|s| s.ident.to_string()).collect();
             match segs[0].as_str() {
                 "self" | "super" => bail!(
                     "#[bridge] impl {} for {parent}: self/super-relative trait paths \
@@ -2739,9 +2732,10 @@ fn ty_mentions_self_type(ty: &syn::Type) -> bool {
             syn::Type::Path(tp) => tp.path.segments.iter().any(|seg| {
                 seg.ident == "Self"
                     || match &seg.arguments {
-                        syn::PathArguments::AngleBracketed(ab) => ab.args.iter().any(|a| {
-                            matches!(a, syn::GenericArgument::Type(t) if ty_mentions(t))
-                        }),
+                        syn::PathArguments::AngleBracketed(ab) => ab
+                            .args
+                            .iter()
+                            .any(|a| matches!(a, syn::GenericArgument::Type(t) if ty_mentions(t))),
                         _ => false,
                     }
             }),
@@ -2767,7 +2761,9 @@ fn is_addr(ty: &syn::Type) -> bool {
     if p.qself.is_some() {
         return false;
     }
-    let Some(seg) = p.path.segments.last() else { return false };
+    let Some(seg) = p.path.segments.last() else {
+        return false;
+    };
     if seg.ident != "Addr" {
         return false;
     }
@@ -2788,7 +2784,9 @@ fn is_addr(ty: &syn::Type) -> bool {
 /// the strict side, and the only one this pass can defend.
 fn is_box_self(ty: &syn::Type) -> bool {
     let syn::Type::Path(p) = ty else { return false };
-    let Some(seg) = p.path.segments.last() else { return false };
+    let Some(seg) = p.path.segments.last() else {
+        return false;
+    };
     if seg.ident != "Box" {
         return false;
     }
@@ -3052,7 +3050,11 @@ fn parse_return_ty(
     let (ty, ret_borrow) = peel_ret_borrow(ty, fn_name)?;
     *borrow = ret_borrow;
     let mut ret = parse_ret_type(ty)?;
-    substitute_self_opt(ret.as_mut(), parent, &format!("fn `{fn_name}`: a Self return"))?;
+    substitute_self_opt(
+        ret.as_mut(),
+        parent,
+        &format!("fn `{fn_name}`: a Self return"),
+    )?;
     Ok((ret, false, None))
 }
 
@@ -3183,7 +3185,10 @@ fn substitute_self(ty: &mut Type, scope: SelfScope<'_>, ctx: &str) -> Result<()>
 /// Anything else is taken as a claim that the error is a value. Whether it is
 /// one the interface can carry is the checker's question (FR0035), not the
 /// parser's: the parser cannot see the type declarations.
-fn parse_error_type(arg: Option<&syn::GenericArgument>, fn_name: &syn::Ident) -> Result<Option<Type>> {
+fn parse_error_type(
+    arg: Option<&syn::GenericArgument>,
+    fn_name: &syn::Ident,
+) -> Result<Option<Type>> {
     let Some(arg) = arg else { return Ok(None) };
     let syn::GenericArgument::Type(ty) = arg else {
         bail!("fn `{fn_name}`: the error of a Result must be a type");
@@ -3450,9 +3455,7 @@ fn parse_path_type(tp: &syn::TypePath) -> Result<Type> {
         ("TimeDelta", []) if time_root(tp, &["chrono"]) => {
             Type::Duration(DurationPeer::ChronoTimeDelta)
         }
-        ("SystemTime", []) if time_root(tp, &["std", "core"]) => {
-            Type::SystemTime(InstantPeer::Std)
-        }
+        ("SystemTime", []) if time_root(tp, &["std", "core"]) => Type::SystemTime(InstantPeer::Std),
         ("OffsetDateTime", []) if time_root(tp, &["time"]) => {
             Type::SystemTime(InstantPeer::TimeOffsetDateTime)
         }
@@ -3596,34 +3599,28 @@ fn parse_path_type(tp: &syn::TypePath) -> Result<Type> {
         // these names is untouched; only the one-argument generic form is
         // reserved, the same rule that already reserves `Vec`/`Box`/`Option`.
         ("Data", [t]) => Type::Claimed(Claim::Data, Box::new(parse_type(t)?)),
-        ("Confined", [t]) => {
-            Type::Claimed(Claim::Model(Model::Confined), Box::new(parse_type(t)?))
-        }
-        ("Resident", [t]) => {
-            Type::Claimed(Claim::Model(Model::Resident), Box::new(parse_type(t)?))
-        }
-        ("Frozen", [t]) => {
-            Type::Claimed(Claim::Model(Model::Frozen), Box::new(parse_type(t)?))
-        }
-        ("Locked", [t]) => {
-            Type::Claimed(Claim::Model(Model::Locked), Box::new(parse_type(t)?))
-        }
-        ("Actor", [t]) => {
-            Type::Claimed(Claim::Model(Model::Actor), Box::new(parse_type(t)?))
-        }
+        ("Confined", [t]) => Type::Claimed(Claim::Model(Model::Confined), Box::new(parse_type(t)?)),
+        ("Resident", [t]) => Type::Claimed(Claim::Model(Model::Resident), Box::new(parse_type(t)?)),
+        ("Frozen", [t]) => Type::Claimed(Claim::Model(Model::Frozen), Box::new(parse_type(t)?)),
+        ("Locked", [t]) => Type::Claimed(Claim::Model(Model::Locked), Box::new(parse_type(t)?)),
+        ("Actor", [t]) => Type::Claimed(Claim::Model(Model::Actor), Box::new(parse_type(t)?)),
         ("HashSet", [t]) => Type::Set(Box::new(parse_type(t)?), MapKind::Hash),
         // BTreeSet shares HashSet's list wire codec and Dart `Set`; it decodes
         // into a `BTreeSet` (sorted).
         ("BTreeSet", [t]) => Type::Set(Box::new(parse_type(t)?), MapKind::BTree),
-        ("HashMap", [k, v]) => {
-            Type::Map(Box::new(parse_type(k)?), Box::new(parse_type(v)?), MapKind::Hash)
-        }
+        ("HashMap", [k, v]) => Type::Map(
+            Box::new(parse_type(k)?),
+            Box::new(parse_type(v)?),
+            MapKind::Hash,
+        ),
         // BTreeMap shares HashMap's wire codec and Dart `Map`; it encodes in
         // sorted key order (its natural iteration) and decodes into a
         // `BTreeMap`. Dart's insertion-ordered `Map` preserves that order.
-        ("BTreeMap", [k, v]) => {
-            Type::Map(Box::new(parse_type(k)?), Box::new(parse_type(v)?), MapKind::BTree)
-        }
+        ("BTreeMap", [k, v]) => Type::Map(
+            Box::new(parse_type(k)?),
+            Box::new(parse_type(v)?),
+            MapKind::BTree,
+        ),
         ("Result", _) => bail!("Result is only supported as the outermost return type"),
         // Same position rule as Result, same reason: `Deferred` is not a
         // value — it is how an actor method hands off its completion — so it
@@ -3636,7 +3633,9 @@ fn parse_path_type(tp: &syn::TypePath) -> Result<Type> {
         // position, which is what lets them compose: nested in a struct, in a
         // Vec, several per function. Direction is enforced
         // by the checker, not here — FR0031.
-        ("StreamSink", [t]) => dart_object(DartMirror::StreamController, Some(parse_type(t)?), None),
+        ("StreamSink", [t]) => {
+            dart_object(DartMirror::StreamController, Some(parse_type(t)?), None)
+        }
         ("StreamSink", _) => {
             bail!("StreamSink takes exactly one type argument (the item type)")
         }
@@ -3672,9 +3671,9 @@ fn parse_path_type(tp: &syn::TypePath) -> Result<Type> {
         ("StreamController", [t]) if is_dart_path(tp) => {
             dart_object(DartMirror::StreamController, Some(parse_type(t)?), None)
         }
-        ("Sink" | "EventSink" | "StreamController", _) if is_dart_path(tp) => bail!(
-            "{ident} takes exactly one type argument (the item type)"
-        ),
+        ("Sink" | "EventSink" | "StreamController", _) if is_dart_path(tp) => {
+            bail!("{ident} takes exactly one type argument (the item type)")
+        }
         (_, []) => Type::Named(ident),
         // A path with type arguments whose head is none of the spellings above
         // is a use of a **generic data type** the interface declares — the one
@@ -3691,7 +3690,9 @@ fn parse_path_type(tp: &syn::TypePath) -> Result<Type> {
         // FR0056 for having a const parameter.
         (_, args) => Type::App(
             ident,
-            args.iter().map(|a| parse_type(a)).collect::<Result<Vec<_>>>()?,
+            args.iter()
+                .map(|a| parse_type(a))
+                .collect::<Result<Vec<_>>>()?,
         ),
     };
     Ok(t)
@@ -4010,8 +4011,7 @@ mod tests {
                 "bind nothing",
             ),
         ] {
-            let err = parse_source(src, "crate::api")
-                .expect_err("must be refused: {src}");
+            let err = parse_source(src, "crate::api").expect_err("must be refused: {src}");
             assert!(
                 format!("{err}").contains(wanted),
                 "wanted {wanted:?} in: {err}"
@@ -4122,9 +4122,13 @@ mod tests {
                 "trait",
             ),
         ] {
-            let msg = parse_source(src, "crate::api").expect_err(scope).to_string();
+            let msg = parse_source(src, "crate::api")
+                .expect_err(scope)
+                .to_string();
             assert!(
-                msg.contains("`allow(a)`") && msg.contains("silences nothing") && msg.contains(scope),
+                msg.contains("`allow(a)`")
+                    && msg.contains("silences nothing")
+                    && msg.contains(scope),
                 "{scope}: {msg}"
             );
         }
@@ -4143,7 +4147,10 @@ mod tests {
             r#"#[bridge(no_block(allow(x::<T>)))] pub fn f(a: i64) -> i64 { a }"#,
             r#"#[bridge(confined, no_block(allow(x)))] pub struct S { a: i64 }"#,
         ] {
-            assert!(parse_source(bad, "crate::api").is_err(), "{bad} must be refused");
+            assert!(
+                parse_source(bad, "crate::api").is_err(),
+                "{bad} must be refused"
+            );
         }
     }
 
@@ -4196,14 +4203,21 @@ mod tests {
     /// write none. The frustrate wire is unaffected — it is the position.
     #[test]
     fn an_explicit_enum_discriminant_is_recorded_per_variant() {
-        let iface = parse("#[bridge(data)] pub enum Code { Ok = 100, Next, Missing = 404, Neg = -1 }");
-        let ds: Vec<Option<i64>> =
-            iface.enums[0].variants.iter().map(|v| v.discriminant).collect();
+        let iface =
+            parse("#[bridge(data)] pub enum Code { Ok = 100, Next, Missing = 404, Neg = -1 }");
+        let ds: Vec<Option<i64>> = iface.enums[0]
+            .variants
+            .iter()
+            .map(|v| v.discriminant)
+            .collect();
         assert_eq!(ds, vec![Some(100), Some(101), Some(404), Some(-1)]);
         // A first variant that writes none starts at 0, as Rust does.
         let iface = parse("#[bridge(data)] pub enum E { A, B = 7, C }");
-        let ds: Vec<Option<i64>> =
-            iface.enums[0].variants.iter().map(|v| v.discriminant).collect();
+        let ds: Vec<Option<i64>> = iface.enums[0]
+            .variants
+            .iter()
+            .map(|v| v.discriminant)
+            .collect();
         assert_eq!(ds, vec![Some(0), Some(7), Some(8)]);
         // Hex and other literal bases are literals too.
         let iface = parse("#[bridge(data)] pub enum H { A = 0x10 }");
@@ -4220,7 +4234,10 @@ mod tests {
     fn an_enum_without_discriminants_records_none() {
         let iface = parse("#[bridge(data)] pub enum Code { Ok, Missing }");
         assert_eq!(iface.enums.len(), 1);
-        assert!(iface.enums[0].variants.iter().all(|v| v.discriminant.is_none()));
+        assert!(iface.enums[0]
+            .variants
+            .iter()
+            .all(|v| v.discriminant.is_none()));
     }
 
     /// What FR0040 still refuses, and why each is refused rather than guessed.
@@ -4228,9 +4245,18 @@ mod tests {
     fn a_discriminant_frustrate_cannot_read_or_carry_is_refused() {
         for (src, needle) in [
             // Not a literal: reading it means evaluating Rust.
-            ("#[bridge(data)] pub enum E { A = FOO }", "not an integer literal"),
-            ("#[bridge(data)] pub enum E { A = 1 << 3 }", "not an integer literal"),
-            ("#[bridge(data)] pub enum E { A = OTHER as i64 }", "not an integer literal"),
+            (
+                "#[bridge(data)] pub enum E { A = FOO }",
+                "not an integer literal",
+            ),
+            (
+                "#[bridge(data)] pub enum E { A = 1 << 3 }",
+                "not an integer literal",
+            ),
+            (
+                "#[bridge(data)] pub enum E { A = OTHER as i64 }",
+                "not an integer literal",
+            ),
             // A fielded enum is a Dart sealed class: no enum value to hang a
             // getter on. (rustc allows this only under a `#[repr]`.)
             (
@@ -4554,7 +4580,11 @@ mod tests {
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("FR0042"), "{}", w[0]);
         assert!(w[0].contains("Doc"), "names the type: {}", w[0]);
-        assert!(w[0].contains("len"), "names the method it dropped: {}", w[0]);
+        assert!(
+            w[0].contains("len"),
+            "names the method it dropped: {}",
+            w[0]
+        );
         assert!(w[0].contains("impl"), "points at the impl block: {}", w[0]);
         assert!(w[0].contains("handle type"), "says which: {}", w[0]);
         // A data type drops methods exactly the same way, so it is reported
@@ -4564,7 +4594,11 @@ mod tests {
              impl P {\n    pub fn go(&self) -> i64 { 0 }\n}",
         );
         assert_eq!(w.len(), 1, "{w:?}");
-        assert!(w[0].contains("FR0042") && w[0].contains("data type"), "{}", w[0]);
+        assert!(
+            w[0].contains("FR0042") && w[0].contains("data type"),
+            "{}",
+            w[0]
+        );
         // A **concrete** impl on a generic data type is bridgeable now, so an
         // unannotated one drops methods the same way — and the report names
         // the block as written, `impl Page<…>`, because the bare `impl Page`
@@ -4600,8 +4634,10 @@ mod tests {
         )
         .is_empty());
         // An impl on a type that is not bridged at all.
-        assert!(warnings("struct Helper;\nimpl Helper {\n    pub fn go(&self) -> i64 { 0 }\n}")
-            .is_empty());
+        assert!(
+            warnings("struct Helper;\nimpl Helper {\n    pub fn go(&self) -> i64 { 0 }\n}")
+                .is_empty()
+        );
         // An impl on a bridged data struct whose only public method is one
         // the checker refuses anyway: `&mut self` mutates a decoded copy
         // (FR0013), so suggesting `#[bridge]` would point at a wall.
@@ -4817,7 +4853,10 @@ mod tests {
         assert_eq!(p[0].ty, Type::Tuple(vec![Type::I32, Type::String]));
         assert_eq!(
             p[1].ty,
-            Type::List(Box::new(Type::Tuple(vec![Type::I32, Type::I32])), SeqKind::Vec)
+            Type::List(
+                Box::new(Type::Tuple(vec![Type::I32, Type::I32])),
+                SeqKind::Vec
+            )
         );
         assert_eq!(
             iface.functions[0].ret,
@@ -4836,9 +4875,8 @@ mod tests {
 
     #[test]
     fn parses_std_time_types() {
-        let iface = parse(
-            "#[bridge(sync)] pub fn f(d: std::time::Duration, t: std::time::SystemTime) {}",
-        );
+        let iface =
+            parse("#[bridge(sync)] pub fn f(d: std::time::Duration, t: std::time::SystemTime) {}");
         let p = &iface.functions[0].params;
         assert_eq!(p[0].ty, Type::Duration(DurationPeer::Std));
         assert_eq!(p[1].ty, Type::SystemTime(InstantPeer::Std));
@@ -4880,9 +4918,8 @@ mod tests {
         // `DateTime<Utc>` and `TimeDelta`/`OffsetDateTime` are each unique to
         // one crate, so the unqualified spelling (the idiomatic one, under
         // `use chrono::{DateTime, Utc};`) resolves identically.
-        let iface = parse(
-            "#[bridge(sync)] pub fn g(a: DateTime<Utc>, b: TimeDelta, c: OffsetDateTime) {}",
-        );
+        let iface =
+            parse("#[bridge(sync)] pub fn g(a: DateTime<Utc>, b: TimeDelta, c: OffsetDateTime) {}");
         let p = &iface.functions[0].params;
         assert_eq!(p[0].ty, Type::SystemTime(InstantPeer::ChronoUtc));
         assert_eq!(p[1].ty, Type::Duration(DurationPeer::ChronoTimeDelta));
@@ -5132,8 +5169,11 @@ mod tests {
     /// hold of one type at once.
     #[test]
     fn two_models_together_are_rejected() {
-        let err = parse_source("#[bridge(confined, locked)] pub struct S { x: i64 }", "crate::api")
-            .unwrap_err();
+        let err = parse_source(
+            "#[bridge(confined, locked)] pub struct S { x: i64 }",
+            "crate::api",
+        )
+        .unwrap_err();
         let msg = err.root_cause().to_string();
         assert!(msg.contains("FR0060"), "{msg}");
         assert!(msg.contains("at most one concurrency model"), "{msg}");
@@ -5143,8 +5183,8 @@ mod tests {
     /// concurrency model is a legal representation for one.
     #[test]
     fn data_on_a_trait_is_rejected() {
-        let err = parse_source("#[bridge(data)] pub trait T { fn f(&self); }", "crate::api")
-            .unwrap_err();
+        let err =
+            parse_source("#[bridge(data)] pub trait T { fn f(&self); }", "crate::api").unwrap_err();
         let msg = err.root_cause().to_string();
         assert!(msg.contains("FR0061"), "{msg}");
         assert!(msg.contains("no fields to copy"), "{msg}");
@@ -5189,7 +5229,10 @@ mod tests {
         );
         let v = &iface.enums[0].variants[0];
         assert_eq!(v.fields[0].name, "field0");
-        assert!(!v.tuple, "V {{ field0: i64 }} is a named variant, not a tuple");
+        assert!(
+            !v.tuple,
+            "V {{ field0: i64 }} is a named variant, not a tuple"
+        );
     }
 
     /// The keyword, the marker type and the `impl` self type — resident is
@@ -5248,7 +5291,10 @@ mod tests {
             pub fn take_it(r: Resident) -> i64 { todo!() }
             "#,
         );
-        assert_eq!(iface.functions[0].params[0].ty, Type::Named("Resident".into()));
+        assert_eq!(
+            iface.functions[0].params[0].ty,
+            Type::Named("Resident".into())
+        );
     }
 
     #[test]
@@ -5398,7 +5444,10 @@ mod tests {
         // `native_only` to declare, so the message must say "remove the cfg"
         // rather than offer a flag the parser would reject.
         for (src, kind) in [
-            ("#[cfg(unix)]\n#[bridge(data)] pub struct P { x: i32 }", "struct"),
+            (
+                "#[cfg(unix)]\n#[bridge(data)] pub struct P { x: i32 }",
+                "struct",
+            ),
             ("#[cfg(unix)]\n#[bridge(data)] pub enum E { A, B }", "enum"),
             (
                 "#[cfg(unix)]\n#[bridge(bytes(dart = \"M\", import = \"pkg:m/m.dart\"))] \
@@ -5437,8 +5486,13 @@ mod tests {
             } else {
                 with_flag
             };
-            let err = parse_source(&with_flag, "crate::api").unwrap_err().to_string();
-            assert!(err.contains("native_only is only valid on"), "{with_flag}: {err}");
+            let err = parse_source(&with_flag, "crate::api")
+                .unwrap_err()
+                .to_string();
+            assert!(
+                err.contains("native_only is only valid on"),
+                "{with_flag}: {err}"
+            );
         }
     }
 
@@ -5453,7 +5507,11 @@ mod tests {
             }
             "#,
         );
-        let f = iface.functions.iter().find(|f| f.name == "blocking_read").unwrap();
+        let f = iface
+            .functions
+            .iter()
+            .find(|f| f.name == "blocking_read")
+            .unwrap();
         assert!(f.web_stub);
         assert_eq!(f.on_contention, Some(OnContention::Block));
         // Default: absent attribute leaves the flag off.
@@ -5474,7 +5532,14 @@ mod tests {
             }
             "#,
         );
-        assert!(iface.functions.iter().find(|f| f.name == "refine").unwrap().web_stub);
+        assert!(
+            iface
+                .functions
+                .iter()
+                .find(|f| f.name == "refine")
+                .unwrap()
+                .web_stub
+        );
     }
 
     /// A representation keyword on a function or an impl block described
@@ -5508,9 +5573,11 @@ mod tests {
     fn rejects_sync_async_fn() {
         // A sync member runs on the caller and returns a plain value, so it
         // cannot await — `#[bridge(sync)] async fn` is a contradiction.
-        let err =
-            parse_source("#[bridge(sync)] pub async fn f() {}", "crate").unwrap_err();
-        assert!(err.root_cause().to_string().contains("cannot be combined"), "{err}");
+        let err = parse_source("#[bridge(sync)] pub async fn f() {}", "crate").unwrap_err();
+        assert!(
+            err.root_cause().to_string().contains("cannot be combined"),
+            "{err}"
+        );
         assert!(err.root_cause().to_string().contains("async fn"), "{err}");
     }
 
@@ -5630,20 +5697,25 @@ mod tests {
             "{dual} #[bridge] impl Data<Doc> {{ \
                  #[bridge(sync)] pub fn f(&self, o: Vec<Self>) -> Self {{ todo!() }} }}"
         ));
-        let claimed =
-            |t: Type| Type::Claimed(Claim::Data, Box::new(t));
+        let claimed = |t: Type| Type::Claimed(Claim::Data, Box::new(t));
         assert_eq!(
             iface.functions[0].params[0].ty,
             Type::List(Box::new(claimed(Type::Named("Doc".into()))), SeqKind::Vec)
         );
-        assert_eq!(iface.functions[0].ret, Some(claimed(Type::Named("Doc".into()))));
+        assert_eq!(
+            iface.functions[0].ret,
+            Some(claimed(Type::Named("Doc".into())))
+        );
         let iface = parse(&format!(
             "{dual} #[bridge] impl Locked<Doc> {{ \
                  #[bridge(sync, on_contention = \"error\")] pub fn f(&self, o: Self) {{}} }}"
         ));
         assert_eq!(
             iface.functions[0].params[0].ty,
-            Type::Claimed(Claim::Model(Model::Locked), Box::new(Type::Named("Doc".into())))
+            Type::Claimed(
+                Claim::Model(Model::Locked),
+                Box::new(Type::Named("Doc".into()))
+            )
         );
         // A block that wrote no marker leaves `Self` bare, which is what
         // FR0067 then reports (the block is unplaced anyway).
@@ -5694,7 +5766,10 @@ mod tests {
             )
             .unwrap_err()
             .to_string();
-            assert!(err.contains("Self return outside an impl block"), "{ret}: {err}");
+            assert!(
+                err.contains("Self return outside an impl block"),
+                "{ret}: {err}"
+            );
         }
     }
 
@@ -5892,30 +5967,42 @@ mod tests {
         assert!(warnings("pub fn f<T>(x: i32) -> i32 { x }").is_empty());
 
         let opaque = "#[bridge(frozen)] pub struct O;";
-        let control = warnings(&format!("{opaque} impl O {{ pub fn m(&self) -> i32 {{ 1 }} }}"));
+        let control = warnings(&format!(
+            "{opaque} impl O {{ pub fn m(&self) -> i32 {{ 1 }} }}"
+        ));
         assert_eq!(control.len(), 1, "{control:?}");
         for refused in ["m<T>(&self)", "m(self: &Self)"] {
-            let w = warnings(&format!("{opaque} impl O {{ pub fn {refused} -> i32 {{ 1 }} }}"));
+            let w = warnings(&format!(
+                "{opaque} impl O {{ pub fn {refused} -> i32 {{ 1 }} }}"
+            ));
             assert!(w.is_empty(), "{refused}: {w:?}");
         }
         // A consuming receiver on a *handle* is bridgeable now, so the
         // omission is worth reporting — prescribing `#[bridge]` here leads
         // somewhere.
         for accepted in ["m(self)", "m(self: Box<Self>)"] {
-            let w = warnings(&format!("{opaque} impl O {{ pub fn {accepted} -> i32 {{ 1 }} }}"));
+            let w = warnings(&format!(
+                "{opaque} impl O {{ pub fn {accepted} -> i32 {{ 1 }} }}"
+            ));
             assert_eq!(w.len(), 1, "{accepted}: {w:?}");
         }
         // On a data type a by-value receiver is bridgeable too, so it is
         // reported like any other omission; `&mut self` is FR0013 and stays
         // skipped.
         let data = "#[bridge(data)] pub struct P { pub x: i32 }";
-        let control = warnings(&format!("{data} impl P {{ pub fn m(&self) -> i32 {{ 1 }} }}"));
+        let control = warnings(&format!(
+            "{data} impl P {{ pub fn m(&self) -> i32 {{ 1 }} }}"
+        ));
         assert_eq!(control.len(), 1, "{control:?}");
         for accepted in ["m(self)", "m(self: Box<Self>)"] {
-            let w = warnings(&format!("{data} impl P {{ pub fn {accepted} -> i32 {{ 1 }} }}"));
+            let w = warnings(&format!(
+                "{data} impl P {{ pub fn {accepted} -> i32 {{ 1 }} }}"
+            ));
             assert_eq!(w.len(), 1, "{accepted}: {w:?}");
         }
-        let w = warnings(&format!("{data} impl P {{ pub fn m(&mut self) -> i32 {{ 1 }} }}"));
+        let w = warnings(&format!(
+            "{data} impl P {{ pub fn m(&mut self) -> i32 {{ 1 }} }}"
+        ));
         assert!(w.is_empty(), "{w:?}");
     }
 
@@ -5923,8 +6010,7 @@ mod tests {
     fn byte_slice_param_is_first_class_immutable_bytes() {
         // `&[u8]` is supported: it parses to Bytes with an immutable borrow,
         // exactly like `&Vec<u8>`.
-        let iface =
-            parse("#[bridge(sync)] pub fn f(x: &[u8]) -> usize { x.len() }");
+        let iface = parse("#[bridge(sync)] pub fn f(x: &[u8]) -> usize { x.len() }");
         assert_eq!(iface.functions[0].params[0].ty, Type::Bytes);
         assert_eq!(iface.functions[0].params[0].borrow, Borrow::Ref);
     }
@@ -5943,9 +6029,7 @@ mod tests {
         assert_eq!(owned.functions[0].params[0].ty, p.ty);
         assert!(p.unsized_borrow && !owned.functions[0].params[0].unsized_borrow);
         // Multi-element tuples parse (→ Dart records); only 1-tuples reject.
-        assert!(
-            parse_source("#[bridge(sync)] pub fn g(x: (i32, i32)) {}", "crate").is_ok()
-        );
+        assert!(parse_source("#[bridge(sync)] pub fn g(x: (i32, i32)) {}", "crate").is_ok());
     }
 
     #[test]
@@ -5986,8 +6070,7 @@ mod tests {
         assert!(iface.structs[0].fields[0].ty.as_dart_object().is_some());
 
         // Still by value: the function owns its end of the channel.
-        let err =
-            parse_source("#[bridge] pub fn f(s: &StreamSink<i64>) {}", "crate").unwrap_err();
+        let err = parse_source("#[bridge] pub fn f(s: &StreamSink<i64>) {}", "crate").unwrap_err();
         assert!(err.to_string().contains("passed by value"), "{err}");
     }
 
@@ -6061,7 +6144,10 @@ mod tests {
             ),
         ] {
             let err = parse_source(src, "crate").unwrap_err();
-            assert!(err.root_cause().to_string().contains(expected), "{src}: {err}");
+            assert!(
+                err.root_cause().to_string().contains(expected),
+                "{src}: {err}"
+            );
         }
     }
 
@@ -6100,7 +6186,10 @@ mod tests {
             ),
         ] {
             let err = parse_source(src, "crate").unwrap_err();
-            assert!(err.root_cause().to_string().contains(expected), "{src}: {err}");
+            assert!(
+                err.root_cause().to_string().contains(expected),
+                "{src}: {err}"
+            );
         }
     }
 
@@ -6190,11 +6279,11 @@ mod tests {
 
     #[test]
     fn callback_bad_shapes_are_rejected() {
-        let err = parse_source("#[bridge] pub fn f(c: &DartCallback<i64>) {}", "crate")
-            .unwrap_err();
+        let err =
+            parse_source("#[bridge] pub fn f(c: &DartCallback<i64>) {}", "crate").unwrap_err();
         assert!(err.to_string().contains("passed by value"), "{err}");
-        let err = parse_source("#[bridge] pub fn f(c: DartFunction<i64, ()>) {}", "crate")
-            .unwrap_err();
+        let err =
+            parse_source("#[bridge] pub fn f(c: DartFunction<i64, ()>) {}", "crate").unwrap_err();
         assert!(
             err.root_cause().to_string().contains("use DartCallback"),
             "{err}"
@@ -6285,7 +6374,10 @@ mod tests {
             ),
         ] {
             let err = parse_source(src, "crate::api").unwrap_err();
-            assert!(err.root_cause().to_string().contains(expected), "{src}: {err}");
+            assert!(
+                err.root_cause().to_string().contains(expected),
+                "{src}: {err}"
+            );
         }
     }
 
@@ -6351,7 +6443,10 @@ mod tests {
             ),
         ] {
             let err = parse_source(src, "crate").unwrap_err();
-            assert!(err.root_cause().to_string().contains(expected), "{src}: {err}");
+            assert!(
+                err.root_cause().to_string().contains(expected),
+                "{src}: {err}"
+            );
         }
         // Marker bounds at the use site are tolerated.
         let iface = parse(
@@ -6399,10 +6494,21 @@ mod tests {
         assert!(slow.deferred);
         assert_eq!(slow.ret, Some(Type::I64));
         assert!(!slow.fallible);
-        let sf = iface.functions.iter().find(|f| f.name == "slow_fallible").unwrap();
+        let sf = iface
+            .functions
+            .iter()
+            .find(|f| f.name == "slow_fallible")
+            .unwrap();
         assert!(sf.deferred && sf.fallible);
         assert_eq!(sf.ret, Some(Type::String));
-        assert!(!iface.functions.iter().find(|f| f.name == "new").unwrap().deferred);
+        assert!(
+            !iface
+                .functions
+                .iter()
+                .find(|f| f.name == "new")
+                .unwrap()
+                .deferred
+        );
     }
 
     #[test]
@@ -6417,13 +6523,23 @@ mod tests {
         ] {
             let err = parse_source(src, "crate").unwrap_err();
             assert!(
-                err.root_cause().to_string().contains("outermost return type"),
+                err.root_cause()
+                    .to_string()
+                    .contains("outermost return type"),
                 "{src}: {err}"
             );
         }
-        let err = parse_source("#[bridge] pub fn f() -> Deferred { unimplemented!() }", "crate")
-            .unwrap_err();
-        assert!(err.root_cause().to_string().contains("exactly one type argument"), "{err}");
+        let err = parse_source(
+            "#[bridge] pub fn f() -> Deferred { unimplemented!() }",
+            "crate",
+        )
+        .unwrap_err();
+        assert!(
+            err.root_cause()
+                .to_string()
+                .contains("exactly one type argument"),
+            "{err}"
+        );
     }
 
     /// The declared-mirror form's attribute reaches the IR, and only there.
@@ -6472,8 +6588,14 @@ mod tests {
             "crate::api",
         )
         .unwrap();
-        assert_eq!(iface.structs[0].dart_identifier.as_deref(), Some("DocValue"));
-        assert_eq!(iface.opaques[0].dart_identifier.as_deref(), Some("DocHandle"));
+        assert_eq!(
+            iface.structs[0].dart_identifier.as_deref(),
+            Some("DocValue")
+        );
+        assert_eq!(
+            iface.opaques[0].dart_identifier.as_deref(),
+            Some("DocHandle")
+        );
         // One representation: the nested and flat spellings agree.
         for src in [
             r#"#[bridge(confined(dart_identifier = "Document"))] pub struct Doc { t: String }"#,
@@ -6491,7 +6613,11 @@ mod tests {
             r#"#[bridge(data, dart_identifier = "Vec2")] pub struct Point { x: f64 }"#,
         ] {
             let iface = parse_source(src, "crate::api").unwrap();
-            assert_eq!(iface.structs[0].dart_identifier.as_deref(), Some("Vec2"), "{src}");
+            assert_eq!(
+                iface.structs[0].dart_identifier.as_deref(),
+                Some("Vec2"),
+                "{src}"
+            );
         }
     }
 
