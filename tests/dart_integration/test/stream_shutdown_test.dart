@@ -12,15 +12,10 @@
 /// then returns from its entry function. Contract (b): the open stream keeps
 /// that isolate alive to consume the items — exactly as an open `ReceivePort`
 /// would — and the isolate exits only once the producer finishes and
-/// drop-retire closes the stream. (The prior behavior let the isolate exit
-/// immediately, leaving the producer to post into a deleted completion
-/// `NativeCallable` — a hard abort, `Callback invoked after it has been
-/// deleted`.)
+/// drop-retire closes the stream.
 ///
-/// Own target, own file: the failure mode for (1) used to be undefined
-/// behavior that could take the process down. It is a clean assertion now, but
-/// the isolation is kept — a regression must not be able to abort the rest of
-/// the suite.
+/// Own target, own file: a regression in (1) can abort the process, and must
+/// not take the rest of the suite with it.
 @TestOn('vm')
 library;
 

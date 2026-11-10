@@ -86,13 +86,11 @@ pub(crate) use native::post_int;
 /// The failure is never local: it is another test failing, in another module,
 /// on one run in a hundred.
 ///
-/// A panic that reaches **no** funnel needs no lock. It used to, because
-/// `panic::tests::the_hook_arm_reports_the_same_report` made the funnel the
-/// process `std` hook for the length of its window and then asserted its log
-/// held exactly one entry — an assertion about every panic in the binary,
-/// which no test can own. That test asserts the presence of its own report
-/// now, so the nine `#[should_panic]` tests in `codec` and `envelope` are free
-/// to panic whenever they are scheduled.
+/// A panic that reaches **no** funnel needs no lock, so the `#[should_panic]`
+/// tests in `codec` and `envelope` are free to panic whenever they are
+/// scheduled. A test that holds the funnel as the process `std` hook asserts
+/// the presence of its own report, never that the log holds exactly one
+/// entry: that would be an assertion about every panic in the binary.
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) fn test_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -226,13 +224,11 @@ mod native {
 
     /// An isolate died. Runs on a VM thread with no isolate entered.
     ///
-    /// This is the trigger [`mark_gone`] always needed and never had. Until
-    /// now its only caller was a *refused* post, so an isolate that **accepted**
-    /// an invocation and then died — the ordinary shape of `Isolate.kill`,
-    /// `Isolate.exit`, and Flutter hot restart — was discovered only if some
-    /// unrelated producer happened to post to it later. A parked waiter is by
-    /// definition not posting, which is why the blocking path used to
-    /// manufacture posts of its own and why the awaited path could not.
+    /// The trigger for [`mark_gone`] besides a *refused* post. Without it an
+    /// isolate that **accepted** an invocation and then died — the ordinary
+    /// shape of `Isolate.kill`, `Isolate.exit`, and Flutter hot restart — would
+    /// be discovered only if some unrelated producer happened to post to it
+    /// later, and a parked waiter is by definition not posting.
     ///
     /// **Must not block and must not panic.** A blocking handler stalls every
     /// other isolate's notice — one that blocks serializes every notice behind

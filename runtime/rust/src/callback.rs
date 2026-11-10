@@ -316,9 +316,8 @@ mod returning {
         /// minutes — but it ends the moment the isolate that owes the answer is
         /// gone, whether it refused the invocation, was swept by another
         /// producer's refusal, or died with the invocation already queued. The
-        /// last of those used to need a probe loop here; the isolate now
-        /// reports its own death (`post::handle_exit`) and this is a plain
-        /// park again.
+        /// isolate reports its own death (`post::handle_exit`), so this is a
+        /// plain park.
         ///
         /// Contract (checked): only from pool or actor context. The
         /// checker already rejects `DartFunction` params on sync members;

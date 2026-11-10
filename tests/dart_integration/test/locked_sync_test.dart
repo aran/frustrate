@@ -69,8 +69,8 @@ void main() {
 
     test('the try-lock crosses a tagged &dyn param', () async {
       // The guard is taken per impl tag off the trait's own carrier, which is
-      // a different arm of the emitter from the concrete cases above — and it
-      // is now compiled into the wasm module like the rest.
+      // a different arm of the emitter from the concrete cases above, and it
+      // is compiled into the wasm module like the rest.
       final counting = CountingStore.fresh();
       expect(storeSizeNow(s: counting), 0);
       final store = await openStore(kind: 'mem');

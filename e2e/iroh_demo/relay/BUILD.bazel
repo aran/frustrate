@@ -59,8 +59,7 @@ rust_library(
 # `bazel test` target and not a tool: nothing external has to be listening,
 # nothing is fixed-port, and it passes with the network sandboxed off.
 #
-# This is what the second crate hub had cost — coverage of the relay path,
-# which no test in this module used to exercise. `iroh_relay::server` is
+# The second crate hub exists for this coverage. `iroh_relay::server` is
 # behind the `server` feature @relay_crates already enables, so closing it adds
 # no package to either lockfile.
 rust_test(

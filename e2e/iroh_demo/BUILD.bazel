@@ -159,8 +159,7 @@ flutter_linux_app(
 # same sources, `manual`, and the only place the wasm-bindgen post-pass and
 # `+atomics` meet.
 #
-# Two things had to be true before any of this existed, and both are now:
-# `ring` compiles for wasm32 (the cc_toolchain in MODULE.bazel), and the
+# It rests on two things: `ring` compiles for wasm32 (the cc_toolchain in MODULE.bazel), and the
 # module survives the wasm-bindgen post-pass with frustrate's own `extern "C"`
 # exports intact (`bindgen = ` below).
 frustrate_wasm_module(

@@ -20,9 +20,7 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:iroh_bridge/init.dart';
 // BridgeException and the other bridge failures come through here: the
 // generated binding re-exports what it throws, so catching one by name needs
-// no dependency this app never declared. It used to import
-// `package:frustrate/frustrate.dart` directly, which resolved only because
-// Dart deps happen to be transitive through //bridge:iroh_bridge.
+// no dependency this app never declared.
 import 'package:iroh_bridge/iroh_rust.frustrate.dart';
 import 'package:qr/qr.dart';
 

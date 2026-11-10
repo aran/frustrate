@@ -1709,8 +1709,8 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // One representative per uncovered path. Printing every cell would print
-    // the same code path twice under different declared facts, which is the
-    // report this tool used to give and the reason it could not be acted on.
+    // the same code path twice under different declared facts, which no one
+    // can act on.
     println!(
         "\n{} emitted code path(s) nothing instantiates, one representative each:",
         uncovered.len()

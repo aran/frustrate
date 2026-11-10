@@ -767,7 +767,7 @@ fn check_pass(mut iface: Interface, caps: &Capabilities) -> Result<Interface, Ve
     // A field may name a handle. Which *direction* the type it belongs to may
     // then travel is a use-site question (FR0004 below), not a declaration
     // one: returning transfers each handle exactly once, and only decoding a
-    // handle *from* Dart would be the consume this used to refuse here.
+    // handle *from* Dart is a consume.
     //
     // The exception is a type that reaches **both** kinds, which is refused at
     // the declaration because the two directions are opposite and neither is
@@ -875,7 +875,8 @@ fn check_pass(mut iface: Interface, caps: &Capabilities) -> Result<Interface, Ve
 
     check_inbound_declarations(&mut iface, &mut diags);
 
-    // Bridged impls of bridged traits. Contract checks first (on the written methods), then synthesis: any
+    // Bridged impls of bridged traits. Contract checks first (on the written
+    // methods), then synthesis: any
     // trait method the impl block does not write — required methods written
     // elsewhere are impossible in Rust, so in practice the trait's
     // default-bodied methods — is cloned onto the concrete type. UFCS
@@ -3205,9 +3206,8 @@ pub(crate) fn decl_native_only(iface: &Interface, name: &str) -> Option<String> 
 /// The endpoints are found structurally ([`Type::walk`], matching how the actor
 /// rules read a parameter), but each item is walked through the **declaration
 /// graph**: an item is a value the producer builds, so a handle in a field of it
-/// crosses exactly as a bare one does. That distinction is load-bearing — while
-/// FR0018 refused every handle in an item, FR0004's declaration walk covered
-/// this; now that items may carry handles, nothing else does.
+/// crosses exactly as a bare one does. That distinction is load-bearing: no
+/// other rule covers a handle in a field of an item.
 pub(crate) fn opaque_in_a_channel_item(
     iface: &Interface,
     ty: &Type,
@@ -4717,8 +4717,8 @@ fn check_function(
     // A consuming receiver on a bridged trait needs no rule of its own —
     // `self: Box<Self>`, that is.
     //
-    // The hazard it used to be refused for is real and is answered rather than
-    // avoided: the Dart member lives on an extension over `Consumed<T>`, Dart
+    // The hazard is real and is answered rather than avoided: the Dart member
+    // lives on an extension over `Consumed<T>`, Dart
     // resolves an extension from the *static* type, and `Consumed<Impl>` is
     // assignable to `Consumed<T>` — so a token holding a concrete implementor
     // does reach the trait's own glue. It arrives carrying the impl tag a
@@ -4919,7 +4919,8 @@ fn check_function(
 
     // `Deferred<T>` is the actor opt-out of serialized completion: the body
     // runs on the actor's executor only for its synchronous prefix, and the
-    // wrapped future answers the call later. It is meaningful nowhere else — everywhere else, an `async fn`
+    // wrapped future answers the call later. It is meaningful nowhere else —
+    // everywhere else, an `async fn`
     // already releases everything while it waits.
     if f.deferred {
         if f.rust_async {
@@ -5292,7 +5293,8 @@ fn check_function(
         });
     }
     // The declared half of `no_block`. What a body actually calls is past
-    // codegen's ceiling and is proven at link time instead; these two catch the cases where the source
+    // codegen's ceiling and is proven at link time instead; these two catch the
+    // cases where the source
     // already says, in frustrate's own vocabulary, that the claim is false.
     //
     // **Only `block`.** The claim's own words are contradicted by an
@@ -6477,13 +6479,11 @@ mod tests {
         assert!(d.message.contains("frustrateBridge"), "{}", d.message);
     }
 
-    /// A representation marker in a constructor's return used to lose it its
-    /// constructor-ness. The parse-time test compared the return against the
-    /// parent by matching the *bare* name, so `-> Actor<Job>` did not match
-    /// `Job` — and the actor rules then refused the member for having no
-    /// receiver (FR0053) and returning a handle (FR0015). The marker is
-    /// supposed to be sugar: `impl Actor<Job>` must produce what `impl Job`
-    /// produces, byte for byte.
+    /// A representation marker in a constructor's return keeps it a
+    /// constructor: `-> Actor<Job>` matches `Job`, or the actor rules would
+    /// refuse the member for having no receiver (FR0053) and returning a
+    /// handle (FR0015). The marker is sugar: `impl Actor<Job>` must produce
+    /// what `impl Job` produces, byte for byte.
     #[test]
     fn a_marker_in_a_constructors_return_keeps_it_a_constructor() {
         let bare = check_src(
@@ -7103,10 +7103,8 @@ mod tests {
         assert_eq!(f.exec, Exec::Async);
         assert!(!f.requires_native, "async fns run on the executor everywhere");
         // Frozen AND Locked methods may be async fns (executor execution), also
-        // portable. Both are checked: this comment used to claim the pair while
-        // only exercising `frozen`, and for as long as it did, a locked
-        // `async fn` was accepted here and then failed to compile in the
-        // generated glue.
+        // portable. Both are checked, because a locked `async fn` accepted here
+        // must also compile in the generated glue.
         for model in ["frozen", "locked"] {
             let iface = check_src(&format!(
                 "#[bridge({model})] pub struct S {{ x: i64 }}\n\
@@ -7360,8 +7358,8 @@ mod tests {
         .is_ok());
     }
 
-    /// FR0056 — what stays refused now that a generic **data** declaration is
-    /// expanded rather than rejected.
+    /// FR0056 — what stays refused for a generic **data** declaration, which
+    /// is expanded rather than rejected.
     ///
     /// A parameter used as a field type is a parameter, not an unknown type —
     /// FR0003 stays silent for it, or the author would go looking for a
@@ -7433,7 +7431,7 @@ mod tests {
     }
 
     /// A bridged `impl` on a generic data type: what it produces, and what
-    /// stays refused now that it is not refused wholesale.
+    /// stays refused.
     #[test]
     fn an_impl_on_a_generic_data_type_expands_per_instantiation() {
         const DECL: &str = "#[bridge(data)] pub struct Item { pub id: i64 } \
@@ -8510,7 +8508,7 @@ mod tests {
         )
         .is_ok());
         // But an `async fn` returning callback is portable (awaits call_async),
-        // so the opt-in is now meaningless on it — FR0030 rejects it.
+        // so the opt-in is meaningless on it — FR0030 rejects it.
         let ds = codes(check_src(
             "#[bridge(web = \"runtime_fail\")] pub async fn transform(f: DartFunction<i64, i64>) -> i64 { 0 }"
         ));
@@ -8655,7 +8653,7 @@ mod tests {
         // a Dart-surface reason: one class, two field types.
         assert!(ds[0].message.contains("Consumed<"), "{}", ds[0].message);
         assert!(ds[0].message.contains("by reference"), "{}", ds[0].message);
-        // Borrowed, the old reason still stands: nothing is transferred, so
+        // Borrowed, the refusal stands: nothing is transferred, so
         // there is nowhere for the handle to come from.
         let ds = check_src(&format!(
             "{decls} #[bridge] pub fn peek(h: &Holder) {{}}"
@@ -9120,9 +9118,7 @@ mod tests {
 
     #[test]
     fn handles_compose_where_the_old_endpoint_rules_forbade_it() {
-        // The three shapes FR0016/FR0017 used to reject, and the one the
-        // parser used to reject. All legal now that a handle is data: this
-        // is the behaviour change the whole design exists to deliver.
+        // Handle-bearing shapes that are legal because a handle is data.
         for src in [
             "#[bridge] pub fn f(a: StreamSink<i64>, b: StreamSink<i64>) {}",
             "#[bridge] pub fn f(s: StreamSink<i64>) -> i64 { 0 }",
@@ -9236,9 +9232,8 @@ mod tests {
     /// compensates for.
     ///
     /// FR0015 refuses it, in both directions, because its parameter walk is
-    /// `Type::walk`, which descends a `DartObject`'s item. Pinned here rather
-    /// than left implicit: FR0018 used to fire beside it on every one of these,
-    /// so nothing proved FR0015 alone was enough.
+    /// `Type::walk`, which descends a `DartObject`'s item. Pinned here so that
+    /// FR0015 alone is shown to be enough.
     #[test]
     fn a_handle_cannot_cross_an_actor_boundary_through_a_channel() {
         // An actor member opening a channel of some other type's handles.
@@ -9506,8 +9501,7 @@ mod tests {
     fn async_fn_returning_callback_is_portable() {
         // The awaitable path: a Rust `async fn` taking a DartFunction awaits
         // `call_async` on the cooperative executor, so it runs on every
-        // platform — NOT native-only, and it must pass the web facts (the old
-        // FR0019 backstop, which would have rejected it, is gone).
+        // platform — NOT native-only, and it must pass the web facts.
         let iface = check_src(
             "#[bridge] pub async fn transform(x: i64, f: DartFunction<i64, i64>) -> i64 { 0 }",
         )

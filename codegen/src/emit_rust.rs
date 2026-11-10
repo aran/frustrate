@@ -1612,10 +1612,10 @@ fn decode_expr_mode(iface: &Interface, ty: &Type, staged: bool) -> String {
         Type::Char => "r.read_char()".into(),
         // `std::time::Duration` is the one **unsigned** peer, and Dart's
         // `Duration` is signed — so a negative µs count is a contract
-        // violation, not data. `as u64` used to accept it silently:
-        // `Duration(microseconds: -5)` reached Rust as 584542 years. The
-        // `try_from` makes it the loud, attributable codec panic it always
-        // should have been, and names the peers that *do* take a negative.
+        // violation, not data. `as u64` would accept it silently:
+        // `Duration(microseconds: -5)` would reach Rust as 584542 years. The
+        // `try_from` makes it a loud, attributable codec panic, and names the
+        // peers that *do* take a negative.
         Type::Duration(DurationPeer::Std) => "std::time::Duration::from_micros(\
              u64::try_from(r.read_i64()).expect(\"frustrate codec: a negative Duration \
              cannot cross to std::time::Duration, which is unsigned — declare the peer \
@@ -2169,9 +2169,8 @@ struct LockRun {
 
 /// Which entry point an arm is being emitted for.
 ///
-/// This used to be a `for_pool: bool`, which was enough while the only
-/// question it answered was where handle locks are acquired. It is not enough
-/// now: whether a decode may *borrow* the request buffer is a property of
+/// Not a `for_pool: bool`: whether a decode may *borrow* the request buffer is
+/// a property of
 /// where the decode's result is consumed, and sync and actor arms are both
 /// "not pool" while differing on exactly that.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2192,13 +2191,12 @@ enum ArmKind {
     /// bytes by `postMessage` and decodes them there (`runtime_web.dart`,
     /// `_WebActorHost.call`).
     ///
-    /// **That is why an actor member has no [`residue`]**, and it is now
+    /// **That is why an actor member has no [`residue`]**, and it is
     /// load-bearing rather than an implementation detail. A `#[bridge(no_block)]`
     /// claim on an actor member is settled by placement with nothing scanned, so
     /// a `BytesCodec::from_bytes` that waits is covered only by running on the
     /// actor's executor, where waiting is legal. Restructuring this into
-    /// decode-then-move — which was once contemplated here as "its own step" —
-    /// would put that user code back on the caller's thread and make every such
+    /// decode-then-move would put that user code back on the caller's thread and make every such
     /// claim a false green, with no artifact anywhere to notice. Anyone doing it
     /// owes actors a residue root.
     Actor,
@@ -2663,9 +2661,7 @@ fn build_call_parts(iface: &Interface, f: &Function, kind: ArmKind) -> CallParts
     }
     // Handles need no special handling here at all: they are ordinary
     // params, decoded in position by `decode_expr`, so the invocation order
-    // is simply the declaration order. (This used to be a hoisted prelude
-    // plus a positional slot reconstruction — both dissolved when endpoints
-    // became data.)
+    // is simply the declaration order.
     parts.args.extend(param_args);
     emit_alias_check(f, &mut parts);
     emit_lock_plan(f, for_pool, &mut parts);
@@ -5233,8 +5229,8 @@ fn emit_model_asserts(out: &mut String, iface: &Interface) {
 /// The split exists so a block-check root can reach this code. The exports are
 /// Dart `NativeFinalizer` / `Finalizer` callbacks, and they carry
 /// [`BLOCK_CHECK_SUPPRESS`] like every other generated export, so a check
-/// artifact contains neither them nor anything only they reach — which used to
-/// include the **user's `Drop` impl**. That body runs on whatever thread frees
+/// artifact contains neither them nor anything only they reach, and without
+/// the split that would include the **user's `Drop` impl**. That body runs on whatever thread frees
 /// the handle, and for a handle the main isolate holds that is the main thread:
 /// `dispose()` calls the export inline, and the GC path is a Dart `Finalizer`
 /// whose callback runs on the isolate that attached it. A `Drop` that takes a
@@ -5963,8 +5959,8 @@ mod tests {
     /// Only the member kind that runs on the caller's thread gets a root that
     /// reaches a body. A dispatched member's body is settled by placement, so
     /// the artifact must not name its glue at all — a root that called
-    /// `spawn_N_*` would scan a body that runs where waiting is legal, which is
-    /// how the gate used to refuse claims it had no business refusing.
+    /// `spawn_N_*` would scan a body that runs where waiting is legal, and
+    /// refuse claims it has no business refusing.
     #[test]
     fn only_a_caller_run_member_is_rooted_at_its_own_glue() {
         let code = emit_src(
@@ -6911,11 +6907,10 @@ mod tests {
     /// the wrong one.
     /// A sync member on a locked `dyn` trait that also takes a locked trait
     /// parameter. `locked_acquisitions` counts both, so the receiver takes the
-    /// *planned* path and defers its guard to `emit_lock_plan` — and the sync
-    /// trait arm used to bind its own guard inline without joining the plan.
-    /// With one entry the plan returns early, so `guard_this` was never bound
-    /// and the emitted Rust did not compile. Found by generating the shape
-    /// rather than by anyone thinking of it.
+    /// *planned* path and defers its guard to `emit_lock_plan`, so the sync
+    /// trait arm must join the plan rather than bind its own guard inline:
+    /// with one entry the plan returns early, and an inline bind would leave
+    /// `guard_this` unbound and the emitted Rust uncompilable.
     #[test]
     fn a_sync_dyn_receiver_beside_a_dyn_param_binds_both_guards() {
         let code = emit_src(
@@ -7108,11 +7103,9 @@ mod tests {
 
     #[test]
     fn a_fallible_sink_taking_member_gets_no_special_error_routing() {
-        // A sink parameter used to make the Err arm different: the glue held a
-        // clone (`__sink_guard_*`) past the user fn's parameter drop so it
-        // could push the Err into "the" stream as a terminal error. Which
-        // stream that meant was decided by parameter order, so two sinks got
-        // asymmetric treatment. Every fallible member now emits one arm.
+        // A sink parameter does not change the Err arm: pushing the Err into
+        // a stream would make which stream depend on parameter order. Every
+        // fallible member emits one arm.
         let code = emit_src(
             r#"
             #[bridge] pub fn one(s: StreamSink<i64>) -> anyhow::Result<()> { Ok(()) }

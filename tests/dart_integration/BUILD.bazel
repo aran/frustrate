@@ -103,11 +103,8 @@ dart_binary(
     ],
     # The harness (Cell, the calibrate/warmup/measure loop, the table renderer)
     # is //tools/bench_harness, shared verbatim with the in-page web bench.
-    # It used to be `tool/bench_core.dart` listed in `srcs` here — which said
-    # in its own comment that it existed so the web bench would not grow "a
-    # second copy that drifts", and a byte-identical copy grew anyway in
-    # another package, because a `srcs` entry cannot cross a pub package
-    # boundary. A dep can, and cannot be satisfied by copying.
+    # A dep rather than a `srcs` entry, because a `srcs` entry cannot cross a
+    # pub package boundary and so invites a second copy that drifts.
     deps = [
         "//runtime/dart:frustrate",
         "//tests/test_api:bindings",
@@ -501,7 +498,7 @@ dart_test(
 # unparks when the isolate that owes the answer dies holding the invocation, and
 # never before (runtime/rust/src/post.rs `handle_exit`).
 #
-# Its own target, and `timeout = "short"`, because the pre-fix signature is a
+# Its own target, and `timeout = "short"`, because a regression shows as a
 # hang, not a failed expectation: a parked pool worker leaves the caller's
 # `_pending` non-empty, which latches `keepIsolateAlive` on the test isolate, so
 # a regression can present as a target TIMEOUT rather than as this file's

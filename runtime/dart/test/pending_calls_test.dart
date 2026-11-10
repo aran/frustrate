@@ -174,7 +174,7 @@ void main() {
     'a decoder that throws rejects the future instead of orphaning it',
     () async {
       // The decoder runs while *building* the error to complete with, and by
-      // then the completer has already left the maps. A throw there used to
+      // then the completer has already left the maps. A throw there would
       // escape into a bare port callback — root zone, so the isolate aborts —
       // and leave the caller's future unsettled forever. A corrupt payload must
       // fail the call, like every other corrupt envelope.

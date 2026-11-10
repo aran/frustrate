@@ -22,7 +22,8 @@ frustrate_bridge_outputs(
 )
 
 # Every `#[bridge(no_block)]` claim in src/api.rs is settled by placement, so
-# this target builds nothing — no `crate`, no +atomics std. Two kinds of placement: the `Node` actor's methods run on the actor's own
+# this target builds nothing — no `crate`, no +atomics std. Two kinds of
+# placement: the `Node` actor's methods run on the actor's own
 # Worker, and `peer_id_for` is a free function whose body is handed to the pool,
 # which puts it off the main thread wherever a wait instruction exists.
 #
@@ -42,10 +43,8 @@ frustrate_no_block_check(
 # The bridge cdylib, shipped to each native platform as the bindings' code
 # asset.
 #
-# The dep set is a select() on @platforms//os. It was written as "iroh on the
-# four native OSes, nothing on the default" because wasm could not build iroh
-# at all; the default branch is now a real dep set rather than an empty one
-# (C10/M5). Selecting on os rather than cpu:wasm32 means this file needs no
+# The dep set is a select() on @platforms//os. Selecting on os rather than
+# cpu:wasm32 means this file needs no
 # wasm config_setting at all — wasm32 is the `//conditions:default` here, since
 # `@platforms//os:none` is what the wasm platform carries.
 #

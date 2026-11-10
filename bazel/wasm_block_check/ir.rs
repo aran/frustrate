@@ -1275,8 +1275,8 @@ mod tests {
         assert!(e.contains("reaches nanosleep — waits"), "{e}");
     }
 
-    /// The hole the old module-path exemption left: a section the member never
-    /// runs still holds the lock the member takes.
+    /// A section the member never runs still holds the lock the member takes,
+    /// which an exemption by module path would miss.
     #[test]
     fn a_section_elsewhere_that_waits_makes_every_member_taking_the_lock_unprovable() {
         let elsewhere = "define void @_RNvCs1_9frustrate5other() {\n  call void @frustrate_bounded_lock_acquire()\n  call i32 @nanosleep(ptr %0)\n  ret void\n}\n";
@@ -1293,9 +1293,8 @@ mod tests {
         assert!(e.contains("takes a bounded lock again"), "{e}");
     }
 
-    /// What the old scanner exempted by module path: frustrate's own code
-    /// calling into `std::sync`. Without the bounded lock's identity it is an
-    /// ordinary wait.
+    /// frustrate's own code calling into `std::sync` gets no exemption by
+    /// module path. Without the bounded lock's identity it is an ordinary wait.
     #[test]
     fn a_runtime_function_taking_a_std_lock_is_an_ordinary_wait() {
         let e = check(

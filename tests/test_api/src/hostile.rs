@@ -478,7 +478,7 @@ fn registry_types(iface: &Interface, a: &Acq) -> Vec<(String, u8)> {
 /// `Option<Doc>`, a set, a map, a tuple, and an inbound struct's fields.
 ///
 /// The codegen crate's own predicate, not a second walk here: it is what the
-/// emitter used to decide whether this member's glue takes or lends, so a
+/// emitter uses to decide whether this member's glue takes or lends, so a
 /// driver that answered differently would build a request for a member that
 /// does not exist.
 fn takes_handle(iface: &Interface, ty: &Type) -> bool {

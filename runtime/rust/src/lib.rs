@@ -248,8 +248,7 @@ pub unsafe extern "C" fn frustrate_buffer_free(ptr: *mut u8, len: u64, cap: u64)
 /// 3 — `frustrate_call_sync` answers into a caller-provided buffer:
 ///     `(fn_id, req, req_len, out, out_cap) -> i32` replaces the three
 ///     out-param pointers, and only a response too large for `out` is leased
-///     back (envelope.rs, `respond_out`). Also the first ABI **web** checks:
-///     this export used to be native-only.
+///     back (envelope.rs, `respond_out`). Also the first ABI **web** checks.
 /// 4 — adds `frustrate_call_cancel(call_id) -> u8`, the transport half of
 ///     `FrustrateCancelToken` (executor.rs). A new export rather than a changed
 ///     one, which is the same reason 2 was cut: without the bump, a

@@ -190,7 +190,7 @@ void main() {
     exited.close();
 
     // Surviving is the assertion. Give the orphaned producer room to post into
-    // the isolate it has just lost — pre-fix, one such post is fatal.
+    // the isolate it has just lost — on regression, one such post is fatal.
     await Future<void>.delayed(const Duration(seconds: 1));
 
     // And it stopped rather than spinning out its remaining ~20k iterations:

@@ -5,11 +5,10 @@
 /// the channel and writes its id into the buffer, then dispatches. Every path
 /// that rejects a call after that point but before Rust decodes it (a shut-down
 /// actor host, `PendingCalls.failAll` on a dead pool, a trap on the hand-off)
-/// used to leave the registration in the router for the life of the isolate:
-/// the consumer's stream neither errored nor closed, `openChannelCount` stayed
-/// inflated, and on native the open registration pinned the isolate on a
-/// channel nothing
-/// would ever feed.
+/// must retire the registration. Left in the router for the life of the
+/// isolate, the consumer's stream would neither error nor close,
+/// `openChannelCount` would stay inflated, and on native the registration
+/// would pin the isolate on a channel nothing would ever feed.
 ///
 /// This is the half of the leak story that the GC finalizer cannot reach —
 /// there is no undisposed handle here, and no collection to notice — so it is
@@ -43,9 +42,8 @@ void main() {
   });
 
   test('a rejected second sink does not strand the first', () async {
-    // The reachable window, and the one the emitted guard's own comment used to
-    // wave at: `a` registers, then `b`'s broadcast check throws. Before this
-    // change `a` stayed in the router for the life of the isolate.
+    // The reachable window: `a` registers, then `b`'s broadcast check throws,
+    // and `a` must not stay in the router for the life of the isolate.
     final a = StreamController<int>();
     final b = StreamController<int>.broadcast();
     final events = <String>[];
@@ -104,9 +102,8 @@ void main() {
     // on web `panic=abort` leaves them open by design.
     // Rolling back here would be wrong rather than redundant — a member that
     // stored a sink before failing leaves a live clone a later call may feed —
-    // and it would double-terminate the consumer. Found by the web suite: an
-    // earlier version of this change retired on every failure and broke the
-    // three producer-panic tests.
+    // and it would double-terminate the consumer; retiring on every failure
+    // breaks the three producer-panic tests on web.
     final a = StreamController<int>();
     final b = StreamController<int>();
     final ea = <String>[];

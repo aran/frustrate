@@ -347,8 +347,7 @@ void applyFacilities(
       // inserts an arm ahead of the one it matched — still matches exactly
       // once on a tree that has already been patched, so the count below
       // cannot tell a clean tree from a patched one and a second pass would
-      // insert the arm twice. (Only the old `#[path]` clock anchor was
-      // self-consuming, which is why this was invisible until it moved.)
+      // insert the arm twice.
       // Nothing in the normal flow hits this: build.dart patches a fresh copy
       // of rust-src every time. It is here so that if that ever stops being
       // true, the build stops instead of producing a std with two arms.

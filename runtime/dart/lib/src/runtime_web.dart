@@ -1636,7 +1636,7 @@ final class _WebTransport {
   /// unchanged matches it exactly no matter how old the runtime underneath is.
   /// A bridge's `call_sync` is on the hot path of every sync call and takes
   /// raw pointers, so calling a module with a different argument list would
-  /// put the response capacity where a pointer used to be and write the answer
+  /// put the response capacity where a pointer belongs and write the answer
   /// over the request. Loud here, or silent corruption there.
   ///
   /// A module too old to have the export at all fails inside [_export] with
@@ -2366,9 +2366,8 @@ final class _WebActorHost implements ActorHost {
   }
 
   /// Router entries this host opened that are still live. Needed because the
-  /// router is now page-wide: a terminated worker's entries used to be
-  /// collected along with its private router, but in a page-lifetime map they
-  /// would leak (and their consumers hang) unless [shutdown] retires them.
+  /// router is page-wide: in a page-lifetime map a terminated worker's
+  /// entries would leak (and their consumers hang) unless [shutdown] retires them.
   /// Kept accurate by retiring on every exit — terminal, cancel, or shutdown.
   final Set<int> _openStreams = {};
 

@@ -7,18 +7,10 @@
 /// Anything platform-specific (process spawning, file hashing, `stdout`) belongs
 /// in the caller; [renderReport] returns a `String` rather than writing one.
 ///
-/// Extracted from `tool/native_bench.dart`, which now imports it instead of
-/// carrying a second copy. Two things had to change in the move and nothing
-/// else did:
-///
-///   * `_sentinel` became the public [sentinel] — the measured bodies live in
-///     the caller's library now, so a private field is unreachable. It has a
-///     constant initializer, so there is no lazy-init guard on the access path
-///     under either compiler.
-///   * `_report` wrote to `stdout`; it is now [renderReport], which takes the
-///     caller's prose (title, banner, section blurbs) and returns the rendered
-///     table. The native driver passes its own strings, so its output is
-///     unchanged apart from the numbers, which move every run anyway.
+/// [sentinel] is public because the measured bodies live in the caller's
+/// library. It has a constant initializer, so there is no lazy-init guard on
+/// the access path under either compiler. [renderReport] takes the caller's
+/// prose (title, banner, section blurbs) and returns the rendered table.
 ///
 /// This file asserts nothing about absolute time, and neither does anything
 /// that imports it.

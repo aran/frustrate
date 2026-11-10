@@ -64,12 +64,10 @@ pub mod proto;
 /// The hermetic two-endpoint test (C3's acceptance criterion 1).
 ///
 /// It lives in `bridge/tests/` but is compiled *into* this crate rather than
-/// linked against it. That used to be forced — a cdylib cannot be linked by an
-/// integration test — but `frustrate_bridge_library` now declares an rlib
-/// beside the cdylib. What keeps it here is this file's own
-/// shape: `use super::*` plus the `#[cfg(test)]` event seam below, neither of
-/// which an external test can reach. Moving it means rewriting it against the
-/// public surface, or onto `frustrate::testing::stream()`, which exists now.
+/// linked against it, because of its shape: `use super::*` plus the
+/// `#[cfg(test)]` event seam below, neither of which an external test can
+/// reach. Moving it means rewriting it against the public surface, or onto
+/// `frustrate::testing::stream()`.
 #[cfg(test)]
 #[path = "../tests/two_endpoints.rs"]
 mod two_endpoints;
@@ -379,16 +377,11 @@ impl Drop for Node {
 /// its address record to n0's pkarr relay over HTTPS. "Touches nothing of n0's"
 /// is the left column, `Minimal`.
 ///
-/// # Why this used to be one knob
+/// # Why two knobs
 ///
-/// It was `N0` unconditionally, and the argument was that changing one variable
-/// keeps a misbehaving self-hosted relay attributable — that if discovery
-/// vanished at the same time, you would not know which broke you. That reasoning
-/// was sound and the conclusion was still wrong: it optimised for diagnosing a
-/// relay at the cost of making "no third party at all" unreachable from a test,
-/// which is what made it wrong. Two orthogonal knobs keep the attribution *and*
-/// the configuration — you can still change one at a time; you simply are no
-/// longer forced to.
+/// Changing one variable at a time keeps a misbehaving self-hosted relay
+/// attributable. Two orthogonal knobs keep that and still make "no third party
+/// at all" reachable from a test.
 ///
 /// The cost `Minimal` really does carry is that [`parse_ticket`]'s second form
 /// stops working: a bare `EndpointId` resolves only through pkarr. That is not

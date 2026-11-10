@@ -17,7 +17,7 @@
 //! `async_fixture` roots what a *dispatched* member leaves on the caller;
 //! `placement_fixture` roots nothing. None of them scans a lock.
 //!
-//! This one does, and it is the shape the claim used to be refused for. A sync
+//! This one does. A sync
 //! `on_contention = "error"` member acquires with a compare-exchange and
 //! releases with another — except when a waiter is queued, where it takes the
 //! lock's waiter list, which is a `spin::SpinLock` on this artifact's

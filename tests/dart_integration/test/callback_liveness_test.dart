@@ -26,10 +26,10 @@
 /// the sweep is `#[cfg(not(target_family = "wasm"))]`).
 ///
 /// Its own target, and for the same reason as `stream_shutdown_test`, only
-/// sharper: pre-fix these do not fail an expectation, they park a pool worker
+/// sharper: on regression these do not fail an expectation, they park a pool worker
 /// forever. Every await is bounded so the failure is legible, but a parked
 /// worker also leaves the caller's `_pending` non-empty, which latches
-/// `keepIsolateAlive` on the test isolate — so pre-fix this target may present
+/// `keepIsolateAlive` on the test isolate — so a regression may present
 /// as a Bazel TIMEOUT rather than as the `fail(...)` message. Both are red;
 /// neither may be allowed to mask a sibling suite.
 @TestOn('vm')
@@ -182,7 +182,7 @@ void main() {
       // The severity claim, made observable: the cost of the defect was not one
       // lost call but a *permanently* narrowed pool. Park one blocking call per
       // worker, kill every owner, and then ask for ordinary async work — which
-      // needs a worker, and pre-fix would never get one again.
+      // needs a worker, and on regression would never get one again.
       //
       // Width from Rust (`poolWidth`), never `Platform.numberOfProcessors`: the
       // pool sizes itself from `available_parallelism()`, which a cgroup quota

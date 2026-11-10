@@ -70,14 +70,13 @@ pub enum PeerEvent {
 /// Which third-party services this endpoint is allowed to use.
 ///
 /// The vocabulary is peerbot's `--preset minimal|n0`, deliberately: the two
-/// halves of a two-peer run are now configured with the same two words, and
+/// halves of a two-peer run are configured with the same two words, and
 /// "fully self-hosted" is `Minimal` plus a relay on both sides rather than a
 /// different sentence for each.
 ///
 /// This is orthogonal to the relay URL. The preset decides *whether address
-/// lookup exists*; the relay argument decides *who carries the bytes*. Before
-/// this enum there was only one knob, welded to `N0`, which put "no third
-/// party at all" out of a test's reach.
+/// lookup exists*; the relay argument decides *who carries the bytes*. With
+/// both, "no third party at all" is within a test's reach.
 #[derive(Clone, Copy)]
 #[bridge(data)]
 pub enum Preset {

@@ -3,19 +3,15 @@
 /// an external runtime (`pollster`) via `block_on` inside a plain pool fn, then
 /// returns a value — so Dart receives it as a resolved `Future`.
 ///
-/// There is no web arm, and since the fixture became `#[bridge(native_only)]`
+/// There is no web arm, and because the fixture is `#[bridge(native_only)]`
 /// there cannot be one: `sumOnExternalRuntime` is absent from the web Dart
 /// surface, so a web arm would not compile. That is the point of the
 /// declaration — see the fixture's comment in tests/test_api/src/api.rs.
 ///
-/// The `@TestOn('vm')` below is therefore belt-and-braces rather than the only
-/// thing keeping this off web. It used to be the only thing, and the reason it
-/// gave was wrong in a way worth recording: it said `block_on` "traps on the
-/// single-threaded-web main thread". It does not. It traps on the *threaded*
-/// web main thread (`Atomics.wait` is barred there); on single-threaded web
-/// there is no futex at all, so `park` is a no-op and the call spins the only
-/// thread forever with no trap and no diagnostic. The dangerous configuration
-/// was the one the comment named as safe.
+/// The `@TestOn('vm')` below is therefore belt-and-braces. On web `block_on`
+/// traps on the *threaded* main thread (`Atomics.wait` is barred there); on
+/// single-threaded web there is no futex at all, so `park` is a no-op and the
+/// call spins the only thread forever with no trap and no diagnostic.
 @TestOn('vm')
 library;
 

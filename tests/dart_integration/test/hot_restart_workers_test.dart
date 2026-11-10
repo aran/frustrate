@@ -92,8 +92,8 @@ void _captureWorkers() {
         globalThis.$frustrateTestWorkers.push(w);
         return w;
       };
-      // `every` alone is vacuously true on an empty registry, which is the
-      // pre-fix state — so require a non-empty one explicitly rather than
+      // `every` alone is vacuously true on an empty registry, which is what
+      // a regression looks like — so require a non-empty one explicitly rather than
       // leaning on the length assertion next to the call site.
       globalThis.$frustrateTestRegisteredAreReal = () =>
           (globalThis.$frustrateWorkers || []).length > 0 &&
@@ -111,7 +111,7 @@ int get _beats =>
     globalContext.getProperty<JSNumber>(r'$frustrateTestBeats'.toJS).toDartInt;
 
 /// The registry as the runtime left it. Absent means "the runtime keeps no
-/// such thing", which is the pre-fix state and must read as empty rather than
+/// such thing", which is what a regression looks like and must read as empty rather than
 /// throw, so the failure lands on the assertion rather than on a cast.
 List<JSObject> _registry() {
   final v = globalContext.getProperty<JSAny?>(_registryKey.toJS);

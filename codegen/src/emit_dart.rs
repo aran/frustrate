@@ -380,7 +380,7 @@ fn emit_bridge_library(out: &mut String, iface: &Interface, dart_package: &str) 
 /// omits. A hook receives an id, and an id it cannot name is worse than one
 /// naming a member this platform happens not to offer. Keying by id makes this
 /// a matter of what the table contains rather than of keeping two platforms'
-/// numbering aligned, which is what the old list had to promise.
+/// numbering aligned.
 ///
 /// The spelling is [channel_label]'s — the member as the bridge declares it,
 /// `parent.name` for a member, so a trace and a leak report name the same
@@ -395,8 +395,8 @@ fn emit_member_names(out: &mut String, iface: &Interface) {
          /// a hook is handed ids, not members.\n\
          const Map<int, String> frustrateMemberNames = {\n",
     );
-    // Sorted so the emitted map does not depend on declaration order, which
-    // ids no longer do either.
+    // Sorted so the emitted map does not depend on declaration order, as ids
+    // do not.
     let mut entries: Vec<(u32, String)> = iface
         .functions
         .iter()
@@ -2346,8 +2346,8 @@ fn encode_stmts_opt(
         // i64 microseconds, UTC.
         //
         // `std::time::Duration` is unsigned and Dart's `Duration` is not, so
-        // the std peer takes the checking writer: a negative value used to
-        // reach Rust as ~584542 years with nothing anywhere to notice. The
+        // the std peer takes the checking writer: a negative value would
+        // otherwise reach Rust as ~584542 years with nothing to notice. The
         // signed peers take the plain i64 writer, because for them a negative
         // span is ordinary data — which is exactly why the check names them.
         Type::Duration(DurationPeer::Std) => {
@@ -2676,13 +2676,12 @@ fn emit_handle_binding(
         // (Dart's contract: a stream may carry errors and continue) — the
         // terminal error is the envelope status below, which also closes.
         //
-        // Called directly, and that is now safe *because the router defers*:
+        // Called directly, which is safe *because the router defers*:
         // `StreamRouter._deferDelivery` runs every delivery on a microtask on
-        // web, where the post import fires inside the Rust call. It did not
-        // always — a direct `t.add` here once ran arbitrary user Dart on the
-        // Rust stack, and a re-entrant call from it aliased a live
-        // `confined_mut`. Do not
-        // reintroduce a deferral here as well: one hop per event is the
+        // web, where the post import fires inside the Rust call. Without it a
+        // direct `t.add` runs user Dart on the Rust stack, and a re-entrant
+        // call from it aliases a live `confined_mut`. Do not add a deferral
+        // here as well: one hop per event is the
         // contract, and items must stay ordered with the terminals below,
         // which the router schedules on the same FIFO queue.
         let mut methods = format!("{pad}    (r) => t.add({decoded}),\n");
@@ -2772,9 +2771,8 @@ pub(crate) fn is_dyn(iface: &Interface, name: &str) -> bool {
 /// error type share its class — which is what makes one `on FooException` catch
 /// cover a whole family of calls.
 ///
-/// `extends BridgeException` is the load-bearing part: it means adopting a
-/// typed error never makes a failure escape code that used to catch it. Every
-/// `on BridgeException` written before this still fires, and only code that
+/// `extends BridgeException` is the load-bearing part: adopting a typed error
+/// never makes a failure escape an `on BridgeException`, so only code that
 /// wants the typed value has to change.
 fn emit_error_classes(out: &mut String, iface: &Interface) {
     let mut seen: Vec<String> = Vec::new();
@@ -5064,8 +5062,8 @@ mod tests {
         ));
         assert!(inside.contains("frDeepEquals(docs, other.docs)"), "{inside}");
         // A generic class one of whose instantiations carries a handle. The
-        // class is the same class either way, and the note that used to say
-        // which instantiation took equality away has nothing left to say.
+        // class is the same class either way, so no note names an
+        // instantiation.
         let src = "#[bridge(data)] pub struct P<T> { pub x: T } \
                    #[bridge(sync)] pub fn plain(p: P<i64>) -> i64 { 0 }";
         let plain = emit_src(&format!("{handle}{src}"));
@@ -5684,13 +5682,11 @@ mod tests {
 
     #[test]
     fn vec_numeric_is_bulk_coded_not_looped() {
-        // The deficit this replaced: decode was
-        // `Int32List.fromList(List.generate(r.readLen(), (_) => r.readI32()))`
-        // — n boxed ints into a growable list, then a copy into the typed one —
-        // and encode was a per-element loop. Both are now one bulk call.
-        // The *wire* is untouched, which is why the length prefix is still
-        // written and read here by the caller; the byte-for-byte equality of
-        // the bulk call and the element loop it replaces is pinned in the
+        // Decode and encode are one bulk call each, not a per-element loop
+        // through boxed ints. The *wire* is the element loop's, which is why
+        // the length prefix is written and read here by the caller; the
+        // byte-for-byte equality of the bulk call and the element loop is
+        // pinned in the
         // runtime suites (runtime/dart/test/binary_codec_bulk_test.dart and
         // runtime/rust/src/codec.rs), not here.
         let code = emit_src("#[bridge(sync)] pub fn f(xs: Vec<i32>) -> Vec<i32> { xs }");
@@ -6387,8 +6383,8 @@ mod tests {
     fn a_declared_native_only_member_says_so_where_it_is_omitted() {
         // The breadcrumb has to name the *declaration*, not guess a derived
         // reason: this member has neither a blocking contract nor a
-        // DartFunction, so the old text ("it takes a DartFunction…") would
-        // have been simply false.
+        // DartFunction, so a derived reason ("it takes a DartFunction…")
+        // would be false.
         let b = emit_all("#[bridge(sync, native_only)] pub fn dial(t: String) -> i64 { 0 }");
         assert!(b.native.contains("int dial("), "{}", b.native);
         assert!(!b.web.contains("int dial("), "{}", b.web);
@@ -7757,7 +7753,7 @@ mod tests {
     /// names is read, and a scope's locals leave with it.
     #[test]
     fn the_unused_local_check_reads_writes_apart_from_reads() {
-        // The shape this emitter used to produce for a consumed set.
+        // A counter only ever incremented.
         assert_eq!(
             write_only_local(
                 "void f() {\n  {\n  var i0 = 0;\n  for (final c0 in ds) {\n    c0.spend('f');\n  }\n  i0++;\n  }\n}\n"

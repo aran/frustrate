@@ -427,7 +427,7 @@ mod tests {
         assert_eq!(probe.take_events(), vec![]);
     }
 
-    /// Compile-time fences on what this change must NOT have cost.
+    /// Compile-time fences on what the capture must NOT cost.
     ///
     /// The capture lives on `Inner` behind `dyn Any + Send + Sync` precisely so
     /// these hold. Moving the typed log onto `StreamSink<T>` would make its

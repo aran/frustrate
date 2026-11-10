@@ -163,10 +163,8 @@ pub fn rev_hash(head: [u8; 32]) -> [u8; 32] {
 
 // ------------------------------------------------ fixed arrays `[T; N]` --
 //
-// `[u8; N]` used to be the only fixed array a signature could name. The wire
-// is the same for every element type — N elements, raw, no length prefix,
-// because the length is in the *type* — so `[u8; N]` keeps its memcpy codec
-// and nothing about it moved.
+// The wire is the same for every element type — N elements, raw, no length prefix,
+// because the length is in the *type* — and `[u8; N]` has a memcpy codec.
 
 /// One struct covering every array shape the codecs branch on: the bulk
 /// numeric path, the element loop, `[u8; N]` beside them, an array nested in
@@ -1367,13 +1365,8 @@ pub fn withdraw_async(balance: i64, amount: i64) -> Result<i64, WithdrawError> {
 /// pool worker the polls run on, so a guard whose `Drop` waits is waiting where
 /// waiting is legal.
 ///
-/// This member used to carry a `static Mutex` guard held across the `.await` as
-/// a *red* witness, and the assertion was about scan mechanics rather than
-/// about a hazard: it proved the check root dropped its rebuilt future, in an
-/// era when the root reached this body at all. Under the contract the root is
-/// gone, and so is the hazard it stood for. The `.await` stays, because the
-/// suspension is what makes cancellation reachable and this member is what the
-/// cancellation tests use.
+/// The `.await` is there because the suspension is what makes cancellation
+/// reachable, and this member is what the cancellation tests use.
 #[bridge(no_block)]
 pub async fn withdraw_awaiting(balance: i64, amount: i64) -> Result<i64, WithdrawError> {
     YieldOnce::pending_once().await;
@@ -1754,8 +1747,7 @@ pub fn find_snapshot(make: bool) -> Option<Snapshot> {
 /// One process-wide `OnceLock`, read by [`once_setting`] and by nothing else.
 static ONCE_SETTING: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
 
-/// A claimed body that **reaches a wait**, and is green — the shape the check
-/// used to refuse, and the reason it stopped.
+/// A claimed body that **reaches a wait**, and is green, and why.
 ///
 /// `OnceLock::get_or_init` parks on `memory.atomic.wait32` when a second thread
 /// is already initialising, so on a `+atomics` build there is a real wait
@@ -1811,10 +1803,9 @@ impl Counter {
         self.value
     }
 
-    /// The narrower case the old refusal also caught, and the one that showed
-    /// it was over-broad: a shared read with **no** `.await` in the body at
-    /// all. Nothing here can suspend; it was refused because the *generated*
-    /// block awaits the call.
+    /// A shared read with **no** `.await` in the body at all. Nothing here can
+    /// suspend; the *generated* block awaits the call, which needs a `Send`
+    /// guard.
     pub async fn peek(&self) -> i64 {
         self.value
     }
@@ -2241,7 +2232,7 @@ pub fn panic_after(n: i64, sink: StreamSink<i64>) {
 /// the resumed poll panics, the executor's `catch_unwind` (executor.rs) unwinds
 /// `run()`, which drops the future — and with it the captured sink — *while*
 /// `std::thread::panicking()` is true. On native that reaches `Drop for Inner`
-/// under the same condition the deleted guard used to short-circuit, so this is
+/// under the condition a `panicking()` short-circuit would skip, so this is
 /// the async analogue of `panic_after`: the stream must still end. Web
 /// (`panic=abort`) runs no destructor and leaves it open, like every panic
 /// there.
@@ -2266,9 +2257,8 @@ pub fn guarded_stream(ok: bool, sink: StreamSink<i64>) -> Result<()> {
     Ok(())
 }
 
-/// Two sinks on one fallible member: the shape whose outcome used to depend
-/// on parameter order, because the glue routed an Err into whichever
-/// StreamController it found first. Both must now be treated the same.
+/// Two sinks on one fallible member: both must be treated the same, whatever
+/// their parameter order.
 #[bridge]
 pub fn guarded_pair(a: StreamSink<i64>, b: StreamSink<i64>) -> Result<()> {
     a.add(1);
@@ -2279,16 +2269,14 @@ pub fn guarded_pair(a: StreamSink<i64>, b: StreamSink<i64>) -> Result<()> {
 /// One pacing pause for [`stream_until_cancelled`]: a real millisecond of wall
 /// clock on every device that fixture can actually reach.
 ///
-/// **`thread::sleep`, not a computed pause, and that is the whole point.** The
-/// pause here used to be `for j in 0..200_000 { x = x.wrapping_add(j) }` with a
-/// trailing `black_box(x)`. That is a triangular sum: LLVM replaces it with its
+/// **`thread::sleep`, not a computed pause, and that is the whole point.** A
+/// loop such as `for j in 0..200_000 { x = x.wrapping_add(j) }` with a
+/// trailing `black_box(x)` is a triangular sum: LLVM replaces it with its
 /// closed form, and a *trailing* `black_box` pins the resulting value, not the
-/// loop. At `-C opt-level=3` the pause is therefore *deleted* rather than made
-/// faster — orders of magnitude, not a factor — while at `-C opt-level=0` it
-/// paces as written. So under `bazel test
-/// -c opt` the producer ran its entire budget out before Dart could cancel it,
-/// and both tests below failed on a producer that had already returned — the
-/// runtime's cancel path never implicated. Sleeping is profile-independent:
+/// loop. At `-C opt-level=3` the pause would be *deleted*, so under
+/// `bazel test -c opt` the producer would run its budget out before Dart could
+/// cancel it, and the tests below would fail without the runtime's cancel
+/// path being implicated. Sleeping is profile-independent:
 /// `-c opt` and fastbuild pace identically, which is what a *timing* fixture
 /// has to do. Polling `is_cancelled()` in the pause is not the fix it looks
 /// like — LLVM hoists an `AtomicBool::load` out of the loop and that collapses
@@ -4132,8 +4120,8 @@ pub fn panic_with_nested_sinks(out: Fanout) {
     panic!("deliberate panic holding nested sinks");
 }
 
-/// A handle beside a real return value — what FR0017 used to forbid. The
-/// stream is no longer forced to be the function's only data channel.
+/// A handle beside a real return value: the stream need not be the
+/// function's only data channel.
 #[bridge]
 pub fn tee_sum(values: Vec<i64>, echo: StreamSink<i64>) -> i64 {
     let mut total = 0;
@@ -4545,7 +4533,7 @@ pub async fn answers_at_once(x: i64) -> i64 {
 // A member taking two or more locked handles acquires them in
 // `handle::lock_plan` order rather than parameter order, and refuses a
 // repeated handle. These fixtures exist to compile that emission and to give
-// `tests/dart_integration` something to call: `Vault::merge(v, v)` used to
+// `tests/dart_integration` something to call: `Vault::merge(v, v)` must not
 // take two write guards on one `RwLock` from one thread, which hangs.
 
 #[bridge(locked)]

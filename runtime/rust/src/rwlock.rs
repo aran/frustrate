@@ -1132,8 +1132,8 @@ mod tests {
 
     /// The property the whole `locked` model rests on: a guard can cross a
     /// thread, so a generated future holding one is `Send` and
-    /// `executor::spawn` accepts it. `std`'s guards are `!Send`, which is what
-    /// used to refuse every `async fn` on a locked type.
+    /// `executor::spawn` accepts it. With `std`'s `!Send` guards every
+    /// `async fn` on a locked type would be refused.
     #[test]
     fn guards_and_acquisitions_are_send() {
         fn assert_send<T: Send>() {}

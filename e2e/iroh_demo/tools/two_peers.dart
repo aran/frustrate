@@ -32,12 +32,9 @@
 // connect. Only the browser needs a relay, because only the browser has no UDP
 // socket.
 //
-// This used to be false of the app half, and it took a bridge change to fix
-// rather than a flag: `Node::open` hardcoded `presets::N0`, so the app
-// published to pkarr and reached for n0's relays no matter what this driver
-// did. The `Preset` argument is what fixed it.
+// The app half is hermetic because `Node::open` takes a `Preset` argument.
 //
-// The default is also what the assertions now pin — step 0 fails the run if the
+// The default is also what the assertions pin — step 0 fails the run if the
 // app's transport chip says anything but "no relay — direct only", so a build
 // that quietly acquired a third party cannot pass.
 //

@@ -224,12 +224,11 @@ rust_test(
 # declared, or stopped carrying the generated glue, or the exports stopped
 # surviving into a linked binary, this goes red.
 #
-# Verified red by hand at landing: pointing the dep at `:fixture_shared` — the
-# cdylib, i.e. what a bridge crate was before this macro — fails with
+# Pointing the dep at `:fixture_shared` — the cdylib alone — fails with
 # `error[E0433]: failed to resolve: use of unresolved module or unlinked crate
 # 'rule_test_fixture'`. rules_rust accepts a cdylib in `deps` (it carries
 # CcInfo) and simply never emits an `--extern` for it, because there is no rlib
-# to name — the old limitation, stated in rustc's own words.
+# to name.
 rust_test(
     name = "fixture_integration_test",
     srcs = ["tests/exported_abi.rs"],
@@ -383,8 +382,7 @@ frustrate_no_block_check(
 # genuinely fails cannot live in `bazel test //...`. Running the scanner from a
 # test over a built module asserts the same thing — the same binary, the same
 # bytes, the same verdict — and stays green. The wired-red path (`std_check` on
-# and the build failing with this message) is demonstrated by hand at landing
-# and recorded in the commit message.
+# and the build failing with this message) can only be shown by hand.
 rust_shared_library(
     name = "probe_shared",
     srcs = ["probe/probe.rs"],

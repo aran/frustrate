@@ -996,10 +996,10 @@ mod tests {
         assert_eq!(*in_flight.try_read().expect("uncontended"), 41);
     }
 
-    /// The property the whole `locked` model rests on after the swap: a guard
-    /// can cross a thread, so a future holding one is `Send` and
-    /// `executor::spawn` accepts it. `std`'s guards are `!Send`, which is what
-    /// used to refuse every `async fn` on a locked type.
+    /// The property the whole `locked` model rests on: a guard can cross a
+    /// thread, so a future holding one is `Send` and `executor::spawn` accepts
+    /// it. With `std`'s `!Send` guards every `async fn` on a locked type would
+    /// be refused.
     #[test]
     fn locked_guards_are_send() {
         fn assert_send<T: Send>() {}

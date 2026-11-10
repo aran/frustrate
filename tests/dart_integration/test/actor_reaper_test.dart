@@ -1,12 +1,9 @@
 /// An actor handle nobody disposed is still reclaimed.
 ///
-/// Until this landed, an actor was the one opaque model with no GC backstop:
-/// every other one carries a `NativeFinalizer` through `HandleDrop`
-/// (runtime_native.dart), while a generated actor held a bare `ActorHost` and
-/// an `int? _raw` and nothing watched it. So the model with the *most* to leak
-/// — a dedicated OS thread, plus whatever the Rust object owns, measured in one
-/// real application at a 16-worker tokio runtime and two bound UDP sockets —
-/// leaked all of it on a single forgotten `dispose()`, with no diagnostic.
+/// Every opaque model carries a GC backstop, and an actor has the *most* to
+/// leak: a dedicated OS thread, plus whatever the Rust object owns. Without
+/// one, a single forgotten `dispose()` would leak all of it with no
+/// diagnostic.
 ///
 /// Three separate claims, because passing the first two while failing the third
 /// is exactly the shape a plausible-but-wrong fix would take:

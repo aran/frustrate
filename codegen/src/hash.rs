@@ -61,7 +61,7 @@ pub fn schema_hash(iface: &Interface) -> u64 {
 /// wrong bytes. With these ids a stale caller's id is simply absent, which the
 /// entry points already answer with a loud `unknown fn_id` panic. The cost is
 /// a sparse match instead of a jump table on every call; see
-/// `//tests/native_bench:dispatch` for what that is worth today.
+/// `//tests/native_bench:dispatch` for what that costs.
 ///
 /// **Collisions are resolved, not reported.** Two members whose ids fold to
 /// the same 32 bits are rehashed with an incrementing salt until each is free.

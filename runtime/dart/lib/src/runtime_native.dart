@@ -969,14 +969,13 @@ final class NativeRuntime implements FrustrateRuntime {
     Object Function(BinaryReader)? typedError,
   }) {
     // ONE allocation carries the response slab AND the request: the slab at
-    // [block], the request bytes immediately after it. This method used to
-    // make four (`reqPtr`, and one cell each for the three out-params) and
-    // free four; the shape it shares with the web transport makes it one and
-    // one, and a response that fits the slab needs no `_bufferFree` either.
+    // [block], the request bytes immediately after it: one allocation and
+    // one free, the shape the web transport shares, and a response that fits
+    // the slab needs no `_bufferFree`.
     //
     // The ABI is shared, so the slab is here because it is the ABI — but it
     // is not a native concession: fewer allocator round trips is fewer
-    // allocator round trips. Nothing about the lifetimes changed. The block
+    // allocator round trips. The block
     // belongs to one call, Rust writes it only after the body has returned,
     // and the `finally` that frees it is the frame that allocated it.
     //
@@ -985,11 +984,9 @@ final class NativeRuntime implements FrustrateRuntime {
     // nothing observes.
     //
     // The generated encoder writes its request DIRECTLY into this block — the
-    // reason it arrives as a closure rather than as a finished writer. There
-    // used to be a Dart heap buffer here, filled by the encoder and then
-    // memcpy'd in; on a 1 MiB argument that was a full payload copy and a
-    // 1 MiB Dart allocation, per call, on the calling isolate's own thread
-    // where nothing overlaps it.
+    // reason it arrives as a closure rather than as a finished writer: a Dart
+    // heap buffer memcpy'd in would cost a full payload copy and allocation
+    // per call, on the calling isolate's own thread.
     // The writer's own 64-byte floor, applied here too: a hint is a lower
     // bound, and undershooting it by a few bytes on a small call would trade a
     // 64-byte over-allocation for a whole realloc-and-copy.

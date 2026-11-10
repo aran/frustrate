@@ -43,10 +43,8 @@ void main() {
   test('a no-await async fn on a locked type is a plain shared read', () async {
     final c = Counter.new_();
     await c.add(delta: 7);
-    // `peek` has no `.await` in its body at all. It was refused before the
-    // lock changed — the *generated* block's await was enough to make the
-    // `std` guard's `!Send` fatal — which is what showed the old refusal was
-    // over-broad rather than precise.
+    // `peek` has no `.await` in its body at all; the *generated* block's
+    // await is what needs a `Send` guard.
     expect(await c.peek(), 7);
   });
 

@@ -346,9 +346,7 @@ void main() {
     // The arm keys on the compilers' declared variables rather than on how a
     // backend happens to represent numbers. The two must never disagree: if
     // they ever do, one of them is wrong about the platform and the codec
-    // would pick an encoding the peer does not expect. Verified by execution
-    // on all three backends (VM, dart2js, dart2wasm) when this landed; this
-    // pins the VM leg in CI.
+    // would pick an encoding the peer does not expect. This pins the VM leg.
     expect(kJsNumbers, identical(0, 0.0));
     expect(kJsNumbers, isFalse, reason: 'the VM has real 64-bit ints');
   });

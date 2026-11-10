@@ -295,8 +295,8 @@ void main() {
       ),
     )).cast<int>();
 
-    // ONE caller for all of them, and a spawned one: pre-fix these calls never
-    // settle, so whoever makes them is latched for good. Putting them in a
+    // ONE caller for all of them, and a spawned one: on regression these
+    // calls never settle, so whoever makes them is latched for good. Putting them in a
     // throwaway isolate keeps that away from the suite.
     caller = await Isolate.spawn(_callAllParkedAsync, [
       slots,

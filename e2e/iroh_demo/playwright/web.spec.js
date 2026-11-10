@@ -65,10 +65,8 @@ const ORIGIN = `http://127.0.0.1:${ORIGIN_PORT}`;
 // peerbot shuts down on stdin EOF, so the handle stays open for the run.
 //
 // `--preset minimal --relay ORIGIN` is the fully self-hosted peer: one relay,
-// ours, and no n0 service of any kind. It used to be `--preset n0`, because
-// n0's relays were the only meeting point available — a browser cannot be
-// dialled directly by anything, so the bot had to be reachable through a relay
-// too. That is still true; the relay is just ours now.
+// ours, and no n0 service of any kind. A browser cannot be dialled directly by
+// anything, so the bot must be reachable through a relay too.
 function startPeerbot() {
   const proc = spawn(
       PEERBOT,
@@ -203,9 +201,8 @@ async function run(page, consoleLines) {
   // relay handshake completes, so the wasm module has really reached a relay
   // and been accepted by it.
   //
-  // This comment used to claim the event proved "a TLS 1.3 exchange performed
-  // by ring's C compiled to WebAssembly". It does not, and did not before this
-  // spec moved to a local relay: on `wasm_browser` the relay client is
+  // It does not prove a TLS exchange by ring compiled to WebAssembly: on
+  // `wasm_browser` the relay client is
   // `ws_stream_wasm::WsStream`, so the socket — and any TLS on it — belongs to
   // the browser, not to ring. ring's exercise is ACCEPTANCE 3.
   await expect(body).toContainText(/online/i, { timeout: 45000 });
@@ -233,18 +230,15 @@ async function run(page, consoleLines) {
 
   // Click Send rather than pressing Enter.
   //
-  // This used to be `keyboard.press('Enter')` against `onSubmitted`, on the
-  // grounds that the Send button might not reach the semantics tree. It does —
-  // the accessibility tree carries `button "Send"` — and the keystroke was the
-  // less reliable half: a synthesised Enter has to land on whatever Flutter's
+  // The Send button reaches the semantics tree (`button "Send"`), and a
+  // keystroke is the less reliable route: a synthesised Enter has to land on whatever Flutter's
   // canvas renderer currently considers focused, and when it does not, the
   // message is never sent and *nothing reports it*. `send()` is fire-and-forget
   // by design, so a keystroke that goes nowhere is indistinguishable from a
-  // peer that never answered — which is precisely the shape this spec used to
-  // fail with about half the time, and which was read as relay flakiness.
+  // peer that never answered, and reads as relay flakiness.
   // Getting text into a Flutter canvas text field is the flakiest step in this
-  // file, and it is worth saying exactly why, because it was misdiagnosed for a
-  // long time as relay flakiness.
+  // file, and it is worth saying exactly why, because it looks like relay
+  // flakiness.
   //
   // Flutter keeps the real text in a Dart `TextEditingController` and attaches
   // its DOM editing connection *asynchronously* after the field is tapped.
@@ -253,20 +247,19 @@ async function run(page, consoleLines) {
   //
   //   - `fill()` sets the input's value directly, which Flutter may never
   //     adopt. The controller stays empty.
-  //   - `keyboard.type()` too early loses its leading characters — observed
-  //     here as "llo from a browser".
+  //   - `keyboard.type()` too early loses its leading characters ("llo from
+  //     a browser").
   //
   // Neither is reported. `_send` reads the controller, and on an empty string
   // it *returns without error*: no message, no log line, no failure. On a
   // truncated one it cheerfully sends the wrong text. Both are then
-  // indistinguishable from a peer that never answered — which is precisely the
-  // shape this spec used to fail with about half the time.
+  // indistinguishable from a peer that never answered.
   //
   // Reading the field back is **not** enough, and that is the subtle part:
   // `inputValue()` reads the DOM input, which holds every keystroke, while
-  // Flutter's controller holds only what its editing connection adopted. A run
-  // that verified the DOM and then sent produced `me: wser` from a typed
-  // "hello from a browser" — the check passed and the wrong text went out.
+  // Flutter's controller holds only what its editing connection adopted, so a
+  // DOM check can pass while `me: wser` goes out for a typed "hello from a
+  // browser".
   //
   // `insertText` avoids per-character loss by dispatching the whole string as
   // one input event, so the failure mode becomes all-or-nothing rather than

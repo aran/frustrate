@@ -184,7 +184,7 @@ class BinaryWriter {
   ///
   /// The native transport passes the FFI block the call is about to hand Rust,
   /// so the generated encoder writes the request straight into its final
-  /// destination and the staging memcpy that used to sit between them is gone.
+  /// destination, with no staging copy between.
   ///
   /// [buffer] must be a typed list at **offset 0 of its own buffer** — which is
   /// what both `Uint8List(n)` and `Pointer<Uint8>.asTypedList(n)` give you, and
@@ -653,9 +653,8 @@ class BinaryWriter {
 
   // ------------------------------------------------- typed numeric lists --
   //
-  // `Vec<f64>` and friends used to encode one element at a time — n calls to
-  // `writeF64`, each a bounds check, a `ByteData` store and a `_len` bump. The
-  // elements of a Dart typed list are already the wire's bytes in the wire's
+  // `Vec<f64>` and friends encode in one call rather than one `writeF64` per
+  // element. The elements of a Dart typed list are already the wire's bytes in the wire's
   // order (little-endian host, see [bulkTypedDataOk]), so the whole payload is
   // one `setRange` — a memcpy.
   //
@@ -968,11 +967,8 @@ class BinaryReader {
 
   // ------------------------------------------------- typed numeric lists --
   //
-  // `Vec<f64>` used to decode as
-  // `Float64List.fromList(List.generate(n, (_) => r.readF64()))`: n *boxed*
-  // doubles into a growable `List<double>`, then a second pass copying them
-  // into the typed list. These read the payload in one `setRange` — a memcpy —
-  // straight into the typed list that is returned.
+  // These read the payload in one `setRange` — a memcpy — straight into the
+  // typed list that is returned, with no boxed element in between.
   //
   // **Why the copy is not avoidable.** The wire offset of a `Vec<f64>` is
   // whatever the fields before it added up to, so it is not generally

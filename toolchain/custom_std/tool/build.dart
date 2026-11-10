@@ -212,14 +212,12 @@ void main(List<String> args) {
 
   // Harvest by *searching* the target dir, not by naming a subdirectory of it.
   //
-  // cargo has moved this: `-Zbuild-std` output used to land in
-  // `<target>/release/deps/` and now lands in
-  // `<target>/release/build/<crate>/<hash>/out/`. Naming the old path did not
-  // fail when that changed — the previous build's `deps/` was still sitting
-  // there, so the builder harvested a whole std from the *previous compiler*,
-  // staged it, and wrote a manifest naming the new pin. Nothing downstream
-  // could see the mismatch; rustc eventually refused the rlibs with E0514,
-  // in an unrelated crate, with no path back to this function.
+  // cargo moves `-Zbuild-std` output between nightlies (`release/deps/`,
+  // `release/build/<crate>/<hash>/out/`). A named path that went stale would
+  // not fail: the previous build's output would still be there, so the
+  // builder would harvest a std from the *previous compiler* under a manifest
+  // naming the new pin, and rustc would refuse the rlibs much later with
+  // E0514, in an unrelated crate.
   //
   // A recursive search has no layout to go stale. `_requireOneOfEachCrate`
   // below is what keeps it honest: if a future cargo writes a crate to two

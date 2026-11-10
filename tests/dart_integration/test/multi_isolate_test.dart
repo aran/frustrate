@@ -63,8 +63,8 @@ void _workerEntry(SendPort toMain) async {
 void main() {
   setUpAll(() {
     // The main isolate is the first to init (isolate tag 1); the worker inits
-    // second (tag 2). Under the old single global callback slot, this second
-    // init would steal the main isolate's completions.
+    // second (tag 2). With one global callback slot, this second init would
+    // steal the main isolate's completions.
     FrustrateNative.init(testApiBridge);
   });
 

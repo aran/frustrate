@@ -359,9 +359,7 @@ impl ByteWriter {
 
 /// The bulk slice codec for fixed-width numeric lists.
 ///
-/// `Vec<f64>` used to encode one element at a time — n calls to
-/// `write_f64`, each an `extend_from_slice` of an 8-byte array — and decode
-/// one at a time into a `push` loop. On a little-endian target the elements
+/// On a little-endian target the elements
 /// of a `[f64]` are *already* the wire's bytes in the wire's order, so the
 /// whole payload is one `memcpy` in either direction.
 ///
@@ -681,10 +679,9 @@ impl<'a> ByteReader<'a> {
 mod tests {
     use super::*;
 
-    /// What `envelope::encode` used to do: build the payload, then allocate
-    /// `len + prefix` and copy it in to make room. Kept here as the golden
-    /// reference so the framed writer is checked against the bytes that
-    /// shipped, not against a fresh re-derivation of what they should be.
+    /// The naive framing: build the payload, then allocate `len + prefix` and
+    /// copy it in. The golden reference the framed writer is checked against,
+    /// rather than a fresh re-derivation of what the bytes should be.
     fn prepend(frame: &[u8], payload: &[u8]) -> Vec<u8> {
         let mut out = Vec::with_capacity(payload.len() + frame.len());
         out.extend_from_slice(frame);

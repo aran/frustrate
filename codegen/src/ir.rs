@@ -866,10 +866,8 @@ pub struct Param {
     pub unsized_borrow: bool,
     /// The lifetime the source named on a borrowed param (`&'a [u8]`), if any.
     ///
-    /// Carried only so the checker can reject it *by name*. The parser has
-    /// always dropped lifetimes silently, which was harmless while every
-    /// borrowed value type was decoded into an owned local — and is not
-    /// harmless now that a sync borrow reaches the request buffer, because
+    /// Carried only so the checker can reject it *by name*. Dropping it would
+    /// not be harmless: a sync borrow reaches the request buffer, and
     /// `request_slice` hands the dispatch a `&'a [u8]` with an unbound `'a`
     /// and a user-written `'static` would unify with it.
     #[serde(default)]
@@ -928,13 +926,6 @@ pub enum Type {
     /// that disagree about which values are legal are exactly what the
     /// fingerprint exists to refuse at init, rather than discovering it later
     /// from whichever value happens to cross first.
-    ///
-    /// Serde emits the default peer as `{"duration":"std"}` rather than the
-    /// old `"duration"`, so a time-using interface re-fingerprints once. That
-    /// is correct rather than merely tolerable: this change also rewrote the
-    /// generated code on both sides of every such interface, so a binding from
-    /// before it genuinely does not match. Interfaces with no time type are
-    /// byte-identical and do not move.
     Duration(DurationPeer),
     /// An **instant** ⇄ Dart `DateTime` (UTC). Crosses as i64 microseconds
     /// since the Unix epoch. Named for its default peer,
@@ -1369,8 +1360,7 @@ impl Function {
     /// [`Function::parent`], a name rather than a [`Type`].
     ///
     /// One iterator so that a pass over a signature cannot silently miss a
-    /// position: the three used to be written out at each call site, and the
-    /// error type was the one that got left off.
+    /// position, the declared error being the easy one to leave off.
     pub fn signature_types_mut(&mut self) -> impl Iterator<Item = &mut Type> {
         self.params
             .iter_mut()

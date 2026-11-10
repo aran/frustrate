@@ -90,7 +90,7 @@ void main() {
       'a corrupt discriminant of 2 is a loud codec error, NOT silent null',
       () {
         // maybeDouble returns Option<f64>: the response is one presence byte.
-        // A byte of 2 is neither 0 nor 1; before the fix `readU8() == 1` would
+        // A byte of 2 is neither 0 nor 1; a plain `readU8() == 1` would
         // silently decode it as `null`. The validating read rejects it.
         fake.nextPayload = Uint8List.fromList([2]);
         expect(

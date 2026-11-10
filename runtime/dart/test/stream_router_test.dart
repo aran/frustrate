@@ -544,9 +544,9 @@ void main() {
   );
 
   group('web (deferDelivery): the void-method path defers too', () {
-    // The gap this group exists for: the flag used to cover only `_invoke`,
-    // so a sink item — the ONE mirror whose Dart side is arbitrary user code
-    // by design — still ran on the Rust stack.
+    // What this group pins: the flag covers sink items as well as `_invoke`.
+    // A sink item is the ONE mirror whose Dart side is arbitrary user code by
+    // design, so without it user code would run on the Rust stack.
 
     test('a sink item does not run during the producing call', () async {
       final got = <int>[];

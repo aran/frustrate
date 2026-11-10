@@ -335,13 +335,12 @@ void main() {
   group('boundaries (enforcement lives elsewhere by construction)', () {
     test('the OPTION discriminant is validated because generated decode routes '
         'through readBool — readU8()==1 would have silently coerced', () {
-      // The generated bindings now decode Option<T> as `r.readBool() ? .. : null`
-      // (codegen fix, emit_dart.rs). A corrupt tag byte of 2 is therefore a
-      // loud codec error, not a silent None — pinned end-to-end on the
-      // generated path in corrupt_decode_test.dart. Here we keep the primitive
-      // contrast so a regression in either read is caught: the old raw
-      // readU8()==1 would coerce a 2 to false (silent None); the readBool the
-      // generator now emits rejects it.
+      // The generated bindings decode Option<T> as `r.readBool() ? .. : null`
+      // (emit_dart.rs). A corrupt tag byte of 2 is therefore a loud codec
+      // error, not a silent None — pinned end-to-end on the generated path in
+      // corrupt_decode_test.dart. Here we keep the primitive contrast so a
+      // regression in either read is caught: a raw readU8()==1 would coerce a
+      // 2 to false (silent None); readBool rejects it.
       final coerced = BinaryReader(Uint8List.fromList([2])).readU8() == 1;
       expect(
         coerced,

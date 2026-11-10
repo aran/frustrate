@@ -1,11 +1,9 @@
 /// The bulk typed-list codec path: one memcpy per list, no boxing, and the
 /// **same bytes** the per-element loop produced.
 ///
-/// A `Vec<f64>` used to decode as
-/// `Float64List.fromList(List.generate(n, (_) => r.readF64()))` — n boxed
-/// doubles into a growable `List<double>`, then a copy into the typed list.
-/// `readF64List`/`writeF64List` replace that with a single byte-range copy.
-/// The wire is unchanged, and that is the whole point of this file: every
+/// `readF64List`/`writeF64List` are a single byte-range copy where the
+/// element form boxes each double. The wire is the same, and that is the whole
+/// point of this file: every
 /// assertion here is either "the bulk form equals the element form" or a
 /// pinned golden vector, so a bulk path that shifted the format goes red.
 ///

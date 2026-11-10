@@ -2304,8 +2304,7 @@ fn parse_enum(
 /// never reaches `check::resolve_type`, and both the wrapper and the argument
 /// list have to be recognised here instead. The arguments ride on
 /// [`Function::parent_args`] until `check`'s expansion binds them; dropping
-/// them is what this used to do, and it made `impl Store<i64>` emit
-/// `crate::api::Store::new()`.
+/// them would make `impl Store<i64>` emit `crate::api::Store::new()`.
 ///
 /// Whether the head is a generic data template at all is `check`'s question
 /// (FR0073/FR0056): the parser cannot see the declarations.
@@ -3634,8 +3633,7 @@ fn parse_path_type(tp: &syn::TypePath) -> Result<Type> {
         }
         ("HashSet", [t]) => Type::Set(Box::new(parse_type(t)?), MapKind::Hash),
         // BTreeSet shares HashSet's list wire codec and Dart `Set`; it decodes
-        // into a `BTreeSet` (sorted). The formerly-rejected "use HashSet" path
-        // is gone.
+        // into a `BTreeSet` (sorted).
         ("BTreeSet", [t]) => Type::Set(Box::new(parse_type(t)?), MapKind::BTree),
         ("HashMap", [k, v]) => {
             Type::Map(Box::new(parse_type(k)?), Box::new(parse_type(v)?), MapKind::Hash)
@@ -3656,8 +3654,7 @@ fn parse_path_type(tp: &syn::TypePath) -> Result<Type> {
         ),
         // Dart-object handles. Parsed here, in the ordinary recursive type
         // position, which is what lets them compose: nested in a struct, in a
-        // Vec, several per function. (They were previously hoisted out of the
-        // parameter list and rejected everywhere else.) Direction is enforced
+        // Vec, several per function. Direction is enforced
         // by the checker, not here — FR0031.
         ("StreamSink", [t]) => dart_object(DartMirror::StreamController, Some(parse_type(t)?), None),
         ("StreamSink", _) => {
@@ -3835,13 +3832,12 @@ fn is_message_error(ty: &syn::Type) -> bool {
 /// Admitting the bare name can shadow two things, both of them a trait called
 /// `Error` that is not std's: one **bridged** in this interface, and one
 /// imported (`use mycrate::Error;`) and used as a `Box<dyn Error>`. Neither
-/// works today. The bridged one is FR0035 (measured: "a typed error must be a
-/// struct or enum, which crosses by value") and the refusal's own advice is to
-/// cross it as a message, which is what this now does; the imported one is
-/// FR0003, and afterwards it crosses as a message if the trait has `Display`
-/// and fails inside generated code — loudly, at rustc — if it does not. So
-/// what changes is a rejection, in one case into the thing the rejection
-/// recommended, never a working meaning into a different one.
+/// would otherwise work: the bridged one would be FR0035 ("a typed error must
+/// be a struct or enum, which crosses by value"), whose advice is to cross it
+/// as a message, which is what this does; the imported one would be FR0003,
+/// and here crosses as a message if the trait has `Display` and fails inside
+/// generated code — loudly, at rustc — if it does not. So the shadowing only
+/// ever replaces a rejection, never a working meaning.
 fn is_boxed_erased_error(ty: &syn::Type) -> bool {
     let syn::Type::Path(tp) = ty else {
         return false;
@@ -5684,9 +5680,8 @@ mod tests {
     }
 
     /// `Self` in a return names the impl's type wherever it is written, not
-    /// only at the root. rustc reads it that way, and the substitution used to
-    /// stop at the top level for no stated reason — so `-> Option<Self>`
-    /// reached the checker as an unknown type literally called `Self`.
+    /// only at the root, as rustc reads it: `-> Option<Self>` must not reach
+    /// the checker as an unknown type literally called `Self`.
     #[test]
     fn self_in_a_return_substitutes_at_every_depth() {
         let d = || Box::new(Type::Named("D".into()));
@@ -6001,8 +5996,8 @@ mod tests {
 
     #[test]
     fn sinks_compose_in_any_position() {
-        // The composition unlock: what used to be a parse error is now the
-        // point. Direction is the checker's job (FR0031), not the parser's.
+        // Handles compose like any type. Direction is the checker's job
+        // (FR0031), not the parser's.
         let iface = parse("#[bridge] pub fn f(s: Vec<StreamSink<i64>>) {}");
         let Type::List(inner, _) = &iface.functions[0].params[0].ty else {
             panic!("expected a list");

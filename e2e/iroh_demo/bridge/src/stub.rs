@@ -38,7 +38,7 @@
 //! rule than the native version, not less: nothing can block, so nothing can
 //! wedge the instance.
 //!
-//! The one rule from `node.rs` still holds and is now structural: **this file
+//! The one rule from `node.rs` holds here structurally: **this file
 //! contains no `block_on` and no `.await` outside a spawned task.** Actor
 //! methods parse, poke a channel, or spawn.
 
@@ -117,10 +117,9 @@ impl Node {
     /// preference about routing, it is a choice of who carries the whole
     /// conversation.
     ///
-    /// This constructor used to be incapable of failing — the bind is
-    /// asynchronous, so `Result` was kept only because the bridged signature is
-    /// shared. The relay parameter gives it one honest use back:
-    /// parsing a URL is synchronous and local, so a bad relay URL is rejected
+    /// The bind is asynchronous, so the `Result` cannot carry a bind failure.
+    /// It carries the one synchronous failure: parsing a URL is synchronous and
+    /// local, so a bad relay URL is rejected
     /// here, on web exactly as on native, rather than becoming a silent
     /// never-online.
     pub fn open(
