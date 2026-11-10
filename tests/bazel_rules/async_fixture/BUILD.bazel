@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_no_block_check")
 
 # The dispatched half of frustrate_no_block_check's contract: two
 # `#[bridge(no_block)]` `async fn`s whose bodies are settled by *placement*, one
@@ -9,7 +9,7 @@ load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
 # caller-run half, where a root reaches a whole body. src/api.rs has why this is
 # a crate of its own rather than one more member in //tests/bazel_rules.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "async_claim_fixture",
     srcs = ["src/api.rs"],
@@ -34,7 +34,7 @@ rust_shared_library(
         "src/lib.rs",
         ":bridge.rs",
     ],
-    # Spelled the same as frustrate_bridge_outputs was told above: it is the name
+    # Spelled the same as frustrate_bridge was told above: it is the name
     # the block check's witness chain prints.
     crate_name = "async_claim_fixture",
     edition = "2021",

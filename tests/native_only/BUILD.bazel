@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_wasm_module")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_wasm_module")
 
 # `#[bridge(native_only)]` means a member or type is absent from the web
 # Dart surface AND from the wasm module. The Dart half is asserted by codegen's
@@ -23,7 +23,7 @@ load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_wasm_module")
 # gates open, must still compile and still export everything. A fixture that
 # passed the wasm test by emitting nothing would fail here.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "native_only_fixture",
     srcs = ["src/api.rs"],

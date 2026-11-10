@@ -1,5 +1,5 @@
 load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
-load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_wasm_module")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_bridge_library", "frustrate_wasm_module")
 
 # A bridge whose actor reaches browser APIs from Rust through wasm-bindgen,
 # web-sys and js-sys: the root test of frustrate's wasm-bindgen support.
@@ -16,7 +16,7 @@ exports_files([
     "Cargo.toml",
 ])
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "bindgen_api",
     srcs = ["src/api.rs"],

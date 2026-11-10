@@ -1,9 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_no_block_check")
 
 # Silences that silence nothing on any analysis. See ../BUILD.bazel.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "silences_stale",
     srcs = ["src/api.rs"],

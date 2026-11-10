@@ -1,8 +1,8 @@
-load("@frustrate//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge", "frustrate_bridge_library")
 load("@rules_dart//dart:defs.bzl", "dart_package_metadata")
 load("@rules_flutter//flutter:defs.bzl", "flutter_plugin")
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "codegen",
     package_name = "compose_ping",
     srcs = ["src/api.rs"],

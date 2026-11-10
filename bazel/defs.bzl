@@ -1,8 +1,8 @@
 """frustrate bridge rules.
 
-Tier 2: `frustrate_bridge` runs the codegen as a declared action over
-explicitly declared bridge sources, producing the Rust glue module and the
-Dart bindings as separate output groups.
+`frustrate_bridge` runs the codegen as a declared action over explicitly
+declared bridge sources, producing the Rust glue module and the Dart bindings
+as separate output groups, and declares a filegroup for each.
 
 The Rust output is declared as `<name>/src/frustrate_generated.rs` so that,
 combined with the bridge crate's own `src/`, rules_rust's unified source tree
@@ -107,7 +107,7 @@ def _frustrate_bridge_impl(ctx):
 # Every Dart build, for any web compiler and with or without creation-location
 # tracking, reaches the one generated set: the codegen has no compiler to vary by (a per-compiler type is a typedef the Dart build picks, see
 # `//runtime/dart:frustrate`), and the Rust glue it writes is the crate's source.
-frustrate_bridge = rule(
+_frustrate_bridge = rule(
     implementation = _frustrate_bridge_impl,
     cfg = non_dart_transition,
     doc = "Generate frustrate bridge glue (Rust) and bindings (Dart) from " +
@@ -207,8 +207,8 @@ bundler (rules_flutter) ships it per platform.
     provides = [DartCodeAssetInfo],
 )
 
-def frustrate_bridge_outputs(name, visibility = None, **kwargs):
-    """Tier 1 convenience: bridge target plus per-language filegroups.
+def frustrate_bridge(name, visibility = None, **kwargs):
+    """Generate a bridge's Rust glue and Dart bindings, plus per-output filegroups.
 
     Declares `<name>`, `<name>.rs` (Rust glue), `<name>.dart` (Dart bindings)
     and `<name>.ir` (the interface JSON), all with the same visibility.
@@ -224,9 +224,11 @@ def frustrate_bridge_outputs(name, visibility = None, **kwargs):
         name: Name of the bridge target; the filegroups are `<name>.rs`,
             `<name>.dart` and `<name>.ir`.
         visibility: Visibility of every target declared.
-        **kwargs: Passed to `frustrate_bridge`.
+        **kwargs: The bridge's attributes (`srcs`, `module_paths`,
+            `crate_name`, `package_name`, `models`), as `_frustrate_bridge`
+            documents them.
     """
-    frustrate_bridge(name = name, visibility = visibility, **kwargs)
+    _frustrate_bridge(name = name, visibility = visibility, **kwargs)
     native.filegroup(
         name = name + ".rs",
         srcs = [":" + name],

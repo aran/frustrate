@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
-load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_wasm_module")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_bridge_library", "frustrate_wasm_module")
 
 # A bridge whose Rust calls JavaScript the app supplies, through an import
 # namespace of its own (`host_imports`), with no wasm-bindgen.
@@ -8,7 +8,7 @@ load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs",
 # and the bindings, and runs host_imports_web_test.dart on them; `-- --threaded`
 # serves the build in ./threaded instead.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "host_imports_api",
     srcs = ["src/api.rs"],

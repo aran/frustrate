@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_wasm_module")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_wasm_module")
 
 # The generated Rust glue promises, in its own header, to be lint-clean:
 #
@@ -31,7 +31,7 @@ load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_wasm_module")
 #     that reasoned about the interface shape at codegen time would be right
 #     on one target and wrong on the other.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "lint_actor_fixture",
     srcs = ["src/api.rs"],

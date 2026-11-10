@@ -1,10 +1,10 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_bridge")
 load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 
 # A claimed member reaching a wait through a marked function: it passes. See ../BUILD.bazel.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "native_red_marked",
     srcs = ["src/api.rs"],

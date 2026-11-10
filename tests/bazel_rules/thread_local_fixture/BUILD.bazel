@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_no_block_check")
 load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 
 # A `#[bridge(no_block)]` claim that reaches a lazily initialised thread-local,
@@ -9,7 +9,7 @@ load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 # `opendir`'s directory stream). A crate of its own for the reason
 # locked_fixture/src/api.rs gives.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "thread_local_claim_fixture",
     srcs = ["src/api.rs"],

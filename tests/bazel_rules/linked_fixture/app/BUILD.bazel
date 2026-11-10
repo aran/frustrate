@@ -1,6 +1,6 @@
-load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_bridge_library")
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "linked_app",
     srcs = ["src/api.rs"],

@@ -1,4 +1,4 @@
-load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset")
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge", "frustrate_code_asset")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 load("@rules_dart//dart:defs.bzl", "dart_package_metadata")
 load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
@@ -6,7 +6,7 @@ load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 
 # Capability enforcement is structural: codegen always checks native and web
 # facts and emits both Dart surfaces behind one conditional-export URI.
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "codegen",
     package_name = "demo_bridge",
     srcs = ["src/api.rs"],

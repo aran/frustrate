@@ -1,5 +1,5 @@
 load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
-load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_bridge_library")
 
 # The sources of //tests/compose/twin, unchanged.
 genrule(
@@ -16,7 +16,7 @@ genrule(
           "cp $(execpath //tests/compose/twin:lib.rs) $(execpath src/lib.rs)",
 )
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "compose_twin_two",
     srcs = ["src/api.rs"],

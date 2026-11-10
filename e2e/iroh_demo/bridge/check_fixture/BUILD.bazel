@@ -1,10 +1,10 @@
-load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge", "frustrate_no_block_check")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 
 # The `#[bridge(no_block)]` gate over the iroh crate graph. src/api.rs says why
 # the claim lives in a crate of its own. Nothing here ships.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "codegen",
     package_name = "iroh_check_fixture",
     srcs = ["src/api.rs"],

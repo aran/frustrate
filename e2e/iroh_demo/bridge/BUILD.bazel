@@ -1,4 +1,4 @@
-load("@frustrate//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_no_block_check")
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge", "frustrate_code_asset", "frustrate_no_block_check")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata", "dart_test")
 load("@rules_flutter//flutter:defs.bzl", "flutter_native_library", "flutter_plugin")
@@ -13,7 +13,7 @@ exports_files([
 
 # Only api.rs is parsed for #[bridge] items; node.rs / proto.rs / stub.rs are
 # ordinary Rust that frustrate never sees.
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "codegen",
     package_name = "iroh_bridge",
     srcs = ["src/api.rs"],

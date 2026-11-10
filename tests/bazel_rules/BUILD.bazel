@@ -3,8 +3,8 @@ load("@rules_dart//dart:defs.bzl", "dart_test")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_shared_library", "rust_test")
 load(
     "//bazel:defs.bzl",
+    "frustrate_bridge",
     "frustrate_bridge_library",
-    "frustrate_bridge_outputs",
     "frustrate_library",
     "frustrate_no_block_check",
     "frustrate_wasm_module",
@@ -27,10 +27,10 @@ load(":mispaired_bridge_test.bzl", "mispaired_bridge_test")
 # can't be probed without duplicating it or editing that shared file, so the
 # threaded case is a build_test gated on the local +atomics std (below).
 
-# The fixture: one #[bridge(sync)] fn. frustrate_bridge_outputs declares the
+# The fixture: one #[bridge(sync)] fn. frustrate_bridge declares the
 # `:bridge` action plus the `:bridge.rs` / `:bridge.dart` output-group
 # filegroups.
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "rule_test_fixture",
     srcs = ["src/api.rs"],
@@ -49,7 +49,7 @@ frustrate_bridge_outputs(
 # forms instead of unit tests only. `:fixture_integration_test` below is the
 # half that could not be written before.
 #
-# `crate_name` matches what frustrate_bridge_outputs was told above, so the
+# `crate_name` matches what frustrate_bridge was told above, so the
 # generated glue, the Dart bindings and the Rust crate all agree on one name —
 # and it is the name a test's `use` line spells.
 #
@@ -163,7 +163,7 @@ build_test(
     ],
 )
 
-# frustrate_bridge_outputs contract: the FrustrateCodegen action runs over
+# frustrate_bridge contract: the FrustrateCodegen action runs over
 # the bridge source and its declared Rust-glue, Dart-bindings and interface-IR
 # output groups build. Regression net for the codegen wiring, the declared
 # output paths, and the output_group filegroups — no Rust compile involved.
@@ -174,7 +174,7 @@ build_test(
 # changed. Losing the label breaks that consumer silently, since
 # `--output_groups=ir` would still work.
 build_test(
-    name = "bridge_outputs_build_test",
+    name = "bridge_build_test",
     targets = [
         ":bridge.rs",
         ":bridge.dart",

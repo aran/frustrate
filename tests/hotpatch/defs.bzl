@@ -1,7 +1,7 @@
 """The hot patch test's fixture crates and the rules that build its data."""
 
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_bridge_library")
 load("//bazel:hot_patch.bzl", "HotPatchIrInfo", "hot_patch_ir_aspect", "hot_patch_transition", "rust_sources_aspect")
 
 # One edition per package, with fixed target names.
@@ -12,7 +12,7 @@ def hot_patch_fixture():
     Every edition compiles to the same crate name with the same flags, so
     symbol names match across them; only `src/api.rs` differs.
     """
-    frustrate_bridge_outputs(
+    frustrate_bridge(
         name = "bridge",
         srcs = ["src/api.rs"],
         crate_name = "hotpatch_fixture",
@@ -41,7 +41,7 @@ def hot_patch_bridge(name):
     `hotpatch_<name>`, declared as `<name>` (and `<name>_lib`, the crate a
     `frustrate_library` links), with its bindings as `bridge`.
     """
-    frustrate_bridge_outputs(
+    frustrate_bridge(
         name = "bridge",
         srcs = ["src/api.rs"],
         crate_name = "hotpatch_" + name,

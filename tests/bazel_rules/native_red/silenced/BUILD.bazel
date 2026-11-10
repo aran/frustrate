@@ -1,12 +1,12 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_bridge")
 load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 
 # Two claimed members calling the same C function, one of them silenced in
 # source. See ../BUILD.bazel.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "native_red_silenced",
     srcs = ["src/api.rs"],

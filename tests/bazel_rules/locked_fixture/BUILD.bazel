@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_no_block_check")
 
 # The **synchronous locked** half of frustrate_no_block_check's contract: a
 # `#[bridge(no_block)]` claim whose body takes and releases a lock guard in the
@@ -7,7 +7,7 @@ load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
 # No other fixture here scans a lock. src/api.rs says why this is a crate of its
 # own rather than one more member in //tests/bazel_rules.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "locked_claim_fixture",
     srcs = ["src/api.rs"],

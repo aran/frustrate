@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_no_block_check")
 
 # `frustrate_no_block_check(web_threads_platform = ...)` builds the check under
 # the platform the app ships with. This crate can only be built where
@@ -8,7 +8,7 @@ load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_no_block_check")
 # platform's `getrandom_backend = "custom"` reaches getrandom through the
 # check's configuration.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "getrandom_check_fixture",
     srcs = ["src/api.rs"],

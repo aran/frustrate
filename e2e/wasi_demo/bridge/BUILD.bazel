@@ -1,4 +1,4 @@
-load("@frustrate//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_code_asset")
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge", "frustrate_bridge_library", "frustrate_code_asset")
 load("@rules_dart//dart:defs.bzl", "dart_package_metadata")
 load("@rules_flutter//flutter:defs.bzl", "flutter_plugin")
 
@@ -7,7 +7,7 @@ exports_files([
     "Cargo.lock",
 ])
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "codegen",
     package_name = "wasi_bridge",
     srcs = ["src/api.rs"],

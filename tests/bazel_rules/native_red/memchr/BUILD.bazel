@@ -1,11 +1,11 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs")
+load("//bazel:defs.bzl", "frustrate_bridge")
 load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 
 # A claimed member that searches bytes with memchr, which picks its routine
 # at run time on x86_64. See ../BUILD.bazel.
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "native_red_memchr",
     srcs = ["src/api.rs"],

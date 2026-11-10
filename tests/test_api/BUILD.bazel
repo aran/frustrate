@@ -1,6 +1,6 @@
 load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata", "dart_test")
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
-load("//bazel:defs.bzl", "frustrate_bridge_outputs", "frustrate_code_asset", "frustrate_no_block_check", "frustrate_wasm_module")
+load("//bazel:defs.bzl", "frustrate_bridge", "frustrate_code_asset", "frustrate_no_block_check", "frustrate_wasm_module")
 load("//bazel:idle_barrier.bzl", "frustrate_idle_barrier_library")
 load("//bazel:manual_scheduler.bzl", "frustrate_manual_scheduler_library")
 
@@ -13,7 +13,7 @@ exports_files([
     "src/shapes_reclaim.rs",
 ])
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "bridge",
     package_name = "frustrate_integration",
     srcs = [

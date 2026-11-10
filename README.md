@@ -185,13 +185,13 @@ mod frustrate_generated;
 
 ### 3. Declare the bridge in Bazel
 
-`frustrate_bridge_outputs` runs codegen over your sources, and
+`frustrate_bridge` runs codegen over your sources, and
 `frustrate_bridge_library` builds the crate with the generated glue:
 
 ```starlark
-load("@frustrate//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge_outputs", "frustrate_code_asset")
+load("@frustrate//bazel:defs.bzl", "frustrate_bridge_library", "frustrate_bridge", "frustrate_code_asset")
 
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "codegen",
     srcs = ["src/api.rs"],
     crate_name = "my_bridge",
@@ -258,7 +258,7 @@ order:
 | File | What it shows |
 |---|---|
 | [`bridge/src/api.rs`](e2e/wasi_demo/bridge/src/api.rs) | the Rust you annotate with `#[bridge]` |
-| [`bridge/BUILD.bazel`](e2e/wasi_demo/bridge/BUILD.bazel) | `frustrate_bridge_outputs` + a `frustrate_bridge_library` over its output |
+| [`bridge/BUILD.bazel`](e2e/wasi_demo/bridge/BUILD.bazel) | `frustrate_bridge` + a `frustrate_bridge_library` over its output |
 | [`lib/main.dart`](e2e/wasi_demo/lib/main.dart) | calling the generated bindings from Flutter |
 | [`BUILD.bazel`](e2e/wasi_demo/BUILD.bazel) | wiring the bridge into a Flutter app |
 | [`MODULE.bazel`](e2e/wasi_demo/MODULE.bazel) | a working `bazel_dep`/toolchain pin set to copy versions from |
@@ -303,7 +303,7 @@ A source need not live in the bridge crate. A domain crate can carry
 `#[bridge(...)]` on its own types and be listed directly:
 
 ```starlark
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "codegen",
     srcs = ["//rust/core:src/model.rs", "src/api.rs"],
     crate_name = "my_bridge",
@@ -322,7 +322,7 @@ takes that bridge's plain data types (structs and enums that reach no handle)
 instead of generating its own Dart copies, so one Dart object crosses both:
 
 ```starlark
-frustrate_bridge_outputs(
+frustrate_bridge(
     name = "codegen",
     srcs = ["//rust/core:src/model.rs", "src/compute.rs"],
     crate_name = "my_compute",
