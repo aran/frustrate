@@ -105,9 +105,9 @@ flutter_ios_app(
 #   adb install -r bazel-bin/app_android.apk
 flutter_android_app(
     name = "app_android",
-    package_name = "dev.frustrate.demo",
     app_name = "Frustrate Demo",
     application = ":app_flutter",
+    application_id = "dev.frustrate.demo",
 )
 
 # Linux (GTK): the same app_flutter + the Rust bridge as the demo_bridge

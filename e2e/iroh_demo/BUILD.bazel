@@ -128,9 +128,9 @@ flutter_ios_app(
 # in every compilation mode. That is what gives this app INTERNET in `-c opt`.
 flutter_android_app(
     name = "app_android",
-    package_name = "dev.frustrate.irohdemo",
     app_name = "Tin Can",
     application = ":app_flutter",
+    application_id = "dev.frustrate.irohdemo",
 )
 
 # Linux (GTK). `flutter_linux_app` templates the runner, so there is no

@@ -58,7 +58,7 @@ flutter_application(
 # android/ directory, so the runner is templated for this app's own package.
 flutter_android_app(
     name = "app_android",
-    package_name = "dev.frustrate.compose",
     app_name = "Frustrate Compose",
     application = ":app_flutter",
+    application_id = "dev.frustrate.compose",
 )
