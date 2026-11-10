@@ -1,6 +1,6 @@
 # `dart analyze` and the `dart format` check run as an aspect over every Dart
 # target a `bazel test` names. The config line is `common` because
-# `bazel run` of `dart_fix`/`dart_format` reads it too.
+# `bazel run @rules_dart//dart/format` and `//dart/fix` read it too.
 test --aspects=@rules_dart//dart:analyze.bzl%dart_analyze
 test --output_groups=+dart_analyze
 test --output_groups=+dart_format

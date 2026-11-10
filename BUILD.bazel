@@ -1,7 +1,7 @@
 load("@package_metadata//licenses/rules:license.bzl", "license")
 load("@package_metadata//purl:purl.bzl", "purl")
 load("@package_metadata//rules:package_metadata.bzl", "package_metadata")
-load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options", "dart_format")
+load("@rules_dart//dart:defs.bzl", "dart_analysis_config", "dart_analysis_options")
 
 package_metadata(
     name = "package_metadata",
@@ -37,5 +37,3 @@ dart_analysis_config(
     name = "analysis_config",
     options = [":analysis_options"],
 )
-
-dart_format(name = "format")
