@@ -1,16 +1,23 @@
 """frustrate: Flutter/Dart + Rust interop, Bazel-native."""
 
+# The version is left unset on purpose: the release workflow's publish step
+# patches in the released tag's version when it submits to the Bazel Central
+# Registry, and an unset version keeps the module usable through non-registry
+# overrides.
 module(
     name = "frustrate",
-    version = "0.1.0",
 )
 
 bazel_dep(name = "rules_rust", version = "0.75.0")
 bazel_dep(name = "rules_dart", version = "0.8.1")
 bazel_dep(name = "platforms", version = "1.1.0")
 
+# The license and package declaration every target of the module carries
+# (//:package_metadata, set in REPO.bazel).
+bazel_dep(name = "package_metadata", version = "0.0.13")
+
 # For the constraint that marks an iOS device platform (//bazel:ios_aarch64).
-bazel_dep(name = "apple_support", version = "2.9.1")
+bazel_dep(name = "apple_support", version = "2.12.0")
 
 # build_test, for the Bazel rule tests in //tests/bazel_rules. Already in the
 # resolved graph (a transitive dep of rules_rust); declared direct so
@@ -20,15 +27,15 @@ bazel_dep(name = "bazel_skylib", version = "1.9.2")
 # cc_library, for //runtime/rust:hot_patch_link — the link flags a patchable
 # library needs, which a select() has to choose per object format. Already in
 # the resolved graph, declared direct for the same reason as bazel_skylib.
-bazel_dep(name = "rules_cc", version = "0.2.26")
+bazel_dep(name = "rules_cc", version = "0.2.28")
 
 # The dev tooling shared with rules_dart: the commit check, the changelog, the
 # lint hooks and the release steps. It lives in rules_dart at `overhead/`.
 bazel_dep(name = "overhead", version = "0.0.0", dev_dependency = True)
 git_override(
     module_name = "overhead",
-    remote = "https://github.com/aran/rules_dart.git",
     commit = "e46da5b40a704d1f8f3aa466cc61d7d0b24f4d6d",
+    remote = "https://github.com/aran/rules_dart.git",
     strip_prefix = "overhead",
 )
 
@@ -123,7 +130,7 @@ register_toolchains("@rust_toolchains//:all")
 # on Xcode. A dev dependency, because which C toolchain a build uses is the
 # root module's choice and never a ruleset's. Its unwinder reaches Rust links
 # through //runtime/rust:unwinder, set in .bazelrc.
-bazel_dep(name = "llvm", version = "0.8.24", dev_dependency = True)
+bazel_dep(name = "llvm", version = "0.8.26", dev_dependency = True)
 
 register_toolchains(
     "@llvm//toolchain:linux_x86_64_to_linux_x86_64",
@@ -213,6 +220,7 @@ crate_dev.annotation(
     gen_binaries = ["wasm-bindgen"],
     repositories = ["wasm_bindgen_crates"],
 )
+
 # The native check's memchr fixture (//tests/bazel_rules/native_red/memchr).
 crate_dev.from_cargo(
     name = "native_red_crates",
@@ -226,6 +234,7 @@ crate_dev.from_cargo(
         "x86_64-unknown-linux-gnu",
     ],
 )
+
 # tokio, for the async-runtime hook's tests and `//ext/tokio` (//tests/tokio_hook).
 # A hub of its own: tokio in `frustrate_crates` would reach every triple
 # frustrate builds for.

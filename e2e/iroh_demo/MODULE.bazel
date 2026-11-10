@@ -21,6 +21,7 @@ module(name = "frustrate_iroh_demo")
 bazel_dep(name = "frustrate", version = "0.1.0")
 bazel_dep(name = "rules_flutter", version = "0.0.8")
 bazel_dep(name = "rules_dart", version = "0.8.1")
+
 # rules_rust releases before 0.70.0 auto-register a fake wasm32 cc_toolchain
 # that resolves ahead of the real one below, so an older rules_rust breaks
 # ring's build script far from the cause.
@@ -32,7 +33,7 @@ bazel_dep(name = "apple_support", version = "2.12.0")
 bazel_dep(name = "rules_apple", version = "5.4.0")
 bazel_dep(name = "rules_cc", version = "0.2.28")
 bazel_dep(name = "rules_swift", version = "4.2.2")
-bazel_dep(name = "llvm", version = "0.8.24")
+bazel_dep(name = "llvm", version = "0.8.26")
 
 # Android bundling (rules_flutter's flutter_android_app + the NDK cc toolchain
 # that cross-compiles the Rust bridge to android_arm64).
@@ -80,7 +81,6 @@ archive_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2021",
-    versions = ["1.99.1"],
     extra_target_triples = [
         "aarch64-apple-ios",
         "aarch64-apple-ios-sim",
@@ -89,6 +89,7 @@ rust.toolchain(
         "wasm32-unknown-unknown",
         "x86_64-unknown-linux-gnu",
     ],
+    versions = ["1.99.1"],
 )
 
 # The demos live inside frustrate's tree and build against it.
@@ -176,12 +177,12 @@ crate.from_cargo(
 # the shipped module.
 crate.annotation_select(
     crate = "getrandom",
-    # The hub alias, not `@iroh_crates__js-sys-0.3.103//:js_sys`: it survives a
-    # version bump in //bridge:Cargo.lock, which the pinned form would not.
-    deps = ["@iroh_crates//:js-sys"],
     repositories = ["iroh_crates"],
     triples = ["wasm32-unknown-unknown"],
     version = "0.4.3",
+    # The hub alias, not `@iroh_crates__js-sys-0.3.103//:js_sys`: it survives a
+    # version bump in //bridge:Cargo.lock, which the pinned form would not.
+    deps = ["@iroh_crates//:js-sys"],
 )
 use_repo(crate, "iroh_crates")
 
@@ -272,8 +273,6 @@ use_repo(crate, "wasm_bindgen_crates")
 # size is worth a build dependency.
 binaryen = use_extension("@frustrate//bazel/wasm_opt:extensions.bzl", "binaryen")
 use_repo(binaryen, "binaryen")
-
-
 
 # ------------------------------------------------------------- toolchains ---
 # The C/C++ toolchain, for wasm32 and Linux. One module, `@llvm`, covering both
