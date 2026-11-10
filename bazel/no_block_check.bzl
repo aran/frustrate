@@ -60,7 +60,7 @@ def _wasm_check_transition_impl(settings, attr):
     return {
         # The platform is the analysis's: //bazel:wasm32_threads for `web_threads`,
         # whose +atomics build is the only one that holds wait instructions,
-        # and //bazel:wasm32_wasi for `wasi`.
+        # and //bazel:wasm32_wasip1 for `wasi`.
         "//command_line_option:platforms": [str(attr.platform)],
         # Debug, and this is a correctness requirement rather than a build-speed
         # preference. At release opt levels rustc inlines the wait intrinsic
@@ -568,7 +568,7 @@ def frustrate_no_block_check(
       +atomics std (`bazel run //toolchain/custom_std:build`); until that is
       staged `bazel test` reports it SKIPPED, and a stale one fails the build
       with the builder's command.
-    - `wasi` → `<name>.wasi`: the crate built for //bazel:wasm32_wasi with
+    - `wasi` → `<name>.wasi`: the crate built for //bazel:wasm32_wasip1 with
       the stock std, scanned for `poll_oneoff` (wasip1's only wait), `slow`,
       and `io`. Hermetic.
 
@@ -766,7 +766,7 @@ def frustrate_no_block_check(
             slow = slow,
             io = io,
             allow = allow,
-            platform = Label("//bazel:wasm32_wasi"),
+            platform = Label("//bazel:wasm32_wasip1"),
             wasi = True,
             tags = tags,
             target_compatible_with = compatible,

@@ -108,7 +108,7 @@ use_repo(
 #   threads                   wasm_threads_enabled  + wasm_std_custom
 #   browser                   wasm_threads_disabled + wasm_std_custom
 #
-# so //bazel:wasm32 (stable, stock std), :wasm32_threads and :wasm32_custom each
+# so //bazel:wasm32 (stable, stock std), :wasm32_threads and :wasm32_browser_std each
 # resolve exactly one. Every stock toolchain carries a stable channel gate, so
 # the order is not load-bearing. Keep it that way: the three differ in
 # extra_rustc_flags, so a wrong pick is a link error far from its cause rather

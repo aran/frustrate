@@ -71,7 +71,7 @@ use wasmparser::{ExternalKind, Parser, Payload, TypeRef};
 /// list, and `host_imports_web_test.dart` requires the runtime to claim every
 /// namespace on it.
 ///
-/// `frustrate` is the bridge ABI plus the custom-std facilities, `env` is the
+/// `frustrate` is the bridge ABI plus the browser std's host calls, `env` is the
 /// shared memory and `__stack_chk_fail`, `wasi_snapshot_preview1` is the
 /// preview1 host the wasi platform's std calls.
 const SELF_SUPPLIED: &[&str] = &["frustrate", "env", "wasi_snapshot_preview1"];
@@ -88,7 +88,7 @@ const SELF_SUPPLIED: &[&str] = &["frustrate", "env", "wasi_snapshot_preview1"];
 ///
 /// The other two namespaces cannot be checked this way and should not be: a
 /// module's `frustrate` imports are whichever subset of the ABI and the
-/// custom-std facilities its std happens to need, and `wasi_snapshot_preview1`
+/// browser std's host calls its std happens to need, and `wasi_snapshot_preview1`
 /// is preview1's whole surface. `env` is two names, both from the runtime —
 /// `memory` for a threaded module, `__stack_chk_fail` from toolchains_llvm's
 /// unremovable `-fstack-protector`. The authority is `runtime_web.dart` and

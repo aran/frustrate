@@ -195,7 +195,7 @@ a missing flavour fails at Bazel load time naming the build command; missing
 headers fail when shared memory is instantiated. Nothing falls back to
 single-threaded.
 
-**wasi or custom-std facilities** (`wasm32_wasi` / `wasm32_custom`). You assert
+**wasi or the browser std** (`wasm32_wasip1` / `wasm32_browser_std`). You assert
 that the facilities you named are the ones your dependency graph reaches, which
 only an attempted build can reveal. `bazel/wasm_std_check` catches some misses
 afterwards but is a tripwire, not a proof — its source says which facilities it

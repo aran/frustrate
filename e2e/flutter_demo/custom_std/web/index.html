@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  The facility-std app's copy of ../web/index.html — see the comments there.
+  The browser-std app's copy of ../web/index.html — see the comments there.
   Identical posture: no policy in the source page (dwds needs an inline
   script for hot restart), the strict policy substituted into the bundle at
   the $FRUSTRATE_CSP marker by //custom_std:index_html.
@@ -8,7 +8,7 @@
   Unlike the threaded page this build needs no cross-origin isolation: it is
   stock single-threaded wasm that happens to link a std whose stubs call the
   host. Isolation only sharpens `performance.now()` (5 µs against 100 µs), and
-  the std-facility card reads a clock across real work rather than a tight
+  the browser-std card reads a clock across real work rather than a tight
   pair, so it is legible either way. Keep in sync.
 -->
 <html>

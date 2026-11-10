@@ -256,13 +256,13 @@ test('gallery: bridge init, every feature family, CSP + real workers', async ({
     await scrollUntil(page, /Splice @2/);
     await scrollUntil(page, /Mark bold=1/);
 
-    // --- The std facilities, absent: this is the STOCK web build, where
+    // --- The browser std, absent: this is the STOCK web build, where
     // std links the unsupported PAL and every reading is the -1 sentinel.
-    // The negative control for std_facilities.spec.js, which asserts the same
+    // The negative control for browser_std.spec.js, which asserts the same
     // card reads "present" with real values on //custom_std. Without this
     // pair, a card that silently rendered sentinels everywhere would still
-    // pass over there — the facility spec would be a gate that can only pass.
-    await scrollUntil(page, /facilities: absent/);
+    // pass over there — the browser-std spec would be a gate that can only pass.
+    await scrollUntil(page, /browser std: absent/);
     await scrollUntil(page, /std\.seed\s*=\s*-1/);
     await scrollUntil(page, /std\.cores\s*=\s*-1/);
 

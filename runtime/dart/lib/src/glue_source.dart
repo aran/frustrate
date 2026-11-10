@@ -20,10 +20,10 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
 (() => {
   // The three host answers std needs, in one place, because two callers want
   // them: the wasip1 shim below (where std asks through `wasi_snapshot_preview1`)
-  // and the `frustrate.*` facility imports (where a custom_std built with
-  // --facilities asks us directly). One implementation, so the two branches
+  // and the `frustrate.*` browser-std imports (where the browser std asks us
+  // directly). One implementation, so the two branches
   // cannot answer a question differently.
-  const hostFacilities = (getMemory) => {
+  const hostAnswers = (getMemory) => {
     const bytes = (ptr, len) => new Uint8Array(getMemory().buffer, ptr, len);
     const decoder = new TextDecoder();
     // Rust's formatting machinery emits one line in several writes, so a
@@ -75,9 +75,9 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
   // Always supplied: a module that was NOT built against a patched std simply
   // does not declare them, and WebAssembly ignores imports it was offered but
   // never asked for. So there is no configuration to get wrong here — the
-  // facilities are available iff the module's std asks for them.
-  const stdFacilityImports = (getMemory) => {
-    const h = hostFacilities(getMemory);
+  // browser std's calls are served iff the module's std asks for them.
+  const browserStdImports = (getMemory) => {
+    const h = hostAnswers(getMemory);
     return {
       now_monotonic_ns: () => h.monotonicNs(),
       now_wall_ns: () => h.wallNs(),
@@ -134,7 +134,7 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
   const wasiImports = (getMemory) => {
     const view = () => new DataView(getMemory().buffer);
     const bytes = (ptr, len) => new Uint8Array(getMemory().buffer, ptr, len);
-    const h = hostFacilities(getMemory);
+    const h = hostAnswers(getMemory);
     const unsupported = (name, detail) => () => {
       throw new Error('frustrate: the wasip1 host does not implement ' +
           name + (detail ? ' — ' + detail : '') + '.');
@@ -355,9 +355,9 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
     // import object) and from any app that instantiates a module itself.
     globalThis.$frustrateWasi = wasiImports;
     // The main instance's import object is built in Dart
-    // (runtime_web.dart); it takes the facility imports from here so
+    // (runtime_web.dart); it takes the browser-std imports from here so
     // all three instantiation sites serve one implementation.
-    globalThis.$frustrateStdFacilities = stdFacilityImports;
+    globalThis.$frustrateBrowserStd = browserStdImports;
     // Main thread: the JS-owned stack frame for bridge calls. Rust panics
     // trap (panic=abort), and a trap is uncatchable from inside another wasm
     // module — but a JS frame CAN catch it and rethrow it as a plain JS error,
@@ -457,7 +457,7 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
       // same linear memory the main thread does.
       wasi_snapshot_preview1: wasiImports(() => memory),
       frustrate: {
-        ...stdFacilityImports(() => memory),
+        ...browserStdImports(() => memory),
         post(callId, ptr, len, cap) {
           postMessage({ type: 'post', callId: Number(callId), ptr: Number(ptr),
                         len: Number(len), cap: Number(cap) });
@@ -612,7 +612,7 @@ const frustrateGlueSource = r'''// frustrate's web glue: the one JavaScript file
       // takes a getter rather than a memory.
       const imports = { wasi_snapshot_preview1: wasiImports(() => mem),
         frustrate: {
-        ...stdFacilityImports(() => mem),
+        ...browserStdImports(() => mem),
         post(callId, ptr, len, cap) {
           const view = new Uint8Array(mem.buffer, Number(ptr), Number(len));
           const copy = new Uint8Array(view);

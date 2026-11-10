@@ -64,15 +64,15 @@ platform(
 # available_parallelism and sleep.
 #
 # Single-threaded, so it keeps everything the default platform has -- module
-# size, no shared memory, no COOP/COEP requirement -- and adds the std
-# facilities. It costs a local build step and the pinned nightly.
+# size, no shared memory, no COOP/COEP requirement -- and adds those
+# calls. It costs a local build step and the pinned nightly.
 #
 # The nightly channel flag is not optional: rustc rejects an rlib built by a
 # different compiler (E0514), so the std and the app must share one, and the
 # flag propagates into exec configurations so proc-macros are nightly-built
 # too.
 platform(
-    name = "wasm32_custom",
+    name = "wasm32_browser_std",
     constraint_values = [
         "@platforms//cpu:wasm32",
         "@platforms//os:none",
@@ -95,17 +95,17 @@ constraint_value(
     visibility = ["//visibility:public"],
 )
 
-# The same, for the facility std (`wasm32_custom`).
-constraint_setting(name = "wasm_facility_std")
+# The same, for the browser std (`wasm32_browser_std`).
+constraint_setting(name = "wasm_browser_std")
 
 constraint_value(
-    name = "wasm_facility_std_staged",
-    constraint_setting = ":wasm_facility_std",
+    name = "wasm_browser_std_staged",
+    constraint_setting = ":wasm_browser_std",
     visibility = ["//visibility:public"],
 )
 
 # For select()s that must react to which std a wasm platform links (e.g.
-# :wasm_facility_std_build below, the one platform whose std has a clock and
+# :wasm_browser_std_build below, the one platform whose std has a clock and
 # entropy behind it).
 # frustrate-owned constraint: which std a wasm platform links. Default
 # `stock` so the plain :wasm32 platform -- and any platform() a consumer
@@ -136,7 +136,7 @@ constraint_value(
     visibility = ["//visibility:public"],
 )
 
-# For a dependency or feature that differs when the std is the *facility* one:
+# For a dependency or feature that differs when the std is the *browser* one:
 # a clock, entropy, console stdio, available_parallelism and sleep, all backed
 # by host calls. Composes with :wasm_build and :wasm_threads_build the same way.
 #
@@ -144,12 +144,12 @@ constraint_value(
 # trap.** :wasm32_threads is also a custom-std platform -- its +atomics std is
 # built the same way -- but the flavour it links is `atomics`, which replaces no
 # stubs at all. A select keyed on `wasm_std_custom` alone therefore fires on the
-# threaded build and tells it the facilities are present, and the failure lands
+# threaded build and tells it the browser std's calls are there, and the failure lands
 # far away: the code takes its real arm and `Instant::now()` panics inside std,
 # at runtime, in a Worker. Pinning threads *off* makes this match exactly the
-# one platform whose std actually has the facilities.
+# one platform whose std actually has them.
 config_setting(
-    name = "wasm_facility_std_build",
+    name = "wasm_browser_std_build",
     constraint_values = [
         ":wasm_std_custom",
         ":wasm_threads_disabled",
@@ -304,7 +304,7 @@ config_setting(
 # variant has had :wasm_threads_build since it existed; this is the plain case
 # it was missing.
 #
-# Matches every wasm platform frustrate ships (:wasm32, :wasm32_wasi,
+# Matches every wasm platform frustrate ships (:wasm32, :wasm32_wasip1,
 # :wasm32_threads) and any a consumer declares, because it keys on the cpu
 # constraint alone — the same open-vocabulary reasoning that keeps
 # frustrate_wasm_module free of a platform table. For "which wasm", compose:
@@ -330,7 +330,7 @@ config_setting(
 # the charter's no-wasm-bindgen rule a compile error rather than a policy —
 # and forecloses web-sys, which is the trade.
 platform(
-    name = "wasm32_wasi",
+    name = "wasm32_wasip1",
     constraint_values = [
         "@platforms//cpu:wasm32",
         "@platforms//os:wasi",

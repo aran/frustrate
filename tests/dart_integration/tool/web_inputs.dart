@@ -34,7 +34,7 @@ String webCompilerKey(String testCompiler) =>
 ///
 /// [inputs] is the runfiles path of the manifest `:web_test_inputs` writes;
 /// `bazel run` starts this binary in its runfiles. The default fixtures are
-/// runfiles. The `--threaded` and `--facilities` ones need a locally built std,
+/// runfiles. The `--threaded` and `--browser-std` ones need a locally built std,
 /// and as dependencies of this binary they would make every run need it, and
 /// `--release` ones are a different configuration of the same targets, so all
 /// of them are built here, after `bazel run` has released the workspace, and
@@ -46,7 +46,7 @@ Future<List<String>?> resolveInputs(
   String workspace, {
   required String compiler,
   required bool threaded,
-  required bool facilities,
+  required bool browserStd,
   required bool release,
 }) async {
   final manifest =
@@ -63,8 +63,8 @@ Future<List<String>?> resolveInputs(
   // else the fixture's own, built `-c opt` where `--release` asks.
   final variant = threaded
       ? manifest['threaded']
-      : facilities
-      ? manifest['facilities']
+      : browserStd
+      ? manifest['browserStd']
       : const <String, Object?>{};
   final labels = (manifest['labels'] as Map<String, Object?>)
       .cast<String, String>();

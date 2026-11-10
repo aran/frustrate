@@ -15,7 +15,7 @@
 ///   bazel run //tests/dart_integration:web_test -- --threaded   # threaded wasm
 ///   bazel run //tests/dart_integration:web_test -- test/bridge_test.dart
 ///
-/// `--threaded` selects the +atomics fixtures, and `--facilities` the one built
+/// `--threaded` selects the +atomics fixtures, and `--browser-std` the one built
 /// against a std whose stubs were replaced by host-backed implementations.
 /// Both need a locally staged std; see toolchain/custom_std. They are mutually
 /// exclusive. `--release` rebuilds the *Rust* half of the bridge fixture with
@@ -35,7 +35,7 @@ import 'web_inputs.dart';
 
 Future<void> main(List<String> args) async {
   final threaded = args.contains('--threaded');
-  final facilities = args.contains('--facilities');
+  final browserStd = args.contains('--browser-std');
   final release = args.contains('--release');
   final inputs = args
       .where((a) => a.startsWith('--inputs='))
@@ -46,18 +46,18 @@ Future<void> main(List<String> args) async {
         (a) =>
             a != '--threaded' &&
             a != '--release' &&
-            a != '--facilities' &&
+            a != '--browser-std' &&
             !a.startsWith('--inputs='),
       )
       .toList();
 
-  if (threaded && facilities) {
+  if (threaded && browserStd) {
     // Not a fundamental conflict -- an `atomics,clock,...` flavour is a
     // legitimate thing to build -- but the fixtures name one std each. Refused
     // rather than silently preferring one, because the suite reads the *value*
     // of the std probes to decide what it is running against.
     stderr.writeln(
-      'web_test: --threaded and --facilities together are not supported. '
+      'web_test: --threaded and --browser-std together are not supported. '
       'Run one flavour at a time.',
     );
     exit(2);
@@ -93,7 +93,7 @@ Future<void> main(List<String> args) async {
     packageDir,
     workspace,
     threaded: threaded,
-    facilities: facilities,
+    browserStd: browserStd,
     release: release,
     compiler: webCompilerKey(testCompiler),
   );

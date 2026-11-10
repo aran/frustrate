@@ -118,7 +118,7 @@ Future<void> main(List<String> args) async {
     packageDir,
     workspace,
     threaded: threaded,
-    facilities: false,
+    browserStd: false,
     release: true,
     compiler: 'wasm',
   );

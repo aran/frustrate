@@ -11,16 +11,16 @@ crate-type = ["cdylib", "rlib"]
 # Forwarded to the runtime: the threaded web transport.
 wasm-threads = ["frustrate/wasm-threads"]
 
-# The std facilities a custom_std provides. Purely
+# What the browser std provides. Purely
 # a *probe* switch: it adds no dependency and changes no bridged surface, it
-# only flips the std-facility probes below from their sentinel branch to the
-# real call. Set when the fixture is built against a facility std.
+# only flips the browser-std probes below from their sentinel branch to the
+# real call. Set when the fixture is built against the browser std.
 #
 # It has to be a feature rather than a cfg on the target, because the target
 # is the same one either way: wasm32-unknown-unknown with a stock std and
 # wasm32-unknown-unknown with a patched std are indistinguishable to `cfg`.
 # Bazel derives it from the platform (//tests/test_api:test_api_shared).
-wasm-std-facilities = []
+wasm-browser-std = []
 
 [dependencies]
 anyhow = "1"

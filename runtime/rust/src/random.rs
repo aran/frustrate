@@ -12,7 +12,7 @@
 //! namespace. **The glue serves it unconditionally at every instantiation site**
 //! — main instance, pool worker, actor worker — whatever std the module was
 //! built against and whichever wasm platform produced it
-//! (`runtime/dart/lib/src/js/frustrate.js`, `stdFacilityImports`, and the three
+//! (`runtime/dart/lib/src/js/frustrate.js`, `browserStdImports`, and the three
 //! call sites in `runtime_web.dart` / that file). So this needs no custom std,
 //! no wasm-bindgen, no `platform` change and no configuration; a module that
 //! never calls it declares no import and pays nothing.

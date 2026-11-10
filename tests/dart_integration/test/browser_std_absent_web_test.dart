@@ -1,14 +1,14 @@
-/// The negative control for `std_facilities_web_test.dart`.
+/// The negative control for `browser_std_web_test.dart`.
 ///
 /// That file skips every assertion when the probes return their sentinel, which
 /// is right — one fixture serves both flavours and it says at runtime which it
 /// is. But a suite where the interesting tests skip themselves can go green
-/// while the facility path is completely broken, and nobody would notice.
+/// while the browser-std path is completely broken, and nobody would notice.
 ///
 /// This asserts the other half: on a **stock** std the sentinels are still
 /// there. So the two files together distinguish three states that would
-/// otherwise look alike — facilities working, facilities absent (expected), and
-/// facilities present but broken.
+/// otherwise look alike — the browser std working, absent (expected), and
+/// present but broken.
 ///
 /// It is the same argument as the `//tests/bazel_rules:wasm_std_check_test`
 /// pair: a gate that can only pass is not a gate.
@@ -23,16 +23,16 @@ import 'init_web.dart';
 void main() {
   setUpAll(initBridge);
 
-  test('a stock-std fixture reports the sentinel for every facility', () {
+  test('a stock-std fixture reports the sentinel for every probe', () {
     if (stdClockMicros() != -1) {
       markTestSkipped(
-        'this fixture has std facilities; the assertions in '
-        'std_facilities_web_test.dart are the ones that apply',
+        'this fixture is built on the browser std; the assertions in '
+        'browser_std_web_test.dart are the ones that apply',
       );
       return;
     }
 
-    // All of them, not just the one the skip keyed on: a facility set that
+    // All of them, not just the one the skip keyed on: a browser std that
     // half-linked — say a clock but no stdio — is exactly the state this pair
     // exists to make visible.
     expect(stdClockMicros(), -1, reason: 'SystemTime');

@@ -1,4 +1,4 @@
-# The demo on a facility std: the SAME bridge crate and the SAME lib/main.dart
+# The demo on the browser std: the SAME bridge crate and the SAME lib/main.dart
 # as the default app at //:app_web, with only the wasm module built differently.
 #
 # What differs from //threaded is which std, not how much of it: this is stock
@@ -13,7 +13,7 @@
 # package's prefix, so it lands at the site root) and output names are target
 # names — two targets named demo_rust.wasm cannot share a package.
 #
-# Tagged manual: the facility std is built locally, and //:app_web must stay
+# Tagged manual: the browser std is built locally, and //:app_web must stay
 # buildable without it. Run, in the frustrate repo:
 #
 #   bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread
@@ -23,12 +23,12 @@ load("@rules_flutter//flutter:web.bzl", "flutter_web_bundle", "flutter_web_manif
 load("//:web_csp.bzl", "strict_csp_index_html")
 
 # The platform is what selects the toolchain, the std, AND the crate feature
-# that tells the probes the facilities are there (//bridge:demo_rust's
+# that tells the probes the browser std is there (//bridge:demo_rust's
 # crate_features select) — one constraint set, so the three cannot disagree.
 frustrate_wasm_module(
     name = "demo_rust.wasm",
     library = "//bridge:demo_rust",
-    platform = "@frustrate//bazel:wasm32_custom",
+    platform = "@frustrate//bazel:wasm32_browser_std",
     tags = ["manual"],
 )
 
@@ -44,7 +44,7 @@ flutter_native_library(
 )
 
 # Same served-glue + strict-CSP story as the root app (see //:frustrate.js).
-# The glue is also what *serves* the facilities: a module built against this
+# The glue is also what *serves* the browser std's calls: a module built against this
 # std imports frustrate.now_monotonic_ns and friends, and this file answers
 # them. Unconditionally — a stock module declares none of those imports, and
 # instantiation only looks up what a module declares.

@@ -92,7 +92,7 @@ void main() {
     test('names the platform attribute that fixes it', () {
       // The charter's bar for an undeclared hazard: the build error names the
       // opt-in and its contract, not just the symptom.
-      expect(err, contains('platform = "@frustrate//bazel:wasm32_wasi"'));
+      expect(err, contains('platform = "@frustrate//bazel:wasm32_wasip1"'));
     });
 
     test('names the target, so the failure is attributable', () {
@@ -133,7 +133,7 @@ void main() {
             'probe.wasm, but on wasm32-wasip1 they are genuinely served. A '
             'failure here means the check is keying on the symbol alone '
             'rather than on the absence of a host behind it, which would '
-            'make //bazel:wasm32_wasi unusable.\n$err',
+            'make //bazel:wasm32_wasip1 unusable.\n$err',
       );
     });
   });

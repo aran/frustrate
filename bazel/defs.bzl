@@ -763,7 +763,7 @@ frustrate_wasm_module = rule(
                   "charter's default web execution model. Add the " +
                   "`bindgen` attribute to this one when the crate graph " +
                   "reaches a browser API from Rust.\n" +
-                  "  * //bazel:wasm32_wasi — triple wasm32-wasip1, stable " +
+                  "  * //bazel:wasm32_wasip1 — triple wasm32-wasip1, stable " +
                   "Rust, one build step. The branch for a graph that needs " +
                   "std facilities wasm32-unknown-unknown has no host for: " +
                   "`SystemTime::now`, `Instant::now`, `getrandom`, " +
@@ -887,7 +887,7 @@ frustrate_wasm_module = rule(
                   "`SystemTime::now()` compiles and then traps at run time, " +
                   "and `println!` accepts the write and discards it — no " +
                   "output, no trap, no error. Both work on " +
-                  "//bazel:wasm32_wasi, and the build error names it.\n\n" +
+                  "//bazel:wasm32_wasip1, and the build error names it.\n\n" +
                   "The check reads the module's own import section rather " +
                   "than comparing platform labels, so a platform() you " +
                   "declare yourself is judged by what its std actually " +

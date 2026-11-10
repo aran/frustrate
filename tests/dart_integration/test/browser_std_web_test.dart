@@ -1,17 +1,17 @@
-/// The std facilities, in a browser: a clock, entropy, console stdio,
+/// The browser std, in a browser: a clock, entropy, console stdio,
 /// `available_parallelism` and `sleep`, all reached through **std's own APIs**
 /// from Rust that does not know it is on wasm.
 ///
-/// Requires a fixture built against a facility std:
+/// Requires a fixture built against the browser std:
 ///
 ///     bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread
-///     bazel run //tests/dart_integration:web_test -- --facilities
+///     bazel run //tests/dart_integration:web_test -- --browser-std
 ///
 /// Every test here gates on the probe's own return value rather than on a flag,
 /// the same shape the threaded tests use with `asyncIsParallel`: the fixture is
 /// one build and says at runtime what it is. `-1` is the sentinel for "this std
 /// has no such facility", so a default single-threaded run skips instead of
-/// failing — and `std_facilities_absent_web_test.dart` asserts the sentinels are
+/// failing — and `browser_std_absent_web_test.dart` asserts the sentinels are
 /// still there, which is what keeps "not linked" distinguishable from "broken".
 ///
 /// **Clock resolution is a property of the page, and this page is the coarse
@@ -56,7 +56,7 @@ List<String> _captureConsole(void Function() body) {
   return seen;
 }
 
-/// Declares a test that runs only against a fixture built with a facility std.
+/// Declares a test that runs only against a fixture built with the browser std.
 ///
 /// The gate reads the probe rather than a build flag: one fixture, one path,
 /// self-describing at runtime — the same shape the pool tests use with
@@ -68,12 +68,12 @@ List<String> _captureConsole(void Function() body) {
 /// red on a stock fixture while reporting the test as skipped. Every other file
 /// in this suite writes `markTestSkipped(...); return;` inline and cannot forget
 /// the second half; a shared helper can, so it owns the return instead.
-void facilityTest(String name, FutureOr<void> Function() body) {
+void browserStdTest(String name, FutureOr<void> Function() body) {
   test(name, () async {
     if (stdClockMicros() == -1) {
       markTestSkipped(
-        'fixture has no std facilities; build it with '
-        '`bazel run //tests/dart_integration:web_test -- --facilities`',
+        'fixture is not built on the browser std; build it with '
+        '`bazel run //tests/dart_integration:web_test -- --browser-std`',
       );
       return;
     }
@@ -84,7 +84,7 @@ void facilityTest(String name, FutureOr<void> Function() body) {
 void main() {
   setUpAll(initBridge);
 
-  facilityTest('SystemTime::now agrees with the page clock', () {
+  browserStdTest('SystemTime::now agrees with the page clock', () {
     final rust = stdClockMicros();
     final dart = DateTime.now().microsecondsSinceEpoch;
     expect(rust, greaterThan(0));
@@ -98,7 +98,7 @@ void main() {
     );
   });
 
-  facilityTest('Instant::now is monotonic across real work', () {
+  browserStdTest('Instant::now is monotonic across real work', () {
     // Never a tight pair: at 100 us resolution on a non-isolated page two
     // adjacent reads legitimately return the same value. What must hold is
     // that it never goes *backwards*, over enough work to exceed a tick.
@@ -116,20 +116,20 @@ void main() {
     expect(previous, greaterThanOrEqualTo(0));
   });
 
-  facilityTest('println! reaches console.log, one entry per line', () {
+  browserStdTest('println! reaches console.log, one entry per line', () {
     late int written;
     final lines = _captureConsole(() {
-      written = stdPrintln(msg: 'facility probe: hello from rust');
+      written = stdPrintln(msg: 'browser std probe: hello from rust');
     });
     expect(
       written,
       greaterThan(0),
       reason: 'std reported writing nothing; stdout is still the stub',
     );
-    expect(lines, contains('facility probe: hello from rust'));
+    expect(lines, contains('browser std probe: hello from rust'));
   });
 
-  facilityTest('HashMap seeding does not panic and is not the sentinel', () {
+  browserStdTest('HashMap seeding does not panic and is not the sentinel', () {
     // Within one instance this only proves the CSPRNG path is reachable — std
     // caches the keys per thread, so a second read here is the same seed by
     // construction. That the seed *differs between instantiations*, which is
@@ -138,7 +138,7 @@ void main() {
     expect(stdHashSeed(), greaterThan(0));
   });
 
-  facilityTest('available_parallelism reports the machine', () {
+  browserStdTest('available_parallelism reports the machine', () {
     final rust = stdParallelism();
     final js = globalContext
         .getProperty<JSObject>('navigator'.toJS)
@@ -155,7 +155,7 @@ void main() {
     expect(rust, greaterThanOrEqualTo(1));
   });
 
-  facilityTest('thread::sleep is refused on the main thread', () {
+  browserStdTest('thread::sleep is refused on the main thread', () {
     // The contract, not a bug: the main thread must never wait on a
     // synchronization primitive, so the host throws rather than freezing the
     // page, and the throw crosses back attributably.
@@ -166,7 +166,7 @@ void main() {
     );
   });
 
-  facilityTest(
+  browserStdTest(
     'thread::sleep works on an actor, where waiting is legal',
     () async {
       final miner = await Miner.new_(label: 'sleeper');

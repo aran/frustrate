@@ -92,7 +92,7 @@ frustrate_wasm_module(
 frustrate_wasm_module(
     name = "fixture_wasi.wasm",
     library = ":fixture_shared",
-    platform = "//bazel:wasm32_wasi",
+    platform = "//bazel:wasm32_wasip1",
 )
 
 # The wasm-opt pass, integrated. Same crate and same platform as
@@ -247,7 +247,7 @@ build_test(
     targets = [":fixture.wasm"],
 )
 
-# platform = //bazel:wasm32_wasi contract: the same crate builds for
+# platform = //bazel:wasm32_wasip1 contract: the same crate builds for
 # wasm32-wasip1 and the single-.wasm extraction still produces the module —
 # i.e. the platform resolves a toolchain, the crate universe resolves the
 # triple (a triple missing from supported_platform_triples would surface here
@@ -304,7 +304,7 @@ build_test(
     targets = [":fixture_threaded.wasm"],
 )
 
-# platform = //bazel:wasm32_custom: stock single-threaded wasm32, but linking a
+# platform = //bazel:wasm32_browser_std: stock single-threaded wasm32, but linking a
 # std whose stubs have been replaced by host-backed implementations. Same
 # manual/never-checked-in reasoning as the
 # threaded fixture above -- the artifacts come from
@@ -316,16 +316,16 @@ build_test(
 # other two platforms offers, so if constraint resolution were ambiguous this
 # would build against the wrong std and fail to link.
 frustrate_wasm_module(
-    name = "fixture_custom.wasm",
+    name = "fixture_browser_std.wasm",
     library = ":fixture_shared",
-    platform = "//bazel:wasm32_custom",
+    platform = "//bazel:wasm32_browser_std",
     tags = ["manual"],
 )
 
 build_test(
-    name = "wasm_module_custom_build_test",
+    name = "wasm_module_browser_std_build_test",
     tags = ["manual"],
-    targets = [":fixture_custom.wasm"],
+    targets = [":fixture_browser_std.wasm"],
 )
 
 # frustrate_no_block_check contract: the same crate under every analysis. Each
@@ -398,13 +398,13 @@ frustrate_wasm_module(
 )
 
 # The positive control, and the half that keeps the check honest: the very same
-# source on //bazel:wasm32_wasi, where std is served. This one is left with the
+# source on //bazel:wasm32_wasip1, where std is served. This one is left with the
 # check ON, so if the import-keyed logic ever stopped recognising a served
 # platform, `bazel build //...` would go red here rather than in an app.
 frustrate_wasm_module(
     name = "probe_wasi.wasm",
     library = ":probe_shared",
-    platform = "//bazel:wasm32_wasi",
+    platform = "//bazel:wasm32_wasip1",
 )
 
 # The same crate with its symbols stripped — the module the scanner must refuse

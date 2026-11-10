@@ -216,15 +216,15 @@ test('threaded: served COOP/COEP, pool parallelism, actors intact', async ({
     await clickButton(page, 'read now');
     await expectText(page, /blockingRead is not available on web/);
 
-    // The std facilities are absent HERE TOO, and that is the interesting
+    // The browser std is absent HERE TOO, and that is the interesting
     // case: this build does link a locally built std, but the `atomics`
     // flavour replaces no stubs — it only turns on shared memory. So the
     // readings must still be sentinels. If they were not, the crate feature
     // would be leaking onto a platform whose std cannot honour it, and
     // Instant::now() would panic inside std in a Worker rather than report
-    // -1. That is the exact failure //bazel:wasm_facility_std_build's
+    // -1. That is the exact failure //bazel:wasm_browser_std_build's
     // wasm_threads_disabled constraint exists to prevent, asserted end to end.
-    await scrollUntil(page, /facilities: absent/);
+    await scrollUntil(page, /browser std: absent/);
     await scrollUntil(page, /std\.seed\s*=\s*-1/);
 
     await page.screenshot({ path: '/tmp/demo_web_threaded.png' });

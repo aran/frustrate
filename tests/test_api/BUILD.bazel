@@ -79,14 +79,14 @@ rust_shared_library(
         "src/shapes.rs",
         ":bridge.rs",
     ],
-    # The std-facility probes (api.rs, "the standard library on web") need to
+    # The browser-std probes (api.rs, "the standard library on web") need to
     # know whether the std being linked has its stubs replaced, and the target
     # cannot tell them apart: stock and patched are both wasm32-unknown-unknown.
     # Deriving the feature from the constraints the toolchain resolves on
-    # means a module built against a facility std always has it, and one built
+    # means a module built against the browser std always has it, and one built
     # against the stock or the +atomics std never does.
     crate_features = select({
-        "//bazel:wasm_facility_std_build": ["wasm-std-facilities"],
+        "//bazel:wasm_browser_std_build": ["wasm-browser-std"],
         "//conditions:default": [],
     }),
     edition = "2021",
@@ -162,15 +162,15 @@ frustrate_wasm_module(
     visibility = ["//tests:__subpackages__"],
 )
 
-# The facility-std fixture: single-threaded, linked against a std whose stubs
+# The browser-std fixture: single-threaded, linked against a std whose stubs
 # ask the host for a clock, entropy, console stdio, available_parallelism and
 # sleep (run `bazel run //toolchain/custom_std:build --
 # --facilities=clock,random,stdio,thread` first). Tagged manual for the same
 # reason as the threaded one.
 frustrate_wasm_module(
-    name = "test_api_facilities.wasm",
+    name = "test_api_browser_std.wasm",
     library = ":test_api_shared",
-    platform = "//bazel:wasm32_custom",
+    platform = "//bazel:wasm32_browser_std",
     tags = ["manual"],
     visibility = ["//tests:__subpackages__"],
 )

@@ -63,7 +63,7 @@ flutter_macos_app(
 frustrate_wasm_module(
     name = "wasi_rust.wasm",
     library = "//bridge:wasi_rust",
-    platform = "@frustrate//bazel:wasm32_wasi",
+    platform = "@frustrate//bazel:wasm32_wasip1",
 )
 
 # The served glue. Same file on every platform — it carries frustrate's four

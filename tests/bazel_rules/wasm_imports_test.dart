@@ -43,7 +43,7 @@ import 'package:test/test.dart';
 /// `spawn_worker` appears only under the threaded platform.
 ///
 /// This is the *bridge* ABI. A module built against a custom std imports more
-/// from the same namespace — see [_stdFacilities], which is read out of the
+/// from the same namespace — see [_browserStdImports], which is read out of the
 /// glue rather than restated here for the same reason [_shimImplements] is.
 const Set<String> _frustrateAbi = {
   'panic',
@@ -65,25 +65,25 @@ Set<String> _facilityImports(String dart) =>
         .map((m) => m.group(1)!)
         .toSet();
 
-/// The std-facility imports the glue serves, parsed out of the
-/// `stdFacilityImports` factory in `frustrate.js`.
+/// The browser-std imports the glue serves, parsed out of the
+/// `browserStdImports` factory in `frustrate.js`.
 ///
 /// Read rather than restated, exactly like [_shimImplements]: these names are a
 /// contract between a std built by `toolchain/custom_std` and the host, and a
 /// list maintained by hand here would drift the first time a facility is added
 /// — silently, because a drifted allowlist only ever makes this test *more*
 /// permissive.
-Set<String> _stdFacilities(String js) {
-  final open = js.indexOf('const stdFacilityImports = (getMemory) => {');
+Set<String> _browserStdImports(String js) {
+  final open = js.indexOf('const browserStdImports = (getMemory) => {');
   expect(
     open,
     isNot(-1),
     reason:
-        'frustrate.js no longer has a `stdFacilityImports` factory; this '
+        'frustrate.js no longer has a `browserStdImports` factory; this '
         'test reads its members as the custom-std allowlist',
   );
   final close = js.indexOf('\n    };', open);
-  expect(close, isNot(-1), reason: 'unterminated `stdFacilityImports` factory');
+  expect(close, isNot(-1), reason: 'unterminated `browserStdImports` factory');
   final body = js.substring(open, close);
   final names = RegExp(
     r'^      ([a-z_0-9]+)\s*[(:]',
@@ -92,7 +92,7 @@ Set<String> _stdFacilities(String js) {
   expect(
     names,
     isNotEmpty,
-    reason: 'parsed no members out of `stdFacilityImports`',
+    reason: 'parsed no members out of `browserStdImports`',
   );
   return names;
 }
@@ -201,12 +201,12 @@ Set<String> _shimImplements(String js) {
 
 void main() {
   late Set<String> implemented;
-  late Set<String> facilities;
+  late Set<String> browserStd;
   setUpAll(() {
     final js = File(_rlocation('runtime/dart/lib/src/js/frustrate.js'))
         .readAsStringSync();
     implemented = _shimImplements(js);
-    facilities = _stdFacilities(js);
+    browserStd = _browserStdImports(js);
   });
 
   List<({String module, String name})> importsOf(String target) =>
@@ -238,7 +238,7 @@ void main() {
         isEmpty,
         reason:
             'wasm32-unknown-unknown must not reach wasi; if this crate '
-            'now needs a working std, it belongs on //bazel:wasm32_wasi',
+            'now needs a working std, it belongs on //bazel:wasm32_wasip1',
       );
     });
   });
@@ -263,13 +263,13 @@ void main() {
         reason: 'parsed no `imports:` entries out of patch.dart',
       );
       expect(
-        declared.difference(facilities),
+        declared.difference(browserStd),
         isEmpty,
         reason:
             'a facility in toolchain/custom_std declares a host import '
             'that frustrate.js does not serve. A module built against that '
             'std fails to instantiate — LinkError, in the browser, naming '
-            'the import. Add it to stdFacilityImports.',
+            'the import. Add it to browserStdImports.',
       );
     });
 
@@ -279,19 +279,19 @@ void main() {
             .readAsStringSync(),
       );
       expect(
-        facilities.difference(declared),
+        browserStd.difference(declared),
         isEmpty,
         reason:
-            'frustrate.js serves a std facility import that no facility '
+            'frustrate.js serves a browser-std import that no facility '
             'declares. Either a facility lost its `imports:` entry — in '
             'which case the manifest now under-reports what a module needs '
             '— or the glue has a member nothing will ever call.',
       );
     });
 
-    test('facility imports do not collide with the bridge ABI', () {
+    test('browser-std imports do not collide with the bridge ABI', () {
       expect(
-        facilities.intersection(_frustrateAbi),
+        browserStd.intersection(_frustrateAbi),
         isEmpty,
         reason:
             'both sets live in the `frustrate` import namespace, so a '

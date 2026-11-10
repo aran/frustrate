@@ -59,7 +59,7 @@ def _web_test_inputs_impl(ctx):
         "fixtures": fixtures,
         "labels": labels,
         "threaded": ctx.attr.threaded,
-        "facilities": ctx.attr.facilities,
+        "browserStd": ctx.attr.browser_std,
         "release": ctx.attr.release,
         "tests": tests,
     }))
@@ -118,8 +118,8 @@ web_test_inputs = rule(
                   "dependencies: those targets need the locally built " +
                   "+atomics std, so the driver builds them only when asked.",
         ),
-        "facilities": attr.string_dict(
-            doc = "Like `threaded`, for the driver's `--facilities`: the " +
+        "browser_std": attr.string_dict(
+            doc = "Like `threaded`, for the driver's `--browser-std`: the " +
                   "targets built against the std whose stubs ask the host, " +
                   "which needs that std staged locally.",
         ),

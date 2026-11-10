@@ -399,13 +399,13 @@ impl Prospector {
     /// burns this worker's core for the duration. That is the honest cost of
     /// the facility, not a shortcut around it.
     pub fn nap(&mut self, millis: i64) -> i64 {
-        #[cfg(any(not(target_family = "wasm"), feature = "std-facilities"))]
+        #[cfg(any(not(target_family = "wasm"), feature = "browser-std"))]
         {
             let start = std::time::Instant::now();
             std::thread::sleep(std::time::Duration::from_millis(millis.max(0) as u64));
             start.elapsed().as_millis() as i64
         }
-        #[cfg(all(target_family = "wasm", not(feature = "std-facilities")))]
+        #[cfg(all(target_family = "wasm", not(feature = "browser-std")))]
         {
             let _ = millis;
             -1
@@ -668,10 +668,10 @@ pub fn bump_plan(p: FakePlanMsg) -> FakePlanMsg {
 // on every target; only the returned *value* says whether std could do the
 // work. `-1` is the sentinel for "this std has no such facility". That is what
 // lets one lib/main.dart render the same card everywhere and report honestly:
-// real numbers on macOS and on a facility web build, sentinels on the default
+// real numbers on macOS and on a browser-std web build, sentinels on the default
 // one, with the card itself explaining the difference.
 //
-// The `std-facilities` feature is what distinguishes the two web builds, and it
+// The `browser-std` feature is what distinguishes the two web builds, and it
 // has to be a feature rather than a target check: stock and patched std are
 // both wasm32-unknown-unknown. bridge/BUILD.bazel sets it from the platform's
 // wasm_std constraint, so it cannot disagree with the std being linked.
@@ -679,14 +679,14 @@ pub fn bump_plan(p: FakePlanMsg) -> FakePlanMsg {
 /// Whether this build can do any of the below — so the UI can say why the
 /// numbers are sentinels instead of just showing -1.
 #[bridge(sync)]
-pub fn std_facilities_present() -> bool {
-    cfg!(any(not(target_family = "wasm"), feature = "std-facilities"))
+pub fn browser_std_present() -> bool {
+    cfg!(any(not(target_family = "wasm"), feature = "browser-std"))
 }
 
 /// Micros since the Unix epoch from `SystemTime::now()`, or -1.
 #[bridge(sync)]
 pub fn std_wall_micros() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), feature = "std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), feature = "browser-std"))]
     {
         use std::time::{SystemTime, UNIX_EPOCH};
         SystemTime::now()
@@ -694,7 +694,7 @@ pub fn std_wall_micros() -> i64 {
             .map(|d| d.as_micros() as i64)
             .unwrap_or(-1)
     }
-    #[cfg(all(target_family = "wasm", not(feature = "std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(feature = "browser-std")))]
     {
         -1
     }
@@ -708,13 +708,13 @@ pub fn std_wall_micros() -> i64 {
 /// 5 µs; a page that does not still shows a sensible number here.
 #[bridge(sync)]
 pub fn std_monotonic_nanos() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), feature = "std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), feature = "browser-std"))]
     {
         let start = std::time::Instant::now();
         std::hint::black_box(brute_force_nth_prime(200));
         start.elapsed().as_nanos() as i64
     }
-    #[cfg(all(target_family = "wasm", not(feature = "std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(feature = "browser-std")))]
     {
         -1
     }
@@ -731,7 +731,7 @@ pub fn std_monotonic_nanos() -> i64 {
 /// Within one page load this only shows the path is reachable — std caches the
 /// keys per thread, so reading twice here returns the same number by
 /// construction. That the seed differs *between* loads is the property that
-/// matters, and it takes two page loads: playwright/std_facilities.spec.js.
+/// matters, and it takes two page loads: playwright/browser_std.spec.js.
 ///
 /// Deliberately not `getrandom`: it refuses to compile for
 /// wasm32-unknown-unknown at all, which would take the default web build with
@@ -739,7 +739,7 @@ pub fn std_monotonic_nanos() -> i64 {
 /// the std a crate already calls.
 #[bridge(sync)]
 pub fn std_random_u64() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), feature = "std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), feature = "browser-std"))]
     {
         use std::collections::hash_map::RandomState;
         use std::hash::{BuildHasher, Hasher};
@@ -749,7 +749,7 @@ pub fn std_random_u64() -> i64 {
         // never be able to produce it.
         (h.finish() >> 1) as i64
     }
-    #[cfg(all(target_family = "wasm", not(feature = "std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(feature = "browser-std")))]
     {
         -1
     }
@@ -763,13 +763,13 @@ pub fn std_random_u64() -> i64 {
 /// `ActorPool`, which can genuinely use the width.
 #[bridge(sync)]
 pub fn std_cores() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), feature = "std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), feature = "browser-std"))]
     {
         std::thread::available_parallelism()
             .map(|n| n.get() as i64)
             .unwrap_or(-1)
     }
-    #[cfg(all(target_family = "wasm", not(feature = "std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(feature = "browser-std")))]
     {
         -1
     }
@@ -778,17 +778,17 @@ pub fn std_cores() -> i64 {
 /// `println!`, returning the bytes std reported writing, or 0 where stdout is
 /// the stub that accepts a write and discards it.
 ///
-/// On a facility build this reaches `console.log`, one entry per line — the
+/// On a browser-std build this reaches `console.log`, one entry per line — the
 /// host buffers per stream until a newline, so a `println!` arrives whole
 /// rather than split across writes.
 #[bridge(sync)]
 pub fn std_console_write(msg: String) -> i64 {
-    #[cfg(any(not(target_family = "wasm"), feature = "std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), feature = "browser-std"))]
     {
         println!("{msg}");
         msg.len() as i64 + 1
     }
-    #[cfg(all(target_family = "wasm", not(feature = "std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(feature = "browser-std")))]
     {
         let _ = msg;
         0

@@ -102,7 +102,7 @@ class GalleryPage extends StatelessWidget {
           _PlanCodecCard(),
           _PatchInspectorCard(),
           _SectionHeader('The standard library on web'),
-          _StdFacilitiesCard(),
+          _BrowserStdCard(),
           _SectionHeader('Watching the bridge'),
           _CallTraceCard(),
           _RustLogCard(),
@@ -1327,25 +1327,25 @@ class _PatchInspectorCardState extends State<_PatchInspectorCard> {
 
 // ============================================== the standard library on web ==
 
-class _StdFacilitiesCard extends StatefulWidget {
-  const _StdFacilitiesCard();
+class _BrowserStdCard extends StatefulWidget {
+  const _BrowserStdCard();
   @override
-  State<_StdFacilitiesCard> createState() => _StdFacilitiesCardState();
+  State<_BrowserStdCard> createState() => _BrowserStdCardState();
 }
 
 /// Five things ordinary Rust does that `wasm32-unknown-unknown` cannot: read a
 /// clock, get entropy, print, count cores, sleep. This card renders on every
 /// target and reports honestly on each — real numbers on macOS and on a
-/// facility web build, `-1` on the default one — because the point is the
-/// *difference*, and a card that vanished on the builds without the facilities
+/// browser-std web build, `-1` on the default one — because the point is the
+/// *difference*, and a card that vanished on the builds without the browser std
 /// would hide exactly what it exists to show.
 ///
 /// The four readings are taken in `initState` rather than behind a button: they
 /// are sync, cheap, and the entropy one has to be on the page at load for
-/// std_facilities.spec.js to compare seeds across two loads. `println!` and the
+/// browser_std.spec.js to compare seeds across two loads. `println!` and the
 /// nap have side effects, so those stay buttons.
-class _StdFacilitiesCardState extends State<_StdFacilitiesCard> {
-  late final bool _present = stdFacilitiesPresent();
+class _BrowserStdCardState extends State<_BrowserStdCard> {
+  late final bool _present = browserStdPresent();
   late final int _wall = stdWallMicros();
   late final int _mono = stdMonotonicNanos();
   late final int _seed = stdRandomU64();
@@ -1357,7 +1357,7 @@ class _StdFacilitiesCardState extends State<_StdFacilitiesCard> {
   bool _napping = false;
 
   void _println() {
-    // Goes to the devtools console on a facility build, through std's own
+    // Goes to the devtools console on a browser-std build, through std's own
     // `println!`. On the default web build std's stdout accepts the write and
     // discards it, and this returns 0 — silence, not an error, which is the
     // failure mode worth seeing.
@@ -1389,7 +1389,7 @@ class _StdFacilitiesCardState extends State<_StdFacilitiesCard> {
 
   @override
   Widget build(BuildContext context) {
-    // One line per facility, `name = value`, so the Playwright spec can read
+    // One line per reading, `name = value`, so the Playwright spec can read
     // them straight out of the aria snapshot.
     final readings = [
       'std.wall  = $_wall',
@@ -1408,13 +1408,13 @@ class _StdFacilitiesCardState extends State<_StdFacilitiesCard> {
               'std\'s own APIs work — in Rust that does not know it is on wasm.'
           : 'This build links the stock std, where these have no OS behind '
               'them: -1 is the sentinel for "no such facility". Build the '
-              'module on @frustrate//bazel:wasm32_custom to see real values.',
+              'module on @frustrate//bazel:wasm32_browser_std to see real values.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'facilities: ${_present ? 'present' : 'absent'}',
-            key: const Key('stdFacilitiesPresent'),
+            'browser std: ${_present ? 'present' : 'absent'}',
+            key: const Key('browserStdPresent'),
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: _present
@@ -1425,7 +1425,7 @@ class _StdFacilitiesCardState extends State<_StdFacilitiesCard> {
           const SizedBox(height: 8),
           Text(
             readings,
-            key: const Key('stdFacilities'),
+            key: const Key('browserStd'),
             style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -1595,7 +1595,7 @@ class _CallTrace {
     if (_publishScheduled) return;
     _publishScheduled = true;
     // A bridge call can happen *during a build*: `_GreetingCard` calls `greet`
-    // straight out of `build`, and the std-facility card's readings are `late
+    // straight out of `build`, and the browser-std card's readings are `late
     // final` fields first read there. Moving a `ValueNotifier` at that moment
     // is "markNeedsBuild called during build", so the notifier moves on a
     // microtask instead — Flutter's build/layout/paint pass is synchronous

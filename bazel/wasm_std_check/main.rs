@@ -15,7 +15,7 @@
 //!   `Ok(len)` without writing, so the call succeeds, produces nothing, and
 //!   nothing anywhere reports it. Measured: no output, no trap, no error.
 //!
-//! Both have a fix that already works — build for `//bazel:wasm32_wasi`, where
+//! Both have a fix that already works — build for `//bazel:wasm32_wasip1`, where
 //! the facilities are genuinely served. This
 //! tool is what points at it, at build time, without the author having to know
 //! the failure mode first.
@@ -28,7 +28,7 @@
 //! Keying on the module's own imports rather than on a platform label is what
 //! keeps this rule free of a platform table. `frustrate_wasm_module` documents
 //! that any `platform()` works, including one a consumer declares; a check that
-//! compared against `//bazel:wasm32_wasi` by name would quietly not apply to
+//! compared against `//bazel:wasm32_wasip1` by name would quietly not apply to
 //! those. A module that imports `clock_time_get` has a clock behind
 //! `SystemTime::now` whatever platform produced it, and one that does not, does
 //! not.
@@ -297,7 +297,7 @@ fn run(path: &str, label: &str, allowed: &[String]) -> Result<(), String> {
          \x20   frustrate_wasm_module(\n\
          \x20       name = \"...\",\n\
          \x20       crate = \"...\",\n\
-         \x20       platform = \"@frustrate//bazel:wasm32_wasi\",\n\
+         \x20       platform = \"@frustrate//bazel:wasm32_wasip1\",\n\
          \x20   )\n\
          \n\
          \x20  It costs module size and rules out web-sys, which is why it is not \
@@ -455,14 +455,14 @@ mod tests {
         let e = check(&[PANIC, SYSTEM_TIME_NOW], &[]).unwrap_err();
         assert!(e.contains("std::time::SystemTime::now"), "{e}");
         assert!(e.contains("traps at run time"), "{e}");
-        assert!(e.contains("//bazel:wasm32_wasi"), "{e}");
+        assert!(e.contains("//bazel:wasm32_wasip1"), "{e}");
         assert!(e.contains("//pkg:target.wasm"), "{e}");
     }
 
     #[test]
     fn system_time_with_a_clock_behind_it_passes() {
         // The wasi platform: same symbol, but the module imports a clock. This
-        // is the half that keeps //bazel:wasm32_wasi green without the rule
+        // is the half that keeps //bazel:wasm32_wasip1 green without the rule
         // holding a platform table.
         assert!(check(
             &[PANIC, SYSTEM_TIME_NOW],
@@ -539,7 +539,7 @@ mod tests {
     #[test]
     fn the_message_names_both_ways_to_get_a_clock() {
         let e = check(&[PANIC, SYSTEM_TIME_NOW], &[]).unwrap_err();
-        assert!(e.contains("//bazel:wasm32_wasi"), "{e}");
+        assert!(e.contains("//bazel:wasm32_wasip1"), "{e}");
         assert!(e.contains("--facilities"), "{e}");
     }
 

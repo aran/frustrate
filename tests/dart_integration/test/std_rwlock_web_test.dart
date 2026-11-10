@@ -4,7 +4,7 @@
 /// `rtabort!`, which bypasses the panic hook and so carries no message.
 ///
 ///     bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread
-///     bazel run //tests/dart_integration:web_test -- --facilities test/std_rwlock_web_test.dart
+///     bazel run //tests/dart_integration:web_test -- --browser-std test/std_rwlock_web_test.dart
 ///
 /// On any other fixture the probes return -1 and every test here skips. The
 /// actor test runs first because a panic leaves its wasm instance's Rust state
@@ -32,7 +32,7 @@ void main() {
     if (stdParkAfterUnpark() != -1) return false;
     markTestSkipped(
       'fixture is not a single-threaded custom std; build it with '
-      '`bazel run //tests/dart_integration:web_test -- --facilities`',
+      '`bazel run //tests/dart_integration:web_test -- --browser-std`',
     );
     return true;
   }

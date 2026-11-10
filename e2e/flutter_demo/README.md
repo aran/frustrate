@@ -158,7 +158,7 @@ withheld-reload-on-a-Rust-edit behaviour, because each names its module through
 its own `flutter_native_library` wrapper.
 
 Each has a Playwright spec beside `web.spec.js`; run one with
-`cd playwright && npx playwright test std_facilities.spec.js`.
+`cd playwright && npx playwright test browser_std.spec.js`.
 
 ## Notes
 

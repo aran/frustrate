@@ -26,14 +26,14 @@ exports_files(["lib/fake_plan.dart"])
 web_test_inputs(
     name = "web_test_inputs",
     srcs = glob(["test/**/*.dart"]),
+    browser_std = {
+        "test_api.wasm": "//tests/test_api:test_api_browser_std.wasm",
+    },
     # The pub run has no Bazel platform to pick by; the driver picks
     # `frustrate`'s variant of `I64List` by the compiler it was asked for.
     compiler_packages = {
         "js": "//runtime/dart/i64_list/js:i64_list",
         "wasm": "//runtime/dart/i64_list/typed:i64_list",
-    },
-    facilities = {
-        "test_api.wasm": "//tests/test_api:test_api_facilities.wasm",
     },
     fixtures = {
         "//tests/bindgen:bindgen_api.wasm": "bindgen/bindgen_api.wasm",

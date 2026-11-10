@@ -27,19 +27,19 @@ frustrate_clippy(
     platform = "//bazel:wasm32",
 )
 
-# The facility-std web build, the one platform where the std-facility arms are
+# The browser-std web build, the one platform where the browser-std arms are
 # live.
 frustrate_clippy(
-    name = "clippy_wasm_facilities",
+    name = "clippy_wasm_browser_std",
     crates = [
         "//runtime/rust:frustrate",
         "//tests/test_api:test_api_shared",
     ],
-    platform = "//bazel:wasm32_custom",
+    platform = "//bazel:wasm32_browser_std",
     # On a checkout that has not staged the std this is incompatible, which
     # `bazel test` reports as SKIPPED; naming the target says why. Stage it
     # with `bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread`.
-    target_compatible_with = [] if BROWSER_STD_STAGED else ["//bazel:wasm_facility_std_staged"],
+    target_compatible_with = [] if BROWSER_STD_STAGED else ["//bazel:wasm_browser_std_staged"],
 )
 
 # Threaded web. The only build that compiles the worker pool and the

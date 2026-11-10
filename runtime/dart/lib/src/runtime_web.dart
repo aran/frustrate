@@ -848,7 +848,7 @@ final class _WebTransport {
     final scheduleDrain = (() {
       scheduleMicrotask(_drainExecutor);
     }).toJS;
-    // The std facilities a module built against a custom_std asks for —
+    // The imports a module built against the browser std asks for —
     // `now_monotonic_ns`, `now_wall_ns`, `fill_random`, `write_stdio`,
     // `hardware_concurrency` (toolchain/custom_std). Taken from the glue so
     // this site, the pool worker and the actor worker all serve one
@@ -857,7 +857,7 @@ final class _WebTransport {
     // for the same reason the wasip1 host below is.
     final ns =
         globalContext
-                .getProperty<JSFunction>(r'$frustrateStdFacilities'.toJS)
+                .getProperty<JSFunction>(r'$frustrateBrowserStd'.toJS)
                 .callAsFunction(null, (() => _memory).toJS)!
             as JSObject;
     // `Addr::post`, declared by a module whose actor takes an `Addr`. An

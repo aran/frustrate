@@ -1,9 +1,9 @@
 // @ts-check
 //
-// Browser verification of the demo on a facility std: the byte-identical app
+// Browser verification of the demo on the browser std: the byte-identical app
 // code and bridge crate as web.spec.js, with only the wasm module built
 // differently (`frustrate_wasm_module(platform =
-// "@frustrate//bazel:wasm32_custom")` — run, in the frustrate repo,
+// "@frustrate//bazel:wasm32_browser_std")` — run, in the frustrate repo,
 // `dart toolchain/custom_std/tool/build.dart --facilities=clock,random,stdio,thread`,
 // then `bazel build //custom_std:app_web_custom_std` here, before this spec).
 //
@@ -103,7 +103,7 @@ async function expectText(page, re, timeout = 60000) {
   }
 }
 
-/** Read one `name = value` reading out of the std-facilities card. */
+/** Read one `name = value` reading out of the browser-std card. */
 async function readReading(page, name) {
   const view = page.locator('flutter-view');
   const re = new RegExp(`std\\.${name}\\s*=\\s*(-?\\d+)`);
@@ -134,17 +134,17 @@ test('the served bundle carries a strict CSP, and it is enforced', async ({
   await expectStrictCspEnforced(page, serverUrl, expect);
 });
 
-test('the std facilities work through std\'s own APIs', async ({ page }) => {
+test('the browser std works through std\'s own APIs', async ({ page }) => {
   const console_ = collectConsoleMessages(page);
   await page.goto(serverUrl, { waitUntil: 'networkidle' });
 
   await waitForFlutterReady(page);
   await enableAccessibility(page);
 
-  // The module declared the frustrate.* facility imports and the glue served
+  // The module declared the frustrate.* browser-std imports and the glue served
   // them; had it not, instantiation would have failed with a LinkError and
   // nothing below would render at all.
-  await scrollUntil(page, /facilities: present/);
+  await scrollUntil(page, /browser std: present/);
 
   // SystemTime is the wall clock, not the monotonic one. A monotonic reading
   // has page load for an epoch and would be off by decades, so a generous

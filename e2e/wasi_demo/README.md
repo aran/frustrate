@@ -18,7 +18,7 @@ bazel test //...                                                   # both, plus 
 frustrate_wasm_module(
     name = "wasi_rust.wasm",
     library = "//bridge:wasi_rust",
-    platform = "@frustrate//bazel:wasm32_wasi",   # <-- the whole choice
+    platform = "@frustrate//bazel:wasm32_wasip1",   # <-- the whole choice
 )
 ```
 

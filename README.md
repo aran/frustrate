@@ -592,17 +592,17 @@ reach them from any web build, wasip1 included, without wasm-bindgen.
 `println!`, `std::env`. Note this is about *reading* a clock: `chrono` and `time`
 span types are bridged peers that compile on the plain target, so Rust that
 receives its instants from Dart needs nothing here. Two answers, and they are
-different trades rather than better and worse. `@frustrate//bazel:wasm32_wasi`
+different trades rather than better and worse. `@frustrate//bazel:wasm32_wasip1`
 supplies a host for all of it and costs module size.
-`@frustrate//bazel:wasm32_custom` keeps the plain target, but you build your
+`@frustrate//bazel:wasm32_browser_std` keeps the plain target, but you build your
 own `std`. We have code to help, but it's more work.
 
 ```sh
 bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread
 ```
 
-Take wasi when your graph wants a lot of std; take a facility when it wants one
-thing and you cannot give up the target.
+Take wasi when your graph wants a lot of std; take the browser std when it wants
+one thing and you cannot give up the target.
 
 **Neither?** `@frustrate//bazel:wasm32`, plain — the default. Smallest module,
 stable Rust, no post-pass.
@@ -690,7 +690,7 @@ namespace, and its attach step is wasm-bindgen's own start-up handshake.
 
 With a stock std:
 
-|  | `wasm32` | `wasm32` + `bindgen` | `wasm32_wasi` | `wasm32_threads` |
+|  | `wasm32` | `wasm32` + `bindgen` | `wasm32_wasip1` | `wasm32_threads` |
 |---|---|---|---|---|
 | triple | `wasm32-unknown-unknown` | same | `wasm32-wasip1` | `wasm32-unknown-unknown` |
 | Rust channel | stable | stable | stable | nightly + local std |
@@ -703,7 +703,7 @@ With a stock std:
 
 The build errors come from frustrate's std-facility check
 (`bazel/wasm_std_check`), which does not cover `Instant::now`.
-`wasm32_custom` makes the clock, `println!` and abort cells work on the plain
+`wasm32_browser_std` makes the clock, `println!` and abort cells work on the plain
 target. getrandom never asks std, so on either `wasm32` column it needs
 `ext/getrandom` ([ext.md](docs/ext.md)).
 
@@ -737,8 +737,8 @@ not make up the difference.
 
 `toolchain/custom_std/` builds a std whose `wasm32-unknown-unknown` stubs
 (clock, entropy, stdio, `available_parallelism`, `sleep`) call the host
-instead, for dependencies you cannot change. Build the facilities
-`//bazel:wasm32_custom` declares, then select that platform:
+instead, for dependencies you cannot change. Build the browser std
+`//bazel:wasm32_browser_std` links, then select that platform:
 
 ```sh
 bazel run //toolchain/custom_std:build -- --facilities=clock,random,stdio,thread

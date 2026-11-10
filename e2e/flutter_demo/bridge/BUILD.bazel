@@ -32,16 +32,16 @@ rust_shared_library(
         "src/lib.rs",
         ":codegen.rs",
     ],
-    # The std-facility card's probes (api.rs, "the standard library on web")
+    # The browser-std card's probes (api.rs, "the standard library on web")
     # need to know whether the std being linked has the stubs replaced, and the
     # *target* cannot tell them apart: stock and patched are both
     # wasm32-unknown-unknown. Deriving the feature from the same constraints the
     # toolchain resolves on means the two cannot disagree — a module built
-    # against a facility std always has the feature, and one built against
+    # against the browser std always has the feature, and one built against
     # either stock or the +atomics flavour never does. Native needs no feature;
     # its cfg arm is `not(wasm)`.
     crate_features = select({
-        "@frustrate//bazel:wasm_facility_std_build": ["std-facilities"],
+        "@frustrate//bazel:wasm_browser_std_build": ["browser-std"],
         "//conditions:default": [],
     }),
     edition = "2021",

@@ -53,7 +53,7 @@ frustrate_wasm_module(
     name = "host_imports_api.wasm",
     host_imports = ["frustrate_test_host"],
     library = ":host_imports_api",
-    platform = "//bazel:wasm32_wasi",
+    platform = "//bazel:wasm32_wasip1",
     visibility = ["//tests:__subpackages__"],
 )
 

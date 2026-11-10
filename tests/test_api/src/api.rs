@@ -272,7 +272,7 @@ pub fn earliest_after(
 ///
 /// The cfg has three ways to be true, and they are three different hosts:
 /// native (std works outright), wasi (the preview1 shim serves it), and the
-/// `wasm-std-facilities` feature (a std from toolchain/custom_std, whose stubs
+/// `wasm-browser-std` feature (a std from toolchain/custom_std, whose stubs
 /// were replaced by host imports). The feature is needed because the *target*
 /// cannot tell the last case apart from the first: stock and patched std are
 /// both wasm32-unknown-unknown.
@@ -283,7 +283,7 @@ pub fn earliest_after(
 /// supported by default"), which would take the default web fixture with it.
 #[bridge(sync)]
 pub fn std_clock_micros() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
     {
         use std::time::{SystemTime, UNIX_EPOCH};
         SystemTime::now()
@@ -291,7 +291,7 @@ pub fn std_clock_micros() -> i64 {
             .map(|d| d.as_micros() as i64)
             .unwrap_or(-1)
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
     {
         -1
     }
@@ -302,13 +302,13 @@ pub fn std_clock_micros() -> i64 {
 /// different clock id, so this catches a shim that wired only one of them.
 #[bridge(sync)]
 pub fn std_monotonic_nanos() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
     {
         let a = std::time::Instant::now();
         let b = std::time::Instant::now();
         b.duration_since(a).as_nanos() as i64
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
     {
         -1
     }
@@ -318,12 +318,12 @@ pub fn std_monotonic_nanos() -> i64 {
 /// `fd_write` is wired; on a target with no stdout this is 0.
 #[bridge(sync)]
 pub fn std_println(msg: String) -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
     {
         println!("{msg}");
         msg.len() as i64 + 1
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
     {
         let _ = msg;
         0
@@ -333,7 +333,7 @@ pub fn std_println(msg: String) -> i64 {
 /// A hash of a fixed key under a fresh `RandomState`, or -1.
 ///
 /// `RandomState` is the public surface over `hashmap_random_keys`, which is
-/// what actually differs between a stock wasm std and a facility one: the stub
+/// what actually differs between a stock wasm std and the browser one: the stub
 /// derives it from *allocation addresses*, under std's own note that this
 /// "isn't particularly secure, but there isn't really an alternative". In a
 /// deterministic module those are close to predictable.
@@ -345,7 +345,7 @@ pub fn std_println(msg: String) -> i64 {
 /// `RandomState` nor a worker is a discriminator here.
 #[bridge(sync)]
 pub fn std_hash_seed() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
     {
         use std::collections::hash_map::RandomState;
         use std::hash::{BuildHasher, Hasher};
@@ -355,7 +355,7 @@ pub fn std_hash_seed() -> i64 {
         // never be able to produce it.
         (h.finish() >> 1) as i64
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
     {
         -1
     }
@@ -368,13 +368,13 @@ pub fn std_hash_seed() -> i64 {
 /// still fails. See toolchain/custom_std/pal/thread.rs.
 #[bridge(sync)]
 pub fn std_parallelism() -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
     {
         std::thread::available_parallelism()
             .map(|n| n.get() as i64)
             .unwrap_or(-1)
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
     {
         -1
     }
@@ -391,13 +391,13 @@ pub fn std_parallelism() -> i64 {
 /// [`Miner::sleep_on_executor`] is the other half, where waiting is legal.
 #[bridge(sync)]
 pub fn std_sleep_millis(millis: i64) -> i64 {
-    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-std-facilities"))]
+    #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
     {
         let start = std::time::Instant::now();
         std::thread::sleep(std::time::Duration::from_millis(millis.max(0) as u64));
         start.elapsed().as_millis() as i64
     }
-    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-std-facilities")))]
+    #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
     {
         let _ = millis;
         -1
@@ -412,7 +412,7 @@ pub fn std_sleep_millis(millis: i64) -> i64 {
 const SINGLE_THREADED_STD: bool = cfg!(all(
     target_family = "wasm",
     not(target_os = "wasi"),
-    feature = "wasm-std-facilities",
+    feature = "wasm-browser-std",
     not(target_feature = "atomics")
 ));
 
@@ -3090,13 +3090,13 @@ impl Miner {
     #[bridge(no_block)]
     pub fn sleep_on_executor(&mut self, millis: i64) -> i64 {
         self.calls += 1;
-        #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-std-facilities"))]
+        #[cfg(any(not(target_family = "wasm"), target_os = "wasi", feature = "wasm-browser-std"))]
         {
             let start = std::time::Instant::now();
             std::thread::sleep(std::time::Duration::from_millis(millis.max(0) as u64));
             start.elapsed().as_millis() as i64
         }
-        #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-std-facilities")))]
+        #[cfg(all(target_family = "wasm", not(target_os = "wasi"), not(feature = "wasm-browser-std")))]
         {
             let _ = millis;
             -1
