@@ -267,14 +267,14 @@ order:
 
 **Several bridges, one library.** An isolate (a page, on web) runs one Rust
 runtime, so bridges an app uses together are linked into one library.
-`frustrate_library` does that, keeping each bridge its own crate, bindings and
+`frustrate_shared_library` does that, keeping each bridge its own crate, bindings and
 asset id, and declares a code asset per bridge that binds its id to the
 combined library. Each key is a bridge's Rust library (the `<name>_lib` rlib
 `frustrate_bridge_library` declares), each value the `frustrate_bridge` its
 glue came from; a pair naming two different crates fails at analysis:
 
 ```starlark
-frustrate_library(
+frustrate_shared_library(
     name = "app_rust",
     bridges = {
         "//main:main_rust_lib": "//main:codegen",
@@ -543,14 +543,14 @@ flutter_native_library(
 Then list `my_bridge_native` in the bindings package's `code_assets`, in place
 of the bare asset.
 
-For a `frustrate_library`, pass the same `bridges` dict instead of a contract.
+For a `frustrate_shared_library`, pass the same `bridges` dict instead of a contract.
 That also declares each bridge's code asset over the patchable library
 (`<name>.<library>`), and every bridge's wrapper names the one patch builder:
 
 ```starlark
 frustrate_hot_patchable(
     name = "app_rust_hot",
-    bridges = BRIDGES,  # what frustrate_library(name = "app_rust") was given
+    bridges = BRIDGES,  # what frustrate_shared_library(name = "app_rust") was given
     library = ":app_rust",
 )
 
@@ -822,7 +822,7 @@ frustrate_no_block_check(
 another threaded platform, such as `@frustrate//ext/getrandom:wasm32_threads`,
 names it with `web_threads_platform`, so the check scans what the app ships.
 
-When the target is a `frustrate_library` that links several bridges, `bridge` takes a
+When the target is a `frustrate_shared_library` that links several bridges, `bridge` takes a
 list, one `frustrate_bridge` per linked bridge.
 
 `bazel test :block_check` runs one analysis per target and CPU, from any

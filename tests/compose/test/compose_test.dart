@@ -1,4 +1,4 @@
-/// Two bridges composed into one library (`frustrate_library`), on the VM:
+/// Two bridges composed into one library (`frustrate_shared_library`), on the VM:
 /// one transport, one Rust runtime, each bridge with its own exports, schema
 /// and handles.
 @TestOn('vm')
@@ -122,7 +122,7 @@ void main() {
         isA<StateError>().having(
           (e) => e.message,
           'message',
-          contains('frustrate_library'),
+          contains('frustrate_shared_library'),
         ),
       ),
     );

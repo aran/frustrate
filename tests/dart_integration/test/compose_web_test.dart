@@ -1,4 +1,4 @@
-/// Two bridges composed into one wasm module (`frustrate_library` +
+/// Two bridges composed into one wasm module (`frustrate_shared_library` +
 /// `frustrate_wasm_module`, //tests/compose): one module, one transport, each
 /// bridge with its own exports, schema and handles. The VM half is
 /// //tests/compose:compose_test.

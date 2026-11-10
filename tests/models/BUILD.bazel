@@ -1,5 +1,5 @@
 load("@rules_dart//dart:defs.bzl", "dart_test")
-load("//bazel:defs.bzl", "frustrate_library")
+load("//bazel:defs.bzl", "frustrate_shared_library")
 
 # Bridge B (`b/`) takes bridge A's (`a/`) data types through `models`, so one
 # Dart object crosses both.
@@ -35,7 +35,7 @@ dart_test(
 
 # Both bridges linked into one library, as an app ships them: an object A's
 # real library returns goes through B's real library in the same process.
-frustrate_library(
+frustrate_shared_library(
     name = "composed",
     bridges = {
         "//tests/models/a:models_a_lib": "//tests/models/a:bridge",

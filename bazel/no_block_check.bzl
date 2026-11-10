@@ -336,7 +336,7 @@ def _verdict_test(ctx, inputs, arguments, mnemonic, extra_outputs = {}, applied 
 
 _SCANNER_ATTRS = {
     # The frustrate_bridge of every bridge the crate links: one, or each of a
-    # `frustrate_library`'s.
+    # `frustrate_shared_library`'s.
     "bridges": attr.label_list(mandatory = True, allow_empty = False, providers = [OutputGroupInfo]),
     "_block_check": attr.label(
         default = Label("//bazel/wasm_block_check"),
@@ -642,7 +642,7 @@ def frustrate_no_block_check(
     Args:
       name: The test_suite; the analyses are `<name>.<target>`.
       bridge: The frustrate_bridge that generated the crate's glue, for its
-        claim census. For a `frustrate_library` that links several bridges, a
+        claim census. For a `frustrate_shared_library` that links several bridges, a
         list of every one of them: the check settles all their claims over the
         one build, and attributes each root to its bridge by the crate name the
         root carries. A root that no listed bridge claims fails the check, so a

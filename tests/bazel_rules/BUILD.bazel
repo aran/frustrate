@@ -5,8 +5,8 @@ load(
     "//bazel:defs.bzl",
     "frustrate_bridge",
     "frustrate_bridge_library",
-    "frustrate_library",
     "frustrate_no_block_check",
+    "frustrate_shared_library",
     "frustrate_wasm_module",
     "frustrate_wasm_opt",
 )
@@ -620,13 +620,13 @@ build_test(
 )
 
 # A bridge paired with a crate other than the one its glue was generated for
-# (alpha's library, beta's bridge) fails at analysis, in frustrate_library and
+# (alpha's library, beta's bridge) fails at analysis, in frustrate_shared_library and
 # in frustrate_hot_patchable, rather than building a library whose code asset
 # for beta holds none of beta's exports. The fixtures are manual: they are
 # meant not to analyze.
 MISPAIRED_BRIDGES = {"//tests/compose/alpha:alpha_lib": "//tests/compose/beta:bridge"}
 
-frustrate_library(
+frustrate_shared_library(
     name = "mispaired",
     bridges = MISPAIRED_BRIDGES,
     tags = ["manual"],

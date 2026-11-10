@@ -7,7 +7,7 @@
 #   bazel run @rules_flutter//tools/dev_tool:flutter_bazel -- run -t //compose:app_android \
 #       -d android --build-arg=--config=android
 
-load("@frustrate//bazel:defs.bzl", "frustrate_library")
+load("@frustrate//bazel:defs.bzl", "frustrate_shared_library")
 load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 load("@rules_dart//dart:defs.bzl", "dart_package_metadata")
 load("@rules_flutter//flutter:android.bzl", "flutter_android_app")
@@ -18,7 +18,7 @@ BRIDGES = {
     "//compose/pong:pong_lib": "//compose/pong:codegen",
 }
 
-frustrate_library(
+frustrate_shared_library(
     name = "compose_rust",
     bridges = BRIDGES,
 )

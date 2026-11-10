@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rust//rust:defs.bzl", "rust_test")
-load("//bazel:defs.bzl", "frustrate_library")
+load("//bazel:defs.bzl", "frustrate_shared_library")
 load("//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 load(":defs.bzl", "hot_patch_edit", "in_mode")
 
@@ -51,7 +51,7 @@ COMPOSED_BRIDGES = {
     "//tests/hotpatch/composed/beta:beta_lib": "//tests/hotpatch/composed/beta:bridge",
 }
 
-frustrate_library(
+frustrate_shared_library(
     name = "composed",
     bridges = COMPOSED_BRIDGES,
 )

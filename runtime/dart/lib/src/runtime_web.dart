@@ -443,7 +443,7 @@ class FrustrateWeb {
   /// attaches a bridge that is not yet served to the module already running.
   /// Naming a *different* module throws, because the first module stays
   /// installed and would keep serving every call. So does a module that does
-  /// not carry [bridge]: link it in with `frustrate_library`.
+  /// not carry [bridge]: link it in with `frustrate_shared_library`.
   ///
   /// **How a module is identified**, since bytes are not cheap to compare: by
   /// what the caller named it — the URL for [initFromUrl], the module's size
@@ -655,8 +655,8 @@ StateError _notCarried(FrustrateBridge bridge, String description) =>
     StateError(
       'frustrate: $description does not carry $bridge: it has no '
       '`${bridge.symbol('call_sync')}` export. Link every bridge the page '
-      'uses into one module with frustrate_library, and build the module '
-      'from that.',
+      'uses into one module with frustrate_shared_library, and build the '
+      'module from that.',
     );
 
 /// `String` reaches JS in O(1) — on dart2wasm a Dart `String` *is* a JS string

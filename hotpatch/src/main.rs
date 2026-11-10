@@ -18,7 +18,7 @@
 //! * `--links`: this compilation links the library, so its argv names the
 //!   linker a patch is linked with. Exactly one unit links.
 //!
-//! A single bridge's library is one unit that is both. A `frustrate_library` is
+//! A single bridge's library is one unit that is both. A `frustrate_shared_library` is
 //! a linking unit and one unit per bridge crate. Naming a unit again continues
 //! its group, and a repeated single-valued option takes its last value.
 //!

@@ -623,7 +623,7 @@ bool get _assertsEnabled {
 /// (`FrustrateNative.init`, `FrustrateWeb.init`). A bridge built into a
 /// *different* library cannot join: its Rust runtime would be a second one,
 /// with its own pool and its own handle registry. The platform init refuses it, naming the fix (compose the
-/// bridges into one library with `frustrate_library`).
+/// bridges into one library with `frustrate_shared_library`).
 ///
 /// ## Installed versus active, per bridge
 ///
@@ -764,7 +764,7 @@ class Frustrate {
       '${bridge.crate} to FrustrateNative.init, and on web, pass its '
       '<crate>Bridge to FrustrateWeb.init with the module it is linked '
       'into. Bridges used together are composed into one library with '
-      'frustrate_library.',
+      'frustrate_shared_library.',
     );
   }
 
@@ -850,7 +850,7 @@ class Frustrate {
       'call asks for $description. An isolate (a page, on web) runs one Rust '
       'runtime, loaded once, and every call keeps going to it. A bridge '
       'built into a separate library cannot join it: compose the bridges '
-      'into one library with frustrate_library and initialize each from '
+      'into one library with frustrate_shared_library and initialize each from '
       'that. Calling init again with the SAME library is fine and does '
       'nothing.',
     );

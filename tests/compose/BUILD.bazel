@@ -1,12 +1,12 @@
 load("@rules_dart//dart:defs.bzl", "dart_test")
-load("//bazel:defs.bzl", "frustrate_library", "frustrate_wasm_module")
+load("//bazel:defs.bzl", "frustrate_shared_library", "frustrate_wasm_module")
 load(":defs.bzl", "code_asset_as")
 
 # Two bridges, one library: //tests/compose/alpha and //tests/compose/beta,
 # each its own crate, bindings and code-asset id, linked into one image with
 # one Rust runtime. Declares `:composed`, `:composed.alpha_lib` and
 # `:composed.beta_lib` (the code assets binding each bridge's id to it).
-frustrate_library(
+frustrate_shared_library(
     name = "composed",
     bridges = {
         "//tests/compose/alpha:alpha_lib": "//tests/compose/alpha:bridge",

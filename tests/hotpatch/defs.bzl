@@ -39,7 +39,7 @@ def hot_patch_bridge(name):
     """One edition of a bridge of the composed fixture (`composed/<name>*`).
 
     `hotpatch_<name>`, declared as `<name>` (and `<name>_lib`, the crate a
-    `frustrate_library` links), with its bindings as `bridge`.
+    `frustrate_shared_library` links), with its bindings as `bridge`.
     """
     frustrate_bridge(
         name = "bridge",
@@ -126,7 +126,7 @@ hot_patch_edit = rule(
         # The crate this is an edit of: it names the configuration, so this
         # compilation lands in the one the launch library was built in.
         "patched_crate": attr.label(mandatory = True),
-        # The launch library's bridge crates, when it is a frustrate_library:
+        # The launch library's bridge crates, when it is a frustrate_shared_library:
         # they name the configuration too.
         "crates": attr.label_list(),
         # The launch build of the crate this edits, when that is an rlib.

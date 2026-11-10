@@ -1,7 +1,7 @@
-load("//bazel:defs.bzl", "frustrate_library", "frustrate_no_block_check")
+load("//bazel:defs.bzl", "frustrate_no_block_check", "frustrate_shared_library")
 load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 
-# frustrate_no_block_check over a frustrate_library that links two bridges:
+# frustrate_no_block_check over a frustrate_shared_library that links two bridges:
 # `example` (a clean member) and `app` (a member silenced per platform). One
 # check settles both bridges' claims over the one build, each root attributed to
 # its bridge by the crate name it carries.
@@ -11,7 +11,7 @@ BRIDGES = [
     "//tests/bazel_rules/linked_fixture/app:bridge",
 ]
 
-frustrate_library(
+frustrate_shared_library(
     name = "linked",
     bridges = {
         "//tests/bazel_rules/linked_fixture/example:example_lib": BRIDGES[0],

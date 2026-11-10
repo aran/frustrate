@@ -1,5 +1,5 @@
 /// Two bridges with the same type and member names, linked into one library
-/// (`frustrate_library`): each generated export carries its crate name, so
+/// (`frustrate_shared_library`): each generated export carries its crate name, so
 /// each call reaches its own crate.
 @TestOn('vm')
 library;

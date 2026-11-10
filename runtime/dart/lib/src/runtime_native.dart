@@ -286,7 +286,7 @@ class FrustrateNative {
   ///
   /// A later call naming another bridge attaches it when its library is the
   /// one already loaded — several bridges composed into one library with
-  /// `frustrate_library` — and throws a [StateError] naming the fix when it
+  /// `frustrate_shared_library` — and throws a [StateError] naming the fix when it
   /// is a different library, whose Rust runtime would be a second one. The
   /// same [library] again is a no-op; generated libraries are `const`, so the
   /// same one is always the same object.
@@ -691,7 +691,7 @@ final class _NativeTransport {
         'frustrate: $description is a different library from '
         '"${_primary.name}", which this isolate already runs. An isolate runs '
         'one Rust runtime, so every bridge it uses must be linked into one '
-        'library: compose them with frustrate_library '
+        'library: compose them with frustrate_shared_library '
         '(@frustrate//bazel:defs.bzl) and bind each bridge\'s code asset to '
         'the combined library.',
       );
