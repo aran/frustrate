@@ -1,13 +1,13 @@
 /// A Rust producer whose consumer isolate is gone is *refused*, not fatal
 /// (runtime/rust/src/post.rs).
 ///
-/// This is a defect that stood until 2026-07-24. Native completions
-/// were delivered by invoking a `NativeCallable.listener` function pointer, and
-/// invoking one whose isolate has been torn down is a hard VM abort:
+/// Delivering completions by invoking a `NativeCallable.listener` function
+/// pointer would fail here: invoking one whose isolate has been torn down is a
+/// hard VM abort:
 ///
 ///     runtime_entry.cc: error: Callback invoked after it has been deleted.
 ///
-/// SIGABRT — so the pre-fix signature of every test here is not a failed
+/// SIGABRT — so the failure signature of every test here is not a failed
 /// expectation but a dead test process, which is why this file is its own
 /// target: an abort takes the whole runner down with it, and it must not be
 /// able to mask sibling suites.

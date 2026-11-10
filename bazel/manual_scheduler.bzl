@@ -2,7 +2,7 @@
 
 `frustrate_manual_scheduler_library` builds `library` with
 `//bazel:manual_scheduler` on. In that build a Rust task runs only when the host
-drains the run queue (`ManualScheduler` in package:frustrate/manual_scheduler.dart),
+drains the run queue (`FrustrateNative.manualDrain()` in package:frustrate),
 so a harness chooses how Rust tasks interleave with its own events and a seeded
 run replays exactly.
 

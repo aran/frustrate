@@ -10,7 +10,7 @@
 ///
 /// That is the only thing standing between frustrate and a **web development
 /// loop**: `flutter run -d chrome` (DDC) offers hot reload and hot restart,
-/// while `flutter run --wasm` offers neither (measured 2026-08-03 — the same
+/// while `flutter run --wasm` offers neither (the same
 /// app shows `r`/`R` and a VM service under DDC, and only `h/d/c/q` under
 /// `--wasm`, because flutter_tools gates the service protocol on
 /// `!webUseWasm`). dart2wasm is still the web *platform*; this is the arm that
@@ -40,7 +40,7 @@
 /// `setInt64`/`getInt64` with the JS arm compiled out. That matters because
 /// `writeLen` delegates here for every string, list and byte array.
 ///
-/// Verified rather than assumed, 2026-08-03, two ways:
+/// Checked two ways:
 ///
 /// - **Structurally.** This library's range-error string is absent from the
 ///   AOT `native_bench` binary, while `writeUsize`'s "usize value must be
@@ -48,13 +48,10 @@
 ///   reachable ones are not, and the arm is in the first group. Symbol names
 ///   are stripped regardless (`setInt64` is absent too), which is why the
 ///   check is on a literal and carries its own control.
-/// - **By measurement.** `native_bench` before and after: `echoI64s` at 1 MiB
-///   is 131072 elements through `writeI64` and `readI64` each way, and moved
-///   −2.7%. The run's noise floor is far wider than that — `poolNthPrime`,
-///   which is pure Rust CPU and touches none of this, moved −8.2% — so the
-///   useful reading is the ordering, not the number: the i64-saturated rows
-///   sat at −4%..−1% while `echoF64s`, whose element loop has no `i64` in it
-///   at all, drifted +8%..+11%. A live branch would have to invert that.
+/// - **By measurement.** `native_bench`'s `echoI64s` rows, which push every
+///   element through `writeI64` and `readI64`, against `echoF64s`, whose loop
+///   has no `i64` in it: a live branch would show up as the first slowing
+///   relative to the second.
 library;
 
 import 'dart:typed_data';

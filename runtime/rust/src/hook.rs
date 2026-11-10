@@ -12,13 +12,9 @@
 //!
 //! # Why it is one type
 //!
-//! `spin.rs` records what the second copy costs. Three hand-written copies of
-//! one concurrency algorithm had already drifted: two released with a trailing
-//! store and were unsound under unwinding, and only the third carried the
-//! regression test. Nothing about a registration slot makes it a safer thing
-//! to hand-copy — the drop-outside rule below is invisible until it hangs, and
-//! a copy that inlines its own `Mutex<Option<_>>` looks correct at every
-//! glance. So it is written once, tested once, and *called* from each hook.
+//! Every hook calls this type rather than carrying its own slot. The
+//! drop-outside rule below is invisible until it hangs, and a copy that
+//! inlines its own `Mutex<Option<_>>` looks correct at every glance.
 //!
 //! # The fast path
 //!

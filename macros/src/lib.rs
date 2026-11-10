@@ -1,7 +1,7 @@
 //! Inert attributes for frustrate bridge declarations.
 //!
-//! `#[frustrate::bridge]` (re-exported from this crate by the `frustrate-runtime`
-//! crate as `frustrate::bridge`) marks items for the frustrate code generator.
+//! `#[frustrate::bridge]` (re-exported from this crate by the `frustrate`
+//! runtime crate as `frustrate::bridge`) marks items for the frustrate code generator.
 //! The generator reads the *source* of declared bridge files with `syn`; it never
 //! expands macros. This attribute therefore does nothing at compile time except
 //! re-emit the item — it exists so that rustc accepts the annotation.

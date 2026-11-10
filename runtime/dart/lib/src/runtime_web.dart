@@ -1975,7 +1975,7 @@ JSArray<JSObject> _workerRegistry() {
 /// list first, so a registration racing the sweep joins the new list rather
 /// than being terminated by it.
 ///
-/// **Load-bearing on the development loop — measured 2026-08-03.** This exists
+/// **Load-bearing on the development loop.** This exists
 /// for a Dart heap reset that leaves the document standing, which is exactly
 /// what a Flutter web hot restart does. Under `flutter run -d chrome` (DDC),
 /// with a real bridge and a live actor, the registry stays at one Worker

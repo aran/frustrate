@@ -70,7 +70,7 @@ struct Facility {
     /// std asks through `wasi_snapshot_preview1`, and a std built by
     /// toolchain/custom_std, where it asks frustrate directly. Either counts.
     served_by: &'static [&'static str],
-    /// What happens today when this ships, for the message.
+    /// What happens when this ships, for the message.
     consequence: &'static str,
     /// `toolchain/custom_std/tool/build.dart --facilities=` spells facilities
     /// with its own short names, and the message has to hand back a command

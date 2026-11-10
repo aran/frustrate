@@ -96,14 +96,9 @@ rust_shared_library(
         ":codegen.rs",
         # Compiled only under `--test`, where node.rs `mod`s it in.
         #
-        # This is no longer *forced*:
-        # `@frustrate//bazel:defs.bzl`'s `frustrate_bridge_library` now declares
-        # an rlib beside the cdylib, which a real `rust_test(srcs = ...)` can
-        # link. What keeps this file smuggled is its own content — it opens with
-        # `use super::*` and drives the `#[cfg(test)]` event seam in node.rs, so
-        # becoming an external test means rewriting it against the public
-        # surface (or onto `frustrate::testing`, which landed the same day).
-        # A real migration, not a rule swap; not done here.
+        # It opens with `use super::*` and drives the `#[cfg(test)]` event
+        # seam in node.rs, so it cannot be an external `rust_test` without a
+        # rewrite against the public surface.
         "tests/two_endpoints.rs",
     ],
     edition = "2021",

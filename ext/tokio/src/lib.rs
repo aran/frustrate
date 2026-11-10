@@ -24,8 +24,8 @@
 //! block the current thread from within a runtime"), and the panic is
 //! attributed to the call like any other. Leaf futures work as before.
 //!
-//! Costs: about 18 ns per poll against 9 ns for `enter`, and tokio's
-//! cooperative budget applies inside a poll.
+//! Costs: a poll costs more than under `enter`, and tokio's cooperative
+//! budget applies inside a poll.
 //!
 //! # Using it
 //!

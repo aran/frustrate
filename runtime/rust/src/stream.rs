@@ -705,14 +705,14 @@ mod tests {
     }
 
     /// The registry lock must survive an unwinding critical section
-    /// (regression guard; the defect landed fixed 2026-07-23).
+    /// (regression guard).
     ///
-    /// Before the fix, `Lock::with` released with a plain `store(false)`
-    /// *after* `f`, so a panic inside the critical section skipped the release
-    /// and left the lock held forever. That was not merely a leak:
+    /// A release written as a plain `store(false)` *after* `f` would be skipped
+    /// by a panic inside the critical section, leaving the lock held forever.
+    /// That is not merely a leak:
     /// `frustrate_stream_cancel` may be entered from the browser main thread,
     /// and a held lock turns it into an unbounded spin — an app freeze rather than a loud
-    /// crash. `with` now releases via a `Drop` guard, like the sibling allocator
+    /// crash. `with` releases via a `Drop` guard, like the sibling allocator
     /// lock in pool.rs; this test holds that line.
     ///
     /// Serialized against the other registry test via `post::test_lock`: while

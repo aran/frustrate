@@ -569,10 +569,9 @@ pub fn host_count() -> usize {
 ///
 /// **This is the hot-restart path.** Flutter's hot restart tears down
 /// the isolate without running `State.dispose` or `AppLifecycleState.detached`,
-/// so no application code ever gets the chance to call `dispose()` — measured
-/// on macOS across three restarts: OS threads 29 -> 81, tokio workers
-/// 16 -> 64, bound UDP sockets 2 -> 8, one whole actor per restart. The app had
-/// done everything available to it.
+/// so no application code ever gets the chance to call `dispose()`: without
+/// this, every restart would leak each actor whole, with its thread and
+/// everything it holds.
 ///
 /// The Dart-side finalizer cannot cover this: it belongs to the isolate that
 /// just died, so it will never run. What does survive is the exit-port notice

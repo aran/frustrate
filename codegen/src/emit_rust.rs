@@ -4902,9 +4902,9 @@ fn emit_async_spawn(out: &mut String, iface: &Interface, f: &Function) {
         // the shared run queue and delivers the encoded result through the
         // completion hook when it resolves. This glue is byte-identical native
         // vs web — the only per-config difference is the executor's Scheduler
-        // (frustrate::executor). Replaces the old native-only
-        // `pool::block_on`-per-call approach (one parked thread per suspended
-        // future — impossible on single-threaded web).
+        // (frustrate::executor). A suspended future is heap data, not a
+        // parked thread, which is what makes this possible on single-threaded
+        // web.
         //
         // A **locked** member comes here even with a plain `fn` body, and the
         // reason is its lock, not its body: `pool::spawn_call` takes a *sync*
@@ -4924,7 +4924,7 @@ fn emit_async_spawn(out: &mut String, iface: &Interface, f: &Function) {
         // Inside a future the acquisition can suspend the *task* instead, which
         // is the only shape that works where a thread cannot wait. Native
         // parallelism is unchanged: `executor::arrange_drain` hands ready tasks
-        // to the same pool the job used to go to.
+        // to the pool.
         out.push_str("    frustrate::executor::spawn(call_id, async move {\n");
         emit_async_future_body(out, iface, f, &parts, f.rust_async);
         out.push_str("    });\n}\n\n");

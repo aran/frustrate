@@ -523,8 +523,8 @@ dart_test(
 # executor task must not leak, the enclosing bridge call must complete, and the
 # caller isolate's `keepIsolateAlive` must unlatch so it can exit.
 #
-# Red from 2026-07-29 to 2026-07-30 as the pin for that defect; green since the
-# isolate started reporting its own death (post::handle_exit). Its two siblings
+# It passes because the isolate reports its own death (post::handle_exit). Its
+# two siblings
 # are the discriminators that stop a cheap fix passing: the slow-but-alive
 # negative, and the assertion that parked awaited calls hold no pool worker.
 #

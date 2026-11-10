@@ -6,7 +6,7 @@
 //!   - everything expressible: every rejected combination names the explicit,
 //!     contract-bearing opt-in that permits it;
 //!   - contracts are loud: opted-in failure modes are deterministic and
-//!     attributable (see frustrate-runtime ContentionError).
+//!     attributable (see the `frustrate` crate's `ContentionError`).
 
 use crate::ir::*;
 use serde::{Deserialize, Serialize};

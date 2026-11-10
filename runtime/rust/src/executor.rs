@@ -1,11 +1,9 @@
 //! Cooperative async executor: multiplexes many futures on few threads.
 //!
 //! This is the shared core that lets a Rust `async fn` run on *every*
-//! configuration — native, single-threaded web, and threaded web — replacing
-//! the old native-only `pool::block_on`-per-call approach (which parked one
-//! thread per suspended future and so could not exist on single-threaded web
-//! at all). A suspended task here is heap data — a pinned future — not a
-//! parked thread. The executor polls ready tasks and lets `Pending` ones sit
+//! configuration — native, single-threaded web, and threaded web. A
+//! suspended task here is heap data — a pinned future — not a parked thread,
+//! which is what lets it exist on single-threaded web at all. The executor polls ready tasks and lets `Pending` ones sit
 //! until their waker re-enqueues them.
 //!
 //! Two kinds ride the one run queue. A **call's** task is held in a
@@ -155,14 +153,10 @@ impl Executor {
     /// trap is caught by the host JS frame instead, exactly as elsewhere).
     ///
     /// The `Send` bound is about crossing to a pool worker, and nothing else.
-    /// It used to double as an accidental refusal of every `async fn` on a
-    /// `locked` type — a generated wrapper takes its guard and then awaits the
-    /// user body, and `std`'s guards are `!Send`, so the future was too. That
-    /// was never a design: it rejected even a shared read with no `.await` in
-    /// its body, because the generated block's own await was enough. The
-    /// `locked` model now uses a lock whose guards are `Send` and whose
-    /// acquisition awaits (`handle::LockedCell`), so the bound refuses only
-    /// what it is for.
+    /// A generated `locked` wrapper holds its guard across the user body's
+    /// await, so the `locked` model uses a lock whose guards are `Send`
+    /// (`handle::LockedCell`); a `std` guard there would make every such
+    /// future `!Send`.
     pub fn spawn(&self, call_id: u64, body: impl Future<Output = Outcome> + Send + 'static) {
         self.spawn_inner(call_id, body, false);
     }
