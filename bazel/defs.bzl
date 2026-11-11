@@ -171,8 +171,8 @@ def _frustrate_code_asset_impl(ctx):
         DartCodeAssetInfo(
             asset_id = ctx.attr.bridge[FrustrateBridgeInfo].asset_id,
             link_mode = "dynamic_loading_bundle",
-            dynamic_library = library,
-            system_uri = "",
+            file = library,
+            uri = "",
         ),
     ]
 

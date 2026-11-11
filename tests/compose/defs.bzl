@@ -11,8 +11,8 @@ def _code_asset_as_impl(ctx):
         DartCodeAssetInfo(
             asset_id = ctx.attr.asset_id,
             link_mode = "dynamic_loading_bundle",
-            dynamic_library = libraries[0],
-            system_uri = "",
+            file = libraries[0],
+            uri = "",
         ),
     ]
 
