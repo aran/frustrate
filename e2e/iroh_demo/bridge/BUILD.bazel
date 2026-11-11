@@ -178,7 +178,7 @@ dart_test(
 
 frustrate_hot_patchable(
     name = "iroh_rust_hot",
-    binding_contract = ":codegen.ir",
+    binding_contract = ":codegen.interface",
     library = ":iroh_rust",
 )
 
@@ -189,13 +189,13 @@ frustrate_code_asset(
 )
 
 # The asset, told apart from its bindings: the dev tool learns that
-# `codegen.ir` is the interface both halves are generated from, so it can tell
+# `codegen.interface` is the interface both halves are generated from, so it can tell
 # a Rust edit that rewrote a body from one that moved the wire — and on a
 # -c dbg build it can ask frustrate for a patch of the first kind and deliver
 # it into the running app rather than reporting the code stale.
 flutter_native_library(
     name = "iroh_rust_native",
-    binding_contract = [":codegen.ir"],
+    binding_contract = [":codegen.interface"],
     hot_patch = ":iroh_rust_hot.hot_patch",
     library = ":iroh_rust_hot_asset",
 )

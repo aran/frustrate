@@ -8,7 +8,7 @@
 //!     [--model core.json=package:core_app/core.frustrate.models.dart ...] \
 //!     --rust-out frustrate_generated.rs \
 //!     --dart-out bridge.frustrate.dart \
-//!     [--ir-out interface.json] \
+//!     [--interface-out interface.json] \
 //!     [--claims-out claims.txt]
 //!
 //! There is no capability profile flag: every run checks the full surface
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
             }
             "--rust-out" => rust_out = Some(value("--rust-out")?.into()),
             "--dart-out" => dart_out = Some(value("--dart-out")?.into()),
-            "--ir-out" => ir_out = Some(value("--ir-out")?.into()),
+            "--interface-out" => ir_out = Some(value("--interface-out")?.into()),
             "--claims-out" => claims_out = Some(value("--claims-out")?.into()),
             other => bail!("unknown flag `{other}`"),
         }

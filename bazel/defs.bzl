@@ -27,7 +27,7 @@ FrustrateBridgeInfo = provider(
         "asset_id": "str: `package:<package_name>/<crate_name>`, the id the generated `@Native` declarations name.",
         "crate_name": "str: the bridge crate's name.",
         "dart_import": "str: import URI of the generated Dart bindings entry.",
-        "ir": "File: the interface JSON, which a bridge naming this one in `models` checks its shared types against.",
+        "interface": "File: the interface JSON, which a bridge naming this one in `models` checks its shared types against.",
         "models_import": "str: import URI of the library through which a bridge naming this one in `models` reaches its plain data classes and their codecs.",
         "package_name": "str: the Dart package the bindings compile into.",
     },
@@ -56,12 +56,12 @@ def _frustrate_bridge_impl(ctx):
     dart_native_out = ctx.actions.declare_file("lib/src/" + stem + ".native.dart")
     dart_web_out = ctx.actions.declare_file("lib/src/" + stem + ".web.dart")
     dart_outs = [dart_out, dart_models_out, dart_native_out, dart_web_out]
-    ir_out = ctx.actions.declare_file(ctx.label.name + "/interface.frustrate.json")
+    interface_out = ctx.actions.declare_file(ctx.label.name + "/interface.frustrate.json")
 
     # The `#[bridge(no_block)]` claim census: which claims want a check
     # artifact and which are already settled by placement. `frustrate_no_block_check`
-    # reads it, and it is a separate output from the IR rather than a field in
-    # it because the IR JSON is the wire-schema fingerprint — see
+    # reads it, and it is a separate output from the interface rather than a field
+    # in it because the interface JSON is the wire-schema fingerprint — see
     # `emit_rust::claim_census`.
     claims_out = ctx.actions.declare_file(ctx.label.name + "/no_block.claims")
 
@@ -72,16 +72,16 @@ def _frustrate_bridge_impl(ctx):
         args.add("--src", "{}:{}".format(src.path, module_path))
     models = [m[FrustrateBridgeInfo] for m in ctx.attr.models]
     for m in models:
-        args.add("--model", "{}={}".format(m.ir.path, m.models_import))
+        args.add("--model", "{}={}".format(m.interface.path, m.models_import))
     args.add("--rust-out", rust_out)
     args.add("--dart-out", dart_out)
-    args.add("--ir-out", ir_out)
+    args.add("--interface-out", interface_out)
     args.add("--claims-out", claims_out)
 
     ctx.actions.run(
         executable = ctx.executable._codegen,
-        inputs = ctx.files.srcs + [m.ir for m in models],
-        outputs = [rust_out, ir_out, claims_out] + dart_outs,
+        inputs = ctx.files.srcs + [m.interface for m in models],
+        outputs = [rust_out, interface_out, claims_out] + dart_outs,
         arguments = [args],
         mnemonic = "FrustrateCodegen",
         progress_message = "frustrate codegen for %{label}",
@@ -91,15 +91,15 @@ def _frustrate_bridge_impl(ctx):
             asset_id = "package:{}/{}".format(ctx.attr.package_name, ctx.attr.crate_name),
             crate_name = ctx.attr.crate_name,
             dart_import = "package:{}/{}.dart".format(ctx.attr.package_name, stem),
-            ir = ir_out,
+            interface = interface_out,
             models_import = "package:{}/{}.models.dart".format(ctx.attr.package_name, stem),
             package_name = ctx.attr.package_name,
         ),
-        DefaultInfo(files = depset([rust_out, ir_out, claims_out] + dart_outs)),
+        DefaultInfo(files = depset([rust_out, interface_out, claims_out] + dart_outs)),
         OutputGroupInfo(
             rust = depset([rust_out]),
             dart = depset(dart_outs),
-            ir = depset([ir_out]),
+            interface = depset([interface_out]),
             claims = depset([claims_out]),
         ),
     ]
@@ -211,18 +211,18 @@ def frustrate_bridge(name, visibility = None, **kwargs):
     """Generate a bridge's Rust glue and Dart bindings, plus per-output filegroups.
 
     Declares `<name>`, `<name>.rs` (Rust glue), `<name>.dart` (Dart bindings)
-    and `<name>.ir` (the interface JSON), all with the same visibility.
+    and `<name>.interface` (the interface JSON), all with the same visibility.
 
     `<name>` itself carries every output, so depending on it to reach one of
     them drags in the rest. These exist so a consumer can name exactly the one
     it needs.
 
-    `.ir` rather than `.json`, which would name the encoding rather than the
+    `.interface` rather than `.json`, which would name the encoding rather than the
     content and would collide with any second JSON output.
 
     Args:
         name: Name of the bridge target; the filegroups are `<name>.rs`,
-            `<name>.dart` and `<name>.ir`.
+            `<name>.dart` and `<name>.interface`.
         visibility: Visibility of every target declared.
         **kwargs: The bridge's attributes (`srcs`, `module_paths`,
             `crate_name`, `package_name`, `models`), as `_frustrate_bridge`
@@ -242,20 +242,20 @@ def frustrate_bridge(name, visibility = None, **kwargs):
         visibility = visibility,
     )
 
-    # The wire schema as a dependable label. `--output_groups=ir` already
+    # The wire schema as a dependable label. `--output_groups=interface` already
     # reaches this file, but only from the command line; a rule that wants it
     # as an input needs a label, and depending on `<name>` would pull in the
     # Rust glue and both Dart surfaces to get it.
     #
     # What makes it worth depending on is that it is the *input* the schema
     # fingerprint is computed over (`hash::schema_hash`), not a report about
-    # the bindings: two builds whose IR bytes match generate identical
+    # the bindings: two builds whose interface bytes match generate identical
     # bindings, so byte equality is a sound answer to "can code built against
     # the old one still call this?" without parsing the file at all.
     native.filegroup(
-        name = name + ".ir",
+        name = name + ".interface",
         srcs = [":" + name],
-        output_group = "ir",
+        output_group = "interface",
         visibility = visibility,
     )
 

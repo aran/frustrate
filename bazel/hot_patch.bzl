@@ -10,7 +10,7 @@
   bridge's wrapper names this same target, since one patch serves them all.
 * `<name>.<library>` — over a `frustrate_shared_library` only: per bridge, the
   `frustrate_code_asset` binding its id to `<name>`. Wrap each in a
-  `flutter_native_library` with that bridge's `.ir` as its contract.
+  `flutter_native_library` with that bridge's `.interface` as its contract.
 
 Only a `-c dbg` build is patchable. There the library is compiled with
 `--cfg=frustrate_hot_patch`, which routes the generated entry points through
@@ -358,7 +358,7 @@ def _hot_patch_impl(ctx):
                     crate.label,
                     crate[rust_common.crate_info].name,
                 ))
-            args, unit_files = _unit(ctx, bridge_info.crate_name, crate[HotPatchIrInfo], bridge_info.ir)
+            args, unit_files = _unit(ctx, bridge_info.crate_name, crate[HotPatchIrInfo], bridge_info.interface)
             command.extend(args)
             files.extend(unit_files)
     else:
@@ -426,7 +426,7 @@ def frustrate_hot_patchable(name, library, binding_contract = None, bridges = No
 
     Over one bridge, give its cdylib and its contract:
 
-        frustrate_hot_patchable(name = "x_hot", library = ":x", binding_contract = ":bridge.ir")
+        frustrate_hot_patchable(name = "x_hot", library = ":x", binding_contract = ":bridge.interface")
 
     Over a `frustrate_shared_library`, give it and the same `bridges` dict:
 
@@ -438,7 +438,7 @@ def frustrate_hot_patchable(name, library, binding_contract = None, bridges = No
         flutter_native_library(
             name = "app_native.ping",
             library = ":app_hot.ping_lib",  # `<name>.<the bridge's Rust library's target name>`
-            binding_contract = ["//ping:codegen.ir"],
+            binding_contract = ["//ping:codegen.interface"],
             hot_patch = ":app_hot.hot_patch",
         )
 
@@ -448,7 +448,7 @@ def frustrate_hot_patchable(name, library, binding_contract = None, bridges = No
     Args:
         name: `<name>` is the library to bundle; `<name>.hot_patch` builds patches for it.
         library: the bridge crate's `rust_shared_library`, or a `frustrate_shared_library`.
-        binding_contract: one bridge's `<bridge>.ir`. Not with `bridges`.
+        binding_contract: one bridge's `<bridge>.interface`. Not with `bridges`.
         bridges: for a `frustrate_shared_library`, the dict it was given. Also
             declares `<name>.<library>`, each bridge's code asset over `<name>`.
         visibility: applied to every target.

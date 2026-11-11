@@ -33,7 +33,7 @@ frustrate_hot_patchable(
 # naming the one patch builder.
 [flutter_native_library(
     name = "compose_rust_native." + bridge,
-    binding_contract = ["//compose/%s:codegen.ir" % bridge],
+    binding_contract = ["//compose/%s:codegen.interface" % bridge],
     hot_patch = ":compose_rust_hot.hot_patch",
     library = ":compose_rust_hot.%s_lib" % bridge,
 ) for bridge in ("ping", "pong")]

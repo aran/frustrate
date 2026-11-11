@@ -157,7 +157,7 @@ frustrate_wasm_module(
 # Flutter's own main.dart.wasm, which moves on every Dart edit.
 flutter_native_library(
     name = "demo_rust_wasm_module",
-    binding_contract = ["//bridge:codegen.ir"],
+    binding_contract = ["//bridge:codegen.interface"],
     library = ":demo_rust.wasm",
 )
 

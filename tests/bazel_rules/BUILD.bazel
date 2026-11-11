@@ -164,21 +164,21 @@ build_test(
 )
 
 # frustrate_bridge contract: the FrustrateCodegen action runs over
-# the bridge source and its declared Rust-glue, Dart-bindings and interface-IR
+# the bridge source and its declared Rust-glue, Dart-bindings and interface
 # output groups build. Regression net for the codegen wiring, the declared
 # output paths, and the output_group filegroups — no Rust compile involved.
 #
-# `.ir` is here because something outside this repo depends on it as a label:
+# `.interface` is here because something outside this repo depends on it as a label:
 # a build tool pairs the interface JSON with the shared library so it can tell
 # a rebuilt library whose wire schema moved from one whose code merely
 # changed. Losing the label breaks that consumer silently, since
-# `--output_groups=ir` would still work.
+# `--output_groups=interface` would still work.
 build_test(
     name = "bridge_build_test",
     targets = [
         ":bridge.rs",
         ":bridge.dart",
-        ":bridge.ir",
+        ":bridge.interface",
     ],
 )
 

@@ -38,7 +38,7 @@ frustrate_wasm_module(
 # target names.
 flutter_native_library(
     name = "demo_rust_wasm_module",
-    binding_contract = ["//bridge:codegen.ir"],
+    binding_contract = ["//bridge:codegen.interface"],
     library = ":demo_rust.wasm",
     tags = ["manual"],
 )

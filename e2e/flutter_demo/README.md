@@ -33,7 +33,7 @@ running yet. Either way, restart, which resets Dart's statics so `initBridge()` 
 first init and loads the rebuilt module.
 
 Both answers are what `native_modules` buys. Each web bundle names its module
-through a `flutter_native_library` wrapper carrying `//bridge:codegen.ir` as the
+through a `flutter_native_library` wrapper carrying `//bridge:codegen.interface` as the
 `binding_contract`, which is the only way the dev tool can tell a module apart
 from Flutter's own `main.dart.wasm` (which moves on every Dart edit). A module
 listed in `web_assets` instead is served identically and watched not at all, so
@@ -48,7 +48,7 @@ goes on counting from where it was, and the statics behind `set_log_sink`
 keep their sinks. `bridge/BUILD.bazel` asks for this by wrapping the library in
 `frustrate_hot_patchable`, binding the result as the bindings' code asset with
 `frustrate_code_asset`, and wrapping that in `flutter_native_library` with the
-patch builder as `hot_patch`; `codegen.ir` — the interface both halves are
+patch builder as `hot_patch`; `codegen.interface` — the interface both halves are
 generated from — is its binding contract.
 
 Only a `-c dbg` build is patchable, which is what `flutter_bazel run` builds.

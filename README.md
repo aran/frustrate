@@ -522,7 +522,7 @@ load("@frustrate//bazel:hot_patch.bzl", "frustrate_hot_patchable")
 
 frustrate_hot_patchable(
     name = "my_bridge_hot",
-    binding_contract = ":codegen.ir",
+    binding_contract = ":codegen.interface",
     library = ":my_bridge",
 )
 
@@ -534,7 +534,7 @@ frustrate_code_asset(
 
 flutter_native_library(
     name = "my_bridge_native",
-    binding_contract = [":codegen.ir"],
+    binding_contract = [":codegen.interface"],
     hot_patch = ":my_bridge_hot.hot_patch",
     library = ":bridge_asset",
 )
@@ -556,7 +556,7 @@ frustrate_hot_patchable(
 
 [flutter_native_library(
     name = "app_rust_native." + bridge,
-    binding_contract = ["//%s:codegen.ir" % bridge],
+    binding_contract = ["//%s:codegen.interface" % bridge],
     hot_patch = ":app_rust_hot.hot_patch",
     library = ":app_rust_hot.%s_lib" % bridge,  # the bridge's Rust library's target name
 ) for bridge in ("ping", "pong")]

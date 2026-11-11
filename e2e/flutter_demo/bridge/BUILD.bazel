@@ -12,7 +12,7 @@ frustrate_bridge(
     srcs = ["src/api.rs"],
     crate_name = "demo_rust",
     module_paths = ["crate::api"],
-    # `codegen.ir` is each web bundle's `binding_contract` as well as this
+    # `codegen.interface` is each web bundle's `binding_contract` as well as this
     # package's: the three wasm modules must each be named demo_rust.wasm, so
     # they live one per package and their flutter_native_library wrappers do
     # too. Same three packages the library and bindings are visible to.
@@ -59,7 +59,7 @@ rust_shared_library(
 
 frustrate_hot_patchable(
     name = "demo_rust_hot",
-    binding_contract = ":codegen.ir",
+    binding_contract = ":codegen.interface",
     library = ":demo_rust",
 )
 
@@ -74,7 +74,7 @@ frustrate_code_asset(
 # The same asset, told apart from its bindings.
 #
 # Bundling sees no difference — the wrapper forwards the asset whole. What it
-# adds is a statement the dev tool cannot infer: `codegen.ir` is the interface
+# adds is a statement the dev tool cannot infer: `codegen.interface` is the interface
 # both halves are generated from, so equal bytes mean the bindings are
 # unchanged. That is the difference between a Rust edit that rewrote a function
 # body and one that changed the wire, and it decides whether a hot reload may
@@ -92,7 +92,7 @@ frustrate_code_asset(
 # in the configuration that can take patches and says how to build them.
 flutter_native_library(
     name = "demo_rust_native",
-    binding_contract = [":codegen.ir"],
+    binding_contract = [":codegen.interface"],
     hot_patch = ":demo_rust_hot.hot_patch",
     library = ":demo_rust_asset",
 )

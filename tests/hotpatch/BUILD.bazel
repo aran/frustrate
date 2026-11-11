@@ -15,7 +15,7 @@ cc_library(
 # The fixture as a patchable library, and what builds its patches.
 frustrate_hot_patchable(
     name = "fixture_hot",
-    binding_contract = "//tests/hotpatch/fixture:bridge.ir",
+    binding_contract = "//tests/hotpatch/fixture:bridge.interface",
     library = "//tests/hotpatch/fixture",
 )
 
@@ -24,7 +24,7 @@ frustrate_hot_patchable(
 [
     hot_patch_edit(
         name = edit,
-        contract = "//tests/hotpatch/%s:bridge.ir" % edit,
+        contract = "//tests/hotpatch/%s:bridge.interface" % edit,
         launch_package = "fixture",
         library = "//tests/hotpatch/%s:fixture" % edit,
         patched_crate = "//tests/hotpatch/fixture",
@@ -65,7 +65,7 @@ frustrate_hot_patchable(
 [
     hot_patch_edit(
         name = edit,
-        contract = "//tests/hotpatch/composed/%s:bridge.ir" % edit,
+        contract = "//tests/hotpatch/composed/%s:bridge.interface" % edit,
         crates = [
             "//tests/hotpatch/composed/alpha:alpha_lib",
             "//tests/hotpatch/composed/beta:beta_lib",
@@ -151,7 +151,7 @@ rust_test(
 # with frustrate's whole integration surface in it.
 frustrate_hot_patchable(
     name = "test_api_hot",
-    binding_contract = "//tests/test_api:bridge.ir",
+    binding_contract = "//tests/test_api:bridge.interface",
     library = "//tests/test_api:test_api_shared",
     tags = ["manual"],
 )
