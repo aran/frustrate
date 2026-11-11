@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   check:
-    uses: aran/rules_dart/.github/workflows/overhead-commit-messages.yaml@0fc7037909e27176df332e0b009a6f280509015f
+    uses: aran/rules_dart/.github/workflows/overhead-commit-messages.yaml@1c4c9baa7982160562fc08b62af6ef14ee4b1dab
     with:
       # Bump to start the Bazel caches afresh (see CACHE_VERSION in ci.yaml).
       cache-version: "1"

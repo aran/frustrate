@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 jobs:
   tag:
-    uses: aran/rules_dart/.github/workflows/overhead-tag.yaml@0fc7037909e27176df332e0b009a6f280509015f
+    uses: aran/rules_dart/.github/workflows/overhead-tag.yaml@1c4c9baa7982160562fc08b62af6ef14ee4b1dab
     permissions:
       contents: write # allow create tag
   release:
@@ -17,6 +17,7 @@ jobs:
       publish_token: ${{ secrets.BCR_PUBLISH_TOKEN }}
     if: needs.tag.outputs.new-tag == 'true' && needs.tag.outputs.new-tag-version-type != 'major'
     permissions:
+      actions: read
       contents: write
       id-token: write
       attestations: write

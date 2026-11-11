@@ -35,7 +35,7 @@ bazel_dep(name = "rules_cc", version = "0.2.28")
 bazel_dep(name = "overhead", version = "0.0.0", dev_dependency = True)
 git_override(
     module_name = "overhead",
-    commit = "0fc7037909e27176df332e0b009a6f280509015f",
+    commit = "1c4c9baa7982160562fc08b62af6ef14ee4b1dab",
     remote = "https://github.com/aran/rules_dart.git",
     strip_prefix = "overhead",
 )
