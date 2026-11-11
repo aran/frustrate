@@ -1,3 +1,7 @@
+# The flags bazelrc-preset.bzl recommends, as overhead writes them for this
+# repository's Bazel (`bazel run @overhead//preset`). Lines below override it.
+import %workspace%/tools/preset.bazelrc
+
 # Every MODULE.bazel.lock is complete and committed: a build that would change
 # one fails instead. This setting does not affect modules that depend on this
 # one.

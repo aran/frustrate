@@ -75,6 +75,8 @@ jobs:
           repository-cache: true
       - run: bazel run --noincompatible_auto_exec_groups @overhead//:bazel_env -- update-symlink
       - run: bazel run --noincompatible_auto_exec_groups @overhead//lint:prek -- run --all-files --show-diff-on-failure
+      - name: bazelrc preset is the one overhead generates
+        run: bazel run @overhead//preset -- --check
 
   # A consuming module must be able to load every package of the published
   # module: tools and IDE plugins enumerate `@frustrate//...`. wasi_demo takes
