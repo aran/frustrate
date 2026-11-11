@@ -120,8 +120,6 @@ use_repo(crate, "demo_crates")
 binaryen = use_extension("@frustrate//bazel/wasm_opt:extensions.bzl", "binaryen")
 use_repo(binaryen, "binaryen")
 
-register_toolchains("@flutter_toolchains//:all")
-
 # ---------------------------------------------------------------- Android ---
 # The rules_android / NDK / SDK wiring, copied from the rules_flutter
 # hello_world example (its comments explain each pin).
