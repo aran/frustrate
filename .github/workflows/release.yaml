@@ -25,13 +25,13 @@ permissions:
   contents: write
 jobs:
   release:
-    uses: aran/rules_dart/.github/workflows/overhead-release.yaml@1c4c9baa7982160562fc08b62af6ef14ee4b1dab
+    uses: aran/rules_dart/.github/workflows/overhead-release.yaml@a910ecfd53a496ec571f125f0ab0aebae6cc425e
     with:
       release_files: frustrate-*.tar.gz
       tag_name: ${{ inputs.tag_name || github.ref_name }}
   publish:
     needs: release
-    uses: aran/rules_dart/.github/workflows/overhead-publish.yaml@1c4c9baa7982160562fc08b62af6ef14ee4b1dab
+    uses: aran/rules_dart/.github/workflows/overhead-publish.yaml@a910ecfd53a496ec571f125f0ab0aebae6cc425e
     with:
       tag_name: ${{ inputs.tag_name || github.ref_name }}
     secrets:
