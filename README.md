@@ -9,6 +9,8 @@ working example of how. Note that this route is not hermetic (the codegen needs
 host-installed tools, so caching is unsound and remote execution is out);
 frustrate is built to avoid that.
 
+### What is `frustrate`?
+
 frustrate provides Bazel rules and glue code for building Flutter apps that
 interoperate with Rust code. It is designed for the kind of project that is
 likely to use a build system like Bazel: projects focused on scalable
@@ -17,6 +19,8 @@ complexity and focuses just on core infrastructure for Flutter/Rust integration.
 Together with rules_flutter, frustrate allows you to use hot reload and hot
 restart for Rust code in a Flutter app.
 
+
+### The problems solved by `frustrate`
 A Flutter app that uses Rust code must solve problems including data sharing and
 serialization, object lifecycle management, and alignment across differences in
 language semantics and conventions.
