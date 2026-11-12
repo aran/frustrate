@@ -39,3 +39,11 @@ pub struct Graph {
     pub shape: Shape,
     pub mood: Mood,
 }
+
+#[bridge(data)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Reading {
+    pub value: f64,
+    pub hint: Option<f64>,
+    pub label: Option<String>,
+}

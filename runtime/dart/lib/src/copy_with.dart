@@ -1,11 +1,11 @@
 /// Sentinel support for generated `copyWith` on data classes.
 ///
 /// A generated `copyWith` must distinguish "argument omitted" from "argument
-/// explicitly `null`" — otherwise it can never null out a nullable field. A
-/// plain `T? field` default of `null` collapses the two cases. The fix is a
-/// sentinel default: every `copyWith` parameter is typed `Object?` and defaults
-/// to [copyWithUnset]; the body keeps the old value when the argument is identical to
-/// the sentinel and otherwise takes the passed value (`null` included). So
+/// explicitly `null`" for a field that can hold `null` — otherwise it can never
+/// null that field out. A plain `T? field` default of `null` collapses the two
+/// cases. Such a field's parameter is typed `Object?` and defaults to
+/// [copyWithUnset]; the body keeps the old value when the argument is identical
+/// to the sentinel and otherwise takes the passed value (`null` included). So
 /// `copyWith(field: null)` nulls the field while `copyWith()` preserves it.
 library;
 

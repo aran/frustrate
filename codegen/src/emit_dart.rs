@@ -3401,12 +3401,19 @@ fn emit_value_members(
 
 /// Emit `copyWith`, returning a new instance with selected fields overridden.
 ///
-/// The nullable trap: a plain `T? field` parameter can't tell "omitted" from
-/// "explicitly null". Every parameter is instead typed `Object?` and defaults
-/// to the shared `copyWithUnset` sentinel; the body keeps the old value when the
-/// argument is `identical(field, copyWithUnset)` and otherwise casts the passed value
-/// (`null` included) to the field type. So `copyWith(f: null)` nulls a nullable
-/// `f` while `copyWith()` preserves it. One idiom for every field; skipped for
+/// A field whose type cannot hold `null` takes a parameter of its own type
+/// made nullable, and `null` (the default) keeps the old value: no value of
+/// the field is lost, and the argument keeps its static type, so `r: 2` is a
+/// `double` and `[1, 2]` a `List<double>` where the field says so.
+///
+/// A field that can hold `null` (an `Option`, or a type parameter) needs
+/// "omitted" apart from "explicitly null", which a nullable default cannot
+/// give. Its parameter is `Object?` defaulting to the shared `copyWithUnset`
+/// sentinel; the body keeps the old value when the argument is
+/// `identical(field, copyWithUnset)` and otherwise casts it (`null` included)
+/// to the field type. So `copyWith(f: null)` nulls a nullable `f` while
+/// `copyWith()` preserves it. A `double?` field converts a `num`, since the
+/// `Object?` parameter turns an integer literal into an `int`. Skipped for
 /// fieldless types (nothing to copy).
 fn emit_copy_with(
     out: &mut String,
@@ -3419,16 +3426,30 @@ fn emit_copy_with(
     if fields.is_empty() {
         return;
     }
+    let nullable = |f: &Field| matches!(f.ty, Type::Option(_) | Type::Param(_));
     let params: Vec<String> = fields
         .iter()
-        .map(|f| format!("Object? {} = copyWithUnset", field_name(f)))
+        .map(|f| {
+            let n = field_name(f);
+            if nullable(f) {
+                format!("Object? {n} = copyWithUnset")
+            } else {
+                format!("{}? {n}", data_field_type(iface, &f.ty, inbound))
+            }
+        })
         .collect();
     let args: Vec<String> = fields
         .iter()
         .map(|f| {
             let n = field_name(f);
             let ty = data_field_type(iface, &f.ty, inbound);
-            let val = format!("identical({n}, copyWithUnset) ? this.{n} : {n} as {ty}");
+            let val = if !nullable(f) {
+                format!("{n} ?? this.{n}")
+            } else if ty == "double?" {
+                format!("identical({n}, copyWithUnset) ? this.{n} : ({n} as num?)?.toDouble()")
+            } else {
+                format!("identical({n}, copyWithUnset) ? this.{n} : {n} as {ty}")
+            };
             if tuple {
                 val
             } else {
@@ -6417,29 +6438,29 @@ mod tests {
 
     #[test]
     fn struct_has_copy_with_using_the_unset_sentinel() {
-        // Item 2: every field is an `Object?` parameter defaulting to `copyWithUnset`;
-        // the body keeps the old value on the sentinel and otherwise casts the
-        // passed value to the field type. One idiom, no per-field helper.
+        // A field that cannot be null takes its own type, nullable, and null
+        // keeps it; a nullable one takes `Object?` defaulting to the sentinel,
+        // so an explicit null still nulls it.
         let code = emit_src(
             r#"
-            #[bridge(data)] pub struct Point { pub x: f64, pub label: Option<String> }
+            #[bridge(data)] pub struct Point { pub x: f64, pub label: Option<String>, pub w: Option<f64> }
             #[bridge(sync)] pub fn mk() -> Point { todo!() }
             "#,
         );
         assert!(
             code.contains(
-                "Point copyWith({Object? x = copyWithUnset, Object? label = copyWithUnset}) =>"
+                "Point copyWith({double? x, Object? label = copyWithUnset, Object? w = copyWithUnset}) =>"
             ),
             "{code}"
         );
-        assert!(
-            code.contains("x: identical(x, copyWithUnset) ? this.x : x as double"),
-            "{code}"
-        );
-        // The nullable field casts to the *nullable* type, so `copyWith(label:
-        // null)` actually nulls it (null is not identical to the sentinel).
+        assert!(code.contains("x: x ?? this.x"), "{code}");
         assert!(
             code.contains("label: identical(label, copyWithUnset) ? this.label : label as String?"),
+            "{code}"
+        );
+        // An integer literal reaches an `Object?` parameter as an `int`.
+        assert!(
+            code.contains("w: identical(w, copyWithUnset) ? this.w : (w as num?)?.toDouble()"),
             "{code}"
         );
     }
@@ -6465,22 +6486,16 @@ mod tests {
             "#,
         );
         assert!(
-            code.contains("PatchInsert copyWith({Object? field0 = copyWithUnset, Object? field1 = copyWithUnset}) =>"),
+            code.contains("PatchInsert copyWith({int? field0, String? field1}) =>"),
             "{code}"
         );
         // Tuple variant: positional constructor call, no field names.
         assert!(
-            code.contains("PatchInsert(identical(field0, copyWithUnset) ? this.field0 : field0 as int, identical(field1, copyWithUnset) ? this.field1 : field1 as String)"),
+            code.contains("PatchInsert(field0 ?? this.field0, field1 ?? this.field1)"),
             "{code}"
         );
-        assert!(
-            code.contains("PatchSet copyWith({Object? at = copyWithUnset}) =>"),
-            "{code}"
-        );
-        assert!(
-            code.contains("at: identical(at, copyWithUnset) ? this.at : at as int"),
-            "{code}"
-        );
+        assert!(code.contains("PatchSet copyWith({int? at}) =>"), "{code}");
+        assert!(code.contains("at: at ?? this.at"), "{code}");
     }
 
     #[test]
