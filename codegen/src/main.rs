@@ -9,14 +9,15 @@
 //!     --rust-out frustrate_generated.rs \
 //!     --dart-out bridge.frustrate.dart \
 //!     [--interface-out interface.json] \
-//!     [--claims-out claims.txt]
+//!     [--claims-out claims.txt] \
+//!     [--data-import package:my_data/bridge.frustrate.data.dart --data-out bridge.frustrate.data.dart]
 //!
 //! There is no capability profile flag: every run checks the full surface
 //! under native facts and the web subset under web facts, and emits both
 //! Dart surfaces behind a conditional export.
 
 use anyhow::{bail, Context, Result};
-use frustrate_codegen::{GenerateConfig, ModelSpec, SourceSpec};
+use frustrate_codegen::{DataSpec, GenerateConfig, ModelSpec, SourceSpec};
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
@@ -28,6 +29,8 @@ fn main() -> Result<()> {
     let mut dart_out = None;
     let mut ir_out = None;
     let mut claims_out = None;
+    let mut data_import = None;
+    let mut data_out = None;
 
     while let Some(flag) = args.next() {
         let mut value = |name: &str| {
@@ -62,6 +65,8 @@ fn main() -> Result<()> {
             "--dart-out" => dart_out = Some(value("--dart-out")?.into()),
             "--interface-out" => ir_out = Some(value("--interface-out")?.into()),
             "--claims-out" => claims_out = Some(value("--claims-out")?.into()),
+            "--data-import" => data_import = Some(value("--data-import")?),
+            "--data-out" => data_out = Some(value("--data-out")?.into()),
             other => bail!("unknown flag `{other}`"),
         }
     }
@@ -75,6 +80,11 @@ fn main() -> Result<()> {
         dart_out: dart_out.context("--dart-out is required")?,
         ir_out,
         claims_out,
+        data: match (data_import, data_out) {
+            (Some(import), Some(out)) => Some(DataSpec { import, out }),
+            (None, None) => None,
+            _ => bail!("--data-import and --data-out go together"),
+        },
     };
     if config.sources.is_empty() {
         bail!("at least one --src is required");

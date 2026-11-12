@@ -55,6 +55,22 @@ pub struct Interface {
     /// imports instead of declaring, so this is `#[serde(skip)]`.
     #[serde(skip, default)]
     pub models: Vec<ModelBridge>,
+    /// The data library this interface's plain data classes are declared in,
+    /// apart from the bindings, set by [`crate::data::apply`]. Like
+    /// [`Interface::models`], a fact about the Dart surface only.
+    #[serde(skip, default)]
+    pub data: Option<DataLibrary>,
+}
+
+/// A bridge's data library ([`crate::data`]), as far as the bindings that
+/// import it need it.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct DataLibrary {
+    /// Import URI of the data library.
+    pub import: String,
+    /// The class declarations it holds, by Rust name: authored structs and
+    /// enums, and generic templates.
+    pub types: Vec<String>,
 }
 
 /// A bridge named in `models`, as far as the importing bindings need it.

@@ -23,12 +23,14 @@ use std::fmt::Write;
 
 /// The generated Dart bindings. `entry` is the public conditional export;
 /// the variants live under `src/` next to it. `models` is the library a
-/// bridge naming this one in `models` imports ([`crate::models`]).
+/// bridge naming this one in `models` imports ([`crate::models`]). `data` is
+/// the data library ([`crate::data`]), when the interface has one.
 pub struct DartBindings {
     pub entry: String,
     pub models: String,
     pub native: String,
     pub web: String,
+    pub data: Option<String>,
 }
 
 /// `entry_stem` is the entry file's name minus `.dart` (conventionally
@@ -41,6 +43,10 @@ pub fn emit(iface: &Interface, entry_stem: &str, dart_package: &str) -> DartBind
         models: crate::models::emit_models_library(iface, entry_stem),
         native: emit_surface(iface, false, dart_package),
         web: emit_surface(iface, true, dart_package),
+        data: iface
+            .data
+            .is_some()
+            .then(|| crate::data::emit_data_library(iface)),
     }
 }
 
@@ -176,6 +182,7 @@ fn emit_surface(iface: &Interface, web: bool, dart_package: &str) -> String {
         let _ = write!(out, "import '{uri}';\n");
     }
     crate::models::emit_imports(&mut out, iface);
+    crate::data::emit_imports(&mut out, iface);
     out.push('\n');
     // The wire-schema fingerprint (codegen/src/hash.rs): the same value the
     // generated Rust exports as `frustrate_<crate>_schema_hash`. `checkFrustrateSchema`
@@ -3696,7 +3703,7 @@ fn emit_struct(out: &mut String, iface: &Interface, s: &StructDecl, web: bool) {
     // A template has no wire form of its own, an expansion has no class of its
     // own; everything an author wrote has both.
     let template = !s.generics.is_empty();
-    if s.instance.is_none() {
+    if s.instance.is_none() && !crate::data::holds(iface, &s.name) {
         emit_struct_class(out, iface, s, web);
     }
     if !template {
@@ -3707,7 +3714,7 @@ fn emit_struct(out: &mut String, iface: &Interface, s: &StructDecl, web: bool) {
     }
 }
 
-fn emit_struct_class(out: &mut String, iface: &Interface, s: &StructDecl, web: bool) {
+pub(crate) fn emit_struct_class(out: &mut String, iface: &Interface, s: &StructDecl, web: bool) {
     if s.dart_interface {
         emit_dart_interface(out, iface, s);
         return;
@@ -3898,7 +3905,7 @@ fn emit_enum(out: &mut String, iface: &Interface, e: &EnumDecl, web: bool) {
         return;
     }
     let template = !e.generics.is_empty();
-    if e.instance.is_none() {
+    if e.instance.is_none() && !crate::data::holds(iface, &e.name) {
         emit_enum_class(out, iface, e, web);
     }
     if !template {
@@ -3936,7 +3943,7 @@ fn emit_discriminant(out: &mut String, iface: &Interface, e: &EnumDecl) {
     out.push_str("      };\n\n");
 }
 
-fn emit_enum_class(out: &mut String, iface: &Interface, e: &EnumDecl, web: bool) {
+pub(crate) fn emit_enum_class(out: &mut String, iface: &Interface, e: &EnumDecl, web: bool) {
     // The class NAME, which every reference is written with, and which the
     // declaration therefore has to be written with too — a `dart_identifier` on
     // the declaration renames the class and nothing else may keep the Rust

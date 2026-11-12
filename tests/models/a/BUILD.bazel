@@ -11,6 +11,7 @@ frustrate_bridge(
         "src/api.rs",
     ],
     crate_name = "models_a",
+    data_package_name = "models_a_data",
     module_paths = [
         "models_shared::model",
         "crate::api",
@@ -53,5 +54,6 @@ dart_library(
     visibility = ["//tests/models:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",
+        "//tests/models/a_data:data",
     ],
 )

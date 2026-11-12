@@ -1,0 +1,23 @@
+load("@rules_dart//dart:defs.bzl", "dart_library", "dart_package_metadata")
+load("//bazel:defs.bzl", "frustrate_bridge_data")
+
+# Bridge A's data library: its data classes that need nothing of the bridge.
+frustrate_bridge_data(
+    name = "classes",
+    bridge = "//tests/models/a:bridge",
+)
+
+dart_package_metadata(
+    name = "pubspec-metadata",
+    package_name = "models_a_data",
+)
+
+# Nothing of bridge A in `deps`, so this compiling says the classes need
+# nothing else.
+dart_library(
+    name = "data",
+    srcs = [":classes"],
+    package = ":pubspec-metadata",
+    visibility = ["//tests/models:__subpackages__"],
+    deps = ["//runtime/dart:frustrate"],
+)

@@ -4,6 +4,17 @@ load("//bazel:defs.bzl", "frustrate_shared_library")
 # Bridge B (`b/`) takes bridge A's (`a/`) data types through `models`, so one
 # Dart object crosses both.
 
+# A's data classes alone: no library and no bindings.
+dart_test(
+    name = "data_only_test",
+    size = "small",
+    main = "test/data_only_test.dart",
+    deps = [
+        "//tests/models/a_data:data",
+        "@pub_deps//:test",
+    ],
+)
+
 # A's real library, and B through its generated fake: a value A returns passes
 # through B's API and back, and what B returns passes into A.
 dart_test(

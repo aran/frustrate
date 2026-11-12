@@ -46,6 +46,7 @@ fn main() {
         // more than every request it then builds.
         ir_out: Some(out.join("frustrate_ir.json")),
         claims_out: None,
+        data: None,
     })
     .expect("frustrate codegen failed");
 }

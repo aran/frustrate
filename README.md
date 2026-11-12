@@ -340,6 +340,50 @@ Rust items or have different shapes, and refuses a shared type that reaches a
 handle, since a handle belongs to the bridge that minted it. Members of a shared
 type stay on its home bridge.
 
+**Data classes without the bridge.** Code that only uses a bridge's data
+classes need not depend on its native library or its bindings, and so need not
+rebuild or rerun when the Rust changes. `data_package_name` declares those
+classes in a Dart package of their own, which `frustrate_bridge_data` places in
+another directory:
+
+```starlark
+# bridge/BUILD.bazel
+frustrate_bridge(
+    name = "codegen",
+    ...
+    package_name = "my_app",
+    data_package_name = "my_app_data",
+)
+
+dart_library(
+    name = "bindings",
+    srcs = [":codegen.dart"],
+    code_assets = [":bridge_asset"],
+    package_name = "my_app",
+    deps = ["//bridge/data", "@frustrate//runtime/dart:frustrate"],
+)
+
+# bridge/data/BUILD.bazel
+frustrate_bridge_data(
+    name = "classes",
+    bridge = "//bridge:codegen",
+)
+
+dart_library(
+    name = "data",
+    srcs = [":classes"],
+    package_name = "my_app_data",
+    deps = ["@frustrate//runtime/dart:frustrate"],
+)
+```
+
+Import `package:my_app_data/my_bridge.frustrate.data.dart` for the classes
+alone. The bindings re-export them, so code importing the bindings sees the
+same classes. The data library holds the structs and enums that reach no
+handle, have no bridged members, name only such types and are not taken through
+`models`. Their codecs, and every other class, stay in the bindings. The
+library changes only when a data declaration does.
+
 ### Build settings some setups need
 
 If your bridge forwards Rust `log` records to Dart, also point frustrate's `log`

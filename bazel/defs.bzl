@@ -27,6 +27,8 @@ FrustrateBridgeInfo = provider(
         "asset_id": "str: `package:<package_name>/<crate_name>`, the id the generated `@Native` declarations name.",
         "crate_name": "str: the bridge crate's name.",
         "dart_import": "str: import URI of the generated Dart bindings entry.",
+        "data": "File or None: the data library, which `frustrate_bridge_data` places in its Dart package; None without `data_package_name`.",
+        "data_import": "str: import URI of the data library, or empty without `data_package_name`.",
         "interface": "File: the interface JSON, which a bridge naming this one in `models` checks its shared types against.",
         "models_import": "str: import URI of the library through which a bridge naming this one in `models` reaches its plain data classes and their codecs.",
         "package_name": "str: the Dart package the bindings compile into.",
@@ -78,10 +80,20 @@ def _frustrate_bridge_impl(ctx):
     args.add("--interface-out", interface_out)
     args.add("--claims-out", claims_out)
 
+    # The data library, outside `lib/`: it belongs to another Dart package,
+    # whose BUILD file places it with `frustrate_bridge_data`.
+    data_out = None
+    data_import = ""
+    if ctx.attr.data_package_name:
+        data_out = ctx.actions.declare_file(ctx.label.name + "/" + stem + ".data.dart")
+        data_import = "package:{}/{}.data.dart".format(ctx.attr.data_package_name, stem)
+        args.add("--data-import", data_import)
+        args.add("--data-out", data_out)
+
     ctx.actions.run(
         executable = ctx.executable._codegen,
         inputs = ctx.files.srcs + [m.interface for m in models],
-        outputs = [rust_out, interface_out, claims_out] + dart_outs,
+        outputs = [rust_out, interface_out, claims_out] + dart_outs + ([data_out] if data_out else []),
         arguments = [args],
         mnemonic = "FrustrateCodegen",
         progress_message = "frustrate codegen for %{label}",
@@ -91,11 +103,13 @@ def _frustrate_bridge_impl(ctx):
             asset_id = "package:{}/{}".format(ctx.attr.package_name, ctx.attr.crate_name),
             crate_name = ctx.attr.crate_name,
             dart_import = "package:{}/{}.dart".format(ctx.attr.package_name, stem),
+            data = data_out,
+            data_import = data_import,
             interface = interface_out,
             models_import = "package:{}/{}.models.dart".format(ctx.attr.package_name, stem),
             package_name = ctx.attr.package_name,
         ),
-        DefaultInfo(files = depset([rust_out, interface_out, claims_out] + dart_outs)),
+        DefaultInfo(files = depset([rust_out, interface_out, claims_out] + dart_outs + ([data_out] if data_out else []))),
         OutputGroupInfo(
             rust = depset([rust_out]),
             dart = depset(dart_outs),
@@ -129,6 +143,23 @@ _frustrate_bridge = rule(
                   "`package_name` of the `dart_library` holding them). It " +
                   "namespaces the bridge's code-asset id, which the Dart VM " +
                   "resolves only under the package that declares it.",
+        ),
+        "data_package_name": attr.string(
+            doc = "The Dart package the bridge's data library compiles into, " +
+                  "which gives the bridge one: its plain data classes (structs " +
+                  "and enums reaching no handle, with no bridged members, " +
+                  "naming only such types, and not taken through `models`) " +
+                  "are declared there instead of in the bindings, which " +
+                  "import and re-export them. The library imports only " +
+                  "`package:frustrate` and the Dart homes of any " +
+                  "bridge-external types it names, and holds no codec or " +
+                  "fingerprint, so a change to the Rust that leaves the data " +
+                  "declarations alone leaves it byte-identical. Place it with " +
+                  "`frustrate_bridge_data` in the BUILD file of that package, " +
+                  "beside a `dart_library` of that name, which the bindings' " +
+                  "`dart_library` must depend on. Code that uses only the data " +
+                  "classes depends on that library, and so not on the native " +
+                  "library or the bindings.",
         ),
         "models": attr.label_list(
             providers = [FrustrateBridgeInfo],
@@ -175,6 +206,40 @@ def _frustrate_code_asset_impl(ctx):
             uri = "",
         ),
     ]
+
+def _frustrate_bridge_data_impl(ctx):
+    info = ctx.attr.bridge[FrustrateBridgeInfo]
+    if not info.data:
+        fail("frustrate_bridge_data %s: %s has no data library; set its `data_package_name`" % (
+            ctx.label,
+            ctx.attr.bridge.label,
+        ))
+    out = ctx.actions.declare_file("lib/" + info.data.basename)
+    ctx.actions.symlink(output = out, target_file = info.data)
+    return [DefaultInfo(files = depset([out]))]
+
+frustrate_bridge_data = rule(
+    implementation = _frustrate_bridge_data_impl,
+    cfg = non_dart_transition,
+    doc = """A bridge's data library, placed under this package's `lib/`.
+
+`bridge` is a `frustrate_bridge` with a `data_package_name`, and this BUILD
+file is that Dart package's: put this target in the `srcs` of the package's
+`dart_library`, which depends on `package:frustrate`
+(`@frustrate//runtime/dart:frustrate`) and on the Dart packages of any
+bridge-external types the classes name, and nothing of the bridge's. The
+library is `lib/<crate>.frustrate.data.dart`.""",
+    attrs = {
+        "bridge": attr.label(
+            mandatory = True,
+            providers = [FrustrateBridgeInfo],
+            doc = "The `frustrate_bridge` whose data library this is.",
+        ),
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
+    },
+)
 
 frustrate_code_asset = rule(
     implementation = _frustrate_code_asset_impl,
@@ -225,8 +290,8 @@ def frustrate_bridge(name, visibility = None, **kwargs):
             `<name>.dart` and `<name>.interface`.
         visibility: Visibility of every target declared.
         **kwargs: The bridge's attributes (`srcs`, `module_paths`,
-            `crate_name`, `package_name`, `models`), as `_frustrate_bridge`
-            documents them.
+            `crate_name`, `package_name`, `data_package_name`, `models`), as
+            `_frustrate_bridge` documents them.
     """
     _frustrate_bridge(name = name, visibility = visibility, **kwargs)
     native.filegroup(

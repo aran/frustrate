@@ -160,6 +160,7 @@ pub fn parse_source_reporting(
         externs: vec![],
         functions: vec![],
         models: vec![],
+        data: None,
     };
     // A file-level claim is read before any item, and merged into each as it is
     // parsed. Claims only ever strengthen (see `parse_impl`), so this is an
@@ -1167,6 +1168,7 @@ pub fn merge(crate_name: &str, parts: Vec<Interface>) -> Interface {
         externs: vec![],
         functions: vec![],
         models: vec![],
+        data: None,
     };
     for p in parts {
         out.structs.extend(p.structs);

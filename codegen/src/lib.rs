@@ -5,6 +5,7 @@
 //! outputs only: sources in, generated Rust + Dart out.
 
 pub mod check;
+pub mod data;
 pub mod emit_dart;
 pub mod emit_dart_fake;
 pub mod emit_rust;
@@ -65,6 +66,19 @@ pub struct GenerateConfig {
     /// Separate from [`GenerateConfig::ir_out`] because the IR JSON is the wire
     /// fingerprint and cannot carry a claim; see `claim_census`.
     pub claims_out: Option<PathBuf>,
+    /// Optional: give the bridge a data library ([`data`]) and write it here.
+    pub data: Option<DataSpec>,
+}
+
+/// Where a bridge's data library ([`data`]) goes, and how the bindings
+/// import it.
+#[derive(Debug, Clone)]
+pub struct DataSpec {
+    /// Import URI of the data library, e.g.
+    /// `package:core_data/core.frustrate.data.dart`.
+    pub import: String,
+    /// Where to write it.
+    pub out: PathBuf,
 }
 
 /// Parse, check, and emit. Returns the finalized interface.
@@ -102,12 +116,15 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
             import: m.import.clone(),
         });
     }
-    let iface = check::check(iface)
+    let mut iface = check::check(iface)
         .and_then(|iface| models::apply(iface, &model_inputs))
         .map_err(|diags| {
             let rendered: Vec<String> = diags.iter().map(|d| d.to_string()).collect();
             anyhow::anyhow!("interface check failed:\n{}", rendered.join("\n"))
         })?;
+    if let Some(spec) = &config.data {
+        data::apply(&mut iface, &spec.import);
+    }
 
     write_atomic(&config.rust_out, &emit_rust::emit(&iface))?;
 
@@ -136,6 +153,9 @@ pub fn generate(config: &GenerateConfig) -> Result<ir::Interface> {
         &dart.native,
     )?;
     write_atomic(&src_dir.join(format!("{entry_stem}.web.dart")), &dart.web)?;
+    if let (Some(spec), Some(data)) = (&config.data, &dart.data) {
+        write_atomic(&spec.out, data)?;
+    }
 
     if let Some(ir_out) = &config.ir_out {
         write_atomic(ir_out, &serde_json::to_string_pretty(&iface)?)?;
