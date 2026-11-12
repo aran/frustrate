@@ -35,6 +35,7 @@ rust_binary(
         "ir.rs",
         "libc.rs",
         "main.rs",
+        "modules.rs",
         "provenance.rs",
         "silences.rs",
         "symbol.rs",

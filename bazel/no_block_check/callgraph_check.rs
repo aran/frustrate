@@ -38,7 +38,10 @@ fn llvm_callgraph(opt: &str, ll: &str) -> Result<BTreeMap<String, BTreeSet<Strin
         .output()
         .map_err(|e| format!("running {opt}: {e}"))?;
     if !out.status.success() {
-        return Err(format!("{opt} on {ll}: {}", String::from_utf8_lossy(&out.stderr)));
+        return Err(format!(
+            "{opt} on {ll}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
     }
     let text = String::from_utf8_lossy(&out.stderr);
     let mut graph = BTreeMap::new();
@@ -62,7 +65,10 @@ fn llvm_callgraph(opt: &str, ll: &str) -> Result<BTreeMap<String, BTreeSet<Strin
             if edge == "calls external node" {
                 continue;
             }
-            let Some(callee) = edge.strip_prefix("calls function '").and_then(|c| c.strip_suffix('\'')) else {
+            let Some(callee) = edge
+                .strip_prefix("calls function '")
+                .and_then(|c| c.strip_suffix('\''))
+            else {
                 return Err(format!("unreadable edge line: `{line}`"));
             };
             graph.get_mut(f).unwrap().insert(callee.to_string());
@@ -79,10 +85,16 @@ fn llvm_callgraph(opt: &str, ll: &str) -> Result<BTreeMap<String, BTreeSet<Strin
 /// The Rust release `opt --version` was built for, as in
 /// `LLVM version 23.1.1-rust-1.99.1-stable`.
 fn opt_release(opt: &str) -> Result<String, String> {
-    let out = Command::new(opt).arg("--version").output().map_err(|e| format!("running {opt}: {e}"))?;
+    let out = Command::new(opt)
+        .arg("--version")
+        .output()
+        .map_err(|e| format!("running {opt}: {e}"))?;
     let text = String::from_utf8_lossy(&out.stdout);
     text.split_whitespace()
-        .find_map(|w| w.split_once("-rust-").map(|(_, r)| r.split('-').next().unwrap_or("").to_string()))
+        .find_map(|w| {
+            w.split_once("-rust-")
+                .map(|(_, r)| r.split('-').next().unwrap_or("").to_string())
+        })
         .ok_or_else(|| format!("`{opt} --version` names no Rust release: {text}"))
 }
 
@@ -106,18 +118,33 @@ fn compare(opt: &str, ll: &str) -> Result<Vec<String>, String> {
         }
     }
     let ir = super::parse(&text)?;
+    // A crate whose module defines no function (one of types and constants
+    // alone) has no call graph to compare, and `opt` prints none.
+    if !ir
+        .defined
+        .iter()
+        .enumerate()
+        .any(|(i, d)| *d && text.contains(&format!("@{}(", ir.names[i])))
+    {
+        return Ok(Vec::new());
+    }
     let llvm = llvm_callgraph(opt, ll)?;
     let mut out = Vec::new();
     for (f, callees) in llvm.iter().filter(|(f, _)| !f.starts_with("llvm.")) {
-        let llvm_calls: BTreeSet<&str> =
-            callees.iter().map(String::as_str).filter(|c| !c.starts_with("llvm.")).collect();
+        let llvm_calls: BTreeSet<&str> = callees
+            .iter()
+            .map(String::as_str)
+            .filter(|c| !c.starts_with("llvm."))
+            .collect();
         let Some(&id) = ir.index.get(f) else {
             out.push(format!("LLVM has `{f}`, which the reader never saw"));
             continue;
         };
         if !ir.defined[id as usize] {
             if !llvm_calls.is_empty() {
-                out.push(format!("LLVM has calls from `{f}`, which the reader did not see defined"));
+                out.push(format!(
+                    "LLVM has calls from `{f}`, which the reader did not see defined"
+                ));
             }
             continue;
         }
@@ -125,13 +152,21 @@ fn compare(opt: &str, ll: &str) -> Result<Vec<String>, String> {
             .iter()
             .map(|&c| ir.names[c as usize].as_str())
             .filter(|c| !c.starts_with("asm \""))
-            .map(|c| if c.starts_with("syscall::") { "syscall" } else { c })
+            .map(|c| {
+                if c.starts_with("syscall::") {
+                    "syscall"
+                } else {
+                    c
+                }
+            })
             .collect();
         for c in llvm_calls.difference(&reader_calls) {
             out.push(format!("`{f}` calls `{c}` and the reader misses it"));
         }
         for c in reader_calls.difference(&llvm_calls) {
-            out.push(format!("the reader has `{f}` call `{c}`, which LLVM does not"));
+            out.push(format!(
+                "the reader has `{f}` call `{c}`, which LLVM does not"
+            ));
         }
     }
     Ok(out)
@@ -143,10 +178,10 @@ fn the_readers_direct_calls_are_llvms() {
     let modules: Vec<String> = std::env::var("MODULES")
         .expect("MODULES: the IR to compare")
         .split_whitespace()
-        .filter(|p| p.ends_with(".ll"))
+        .filter(|p| p.ends_with(".module.ll"))
         .map(str::to_string)
         .collect();
-    assert!(!modules.is_empty(), "MODULES names no `.ll`");
+    assert!(!modules.is_empty(), "MODULES names no `.module.ll`");
     let mut failures = Vec::new();
     for ll in &modules {
         match compare(&opt, ll) {

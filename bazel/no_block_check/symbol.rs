@@ -13,27 +13,58 @@ use std::fmt::Write;
 /// neither mangling (a `#[no_mangle]` export, a C function) is returned
 /// unchanged.
 pub(crate) fn readable(sym: &str) -> String {
-    demangled(sym).unwrap_or_else(|| sym.to_string())
+    demangled(sym).unwrap_or_else(|| unlinked(sym).to_string())
+}
+
+/// A local name without the module suffix linking gave it (`vtable.0.m3` is
+/// `vtable.0`; modules.rs).
+fn unlinked(sym: &str) -> &str {
+    match sym.rsplit_once(".m") {
+        Some((name, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => name,
+        _ => sym,
+    }
 }
 
 /// The path a symbol's item is written at, segment by segment, without
 /// generic arguments: `alloc::vec::Vec::push` for every instance of
 /// `Vec::<T, A>::push`, in either mangling. A trait impl's method is its
 /// implementing type's (`<std::fs::File as std::io::Read>::read` is
-/// `std::fs::File::read`); [`trait_path`] gives the trait's. A closure keeps
+/// `std::fs::File::read`); [`paths_of`] also gives the trait's. A closure keeps
 /// its `{closure#0}` segment, so it is never its parent's path. A name that is
 /// neither mangling is one segment.
 pub(crate) fn own_path(sym: &str) -> Vec<String> {
     match demangled(sym) {
         Some(text) => item_path(&text).0,
-        None => vec![sym.to_string()],
+        None => vec![unlinked(sym).to_string()],
     }
 }
 
-/// A trait impl's item by the trait's path: `std::io::Read::read` for
-/// `<std::fs::File as std::io::Read>::read`. `None` for anything else.
-pub(crate) fn trait_path(sym: &str) -> Option<Vec<String>> {
-    item_path(&demangled(sym)?).1
+/// An item's path, segment by segment.
+pub(crate) type Path = Vec<String>;
+
+/// [`own_path`] of every name, and for a trait impl's item its path by the
+/// trait's (`std::io::Read::read` for `<std::fs::File as std::io::Read>::read`),
+/// demangling each name once, on every core.
+pub(crate) fn paths_of(names: &[String]) -> (Vec<Path>, Vec<Option<Path>>) {
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let chunk = names.len().div_ceil(threads).max(1);
+    let parts: Vec<Vec<(Path, Option<Path>)>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = names
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter()
+                        .map(|n| match demangled(n) {
+                            Some(text) => item_path(&text),
+                            None => (vec![unlinked(n).to_string()], None),
+                        })
+                        .collect()
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    parts.into_iter().flatten().unzip()
 }
 
 fn demangled(sym: &str) -> Option<String> {
@@ -141,6 +172,10 @@ fn split_top<'a>(s: &'a str, sep: &str) -> Vec<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn trait_path(sym: &str) -> Option<Vec<String>> {
+        paths_of(&[sym.to_string()]).1.pop().unwrap()
+    }
 
     fn p(sym: &str) -> String {
         own_path(sym).join("::")

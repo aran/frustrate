@@ -367,6 +367,32 @@ platform(
     ]
 ]
 
+# Whether the build already targets a native analysis's platform: there the
+# analysis reads the library as the build has it, in the build's own
+# configuration (no_block_check.bzl).
+[
+    config_setting(
+        name = "%s_%s.targeted" % (os, cpu),
+        constraint_values = [
+            "@platforms//os:" + os,
+            "@platforms//cpu:" + cpu,
+        ] + extra,
+        visibility = ["//visibility:public"],
+    )
+    for os, cpu, extra in [
+        ("android", "aarch64", []),
+        ("android", "x86_64", []),
+        (
+            "ios",
+            "aarch64",
+            ["@apple_support//constraints:device"],
+        ),
+        ("linux", "aarch64", []),
+        ("linux", "x86_64", []),
+        ("macos", "aarch64", []),
+    ]
+]
+
 # The allocator library the native analyses' builds give rules_rust's Rust
 # toolchain in place of its C one (no_block_check.bzl says why).
 no_cc_allocator(name = "no_block_check_allocator")

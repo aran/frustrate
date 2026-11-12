@@ -1,14 +1,12 @@
 //! The native check: the same `#[bridge(no_block)]` claims, settled over the
 //! LLVM IR of a native build rather than over a wasm module.
 //!
-//! The input is one module: the bridge crate built for one platform as a
-//! `staticlib` with fat LTO and `--emit=llvm-ir`, so std and every Rust
-//! dependency are merged in from their bitcode, under
-//! `--cfg frustrate_no_block_check`, which adds one root per
-//! claimed member and natively keeps every production export, so the whole
-//! program is present. On the native target a wait is a call into the OS, and
-//! the IR keeps every call out of the Rust program as a call to an external
-//! declaration.
+//! The input is the program as LLVM IR: every Rust crate in the library,
+//! each module written by the crate's own compilation at opt-level 0 under
+//! `--cfg frustrate_no_block_check`, which adds one root per claimed member
+//! beside every production export, and std's part last ([`super::modules`]).
+//! On the native target a wait is a call into the OS, and the IR keeps every
+//! call out of the Rust program as a call to an external declaration.
 //!
 //! The module is read as text. The crates that read LLVM IR (`llvm-ir`,
 //! `inkwell`) bind libLLVM through `llvm-sys`, which needs `llvm-config` and
@@ -39,7 +37,7 @@
 //!
 //! **The bounded lock is the one sanctioned wait.** frustrate's registries
 //! share one lock type (`runtime/rust/src/bounded.rs`) whose acquire the check
-//! build exports as [`ACQUIRE`]. Its wait is bounded by the longest critical
+//! scan knows by its path, [`ACQUIRE_PATH`]. Its wait is bounded by the longest critical
 //! section any thread runs under it, so the edge into the acquire is not
 //! followed only when every section in the program is proven: every function
 //! that references the acquire (each `Lock::with` instance) must reach no
@@ -68,7 +66,7 @@
 //! **Silences.** Any finding is silenced by naming what it names: `--allow <name>` (the check target's `allow`)
 //! for every claim, or a census `allow` row (`no_block(allow(...))` in
 //! source) for one member. A function can also be silenced whole: one marked
-//! `#[frustrate::no_block(allow)]` calls [`MARKER`] first, and a function
+//! `#[frustrate::no_block(allow)]` calls [`MARKER_PATH`] first, and a function
 //! that calls it is a stop point: no claim's traversal enters it, so it and
 //! everything it reaches are excluded, the bounded lock's section proof
 //! included. Each applied silence is listed in the verdict and written for
@@ -97,17 +95,13 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::libc::{self, Libc};
 use super::silences::{Applied, Silence};
-use super::symbol::trait_path;
-use super::{match_census, own_path, readable, Claims, Green, Sinks, FATAL_ENTRIES, ROOT_PREFIX};
+use super::symbol::paths_of;
+use super::{
+    match_census, own_path, readable, Claims, Green, Sinks, FATAL_ENTRIES, MARKER_PATH, ROOT_PREFIX,
+};
 
-/// The export name `runtime/rust/src/bounded.rs` gives the bounded lock's
-/// acquire in the check build.
-pub(crate) const ACQUIRE: &str = "frustrate_bounded_lock_acquire";
-
-/// The export name `runtime/rust/src/lib.rs` gives the marker that
-/// `#[frustrate::no_block(allow)]` makes a function call first, in the check
-/// build.
-pub(crate) const MARKER: &str = "frustrate_no_block_allow";
+/// The path of the bounded lock's acquire (`runtime/rust/src/bounded.rs`).
+pub(crate) const ACQUIRE_PATH: &[&str] = &["frustrate", "bounded", "Raw", "acquire"];
 
 /// Statics a call may be made through without a finding: what is in them
 /// is installed by code frustrate knows, and why it cannot stall the caller.
@@ -205,7 +199,7 @@ impl Ir {
 /// comment, so neither an `@` inside data nor a `;` inside an asm template
 /// changes what the line references. IR spells a quote inside quoted text as
 /// `\22`, so the next `"` always closes it.
-fn symbols(line: &str) -> Vec<(String, bool)> {
+pub(crate) fn symbols(line: &str) -> Vec<(String, bool)> {
     let b = line.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
@@ -545,7 +539,7 @@ fn reach(start: u32, edges: &[BTreeSet<u32>], cut: &BTreeSet<u32>) -> BTreeSet<u
 /// module, then the name. A method's is its type's, which may be defined
 /// outside the module holding the bridged impl, so it is `krate`, any
 /// module, then the type and name. A `dyn` parent's trait method matches by
-/// its [`trait_path`].
+/// its trait path ([`paths_of`]).
 fn is_member(path: &[String], krate: &str, want: &[String], display: &[&str]) -> bool {
     let module = &want[1..want.len().saturating_sub(display.len())];
     let Some((first, rest)) = path.split_first() else {
@@ -646,13 +640,13 @@ fn prove_bounded(
 
 /// Settle the claims of one native IR module.
 pub(crate) fn run_ir(
-    path: &str,
+    modules: &[String],
     label: &str,
     claims: Option<&Claims>,
     sinks: &Sinks,
 ) -> Result<Green, String> {
-    super::budget::set(path, label);
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+    super::budget::set(modules, label);
+    let text = super::modules::link(modules)?;
     let mut ir = parse(&text).map_err(|e| format!("no_block_check: {label}: {e}"))?;
 
     let Some(libc) = libc::for_triple(&ir.triple) else {
@@ -670,9 +664,9 @@ pub(crate) fn run_ir(
         ));
     };
 
-    // Control: the module is the whole program. After fat LTO every Rust
-    // function has a body here; a Rust symbol that is only declared is code
-    // this scan cannot see into, so a green over it would mean nothing.
+    // Control: the modules are the whole program. Every Rust function has a
+    // body in one of them; a Rust symbol that is only declared is code this
+    // scan cannot see into, so a green over it would mean nothing.
     let missing: Vec<String> = (0..ir.names.len())
         .filter(|f| {
             !ir.defined[*f] && (ir.names[*f].starts_with("_R") || ir.names[*f].starts_with("_ZN"))
@@ -683,11 +677,10 @@ pub(crate) fn run_ir(
     if !missing.is_empty() {
         return Err(format!(
             "no_block_check: cannot verify {label}: Rust functions are declared \
-             here without a body, so this is not the whole program:\n\n{}\n\n\
-             The IR must come from a fat-LTO build of a final crate type \
-             (`-Clto=fat`, `link` among the emits), which merges std and every \
-             dependency into the crate's module. Without one, rustc writes the \
-             crate's own module before LTO.",
+             here and defined in no module, so this is not the whole program:\n\n{}\n\n\
+             The modules are each crate's own and std's closure. A crate whose \
+             module is missing (one built by a rule the check does not follow) \
+             leaves its functions out.",
             missing.join("\n")
         ));
     }
@@ -702,8 +695,7 @@ pub(crate) fn run_ir(
     }
     match_census(&root_names, claims, label)?;
 
-    let paths: Vec<Vec<String>> = ir.names.iter().map(|n| own_path(n)).collect();
-    let trait_paths: Vec<Option<Vec<String>>> = ir.names.iter().map(|n| trait_path(n)).collect();
+    let (paths, trait_paths) = paths_of(&ir.names);
 
     // Control: every `--slow` path names a function in the program. This
     // build keeps every production export, so a path that matches nothing
@@ -733,24 +725,25 @@ pub(crate) fn run_ir(
         .filter(|f| {
             FATAL_ENTRIES
                 .iter()
-                .any(|e| e.matches(&ir.names[*f as usize]))
+                .any(|e| e.matches_at(&ir.names[*f as usize], || paths[*f as usize].clone()))
         })
         .collect();
-    let acquire = ir
-        .index
-        .get(ACQUIRE)
-        .copied()
-        .filter(|a| ir.defined[*a as usize]);
+    let acquire = (0..ir.names.len() as u32)
+        .find(|f| ir.defined[*f as usize] && paths[*f as usize] == ACQUIRE_PATH);
     let mut cut = fatal.clone();
     cut.extend(acquire);
     // Functions marked `#[frustrate::no_block(allow)]`: stop points for every
     // traversal below except the control that a root reaches its member.
-    let marked: BTreeSet<u32> = match ir.index.get(MARKER) {
-        Some(m) => (0..ir.names.len() as u32)
-            .filter(|f| *f != *m && ir.defined[*f as usize] && ir.calls[*f as usize].contains(m))
-            .collect(),
-        None => BTreeSet::new(),
-    };
+    let markers: BTreeSet<u32> = (0..ir.names.len() as u32)
+        .filter(|f| paths[*f as usize] == MARKER_PATH)
+        .collect();
+    let marked: BTreeSet<u32> = (0..ir.names.len() as u32)
+        .filter(|f| {
+            !markers.contains(f)
+                && ir.defined[*f as usize]
+                && !ir.calls[*f as usize].is_disjoint(&markers)
+        })
+        .collect();
     let mut stops = cut.clone();
     stops.extend(&marked);
 
@@ -762,7 +755,7 @@ pub(crate) fn run_ir(
     // object the handle holds, built wherever that object was made, so its
     // own function is never in the root's closure. Its possible callees are
     // every function in a vtable that implements that trait method, named
-    // `<Impl as Trait>::method` ([`trait_path`]): the root gets an edge to each.
+    // `<Impl as Trait>::method` ([`paths_of`]): the root gets an edge to each.
     let address_taken: BTreeSet<u32> = (0..ir.names.len())
         .flat_map(|g| {
             ir.refs[g]
@@ -865,7 +858,9 @@ pub(crate) fn run_ir(
             }
         }
     }
-    let paths: Vec<Vec<String>> = ir.names.iter().map(|n| own_path(n)).collect();
+    // Names the analyses above added since the first reading.
+    let mut paths = paths;
+    paths.extend(ir.names[paths.len()..].iter().map(|n| own_path(n)));
     let mut kinds = sink_kinds(&ir, libc, &paths, sinks);
     let known = known_paths(&ir, &paths);
     for (s, why) in &unresolved {
@@ -1250,7 +1245,12 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join(format!("m{}.ll", NEXT.fetch_add(1, Ordering::Relaxed)));
         std::fs::write(&p, text).unwrap();
-        run_ir(p.to_str().unwrap(), "//pkg:target", claims, sinks)
+        run_ir(
+            &[p.to_str().unwrap().to_string()],
+            "//pkg:target",
+            claims,
+            sinks,
+        )
     }
 
     fn sinks(slow: &[&str], io: &[&str], allowed: &[&str]) -> Sinks {
@@ -1375,8 +1375,8 @@ mod tests {
     fn bounded(section_body: &str, elsewhere: &str) -> String {
         format!(
             "{HEAD}define void @frustrate_check_block_example_1_render() {{\n  call void @_RNvCs1_9frustrate4with()\n  ret void\n}}\n\
-             define void @frustrate_bounded_lock_acquire() {{\n  call i32 @pthread_mutex_lock(ptr %0)\n  ret void\n}}\n\
-             define void @_RNvCs1_9frustrate4with() {{\n  call void @frustrate_bounded_lock_acquire()\n  call void @_RNvCs1_9frustrate7section()\n  call i32 @pthread_mutex_unlock(ptr %0)\n  ret void\n}}\n\
+             define void @_RNvMNtCs1_9frustrate7boundedNtB2_3Raw7acquire() {{\n  call i32 @pthread_mutex_lock(ptr %0)\n  ret void\n}}\n\
+             define void @_RNvCs1_9frustrate4with() {{\n  call void @_RNvMNtCs1_9frustrate7boundedNtB2_3Raw7acquire()\n  call void @_RNvCs1_9frustrate7section()\n  call i32 @pthread_mutex_unlock(ptr %0)\n  ret void\n}}\n\
              define void @_RNvCs1_9frustrate7section() {{\n{section_body}  ret void\n}}\n\
              {elsewhere}\
              declare i32 @pthread_mutex_lock(ptr)\ndeclare i32 @pthread_mutex_unlock(ptr)\ndeclare i32 @nanosleep(ptr)\n"
@@ -1412,7 +1412,7 @@ mod tests {
     /// which an exemption by module path would miss.
     #[test]
     fn a_section_elsewhere_that_waits_makes_every_member_taking_the_lock_unprovable() {
-        let elsewhere = "define void @_RNvCs1_9frustrate5other() {\n  call void @frustrate_bounded_lock_acquire()\n  call i32 @nanosleep(ptr %0)\n  ret void\n}\n";
+        let elsewhere = "define void @_RNvCs1_9frustrate5other() {\n  call void @_RNvMNtCs1_9frustrate7boundedNtB2_3Raw7acquire()\n  call i32 @nanosleep(ptr %0)\n  ret void\n}\n";
         let e = run_text(&bounded("", elsewhere), None, &Sinks::default()).unwrap_err();
         assert!(
             e.contains("cannot verify: takes the bounded lock, whose wait is unproven"),
@@ -1424,7 +1424,7 @@ mod tests {
     #[test]
     fn a_section_that_takes_the_lock_again_is_refused() {
         let nested = "  call void @_RNvCs1_9frustrate5inner()\n";
-        let elsewhere = "define void @_RNvCs1_9frustrate5inner() {\n  call void @frustrate_bounded_lock_acquire()\n  ret void\n}\n";
+        let elsewhere = "define void @_RNvCs1_9frustrate5inner() {\n  call void @_RNvMNtCs1_9frustrate7boundedNtB2_3Raw7acquire()\n  ret void\n}\n";
         let e = run_text(&bounded(nested, elsewhere), None, &Sinks::default()).unwrap_err();
         assert!(e.contains("takes a bounded lock again"), "{e}");
     }
@@ -1929,12 +1929,12 @@ mod tests {
     }
 
     /// `#[frustrate::no_block(allow)]`: a function that calls the marker first.
-    const MARK: &str = "define void @frustrate_no_block_allow() {\n  ret void\n}\n";
+    const MARK: &str = "define void @_RNvCs1_9frustrate16___no_block_allow() {\n  ret void\n}\n";
 
     fn marked(render_calls: &str, wrap_body: &str) -> String {
         format!(
             "{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n{render_calls}  ret void\n}}\n\
-             define void @_RNvCs1_7example4wrap() {{\n  call void @frustrate_no_block_allow()\n{wrap_body}  ret void\n}}\n\
+             define void @_RNvCs1_7example4wrap() {{\n  call void @_RNvCs1_9frustrate16___no_block_allow()\n{wrap_body}  ret void\n}}\n\
              {MARK}declare i32 @pthread_mutex_lock(ptr)\n"
         )
     }
@@ -1954,7 +1954,7 @@ mod tests {
         let both = format!("{call}{wait}");
         let e = run_text(&marked(&both, wait), None, &Sinks::default()).unwrap_err();
         assert!(e.contains("reaches pthread_mutex_lock — waits"), "{e}");
-        assert!(!e.contains("frustrate_no_block_allow"), "{e}");
+        assert!(!e.contains("__no_block_allow"), "{e}");
     }
 
     #[test]
@@ -1990,8 +1990,8 @@ mod tests {
     fn a_generic_marked_function_is_one_silence_across_its_instances() {
         let text = format!(
             "{HEAD}{ROOT}define void @_RNvCs1_7example6render() {{\n  call void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4FileE()\n  call void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4PathE()\n  ret void\n}}\n\
-             define void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4FileE() {{\n  call void @frustrate_no_block_allow()\n  call i32 @pthread_mutex_lock(ptr %0)\n  ret void\n}}\n\
-             define void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4PathE() {{\n  call void @frustrate_no_block_allow()\n  ret void\n}}\n\
+             define void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4FileE() {{\n  call void @_RNvCs1_9frustrate16___no_block_allow()\n  call i32 @pthread_mutex_lock(ptr %0)\n  ret void\n}}\n\
+             define void @_RINvCs1_7example4wrapNtNtCs2_3std2fs4PathE() {{\n  call void @_RNvCs1_9frustrate16___no_block_allow()\n  ret void\n}}\n\
              {MARK}declare i32 @pthread_mutex_lock(ptr)\n"
         );
         let ok = run_text(&text, None, &Sinks::default()).unwrap();
@@ -2009,7 +2009,7 @@ mod tests {
         let text = bounded(
             "  call void @_RNvCs1_7example4wrap()\n",
             &format!(
-                "define void @_RNvCs1_7example4wrap() {{\n  call void @frustrate_no_block_allow()\n  call i32 @nanosleep(ptr %0)\n  ret void\n}}\n{MARK}"
+                "define void @_RNvCs1_7example4wrap() {{\n  call void @_RNvCs1_9frustrate16___no_block_allow()\n  call i32 @nanosleep(ptr %0)\n  ret void\n}}\n{MARK}"
             ),
         );
         let ok = run_text(&text, None, &Sinks::default()).unwrap();
@@ -2243,8 +2243,8 @@ mod tests {
         let text = "target triple = \"x86_64-unknown-linux-gnu\"\n\
              define void @frustrate_check_block_example_1_render() {\n  call void @_RNvCs1_7example6render()\n  ret void\n}\n\
              define void @_RNvCs1_7example6render() {\n  call void @_RNvCs1_9frustrate4with()\n  ret void\n}\n\
-             define void @frustrate_bounded_lock_acquire() {\n  %1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 137, i32 noundef 0, ptr null, ptr null, i32 noundef -1)\n  ret void\n}\n\
-             define void @_RNvCs1_9frustrate4with() {\n  call void @frustrate_bounded_lock_acquire()\n  %1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 129, i32 noundef 1)\n  ret void\n}\n\
+             define void @_RNvMNtCs1_9frustrate7boundedNtB2_3Raw7acquire() {\n  %1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 137, i32 noundef 0, ptr null, ptr null, i32 noundef -1)\n  ret void\n}\n\
+             define void @_RNvCs1_9frustrate4with() {\n  call void @_RNvMNtCs1_9frustrate7boundedNtB2_3Raw7acquire()\n  %1 = call i64 (i64, ...) @syscall(i64 noundef 202, ptr %0, i32 noundef 129, i32 noundef 1)\n  ret void\n}\n\
              declare i64 @syscall(i64 noundef, ...)\n";
         let ok = run_text(text, None, &Sinks::default()).unwrap();
         assert!(

@@ -12,12 +12,10 @@
 //!   guard to hold across arbitrary code, so a section is exactly one call to
 //!   the closure.
 //! - **The acquire has an identity.** It is one non-generic function, private
-//!   to this module, so every section in the program is a caller of it. In the
-//!   no_block check build (`--cfg frustrate_no_block_check`) natively it is
-//!   exported as `frustrate_bounded_lock_acquire`, a name only this function
-//!   can hold (a
-//!   second definition is a duplicate-symbol link error), and
-//!   `bazel/no_block_check`'s native analysis does two things with it: it
+//!   to this module, so every section in the program is a caller of it, and
+//!   its path (`frustrate::bounded::Raw::acquire`) is its name in the
+//!   no_block check. `bazel/no_block_check`'s native analysis does two things
+//!   with it: it
 //!   does not count the acquire's own wait against a root, and it checks every
 //!   caller of the acquire in the program — every section — reaches no wait, no
 //!   slow function, no external it cannot vouch for, and no acquire. That is
@@ -130,13 +128,8 @@ impl Raw {
     }
 
     /// Every section's entry. Never inlined, so each section is a call to it
-    /// at any opt-level; exported under the check cfg, so the native analysis
-    /// knows it by a name nothing else can define.
+    /// at any opt-level; the native analysis knows it by its path.
     #[inline(never)]
-    #[cfg_attr(
-        all(frustrate_no_block_check, not(target_family = "wasm")),
-        unsafe(export_name = "frustrate_bounded_lock_acquire")
-    )]
     fn acquire(&self) -> std::sync::MutexGuard<'_, ()> {
         self.0
             .lock()

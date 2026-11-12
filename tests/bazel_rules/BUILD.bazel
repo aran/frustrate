@@ -11,6 +11,7 @@ load(
     "frustrate_wasm_opt",
 )
 load("//bazel:hot_patch.bzl", "frustrate_hot_patchable")
+load(":fake_app.bzl", "fake_app")
 load(":mispaired_bridge_test.bzl", "mispaired_bridge_test")
 
 # Dedicated rule tests for the frustrate Bazel rules: before this package
@@ -367,6 +368,23 @@ frustrate_no_block_check(
         "web_threads",
         "wasi",
     ],
+)
+
+# `shipped`: the Android analysis is `.android`, over the library as `:app`
+# builds it, under the app's own transition (fake_app.bzl).
+fake_app(
+    name = "app",
+    library = ":fixture_shared",
+    platform = "//bazel:android_aarch64",
+)
+
+frustrate_no_block_check(
+    name = "shipped_no_block_check",
+    bridge = ":bridge",
+    library = ":fixture_shared",
+    shipped = {"android": ":app"},
+    slow = ["rule_test_fixture::api::slow"],
+    targets = ["android"],
 )
 
 # ----------------------------------------- the std-facility check's fence --

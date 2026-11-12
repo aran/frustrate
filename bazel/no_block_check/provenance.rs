@@ -1017,7 +1017,8 @@ fn analyse(
 
 /// The statics that hold one of a known set of functions: a runtime CPU
 /// dispatch (memchr's), a lazily chosen implementation. A static is one when
-/// only this module can name it (internal linkage), its type is `ptr`, its
+/// only the program can name it (internal linkage, or a Rust symbol), its
+/// type is `ptr`, its
 /// initialiser is a function defined here, and every use of it in the module
 /// is one this reads: a load from it, or a store, exchange or
 /// compare-exchange into it of a value that is a function defined here,
@@ -1883,7 +1884,13 @@ fn split_module(text: &str) -> (Vec<Func>, Vec<Global>, Vec<String>) {
                 let head = line.split(['[', '{', '<', '"']).next().unwrap_or(line);
                 let words: Vec<&str> = head.split_whitespace().collect();
                 let mutable = !words.contains(&"constant");
-                let internal = words.iter().any(|w| matches!(*w, "internal" | "private"));
+                // Or a Rust symbol: the program is every crate's module
+                // linked (modules.rs), so every use of one is here; only Rust
+                // code names a mangled symbol, and a library exports only
+                // `#[no_mangle]` names.
+                let internal = words.iter().any(|w| matches!(*w, "internal" | "private"))
+                    || name.starts_with("_R")
+                    || name.starts_with("_ZN");
                 // `global ptr @f`: a pointer, its initialiser one symbol.
                 let holds_pointer = words.windows(2).any(|w| w == ["global", "ptr"]);
                 globals.push(Global {

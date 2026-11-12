@@ -37,8 +37,11 @@ fn budget_for(len: u64) -> usize {
 }
 
 /// Set the budget for the scan of `path`, the input `label` names.
-pub(crate) fn set(path: &str, label: &str) {
-    let len = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+pub(crate) fn set(paths: &[String], label: &str) {
+    let len: u64 = paths
+        .iter()
+        .map(|p| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0))
+        .sum();
     let limit = budget_for(len);
     let mb = |n: u64| n.div_ceil(1 << 20);
     let _ = MESSAGE.set(format!(

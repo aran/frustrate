@@ -15,22 +15,13 @@ pub use frustrate_macros::bridge;
 pub use frustrate_macros::bridge_file;
 pub use frustrate_macros::no_block;
 
-/// What `#[frustrate::no_block(allow)]` makes a function call first, in the
-/// no_block check's build only. It does nothing and is never inlined, so the
-/// scanner finds the call in the function that made it. The native scanner
-/// knows this function by its export name; a wasm check module exports only
-/// its roots, so there the scanner knows it by its path.
+/// What `#[frustrate::no_block(allow)]` makes a function call first. It does
+/// nothing. The no_block check reads its build at opt-level 0, where the call
+/// stays a call, and knows the function by its path; any optimised build
+/// inlines it to nothing.
 #[doc(hidden)]
-#[cfg(frustrate_no_block_check)]
-#[inline(never)]
-#[cfg_attr(
-    not(target_family = "wasm"),
-    unsafe(export_name = "frustrate_no_block_allow")
-)]
-pub fn __no_block_allow() {
-    // An empty side effect, so no optimizer deletes the call as pure.
-    core::hint::black_box(());
-}
+#[inline]
+pub fn __no_block_allow() {}
 
 /// The six representation keywords, spelled as types so a use site may name
 /// one explicitly wherever a bridged type name may appear — `fn f(doc:

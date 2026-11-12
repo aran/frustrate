@@ -6,28 +6,7 @@ for native IR, io.rs for the IO categories).
 """
 
 load("@frustrate_custom_std_threads//:staged.bzl", _THREADS_STD_STAGED = "STAGED")
-load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
-load("@rules_rust//rust:defs.bzl", "rust_common")
-
-# buildifier: disable=bzl-visibility
-load("@rules_rust//rust/private:rust.bzl", "RUSTC_ATTRS")
-
-# buildifier: disable=bzl-visibility
-load(
-    "@rules_rust//rust/private:rustc.bzl",
-    "collect_deps",
-    "collect_inputs",
-    "construct_arguments",
-)
-
-# buildifier: disable=bzl-visibility
-load(
-    "@rules_rust//rust/private:utils.bzl",
-    "determine_output_hash",
-    "find_cc_toolchain",
-    "find_toolchain",
-)
 
 # Build-setting labels for the transitions below, canonicalized in frustrate's
 # own repo mapping. A transition's `outputs` and its returned dict take plain
@@ -36,7 +15,6 @@ load(
 _NO_BLOCK_CHECK_FLAG = str(Label("//bazel:no_block_check"))
 _EXTRA_RUSTC_FLAGS = str(Label("@rules_rust//rust/settings:extra_rustc_flags"))
 _EXTRA_RUSTC_FLAG = str(Label("@rules_rust//rust/settings:extra_rustc_flag"))
-_LTO = str(Label("@rules_rust//rust/settings:lto"))
 _ALLOCATOR_LIBRARY = str(Label("@rules_rust//rust/settings:default_allocator_library"))
 
 # The native OSes `targets` may name, and the CPUs each one's analyses build
@@ -132,137 +110,214 @@ _wasm_check_transition = transition(
 
 # ---------------------------------------------------------------- native --
 
-# rules_rust declares no LLVM IR output, so this re-runs rustc on the crate the
-# way rules_rust's own `unpretty` aspect does, with one declared output: the
-# whole program's IR. Fat LTO is what makes it whole: rustc merges every
-# dependency's bitcode and std's embedded bitcode into the crate's module
-# before writing it.
-#
-# The crate is emitted as a staticlib, the one crate type rustc runs fat LTO
-# for without calling a linker. The IR is the same program either way; what
-# the staticlib saves is the target's C library and linker, so this action
-# needs only rustc and the target's std, from any host.
-def _native_ir_aspect_impl(target, ctx):
-    # A cdylib carries its CrateInfo inside TestCrateInfo.
-    if rust_common.crate_info in target:
-        crate_info = target[rust_common.crate_info]
-    elif rust_common.test_crate_info in target:
-        crate_info = target[rust_common.test_crate_info].crate
-    else:
-        return []
-
-    crate_info = rust_common.create_crate_info(**(
-        {k: getattr(crate_info, k) for k in dir(crate_info) if k not in ["to_json", "to_proto"]} |
-        {"type": "staticlib"}
-    ))
-    toolchain = find_toolchain(ctx)
-    cc_toolchain, feature_configuration = find_cc_toolchain(ctx)
-    dep_info, build_info, _ = collect_deps(
-        deps = crate_info.deps.to_list(),
-        proc_macro_deps = crate_info.proc_macro_deps.to_list(),
-        aliases = crate_info.aliases,
-        extra_named_deps = crate_info.extra_named_deps,
-    )
-    compile_inputs, out_dir, build_env_files, build_flags_files, linkstamp_outs, ambiguous_libs = collect_inputs(
-        ctx,
-        ctx.rule.file,
-        ctx.rule.files,
-        depset([]),
-        toolchain,
-        cc_toolchain,
-        feature_configuration,
-        crate_info,
-        dep_info,
-        build_info,
-        [],
-    )
-    ir = ctx.actions.declare_file(ctx.label.name + ".native_check.ll", sibling = crate_info.output)
-    args, env = construct_arguments(
-        ctx = ctx,
-        attr = ctx.rule.attr,
-        file = ctx.file,
-        toolchain = toolchain,
-        tool_path = toolchain.rustc.path,
-        tool_file = toolchain.rustc,
-        cc_toolchain = cc_toolchain,
-        feature_configuration = feature_configuration,
-        crate_info = crate_info,
-        dep_info = dep_info,
-        linkstamp_outs = linkstamp_outs,
-        ambiguous_libs = ambiguous_libs,
-        output_hash = determine_output_hash(crate_info.root, ctx.label),
-        rust_flags = [],
-        out_dir = out_dir,
-        build_env_files = build_env_files,
-        build_flags_files = build_flags_files,
-        # `link` too: rustc performs LTO only when it writes a final crate
-        # type, and without it the IR is the crate's own module. The archive
-        # lands in the sandbox, undeclared, and is discarded.
-        emit = ["link", ("llvm-ir", ir)],
-        skip_expanding_rustc_env = True,
-    )
-    ctx.actions.run(
-        executable = ctx.executable._process_wrapper,
-        inputs = compile_inputs,
-        outputs = [ir],
-        env = env,
-        arguments = args.all,
-        mnemonic = "FrustrateNativeIr",
-        progress_message = "emitting whole-program IR for %{label}",
-        toolchain = "@rules_rust//rust:toolchain_type",
-    )
-    return [OutputGroupInfo(frustrate_native_ir = depset([ir]))]
-
-_native_ir_aspect = aspect(
-    implementation = _native_ir_aspect_impl,
-    fragments = ["cpp"],
-    attrs = RUSTC_ATTRS,
-    toolchains = [str(Label("@rules_rust//rust:toolchain_type"))] + use_cc_toolchain(mandatory = False),
-    required_providers = [[rust_common.crate_info], [rust_common.test_crate_info]],
+_CrateIrInfo = provider(
+    doc = "The LLVM IR the native analysis reads for a crate and the crates it depends on.",
+    fields = {
+        "own": "File or None: this crate's module.",
+        "modules": "depset[File]: the modules of this crate and of every Rust crate beneath it.",
+        "summaries": "depset[File]: each of those modules' Rust symbols, for std's part.",
+        "std": "File or None: std's part of the program, for a crate rustc links.",
+        "panic": "str or None: the crate's panic strategy, when its flags set one.",
+    },
 )
 
-def _native_check_transition_impl(settings, attr):
+# The values rustc reads as a codegen switch turned on.
+_ON = ["", "y", "yes", "on", "true"]
+
+def _codegen_value(argv, key):
+    """The last value `argv` gives codegen option `key`, or None."""
+    value = None
+    for i, a in enumerate(argv):
+        for prefix in ("-C" + key + "=", "--codegen=" + key + "="):
+            if a.startswith(prefix):
+                value = a[len(prefix):]
+        if a in ("-C" + key, "--codegen=" + key):
+            value = ""
+        if a in ("-C", "--codegen") and i + 1 < len(argv):
+            nxt = argv[i + 1]
+            if nxt.startswith(key + "="):
+                value = nxt[len(key) + 1:]
+            elif nxt == key:
+                value = ""
+    return value
+
+def _crate_type(argv):
+    for i, a in enumerate(argv):
+        if a.startswith("--crate-type="):
+            return a[len("--crate-type="):]
+        if a == "--crate-type" and i + 1 < len(argv):
+            return argv[i + 1]
+    return None
+
+def _switch(on):
+    return "on" if on else "off"
+
+def _ir_flags(argv):
+    """What the module's compilation adds to the crate's own.
+
+    Opt-level 0, so no function is inlined into another and every name the
+    findings and silences use is a function of its own; the crate's own
+    debug assertions and overflow checks, which rustc otherwise ties to the
+    opt-level, so the code read is the code the build runs. One unit, so one
+    file. No debug info, which the scan never reads. No LTO: the program is
+    linked from the modules (modules.rs). The cfg adds the check roots beside
+    the crate's exports; it changes no item another crate can see, so a crate
+    compiled with it uses its dependencies' metadata compiled without it.
+    """
+    opt = _codegen_value(argv, "opt-level") or "0"
+    asserts = _codegen_value(argv, "debug-assertions")
+    asserts = (asserts in _ON) if asserts != None else (opt == "0")
+    overflow = _codegen_value(argv, "overflow-checks")
+    overflow = (overflow in _ON) if overflow != None else asserts
+    return [
+        "-Cdebug-assertions=" + _switch(asserts),
+        "-Coverflow-checks=" + _switch(overflow),
+        "-Copt-level=0",
+        "-Ccodegen-units=1",
+        "-Cdebuginfo=0",
+        "-Clto=off",
+        "--cfg=frustrate_no_block_check",
+        "--cap-lints=allow",
+    ]
+
+def _std_closure(ctx, summaries, panic):
+    """std's part of the program: rustc's fat LTO of the crate that names it."""
+    name = ctx.label.name + ".no_block"
+    listing = ctx.actions.declare_file(name + ".modules")
+    args = ctx.actions.args()
+    args.set_param_file_format("multiline")
+    args.add_all(summaries)
+    ctx.actions.write(listing, args)
+    keep = ctx.actions.declare_file(name + ".std.rs")
+    ctx.actions.run(
+        executable = ctx.executable._no_block_check,
+        inputs = depset([listing], transitive = [summaries]),
+        outputs = [keep],
+        arguments = ["--std-keep", keep.path, "--modules", listing.path],
+        mnemonic = "FrustrateNoBlockStdKeep",
+        progress_message = "naming std's part of %{label}",
+    )
+    toolchain = ctx.toolchains[str(Label("@rules_rust//rust:toolchain_type"))]
+    ir = ctx.actions.declare_file(name + ".std.module.ll")
+    archive = ctx.actions.declare_file(name + ".std.a")
+    ctx.actions.run(
+        executable = toolchain.rustc,
+        inputs = depset([keep], transitive = [toolchain.all_files]),
+        outputs = [ir, archive],
+        arguments = [
+            keep.path,
+            "--crate-name=frustrate_no_block_std",
+            "--crate-type=staticlib",
+            "--edition=2024",
+            "--target=" + toolchain.target_flag_value,
+            "--sysroot=" + toolchain.sysroot,
+            "-Copt-level=0",
+            "-Ccodegen-units=1",
+            "-Cdebuginfo=0",
+            "-Clto=fat",
+            "--cap-lints=allow",
+            # `link` too: rustc runs LTO only when it writes a crate type that
+            # links.
+            "--emit=link=%s,llvm-ir=%s" % (archive.path, ir.path),
+        ] + (["-Cpanic=" + panic] if panic else []),
+        mnemonic = "FrustrateNoBlockStd",
+        progress_message = "emitting std's part of %{label}",
+        toolchain = str(Label("@rules_rust//rust:toolchain_type")),
+    )
+    return ir
+
+def _crate_ir_aspect_impl(target, ctx):
+    # A build script runs on the execution platform; nothing it compiles is
+    # in the program.
+    if "build_script" in ctx.rule.kind:
+        return [_CrateIrInfo(own = None, modules = depset(), summaries = depset(), std = None, panic = None)]
+    infos = [d[_CrateIrInfo] for d in getattr(ctx.rule.attr, "deps", []) if _CrateIrInfo in d]
+    deps = [i.modules for i in infos]
+    dep_summaries = [i.summaries for i in infos]
+    rustc = [a for a in target.actions if a.mnemonic == "Rustc"]
+    if not rustc:
+        return [_CrateIrInfo(own = None, modules = depset(transitive = deps), summaries = depset(transitive = dep_summaries), std = None, panic = None)]
+    if len(rustc) != 1:
+        fail("%s: expected exactly one Rustc action, found %d" % (target.label, len(rustc)))
+    action = rustc[0]
+    argv = action.argv
+
+    # The crate's own Rustc command, as the build ran it, with only the emit
+    # changed and the flags above added: its inputs, the dependencies'
+    # metadata among them, are the build's own.
+    if len([a for a in argv[1:] if a.startswith("--emit=")]) != 1:
+        # Not a compilation rules_rust's rules make (its own bootstrap tools'
+        # are one). Nothing of it is read, and a program that calls into it
+        # is refused for the functions it lacks.
+        return [_CrateIrInfo(own = None, modules = depset(transitive = deps), summaries = depset(transitive = dep_summaries), std = None, panic = None)]
+    ir = ctx.actions.declare_file(ctx.label.name + ".no_block.module.ll")
+    args = ["--emit=llvm-ir=" + ir.path if a.startswith("--emit=") else a for a in argv[1:]]
+    ctx.actions.run(
+        executable = argv[0],
+        arguments = args + _ir_flags(argv),
+        inputs = action.inputs,
+        outputs = [ir],
+        env = action.env,
+        # The argv names tools by their paths in the exec configuration the
+        # Rustc action resolved, so this runs where that action would.
+        toolchain = str(Label("@rules_rust//rust:toolchain_type")),
+        mnemonic = "FrustrateNoBlockIr",
+        progress_message = "emitting no_block IR for %{label}",
+    )
+    summary = ctx.actions.declare_file(ctx.label.name + ".no_block.symbols")
+    ctx.actions.run(
+        executable = ctx.executable._no_block_check,
+        inputs = [ir],
+        outputs = [summary],
+        arguments = ["--summary", summary.path, ir.path],
+        mnemonic = "FrustrateNoBlockSymbols",
+        progress_message = "listing the symbols of %{label}",
+    )
+    modules = depset([ir], transitive = deps)
+    summaries = depset([summary], transitive = dep_summaries)
+    panic = _codegen_value(argv, "panic")
+    std = None
+    if _crate_type(argv) in ("cdylib", "staticlib", "bin"):
+        std = _std_closure(ctx, summaries, panic)
+    return [_CrateIrInfo(own = ir, modules = modules, summaries = summaries, std = std, panic = panic)]
+
+_crate_ir_aspect = aspect(
+    implementation = _crate_ir_aspect_impl,
+    attr_aspects = ["deps"],
+    attrs = {
+        "_no_block_check": attr.label(
+            default = Label("//bazel/no_block_check"),
+            executable = True,
+            cfg = "exec",
+        ),
+    },
+    toolchains = [
+        str(Label("@rules_rust//rust:toolchain_type")),
+        config_common.toolchain_type("@rules_cc//cc:toolchain_type", mandatory = False),
+    ],
+)
+
+def _native_check_transition_impl(_settings, attr):
     return {
-        # The platform the analysis proves the claims for. Only the crate
-        # moves to it; the test and the scanner stay on the host, so any
-        # platform's analysis runs from any host.
+        # The platform the analysis proves the claims for, for a build that
+        # does not already target it. Only the crate moves to it; the test
+        # and the scanner stay on the host, so any platform's analysis runs
+        # from any host. Everything else is the build's own.
         "//command_line_option:platforms": [str(attr.platform)],
         # rules_rust's default is a C library every Rust toolchain depends
         # on, which needs a C toolchain for the target. Its symbols are for a
-        # C link of Rust code, which this build never does, so an empty one
+        # C link of Rust code, which the analysis never does, so an empty one
         # keeps the target's C toolchain out of the build. A dependency that
         # compiles C for the target still needs one registered.
         _ALLOCATOR_LIBRARY: str(Label("//bazel:no_block_check_allocator")),
-        # Debug, as on wasm: an optimised build inlines across the boundaries
-        # the witness paths name.
-        "//command_line_option:compilation_mode": "fastbuild",
-        # Fat LTO is what puts std and every dependency in the one module
-        # the scanner reads; rules_rust builds the dependencies as bitcode
-        # for it.
-        _LTO: "fat",
-        # The roots. Natively the cfg adds them beside every production
-        # export rather than in place of them: the scanner walks the graph
-        # from the roots itself, and it needs the whole program to check
-        # every bounded-lock section.
-        _EXTRA_RUSTC_FLAGS: [
-            "--cfg=frustrate_no_block_check",
-            "-Adead_code",
-        ],
-        # For readable witness paths only: the roots take their inputs as
-        # parameters, so no opt-level can delete a body the scan should read.
-        _EXTRA_RUSTC_FLAG: settings[_EXTRA_RUSTC_FLAG] + ["-Copt-level=0"],
     }
 
 _native_check_transition = transition(
     implementation = _native_check_transition_impl,
-    inputs = [_EXTRA_RUSTC_FLAG],
+    inputs = [],
     outputs = [
         "//command_line_option:platforms",
         _ALLOCATOR_LIBRARY,
-        "//command_line_option:compilation_mode",
-        _LTO,
-        _EXTRA_RUSTC_FLAGS,
-        _EXTRA_RUSTC_FLAG,
     ],
 )
 
@@ -271,6 +326,15 @@ def _no_cc_allocator_impl(_ctx):
 
 # An allocator library with nothing in it, for the native analyses' builds.
 no_cc_allocator = rule(implementation = _no_cc_allocator_impl)
+
+def _program(library):
+    """The library's modules in reading order: its own first, std's last."""
+    info = library[_CrateIrInfo]
+    if not info.std:
+        fail("frustrate_no_block_check: %s is not a crate rustc links (a " % library.label +
+             "`rust_shared_library`, say), so it is not a whole program.")
+    rest = [m for m in info.modules.to_list() if m != info.own] + [info.std]
+    return info.own, rest
 
 # ----------------------------------------------------------------- tests --
 
@@ -404,13 +468,27 @@ _wasm_test = rule(
     },
 )
 
+def _native_library(ctx):
+    """The library as the build has it, or built for the analysis's platform."""
+    return ctx.attr.library or ctx.attr.elsewhere[0]
+
+def _modules_list(ctx, modules, name = None):
+    listing = ctx.actions.declare_file((name or ctx.label.name) + ".modules")
+    args = ctx.actions.args()
+    args.set_param_file_format("multiline")
+    args.add_all(modules)
+    ctx.actions.write(listing, args)
+    return listing
+
 def _native_test_impl(ctx):
     censuses = _censuses(ctx)
-    ir = ctx.attr.library[0][OutputGroupInfo].frustrate_native_ir.to_list()[0]
+    own, rest = _program(_native_library(ctx))
+    listing = _modules_list(ctx, rest)
     return _verdict_test(
         ctx,
-        [ir] + censuses,
-        ["--ir"] + _sink_args(ctx) + _allow_args(ctx) + _claims_args("--claims", censuses) + [ir.path],
+        [own, listing] + rest + censuses,
+        ["--ir", "--modules", listing.path] + _sink_args(ctx) + _allow_args(ctx) +
+        _claims_args("--claims", censuses) + [own.path],
         "FrustrateNativeBlockCheck",
         applied = True,
     )
@@ -419,15 +497,107 @@ _native_test = rule(
     implementation = _native_test_impl,
     test = True,
     attrs = _SCANNER_ATTRS | _SINK_ATTRS | {
-        "library": attr.label(
-            mandatory = True,
+        # The library in the build's configuration, where the build targets
+        # the analysis's platform; otherwise None.
+        "library": attr.label(aspects = [_crate_ir_aspect]),
+        # Otherwise the library built for the platform; otherwise None.
+        "elsewhere": attr.label(
             cfg = _native_check_transition,
-            aspects = [_native_ir_aspect],
+            aspects = [_crate_ir_aspect],
         ),
         "platform": attr.label(mandatory = True),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
+    },
+)
+
+_ShippedInfo = provider(
+    doc = "Every program rustc links beneath a target, in the configuration it is built in there.",
+    fields = {"programs": "depset[struct(label, own, modules, std)]"},
+)
+
+def _deps_of(value):
+    if type(value) == "Target":
+        return [value]
+    if type(value) == "list":
+        return [v for v in value if type(v) == "Target"]
+    if type(value) == "dict":
+        return [v for v in value.keys() + value.values() if type(v) == "Target"]
+    return []
+
+def _shipped_aspect_impl(target, ctx):
+    transitive = [
+        d[_ShippedInfo].programs
+        for name in dir(ctx.rule.attr)
+        for d in _deps_of(getattr(ctx.rule.attr, name))
+        if _ShippedInfo in d
+    ]
+    found = []
+    if _CrateIrInfo in target and target[_CrateIrInfo].std:
+        info = target[_CrateIrInfo]
+        found.append(struct(label = target.label, own = info.own, modules = info.modules, std = info.std))
+    return [_ShippedInfo(programs = depset(found, transitive = transitive))]
+
+# Down every attribute of a shipped app to the libraries in it, each in the
+# configuration the app's own rules give it, with its IR beside it.
+_shipped_aspect = aspect(
+    implementation = _shipped_aspect_impl,
+    attr_aspects = ["*"],
+    requires = [_crate_ir_aspect],
+)
+
+def _shipped_test_impl(ctx):
+    censuses = _censuses(ctx)
+    want = ctx.attr.library.label
+    programs = {}
+    for p in ctx.attr.app[_ShippedInfo].programs.to_list():
+        if p.label == want:
+            programs[p.own.path] = p
+    if not programs:
+        fail("frustrate_no_block_check: %s does not ship %s, so its analysis " % (ctx.attr.app.label, want) +
+             "would check nothing. Name the app that bundles the library.")
+    verdicts = []
+    applied = []
+    for i, p in enumerate(sorted(programs.values(), key = lambda p: p.own.path)):
+        rest = [m for m in p.modules.to_list() if m != p.own] + [p.std]
+        name = "%s.%d" % (ctx.label.name, i)
+        listing = ctx.actions.declare_file(name + ".modules")
+        args = ctx.actions.args()
+        args.set_param_file_format("multiline")
+        args.add_all(rest)
+        ctx.actions.write(listing, args)
+        verdict = ctx.actions.declare_file(name + ".verdict")
+        out = ctx.actions.declare_file(name + ".applied")
+        ctx.actions.run(
+            executable = ctx.executable._no_block_check,
+            inputs = [p.own, listing] + rest + censuses,
+            outputs = [verdict, out],
+            arguments = ["--applied", out.path, "--ir", "--modules", listing.path] +
+                        _sink_args(ctx) + _allow_args(ctx) + _claims_args("--claims", censuses) +
+                        [p.own.path, str(ctx.label), verdict.path],
+            mnemonic = "FrustrateNativeBlockCheck",
+            progress_message = "checking no_block claims in %{label}",
+        )
+        verdicts.append(verdict)
+        applied.append(out)
+    exe = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.symlink(output = exe, target_file = ctx.executable._runner, is_executable = True)
+    return [
+        DefaultInfo(executable = exe, files = depset(verdicts), runfiles = ctx.runfiles(files = verdicts)),
+        RunEnvironmentInfo(environment = {"FRUSTRATE_NO_BLOCK_VERDICT": ":".join([v.short_path for v in verdicts])}),
+        OutputGroupInfo(silences = depset(applied)),
+    ]
+
+# A native analysis over the library as a shipped app builds it: one verdict
+# for each configuration the app builds it in (an Android app's ABIs, say).
+_shipped_test = rule(
+    implementation = _shipped_test_impl,
+    test = True,
+    attrs = _SCANNER_ATTRS | _SINK_ATTRS | {
+        "app": attr.label(mandatory = True, aspects = [_shipped_aspect]),
+        # Only its label: which library in the app to analyse.
+        "library": attr.label(mandatory = True),
     },
 )
 
@@ -457,35 +627,47 @@ def _native_fixture_transition_impl(settings, attr):
     out = {}
     for platform in attr.platforms:
         config = _native_check_transition_impl(settings, struct(platform = platform))
-        config[_EXTRA_RUSTC_FLAGS] = config[_EXTRA_RUSTC_FLAGS] + ["--cfg=" + c for c in attr.cfgs]
+        config[_EXTRA_RUSTC_FLAGS] = settings[_EXTRA_RUSTC_FLAGS] + ["--cfg=" + c for c in attr.cfgs]
         out[platform.name] = config
     return out
 
 _native_fixture_transition = transition(
     implementation = _native_fixture_transition_impl,
-    inputs = [_EXTRA_RUSTC_FLAG],
+    inputs = [_EXTRA_RUSTC_FLAGS],
     outputs = [
         "//command_line_option:platforms",
         _ALLOCATOR_LIBRARY,
-        "//command_line_option:compilation_mode",
-        _LTO,
         _EXTRA_RUSTC_FLAGS,
-        _EXTRA_RUSTC_FLAG,
     ],
 )
 
 def _native_artifacts_impl(ctx):
     files = _censuses(ctx)
     for platform, library in ctx.split_attr.library.items():
-        ir = ctx.actions.declare_file("%s/%s.ll" % (ctx.label.name, platform))
-        ctx.actions.symlink(output = ir, target_file = library[OutputGroupInfo].frustrate_native_ir.to_list()[0])
-        files.append(ir)
+        own, rest = _program(library)
+        listing = _modules_list(ctx, rest, "%s/%s" % (ctx.label.name, platform))
+        program = ctx.actions.declare_file("%s/%s.ll" % (ctx.label.name, platform))
+        ctx.actions.run(
+            executable = ctx.executable._no_block_check,
+            inputs = [own, listing] + rest,
+            outputs = [program],
+            arguments = ["--link", program.path, "--modules", listing.path, own.path],
+            mnemonic = "FrustrateNoBlockLink",
+            progress_message = "linking the no_block program of %{label}",
+        )
+        files.append(program)
+        for i, m in enumerate([own] + rest):
+            module = ctx.actions.declare_file("%s/%s/%d.module.ll" % (ctx.label.name, platform, i))
+            ctx.actions.symlink(output = module, target_file = m)
+            files.append(module)
     return [DefaultInfo(files = depset(files))]
 
 # The native analysis's inputs with no verdict: the claim census of each
-# bridge, and the check build's IR for each platform as `<name>/<platform>.ll`,
-# for a test that runs the scanner over a fixture it expects to fail
-# (//tests/bazel_rules/native_red:native_red_test).
+# bridge and, for each platform, the program the analysis reads as one file,
+# `<name>/<platform>.ll`, and each module it is linked from,
+# `<name>/<platform>/<n>.module.ll`. For a test that runs the scanner over a
+# fixture it expects to fail (//tests/bazel_rules/native_red:native_red_test),
+# and the reader's check against LLVM's call graph.
 _no_block_check_artifacts = rule(
     implementation = _native_artifacts_impl,
     attrs = {
@@ -493,13 +675,18 @@ _no_block_check_artifacts = rule(
         "library": attr.label(
             mandatory = True,
             cfg = _native_fixture_transition,
-            aspects = [_native_ir_aspect],
+            aspects = [_crate_ir_aspect],
         ),
         # Extra cfgs for every crate in the build, for a fixture that turns on
         # test-only code in the runtime.
         "cfgs": attr.string_list(),
         # The platforms to build the IR for: any of the native analyses'.
         "platforms": attr.label_list(mandatory = True),
+        "_no_block_check": attr.label(
+            default = Label("//bazel/no_block_check"),
+            executable = True,
+            cfg = "exec",
+        ),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
@@ -525,6 +712,7 @@ def frustrate_no_block_check(
         io = [],
         allow = [],
         web_threads_platform = None,
+        shipped = {},
         **kwargs):
     """Settle every `#[bridge(no_block)]` claim in a bridge, for the targets it ships on.
 
@@ -532,9 +720,8 @@ def frustrate_no_block_check(
     the member cannot be stalled: it reaches no wait, no function named in
     `slow`, and no IO in an `io` class. Codegen settles what placement
     settles (an actor member's body, a dispatched member's body) and writes a
-    claim census; the rest is settled here, over a throwaway build of `library`
-    with one root per claim. Nothing this builds
-    ships.
+    claim census; the rest is settled here, over the code of `library`.
+    Nothing this builds ships.
 
     `targets` says where the bridge ships, and each analysis runs only where
     it proves something there. They are tests under `name`, a test_suite:
@@ -542,21 +729,36 @@ def frustrate_no_block_check(
     - `android`, `ios`, `linux`, `macos` → `<name>.<os>_<cpu>`, one per CPU
       frustrate builds that OS for: `android_aarch64` and `android_x86_64`;
       `ios_aarch64` (a device); `linux_x86_64` and `linux_aarch64` (glibc);
-      `macos_aarch64`. Each builds the crate for its platform with fat LTO
-      and scans the whole-program LLVM IR for `slow`, `io`, and any call out
-      of the Rust program that its C library (Apple's libSystem, Android's
-      bionic, glibc) is not known to return from without waiting; a C
-      dependency's function is "cannot verify" until a silence names it.
-      The test and the scanner run on the host; only the crate is built for
-      the platform, and rustc writes the IR without linking, so every
-      analysis runs from any host with no SDK, NDK or C toolchain for the
-      platform. What each needs is the platform's Rust std: the root
-      module's `rust.toolchain` lists the triple in `extra_target_triples`
-      (`aarch64-linux-android`, `x86_64-linux-android`, `aarch64-apple-ios`,
-      and the Linux and macOS triples rules_rust lists by default), and the
-      crate universe the bridge's dependencies come from supports it. A
-      dependency that compiles C for the platform also needs the platform's C
-      toolchain registered.
+      `macos_aarch64`. Each scans the LLVM IR of every Rust crate in the
+      library for `slow`, `io`, and any call out of the Rust program that its
+      C library (Apple's libSystem, Android's bionic, glibc) is not known to
+      return from without waiting; a C dependency's function is "cannot
+      verify" until a silence names it.
+
+      Where the build already targets the analysis's platform (a Mac's own
+      `bazel test`, for `macos_aarch64`), the analysis reads the library as
+      that build has it: the same configuration, the same compiled
+      dependencies. Each crate's IR comes from that crate's own Rustc command
+      run again with `--emit=llvm-ir` and `-Copt-level=0` (keeping the
+      crate's debug assertions and overflow checks) and the check's cfg,
+      which adds the roots; std's part comes from the bitcode its rlibs ship
+      with, through rustc's fat LTO of a crate naming what the program uses
+      of it. So the analysis costs one IR emission per crate the build
+      compiles, and a change costs what it recompiles, again. Elsewhere it
+      builds the library for the platform, in the build's configuration
+      otherwise. The test and the scanner run on the host and nothing is
+      linked, so every analysis runs from any host with no SDK, NDK or C
+      toolchain for the platform. What each needs is the platform's Rust
+      std: the root module's `rust.toolchain` lists the triple in
+      `extra_target_triples` (`aarch64-linux-android`,
+      `x86_64-linux-android`, `aarch64-apple-ios`, and the Linux and macOS
+      triples rules_rust lists by default), and the crate universe the
+      bridge's dependencies come from supports it. A dependency that
+      compiles C for the platform also needs the platform's C toolchain
+      registered. A crate built by a rule other than rules_rust's has no IR,
+      and the analysis refuses a program that calls into one.
+      With `shipped` naming an app for the OS, the OS's analysis is
+      `<name>.<os>`, over the library as that app builds it (see `shipped`).
     - `web` → nothing of its own. Single-threaded wasm has no wait
       instruction (std panics where it would wait), its std IO is stubs and
       JavaScript IO is asynchronous; its portable code is the native
@@ -588,12 +790,11 @@ def frustrate_no_block_check(
     Each root takes its member's request bytes as parameters, so no
     optimizer can delete a body behind a decode it proved fails, and a
     native analysis reports a root that does not reach its member's own
-    function as "cannot verify". The analyses append `-Copt-level=0` to
-    `--@rules_rust//rust/settings:extra_rustc_flag` for readable witness
-    paths; a crate's own `rustc_flags` reach rustc after it. The
-    configurations also set `--cfg=frustrate_no_block_check -Adead_code`; on
-    `web_threads` they are appended to the platform's own flags, and on the
-    native analyses they replace `extra_rustc_flags`.
+    function as "cannot verify". The wasm analyses append `-Copt-level=0`
+    to `--@rules_rust//rust/settings:extra_rustc_flag` for readable witness
+    paths; a crate's own `rustc_flags` reach rustc after it. Their
+    configurations also set `--cfg=frustrate_no_block_check -Adead_code`,
+    appended to the platform's own flags.
 
     For `web_threads`, the whole graph must build `+atomics`, and
     crate_universe resolves deps per triple, before RUSTFLAGS exist, so it
@@ -678,6 +879,14 @@ def frustrate_no_block_check(
         `@frustrate//ext/getrandom:wasm32_threads`. It must be a threaded
         platform, or the check finds no wait instruction. Its `flags` reach
         the check's build, so what the app compiles is what is scanned.
+      shipped: For a native OS, the app target that ships the library there
+        (`{"ios": "//app:ios", "android": "//app:android"}`). The OS's
+        analysis is then one test, `<name>.<os>`, over the library as that app
+        builds it: the analysis follows the app's own rules down to the
+        library, so it reads the library in each configuration the app
+        builds it in (one verdict each), and a build of the app with the
+        same flags shares its compiled crates. Without it, `<name>.<os>_<cpu>`
+        builds the library for frustrate's platform for that OS and CPU.
       allow: Silences for every claim the target checks, for code you cannot
         annotate. A name is what a finding says to silence it as, and each
         analysis names its findings its own way (natively a wait is the C
@@ -717,6 +926,10 @@ def frustrate_no_block_check(
     if web_threads_platform and "web_threads" not in analyses:
         fail("frustrate_no_block_check: %s names `web_threads_platform` but " % name +
              "`targets` has no `web_threads`, so nothing would build under it.")
+    for os in shipped:
+        if os not in _NATIVE or os not in analyses:
+            fail("frustrate_no_block_check: `shipped` names %r, which is not a native " % os +
+                 "OS in `targets`.")
     if io and not [t for t in analyses if t in _NATIVE or t == "wasi"]:
         fail("frustrate_no_block_check: %s names `io`, but only the native " % name +
              "targets and `wasi` check IO: a web build has none that blocks.")
@@ -728,12 +941,29 @@ def frustrate_no_block_check(
     for os in sorted(_NATIVE):
         if os not in analyses:
             continue
+        if os in shipped:
+            _shipped_test(
+                name = "%s.%s" % (name, os),
+                bridges = bridges,
+                app = shipped[os],
+                library = library,
+                slow = slow,
+                io = io,
+                allow = allow,
+                tags = tags,
+                target_compatible_with = compatible,
+                **kwargs
+            )
+            tests.append("%s.%s" % (name, os))
+            continue
         for cpu in _NATIVE[os]:
             test = "%s.%s_%s" % (name, os, cpu)
+            here = Label("//bazel:%s_%s.targeted" % (os, cpu))
             _native_test(
                 name = test,
                 bridges = bridges,
-                library = library,
+                library = select({here: library, "//conditions:default": None}),
+                elsewhere = select({here: None, "//conditions:default": library}),
                 platform = Label("//bazel:%s_%s" % (os, cpu)),
                 slow = slow,
                 io = io,

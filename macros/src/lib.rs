@@ -187,13 +187,11 @@ pub fn bridge_file(_input: TokenStream) -> TokenStream {
 /// follow into it. See `docs/ANNOTATIONS.md`, "Silencing a finding".
 ///
 /// Accepts exactly `(allow)`, on a free function, a method or a generic
-/// function. In an ordinary build the function is emitted unchanged. Under
-/// `--cfg frustrate_no_block_check` (the no_block check's build) it is
-/// `#[inline(never)]`, and its body begins with a call to
-/// `frustrate::__no_block_allow`, which every analysis reads as a stop
-/// point. A call in the body survives every generic instantiation, which a
-/// static could not; `inline(never)` keeps the call from moving into a
-/// caller, which would widen the silence to the caller.
+/// function. Its body begins with a call to `frustrate::__no_block_allow`,
+/// which every analysis reads as a stop point. The check reads code built at
+/// opt-level 0, where neither call is inlined; an optimised build inlines
+/// the empty marker to nothing. A call in the body survives every generic
+/// instantiation, which a static could not.
 #[proc_macro_attribute]
 pub fn no_block(attr: TokenStream, item: TokenStream) -> TokenStream {
     use proc_macro::{Delimiter, Group, TokenTree};
@@ -206,7 +204,7 @@ pub fn no_block(attr: TokenStream, item: TokenStream) -> TokenStream {
         _ => return fail("`#[frustrate::no_block(...)]` on a function takes exactly `(allow)`"),
     }
 
-    let mut trees: Vec<TokenTree> = item.clone().into_iter().collect();
+    let mut trees: Vec<TokenTree> = item.into_iter().collect();
     let has_body =
         matches!(trees.last(), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Brace);
     let is_fn = trees
@@ -233,13 +231,5 @@ pub fn no_block(attr: TokenStream, item: TokenStream) -> TokenStream {
     new_body.set_span(body.span());
     marked.extend([TokenTree::Group(new_body)]);
 
-    let mut out: TokenStream = "#[cfg(not(frustrate_no_block_check))]".parse().unwrap();
-    out.extend(item);
-    out.extend(
-        "#[cfg(frustrate_no_block_check)] #[inline(never)]"
-            .parse::<TokenStream>()
-            .unwrap(),
-    );
-    out.extend(marked);
-    out
+    marked
 }

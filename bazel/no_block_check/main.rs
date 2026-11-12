@@ -126,6 +126,7 @@ mod budget;
 mod io;
 mod ir;
 mod libc;
+mod modules;
 mod provenance;
 mod silences;
 mod symbol;
@@ -231,10 +232,16 @@ struct FatalEntry {
 
 impl FatalEntry {
     fn matches(&self, sym: &str) -> bool {
+        self.matches_at(sym, || own_path(sym))
+    }
+
+    /// [`Self::matches`], with the symbol's [`own_path`] from `path`, which
+    /// is called only if the entry needs it.
+    fn matches_at(&self, sym: &str, path: impl FnOnce() -> Vec<String>) -> bool {
         self.exact.contains(&sym)
             || (!self.segments.is_empty() && self.segments.iter().all(|s| sym.contains(*s)))
             || (!self.path.is_empty() && {
-                let p = own_path(sym);
+                let p = path();
                 p.len() >= self.path.len() && self.path.iter().zip(&p).all(|(a, b)| a == b)
             })
     }
@@ -1174,7 +1181,7 @@ fn run_with(
     claims: Option<&Claims>,
     sinks: &Sinks,
 ) -> Result<Green, String> {
-    budget::set(path, label);
+    budget::set(&[path.to_string()], label);
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     let m = parse(&bytes)?;
 
@@ -2364,23 +2371,25 @@ fn decode_body(instrs: &[u8]) -> Result<Scan, String> {
 }
 
 /// The environment variable that makes this binary a test's runner: it names
-/// the verdict a check action wrote, which the runner prints. The verdict was
+/// the verdict a check action wrote (or one per configuration, `:`-separated),
+/// which the runner prints. The verdict was
 /// reached at build time, so a red check fails the test's build and a test
 /// that runs at all is green; running it shows what was checked.
 const VERDICT_ENV: &str = "FRUSTRATE_NO_BLOCK_VERDICT";
 
 fn main() -> ExitCode {
-    if let Some(path) = std::env::var_os(VERDICT_ENV) {
-        return match std::fs::read_to_string(&path) {
-            Ok(text) => {
-                print!("{text}");
-                ExitCode::SUCCESS
+    if let Some(paths) = std::env::var_os(VERDICT_ENV) {
+        // One verdict, or one per configuration, `:`-separated.
+        for path in std::env::split_paths(&paths) {
+            match std::fs::read_to_string(&path) {
+                Ok(text) => print!("{text}"),
+                Err(e) => {
+                    eprintln!("no_block_check: {}: {e}", path.to_string_lossy());
+                    return ExitCode::FAILURE;
+                }
             }
-            Err(e) => {
-                eprintln!("no_block_check: {}: {e}", path.to_string_lossy());
-                ExitCode::FAILURE
-            }
-        };
+        }
+        return ExitCode::SUCCESS;
     }
     // `--slow <path>` and `--io <category>`, repeatable and anywhere on the
     // line, add named sinks to the gate shapes; the positional parsing below
@@ -2394,8 +2403,46 @@ fn main() -> ExitCode {
     // `--also-claims <census>`: another bridge linked into the same artifact,
     // beside the census a mode takes positionally.
     let mut also_claims: Vec<String> = Vec::new();
+    // `--modules <list>`: a file naming further IR modules, one a line,
+    // read after the positional one as parts of the same program.
+    let mut more_modules: Vec<String> = Vec::new();
+    // `--std-keep <out.rs>`: write the crate that keeps std's part of the
+    // program (modules.rs) and stop.
+    let mut std_keep: Option<String> = None;
+    // `--link <out.ll>`: write the modules as the one program the native
+    // analysis reads, and stop.
+    let mut link_out: Option<String> = None;
+    // `--summary <out> <module.ll>`: write the module's Rust symbols for
+    // `--std-keep`, and stop.
+    let mut summary_out: Option<String> = None;
     let mut raw = std::env::args();
     while let Some(a) = raw.next() {
+        if a == "--modules" || a == "--std-keep" || a == "--link" || a == "--summary" {
+            let Some(v) = raw.next() else {
+                eprintln!("no_block_check: `{a}` wants a value");
+                return ExitCode::FAILURE;
+            };
+            if a == "--std-keep" {
+                std_keep = Some(v);
+                continue;
+            }
+            if a == "--link" {
+                link_out = Some(v);
+                continue;
+            }
+            if a == "--summary" {
+                summary_out = Some(v);
+                continue;
+            }
+            match std::fs::read_to_string(&v) {
+                Ok(t) => more_modules.extend(t.lines().filter(|l| !l.is_empty()).map(String::from)),
+                Err(e) => {
+                    eprintln!("no_block_check: {v}: {e}");
+                    return ExitCode::FAILURE;
+                }
+            }
+            continue;
+        }
         if a == "--ir" {
             ir_mode = true;
             continue;
@@ -2445,6 +2492,54 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
+    if let Some(out) = summary_out {
+        let Some(module) = args.get(1) else {
+            eprintln!("usage: no_block_check --summary <out> <module.ll>");
+            return ExitCode::FAILURE;
+        };
+        return match modules::summary(module)
+            .and_then(|text| std::fs::write(&out, text).map_err(|e| format!("{out}: {e}")))
+        {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("no_block_check --summary: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    if let Some(out) = std_keep {
+        return match modules::std_keep(&more_modules)
+            .and_then(|src| std::fs::write(&out, src).map_err(|e| format!("{out}: {e}")))
+        {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("no_block_check --std-keep: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    if let Some(out) = link_out {
+        let modules: Vec<String> = args
+            .iter()
+            .skip(1)
+            .chain(more_modules.iter())
+            .cloned()
+            .collect();
+        return match modules::link(&modules)
+            .and_then(|text| std::fs::write(&out, text).map_err(|e| format!("{out}: {e}")))
+        {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("no_block_check --link: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    let with_modules = |first: &String| -> Vec<String> {
+        std::iter::once(first.clone())
+            .chain(more_modules.iter().cloned())
+            .collect()
+    };
     if let Err(e) = self_test() {
         eprintln!("no_block_check: {e}");
         return ExitCode::FAILURE;
@@ -2478,7 +2573,10 @@ fn main() -> ExitCode {
          \x20      no_block_check [--wasi] [--slow ... | --io ... | --allow ...] [--applied <file>] \
          --claims <census> <module.wasm> <label> [marker-out]\n\
          \x20      no_block_check --ir [--slow ... | --io ... | --allow ...] [--applied <file>] \
-         [--claims <census>] <module.ll> <label> [marker-out]\n\
+         [--modules <list>] [--claims <census>] <module.ll> <label> [marker-out]\n\
+         \x20      no_block_check --summary <out> <module.ll>\n\
+         \x20      no_block_check --std-keep <out.rs> --modules <list of summaries>\n\
+         \x20      no_block_check --link <out.ll> [--modules <list>] <module.ll>...\n\
          \x20      no_block_check --claims-only <census> <label> [marker-out]\n\
          \x20      no_block_check [--allow <name>]... --silences <census> <applied>... <label> <marker-out>\n\
          \x20      no_block_check --report <module.wasm> [label]";
@@ -2512,7 +2610,7 @@ fn main() -> ExitCode {
                     ))
                 } else {
                     if ir_mode {
-                        ir::run_ir(&args[3], &args[4], Some(&claims), &slow)
+                        ir::run_ir(&with_modules(&args[3]), &args[4], Some(&claims), &slow)
                     } else {
                         run_with(&args[3], &args[4], Some(&claims), &slow)
                     }
@@ -2557,9 +2655,10 @@ fn main() -> ExitCode {
             eprintln!("{usage}");
             return ExitCode::FAILURE;
         }
-        _ if args.len() >= 3 && ir_mode => {
-            (ir::run_ir(&args[1], &args[2], None, &slow), args.get(3))
-        }
+        _ if args.len() >= 3 && ir_mode => (
+            ir::run_ir(&with_modules(&args[1]), &args[2], None, &slow),
+            args.get(3),
+        ),
         _ if args.len() >= 3 => (run_with(&args[1], &args[2], None, &slow), args.get(3)),
         _ => {
             eprintln!("{usage}");

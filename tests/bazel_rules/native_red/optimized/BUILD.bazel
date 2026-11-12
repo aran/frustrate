@@ -2,8 +2,9 @@ load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 load("//bazel:defs.bzl", "frustrate_bridge")
 load("//bazel:no_block_check.bzl", "no_block_check_artifacts")
 
-# A claimed member that waits, in a crate whose own flags raise the opt-level
-# past the check's pin. See ../BUILD.bazel.
+# A claimed member that waits, in a crate whose own flags build it at
+# opt-level 2: the analysis reads it at opt-level 0 all the same. See
+# ../BUILD.bazel.
 
 frustrate_bridge(
     name = "bridge",
