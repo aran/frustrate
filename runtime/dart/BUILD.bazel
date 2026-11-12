@@ -58,7 +58,6 @@ dart_test(
     main = "test/no_per_byte_crossing_test.dart",
     package = ":pubspec-metadata",
     deps = [
-        ":frustrate",
         "@pub_deps//:test",
         "@rules_dart//dart/runfiles",
     ],

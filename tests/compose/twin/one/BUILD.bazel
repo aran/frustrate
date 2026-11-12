@@ -53,6 +53,5 @@ dart_library(
     visibility = ["//tests/compose/twin:__subpackages__"],
     deps = [
         "//runtime/dart:frustrate",
-        "@pub_deps//:ffi",
     ],
 )
