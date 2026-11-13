@@ -18,4 +18,4 @@ dev_dependencies:
   # rules_dart's own `//dart/runfiles` serves it (`resolve` in MODULE.bazel).
   # To use a local rules_dart's with `dart pub get`, override it in an untracked
   # `pubspec_overrides.yaml`.
-  runfiles: 0.8.1
+  runfiles: 0.9.1

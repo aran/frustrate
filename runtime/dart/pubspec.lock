@@ -213,10 +213,10 @@ packages:
     dependency: "direct dev"
     description:
       name: runfiles
-      sha256: "9fb28964e79df69800864f7fc0f98fe6c6f849d6bf8289fdf2d1dadd5c54f990"
+      sha256: da6227e3bb86ab617f3b55b9a9fc917e04b05f3ebd532ae1ca647ed6e9b620dc
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.1"
+    version: "0.9.1"
   shelf:
     dependency: transitive
     description:
