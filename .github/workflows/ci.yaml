@@ -1,6 +1,6 @@
-# `bazel test //...` in the root workspace and in bazel_frb, which is its own
-# module (it is in .bazelignore). The smoke jobs below make a few real bridge
-# calls on each platform the project supports; macOS and Linux are already
+# `bazel test //...` in the root workspace and in bazel_frb and e2e/iroh_demo,
+# each its own module (in .bazelignore). The smoke jobs below make a few real
+# bridge calls on each platform the project supports; macOS and Linux are already
 # covered by `bazel test //...`, which runs //tests/dart_integration natively.
 name: CI
 on:
@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        folder: [".", "bazel_frb"]
+        folder: [".", "bazel_frb", "e2e/iroh_demo"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # 0.19.1
@@ -77,6 +77,8 @@ jobs:
       - run: bazel run --noincompatible_auto_exec_groups @overhead//lint:prek -- run --all-files --show-diff-on-failure
       - name: bazelrc preset is the one overhead generates
         run: bazel run @overhead//preset -- --check
+      - name: conclusion needs every job, and a job runs in every workspace
+        run: bazel run @overhead//ci:check
 
   # A consuming module must be able to load every package of the published
   # module: tools and IDE plugins enumerate `@frustrate//...`. wasi_demo takes
@@ -208,3 +210,23 @@ jobs:
           disable-animations: true
           working-directory: e2e/flutter_demo
           script: bazel run //:smoke -- -t //:app_android --build-arg=--config=android -d android
+
+  # The one job branch protection requires: it fails when any job it needs
+  # failed or was cancelled. A smoke job skipped for a docs-only change counts
+  # as passed. `bazel run @overhead//ci:check` checks that it needs every job.
+  conclusion:
+    needs:
+      - test
+      - pre-commit
+      - consumer-query
+      - changes
+      - smoke-web
+      - smoke-ios
+      - smoke-android
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: always()
+    steps:
+      - name: Fail if any job did not succeed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
