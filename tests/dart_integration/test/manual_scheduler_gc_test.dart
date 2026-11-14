@@ -2,7 +2,8 @@
 /// work: a handle collected without `dispose()` is dropped by its finalizer,
 /// and a `Drop` that spawns puts the task on the run queue when the collector
 /// chooses. The next drain throws, naming the handle type, and the one after
-/// runs the work.
+/// runs the work. `FrustrateNative.manualHandles` counts handles made and
+/// given back, the same whether or when the collector ran.
 ///
 /// Its own target, as `gc_finalizer_test` is: whether a finalizer runs within
 /// the time allowed is up to the VM.
@@ -28,22 +29,39 @@ void main() {
 
   test('a disposed handle\'s Drop schedules work the drain runs', () {
     final drain = FrustrateNative.manualDrain();
+    final handles = FrustrateNative.manualHandles();
     while (drain()) {}
+    handles();
     final before = dropSpawnsRun();
     for (var i = 0; i < 3; i++) {
       SpawnsOnDrop.new_().dispose();
     }
     expect(drain(), isTrue);
     expect(dropSpawnsRun(), before + 3);
+    expect(handles()['SpawnsOnDrop'], (made: 3, disposed: 3));
+  });
+
+  test('a call that takes the object gives its handle back', () {
+    final handles = FrustrateNative.manualHandles();
+    handles();
+    expect(Tape.new_(marks: ['a', 'b']).take().intoCount(), 2);
+    final kept = Tape.new_(marks: []);
+    expect(handles()['Tape'], (made: 2, disposed: 1));
+    expect(handles(), isEmpty, reason: 'each read starts the count again');
+    kept.dispose();
+    expect(handles()['Tape'], (made: 0, disposed: 1));
   });
 
   test(
     'work a finalizer schedules fails the next drain, naming the type',
     () async {
       final drain = FrustrateNative.manualDrain();
+      final handles = FrustrateNative.manualHandles();
       while (drain()) {}
+      handles();
       final before = dropSpawnsRun();
       _abandon();
+      final abandoned = handles();
 
       StateError? error;
       final elapsed = Stopwatch()..start();
@@ -65,6 +83,11 @@ void main() {
       expect(sink, isNot(0));
       expect(error, isNotNull, reason: 'the handle was not finalized in 10s');
       expect(error!.message, contains('SpawnsOnDrop: 1'));
+      expect(abandoned['SpawnsOnDrop'], (
+        made: 1,
+        disposed: 0,
+      ), reason: 'read before the collector ran');
+      expect(handles(), isEmpty, reason: 'a finalizer gives nothing back');
       expect(
         dropSpawnsRun(),
         before,

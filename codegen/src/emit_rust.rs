@@ -1411,7 +1411,7 @@ fn encode_owned(
             // (`ByteWriter::write_minted`).
             let (ctor, drop_fn) = match iface.opaque(n).unwrap().model {
                 Model::Confined => (
-                    format!("handle::confined_new::<{path}>({expr})"),
+                    format!("handle::confined_new::<{path}>({expr}, \"{n}\")"),
                     Some(format!("handle::confined_drop::<{path}>")),
                 ),
                 // The type name rides along for the same reason it does on an
@@ -1425,11 +1425,11 @@ fn encode_owned(
                     Some(format!("handle::resident_drop::<{path}>")),
                 ),
                 Model::Frozen => (
-                    format!("handle::frozen_new::<{path}>({expr})"),
+                    format!("handle::frozen_new::<{path}>({expr}, \"{n}\")"),
                     Some(format!("handle::frozen_drop::<{path}>")),
                 ),
                 Model::Locked => (
-                    format!("handle::locked_new::<{path}>({expr})"),
+                    format!("handle::locked_new::<{path}>({expr}, \"{n}\")"),
                     Some(format!("handle::locked_drop::<{path}>")),
                 ),
                 // An actor object goes into its executor's object table, and
@@ -5842,7 +5842,7 @@ mod tests {
         assert!(value.contains("w.write_string(&k3);"), "{value}");
         assert!(
             value.contains(
-                "unsafe { w.write_minted(handle::frozen_new::<crate::api::S>(v3), \
+                "unsafe { w.write_minted(handle::frozen_new::<crate::api::S>(v3, \"S\"), \
                  handle::frozen_drop::<crate::api::S>) };"
             ),
             "{value}"
@@ -5862,7 +5862,7 @@ mod tests {
         assert!(set.contains("for x3 in ret {"), "{set}");
         assert!(
             set.contains(
-                "unsafe { w.write_minted(handle::frozen_new::<crate::api::S>(x3), \
+                "unsafe { w.write_minted(handle::frozen_new::<crate::api::S>(x3, \"S\"), \
                  handle::frozen_drop::<crate::api::S>) };"
             ),
             "{set}"
@@ -7583,7 +7583,7 @@ mod tests {
             "{code}"
         );
         assert!(
-            code.contains("handle::frozen_new::<Box<dyn crate::api::Store>>(ret)"),
+            code.contains("handle::frozen_new::<Box<dyn crate::api::Store>>(ret, \"Store\")"),
             "{code}"
         );
         // borrowed trait param on a free function: tagged, and
@@ -7880,7 +7880,7 @@ mod tests {
             "{code}"
         );
         assert!(
-            code.contains("handle::confined_new::<Box<dyn crate::api::Counter>>(ret)"),
+            code.contains("handle::confined_new::<Box<dyn crate::api::Counter>>(ret, \"Counter\")"),
             "{code}"
         );
         assert!(
@@ -8152,7 +8152,7 @@ mod tests {
             "#,
         );
         assert!(
-            code.contains("handle::frozen_new::<crate::api::Snap>(ret)"),
+            code.contains("handle::frozen_new::<crate::api::Snap>(ret, \"Snap\")"),
             "{code}"
         );
     }
@@ -8390,7 +8390,7 @@ mod tests {
             let code = emit_src(&format!("{decls} #[bridge] pub fn f(s: {chan}<Doc>) {{}}"));
             assert!(
                 code.contains(
-                    "|v, w| { unsafe { w.write_minted(handle::confined_new::<crate::api::Doc>(v), \
+                    "|v, w| { unsafe { w.write_minted(handle::confined_new::<crate::api::Doc>(v, \"Doc\"), \
                      handle::confined_drop::<crate::api::Doc>) }; }"
                 ),
                 "{chan}: {code}"
@@ -8406,7 +8406,7 @@ mod tests {
         assert!(code.contains("enc_Wrap(w, x0);"), "{code}");
         assert!(
             code.contains(
-                "unsafe { w.write_minted(handle::confined_new::<crate::api::Doc>(v.d), \
+                "unsafe { w.write_minted(handle::confined_new::<crate::api::Doc>(v.d, \"Doc\"), \
                  handle::confined_drop::<crate::api::Doc>) };"
             ),
             "{code}"

@@ -856,18 +856,34 @@ pub extern "C" fn frustrate_manual_drain() -> u8 {
 #[cfg(frustrate_manual_scheduler)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn frustrate_manual_unscheduled(out: *mut u8, cap: u64) -> u64 {
-    global().shared.inner.with(|inner| {
-        let counts = &mut inner.unscheduled;
-        let report: String = counts
-            .iter()
-            .map(|(name, n)| format!("{name}\t{n}\n"))
-            .collect();
-        if !report.is_empty() && report.len() as u64 <= cap {
-            unsafe { std::ptr::copy_nonoverlapping(report.as_ptr(), out, report.len()) };
-            counts.clear();
-        }
-        report.len() as u64
-    })
+    global()
+        .shared
+        .inner
+        .with(|inner| unsafe { take_lines(&mut inner.unscheduled, |n| n.to_string(), out, cap) })
+}
+
+/// Writes `records` to `out` as UTF-8 lines of `<type name>\t<fields>` and
+/// clears them when they fit in `cap` bytes; returns their length either way,
+/// so a caller whose buffer was short calls again with a larger one.
+///
+/// # Safety
+/// `out` must be valid for `cap` bytes of writes, or `cap` must be 0.
+#[cfg(frustrate_manual_scheduler)]
+pub(crate) unsafe fn take_lines<V>(
+    records: &mut std::collections::BTreeMap<&'static str, V>,
+    fields: impl Fn(&V) -> String,
+    out: *mut u8,
+    cap: u64,
+) -> u64 {
+    let report: String = records
+        .iter()
+        .map(|(name, v)| format!("{name}\t{}\n", fields(v)))
+        .collect();
+    if !report.is_empty() && report.len() as u64 <= cap {
+        unsafe { std::ptr::copy_nonoverlapping(report.as_ptr(), out, report.len()) };
+        records.clear();
+    }
+    report.len() as u64
 }
 
 thread_local! {

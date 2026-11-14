@@ -97,8 +97,8 @@ typedef _SchemaHashC = Uint64 Function();
 typedef _SchemaHashDart = int Function();
 typedef _ManualDrainC = Uint8 Function();
 typedef _ManualDrainDart = int Function();
-typedef _ManualUnscheduledC = Uint64 Function(Pointer<Uint8>, Uint64);
-typedef _ManualUnscheduledDart = int Function(Pointer<Uint8>, int);
+typedef _ManualCountsC = Uint64 Function(Pointer<Uint8>, Uint64);
+typedef _ManualCountsDart = int Function(Pointer<Uint8>, int);
 typedef _IdleNotifyC = Void Function(Int64);
 typedef _IdleNotifyDart = void Function(int);
 typedef _IdleReadC = Uint64 Function();
@@ -127,6 +127,7 @@ abstract final class RuntimeSymbol {
   static const actorReap = 'frustrate_actor_reap';
   static const manualDrain = 'frustrate_manual_drain';
   static const manualUnscheduled = 'frustrate_manual_unscheduled';
+  static const manualHandles = 'frustrate_manual_handles';
   static const idleNotify = 'frustrate_idle_notify';
   static const idlePending = 'frustrate_idle_pending';
   static const idleGeneration = 'frustrate_idle_generation';
@@ -159,6 +160,7 @@ enum NativeExport {
   actorReap(RuntimeSymbol.actorReap),
   manualDrain(RuntimeSymbol.manualDrain),
   manualUnscheduled(RuntimeSymbol.manualUnscheduled),
+  manualHandles(RuntimeSymbol.manualHandles),
   idleNotify(RuntimeSymbol.idleNotify),
   idlePending(RuntimeSymbol.idlePending),
   idleGeneration(RuntimeSymbol.idleGeneration),
@@ -349,33 +351,17 @@ class FrustrateNative {
   /// when the installed one was built without the manual scheduler: a harness
   /// that asked for manual scheduling and got the pool would replay nothing.
   static bool Function() manualDrain() {
-    final transport = _transport;
-    if (transport == null) {
-      throw StateError(
-        'frustrate: manualDrain() needs an installed bridge; '
-        'call FrustrateNative.init first.',
-      );
-    }
-    final _ManualDrainDart drain;
-    final _ManualUnscheduledDart unscheduled;
-    try {
-      drain = transport._primary
-          .address(NativeExport.manualDrain)
-          .cast<NativeFunction<_ManualDrainC>>()
-          .asFunction<_ManualDrainDart>();
-      unscheduled = transport._primary
-          .address(NativeExport.manualUnscheduled)
-          .cast<NativeFunction<_ManualUnscheduledC>>()
-          .asFunction<_ManualUnscheduledDart>();
-    } on ArgumentError {
-      throw StateError(
-        'frustrate: ${_describe(transport._primary)} was built without the '
-        'manual scheduler, so its Rust tasks run on the thread pool and '
-        'there is nothing to drain. Build it through '
-        'frustrate_manual_scheduler_library '
-        '(@frustrate//bazel:manual_scheduler.bzl).',
-      );
-    }
+    final transport = _manualTransport('manualDrain()');
+    final drain = _manualExport<_ManualDrainC, _ManualDrainDart>(
+      transport,
+      NativeExport.manualDrain,
+      (f) => f.asFunction(),
+    );
+    final unscheduled = _manualExport<_ManualCountsC, _ManualCountsDart>(
+      transport,
+      NativeExport.manualUnscheduled,
+      (f) => f.asFunction(),
+    );
     return () {
       final ran = drain();
       if (ran == 2) throw StateError(_unscheduledReport(unscheduled));
@@ -383,31 +369,91 @@ class FrustrateNative {
     };
   }
 
+  /// A reader of the handles made and disposed, for a harness that holds a
+  /// run to disposing everything it makes. Each call returns, by each handle
+  /// type's name (the Dart class's, as [manualDrain]'s error names it), how
+  /// many handles Rust gave Dart since the
+  /// previous call and how many Dart gave back, by `dispose()` or by a call
+  /// that took the object, and starts the count again; types with neither are
+  /// left out. A handle a finalizer dropped is not given back, so the counts
+  /// depend on what the run did and not on when the collector ran: `made`
+  /// above `disposed` is handles the run did not dispose.
+  ///
+  /// Kept only by a bridge built with the manual scheduler, as for
+  /// [manualDrain], and it throws a [StateError] the same way when there is
+  /// none.
+  static Map<String, ({int made, int disposed})> Function() manualHandles() {
+    final handles = _manualExport<_ManualCountsC, _ManualCountsDart>(
+      _manualTransport('manualHandles()'),
+      NativeExport.manualHandles,
+      (f) => f.asFunction(),
+    );
+    return () => {
+      for (final MapEntry(:key, value: [made, disposed]) in _takeRecords(
+        handles,
+      ).entries)
+        key: (made: made, disposed: disposed),
+    };
+  }
+
+  static _NativeTransport _manualTransport(String caller) {
+    final transport = _transport;
+    if (transport == null) {
+      throw StateError(
+        'frustrate: $caller needs an installed bridge; '
+        'call FrustrateNative.init first.',
+      );
+    }
+    return transport;
+  }
+
+  static D _manualExport<C extends Function, D extends Function>(
+    _NativeTransport transport,
+    NativeExport export,
+    D Function(Pointer<NativeFunction<C>>) bind,
+  ) {
+    try {
+      return bind(transport._primary.address(export).cast<NativeFunction<C>>());
+    } on ArgumentError {
+      throw StateError(
+        'frustrate: ${_describe(transport._primary)} was built without the '
+        'manual scheduler: its Rust tasks run on the thread pool, and it '
+        'keeps no manual-scheduler records. Build it through '
+        'frustrate_manual_scheduler_library '
+        '(@frustrate//bazel:manual_scheduler.bzl).',
+      );
+    }
+  }
+
   /// The [StateError] message for work finalizers scheduled, read (and so
   /// cleared) from the library's record.
-  static String _unscheduledReport(_ManualUnscheduledDart unscheduled) {
+  static String _unscheduledReport(_ManualCountsDart unscheduled) {
+    final lines = _takeRecords(unscheduled).entries
+        .map((e) => '  ${e.key}: ${e.value.single}');
+    return 'frustrate: handles that were never disposed scheduled Rust '
+        'work as the garbage collector or a stopping actor dropped them, '
+        'so when it runs is not up to this run, which will not replay. '
+        'Spawns and wakes, by handle type:\n${lines.join('\n')}\n'
+        'Dispose these handles. The next drain runs the work.';
+  }
+
+  /// Reads (and so clears) a record of counts by handle type.
+  static Map<String, List<int>> _takeRecords(_ManualCountsDart read) {
     var cap = 256;
     while (true) {
       final buf = malloc<Uint8>(cap);
       try {
-        final len = unscheduled(buf, cap);
+        final len = read(buf, cap);
         if (len > cap) {
           cap = len;
           continue;
         }
-        final lines = utf8
-            .decode(buf.asTypedList(len))
-            .split('\n')
-            .where((line) => line.isNotEmpty)
-            .map((line) {
-              final [type, count] = line.split('\t');
-              return '  $type: $count';
-            });
-        return 'frustrate: handles that were never disposed scheduled Rust '
-            'work as the garbage collector or a stopping actor dropped them, '
-            'so when it runs is not up to this run, which will not replay. '
-            'Spawns and wakes, by handle type:\n${lines.join('\n')}\n'
-            'Dispose these handles. The next drain runs the work.';
+        return {
+          for (final line in utf8.decode(buf.asTypedList(len)).split('\n'))
+            if (line.isNotEmpty)
+              if (line.split('\t') case [final type, ...final counts])
+                type: [for (final n in counts) int.parse(n)],
+        };
       } finally {
         malloc.free(buf);
       }

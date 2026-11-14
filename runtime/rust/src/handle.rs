@@ -164,6 +164,82 @@ pub fn assert_frozen<T: FrozenSafe>() {}
 /// ```
 pub fn assert_locked<T: LockedSafe>() {}
 
+// ---- The manual scheduler's handle ledger ----
+
+/// Handles minted for Dart, and handles Dart gave back, by the bridge's name
+/// for the type, since the harness last read them: `(made, disposed)`. Kept
+/// only under the manual scheduler; see [`frustrate_manual_handles`].
+///
+/// Given back means `dispose()` or a call that took the object. A drop by a
+/// finalizer counts as neither, and nor does an object stranded on the wrong
+/// thread, so the pair depends on what the run did and not on when the
+/// collector ran: made minus disposed is the handles the run left to the
+/// collector, stranded, or still holds.
+#[cfg(frustrate_manual_scheduler)]
+static LEDGER: crate::bounded::Lock<Ledger> = crate::bounded::Lock::new(Ledger {
+    counts: std::collections::BTreeMap::new(),
+    names: std::collections::BTreeMap::new(),
+});
+
+#[cfg(frustrate_manual_scheduler)]
+struct Ledger {
+    /// `(made, disposed)` by the bridge's name for the type.
+    counts: std::collections::BTreeMap<&'static str, (u64, u64)>,
+    /// The bridge's name for each Rust type minted, so a drop, which is told
+    /// only the type, counts under the name the drain's report uses.
+    names: std::collections::BTreeMap<&'static str, &'static str>,
+}
+
+#[inline(always)]
+#[cfg_attr(
+    not(frustrate_manual_scheduler),
+    allow(clippy::extra_unused_type_parameters)
+)]
+fn made<T>(name: &'static str) {
+    #[cfg(frustrate_manual_scheduler)]
+    LEDGER.with(|l| {
+        l.names.insert(std::any::type_name::<T>(), name);
+        l.counts.entry(name).or_default().0 += 1;
+    });
+    #[cfg(not(frustrate_manual_scheduler))]
+    let _ = name;
+}
+
+/// Counts a drop as given back unless a finalizer is running it.
+#[inline(always)]
+fn given_back<T>() {
+    #[cfg(frustrate_manual_scheduler)]
+    if crate::stream::finalizing().is_none() {
+        LEDGER.with(|l| {
+            let rust = std::any::type_name::<T>();
+            let name = l.names.get(rust).copied().unwrap_or(rust);
+            l.counts.entry(name).or_default().1 += 1;
+        });
+    }
+}
+
+/// The handles made and given back since the last read, as UTF-8 lines of
+/// `<type name>\t<made>\t<disposed>`, one per handle type, named as the
+/// bridge names it. Writes them to `out` and clears the record when they fit
+/// in `cap` bytes; returns their length either way, so a caller whose buffer
+/// was short calls again with a larger one. Absent from every build but the
+/// manual scheduler's.
+///
+/// # Safety
+/// `out` must be valid for `cap` bytes of writes, or `cap` must be 0.
+#[cfg(frustrate_manual_scheduler)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn frustrate_manual_handles(out: *mut u8, cap: u64) -> u64 {
+    LEDGER.with(|l| unsafe {
+        crate::executor::take_lines(
+            &mut l.counts,
+            |(made, given)| format!("{made}\t{given}"),
+            out,
+            cap,
+        )
+    })
+}
+
 // ---- Confined: Box<T> ----
 
 /// `Send`, and deliberately not `Sync`: a confined object has one owner and
@@ -171,9 +247,10 @@ pub fn assert_locked<T: LockedSafe>() {}
 /// it can be born on a pool worker and used from the calling isolate.
 ///
 /// ```compile_fail,E0277
-/// frustrate::__private::handle::confined_new(std::rc::Rc::new(1i32));
+/// frustrate::__private::handle::confined_new(std::rc::Rc::new(1i32), "Probe");
 /// ```
-pub fn confined_new<T: Send + 'static>(value: T) -> u64 {
+pub fn confined_new<T: Send + 'static>(value: T, name: &'static str) -> u64 {
+    made::<T>(name);
     Box::into_raw(Box::new(value)) as u64
 }
 
@@ -197,6 +274,7 @@ pub unsafe fn confined_mut<'a, T>(h: u64) -> &'a mut T {
 /// # Safety
 /// `h` must be a live handle created by `confined_new::<T>`; never used after.
 pub unsafe fn confined_drop<T>(h: u64) {
+    given_back::<T>();
     drop(Box::from_raw(h as *mut T));
 }
 
@@ -251,6 +329,7 @@ pub fn resident_new<T: 'static>(value: T, name: &'static str) -> u64 {
              a field, or declare it #[bridge(confined)]"
         );
     }
+    made::<T>(name);
     let h = Box::into_raw(Box::new(value)) as u64;
     #[cfg(not(target_family = "wasm"))]
     crate::resident::record(h, name);
@@ -322,6 +401,7 @@ pub unsafe fn resident_mut<'a, T>(h: u64) -> &'a mut T {
 /// If the calling thread is not the one that built the object.
 pub unsafe fn resident_adopt<T>(h: u64) -> Box<T> {
     assert_owning_thread(h, "consumed");
+    given_back::<T>();
     #[cfg(not(target_family = "wasm"))]
     crate::resident::retire(h);
     Box::from_raw(h as *mut T)
@@ -356,6 +436,7 @@ pub unsafe fn resident_drop<T>(h: u64) {
             // Another thread. The object is stranded: it is retired from the
             // registry (nothing will ever reclaim it) and counted, and the
             // `Box` is deliberately not freed.
+            // Not given back: nothing freed it.
             Err(crate::resident::Refused::OtherThread(name)) => {
                 crate::resident::retire(h);
                 crate::resident::strand(name);
@@ -370,6 +451,7 @@ pub unsafe fn resident_drop<T>(h: u64) {
             }
         }
     }
+    given_back::<T>();
     drop(Box::from_raw(h as *mut T));
 }
 
@@ -506,6 +588,7 @@ pub fn alias_check(entries: &[(Option<u64>, Use)]) -> Result<(), Aliased> {
 ///
 /// The object becomes its executor's root, which `Addr<T>` posts run on.
 pub fn actor_new<T: 'static>(value: T, type_name: &'static str) -> u64 {
+    made::<T>(type_name);
     crate::objects::insert_root(value, type_name)
 }
 
@@ -540,7 +623,9 @@ pub unsafe fn actor_mut<'a, T: 'static>(slot: u64) -> &'a mut T {
 /// the table hands out each object at most once, and a slot it no longer
 /// holds misses loudly.
 pub fn actor_take<T: 'static>(slot: u64) -> Box<T> {
-    crate::objects::remove::<T>(slot)
+    let object = crate::objects::remove::<T>(slot);
+    given_back::<T>();
+    object
 }
 
 /// Drop the actor at `slot`, for the orderly `dispose()`.
@@ -557,9 +642,10 @@ pub fn actor_drop<T: 'static>(slot: u64) {
 /// through [`frozen_ref`], and the last clone can drop on a pool thread.
 ///
 /// ```compile_fail,E0277
-/// frustrate::__private::handle::frozen_new(std::cell::Cell::new(1i32));
+/// frustrate::__private::handle::frozen_new(std::cell::Cell::new(1i32), "Probe");
 /// ```
-pub fn frozen_new<T: Send + Sync + 'static>(value: T) -> u64 {
+pub fn frozen_new<T: Send + Sync + 'static>(value: T, name: &'static str) -> u64 {
+    made::<T>(name);
     Arc::into_raw(Arc::new(value)) as u64
 }
 
@@ -583,6 +669,7 @@ pub unsafe fn frozen_arc<T>(h: u64) -> Arc<T> {
 /// # Safety
 /// `h` must be a live handle created by `frozen_new::<T>`; never used after.
 pub unsafe fn frozen_drop<T>(h: u64) {
+    given_back::<T>();
     drop(Arc::from_raw(h as *const T));
 }
 
@@ -593,9 +680,10 @@ pub unsafe fn frozen_drop<T>(h: u64) {
 /// needs to cross to the pool.
 ///
 /// ```compile_fail,E0277
-/// frustrate::__private::handle::locked_new(std::cell::Cell::new(1i32));
+/// frustrate::__private::handle::locked_new(std::cell::Cell::new(1i32), "Probe");
 /// ```
-pub fn locked_new<T: Send + Sync + 'static>(value: T) -> u64 {
+pub fn locked_new<T: Send + Sync + 'static>(value: T, name: &'static str) -> u64 {
+    made::<T>(name);
     Arc::into_raw(Arc::new(RwLock::new(value))) as u64
 }
 
@@ -671,6 +759,7 @@ pub fn lock_plan(entries: &mut [(u64, u32)]) -> Result<(), (u32, u32)> {
 /// # Safety
 /// `h` must be a live handle created by `locked_new::<T>`; never used after.
 pub unsafe fn locked_drop<T>(h: u64) {
+    given_back::<T>();
     drop(Arc::from_raw(h as *const RwLock<T>));
 }
 
@@ -727,6 +816,7 @@ pub unsafe fn locked_drop<T>(h: u64) {
 /// `h` must be a live handle created by `confined_new::<T>` whose Dart side
 /// has given it up; never used after.
 pub unsafe fn confined_adopt<T>(h: u64) -> Box<T> {
+    given_back::<T>();
     Box::from_raw(h as *mut T)
 }
 
@@ -741,6 +831,7 @@ pub unsafe fn confined_adopt<T>(h: u64) -> Box<T> {
 /// `h` must be a live handle created by `frozen_new::<T>` whose Dart side has
 /// given it up; never used after.
 pub unsafe fn frozen_adopt<T>(h: u64) -> Arc<T> {
+    given_back::<T>();
     Arc::from_raw(h as *const T)
 }
 
@@ -749,6 +840,7 @@ pub unsafe fn frozen_adopt<T>(h: u64) -> Arc<T> {
 /// # Safety
 /// As [`frozen_adopt`], with `locked_new`.
 pub unsafe fn locked_adopt<T>(h: u64) -> Arc<RwLock<T>> {
+    given_back::<T>();
     Arc::from_raw(h as *const RwLock<T>)
 }
 
@@ -865,8 +957,8 @@ mod tests {
     #[test]
     fn alias_check_ignores_zero_sized_types() {
         struct Zst;
-        let a = confined_new(Zst);
-        let b = confined_new(Zst);
+        let a = confined_new(Zst, "T");
+        let b = confined_new(Zst, "T");
         assert_eq!(a, b, "the premise: distinct ZST handles collide");
         let e = [
             alias_entry::<Zst>(a, Use::Consume),
@@ -881,7 +973,7 @@ mod tests {
 
     #[test]
     fn confined_lifecycle() {
-        let h = confined_new(String::from("hi"));
+        let h = confined_new(String::from("hi"), "T");
         unsafe {
             assert_eq!(confined_ref::<String>(h), "hi");
             confined_mut::<String>(h).push('!');
@@ -905,7 +997,7 @@ mod tests {
 
     #[test]
     fn frozen_arc_keeps_value_alive_after_drop() {
-        let h = frozen_new(vec![1, 2, 3]);
+        let h = frozen_new(vec![1, 2, 3], "T");
         let arc = unsafe { frozen_arc::<Vec<i32>>(h) };
         unsafe { frozen_drop::<Vec<i32>>(h) };
         assert_eq!(*arc, vec![1, 2, 3]);
@@ -917,7 +1009,7 @@ mod tests {
     /// measuring the harness.
     #[test]
     fn locked_lifecycle() {
-        let h = locked_new(0i64);
+        let h = locked_new(0i64, "T");
         {
             let lock = unsafe { locked_ref::<i64>(h) };
             *lock.try_write().expect("uncontended") += 5;
@@ -949,8 +1041,8 @@ mod tests {
     #[test]
     fn arc_entries_do_not_collapse_zero_sized_types() {
         struct Zst;
-        let a = frozen_new(Zst);
-        let b = frozen_new(Zst);
+        let a = frozen_new(Zst, "T");
+        let b = frozen_new(Zst, "T");
         assert_ne!(a, b, "the premise: distinct frozen ZST handles differ");
         let e = [
             arc_alias_entry(a, Use::Consume),
@@ -968,7 +1060,7 @@ mod tests {
     /// takes it as it is.
     #[test]
     fn confined_adopt_hands_back_the_box() {
-        let h = confined_new(String::from("hi"));
+        let h = confined_new(String::from("hi"), "T");
         let b: Box<String> = unsafe { confined_adopt::<String>(h) };
         assert_eq!(*b, "hi");
     }
@@ -977,7 +1069,7 @@ mod tests {
     /// take succeeds and the object is the caller's.
     #[test]
     fn frozen_take_succeeds_when_nothing_else_holds_a_clone() {
-        let h = frozen_new(vec![1i32, 2, 3]);
+        let h = frozen_new(vec![1i32, 2, 3], "T");
         let arc = unsafe { frozen_adopt::<Vec<i32>>(h) };
         assert_eq!(frozen_take(arc), Ok(vec![1, 2, 3]));
     }
@@ -987,7 +1079,7 @@ mod tests {
     /// released here and surviving until the in-flight call lets go.
     #[test]
     fn frozen_take_refuses_while_a_clone_is_live_and_releases_the_object() {
-        let h = frozen_new(vec![1i32, 2, 3]);
+        let h = frozen_new(vec![1i32, 2, 3], "T");
         let in_flight = unsafe { frozen_arc::<Vec<i32>>(h) };
         let arc = unsafe { frozen_adopt::<Vec<i32>>(h) };
         assert_eq!(frozen_take(arc), Err(StillInUse));
@@ -1001,14 +1093,14 @@ mod tests {
     /// portable path a consuming member on a locked type uses.
     #[test]
     fn locked_take_unwraps_the_lock_without_a_guard() {
-        let h = locked_new(41i64);
+        let h = locked_new(41i64, "T");
         let arc = unsafe { locked_adopt::<i64>(h) };
         assert_eq!(locked_take(arc), Ok(41));
     }
 
     #[test]
     fn locked_take_refuses_while_a_clone_is_live() {
-        let h = locked_new(41i64);
+        let h = locked_new(41i64, "T");
         let in_flight = unsafe { locked_arc::<i64>(h) };
         let arc = unsafe { locked_adopt::<i64>(h) };
         assert_eq!(locked_take(arc), Err(StillInUse));
