@@ -8,7 +8,7 @@ and NDK toolchains, so every other build needs no Android setup."""
 module(name = "frustrate_flutter_demo")
 
 bazel_dep(name = "frustrate", version = "0.1.0")
-bazel_dep(name = "rules_flutter", version = "0.0.8")
+bazel_dep(name = "rules_flutter", version = "0.1.0")
 bazel_dep(name = "rules_dart", version = "0.9.1")
 bazel_dep(name = "rules_rust", version = "0.75.0")
 bazel_dep(name = "platforms", version = "1.1.0")
@@ -26,6 +26,15 @@ bazel_dep(name = "rules_kotlin", version = "2.4.21")
 bazel_dep(name = "rules_java", version = "9.9.0")
 bazel_dep(name = "rules_go", version = "0.64.2")
 bazel_dep(name = "rules_jvm_external", version = "7.2")
+
+# 0.1.5 links arm64 libraries for 4 KB pages, which rules_flutter's 16 KB page
+# check rejects; this commit carries the fix (bazelbuild/rules_android_ndk#121).
+# Drop it for the first release that has it.
+git_override(
+    module_name = "rules_android_ndk",
+    commit = "9946c72d5b617115d34dc2efb334f829c558a87b",
+    remote = "https://github.com/bazelbuild/rules_android_ndk.git",
+)
 
 # This app bundles the Rust bridge for every platform it targets, so it
 # declares the cross-compile triples here: the app module is the root of its
