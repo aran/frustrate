@@ -1,0 +1,10 @@
+load("@rules_cc//cc:defs.bzl", "cc_import")
+
+# The `llvm` toolchain's static libunwind, for frustrate's `unwinder` flag
+# (.bazelrc): that toolchain's `libgcc_s` is a stub, so a Rust shared library
+# links the unwinder itself or fails to load into the Dart VM on Linux.
+cc_import(
+    name = "libunwind",
+    static_library = "@llvm//runtimes/libunwind:libunwind.static",
+    visibility = ["//visibility:public"],
+)

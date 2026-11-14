@@ -8,6 +8,10 @@ common --lockfile_mode=error
 # into a slot nothing fills.
 common --@frustrate//runtime/rust:log=@iroh_crates//:log
 
+# The `llvm` C toolchain (MODULE.bazel) links Linux, and its `libgcc_s` is a
+# stub, so the bridge library takes the toolchain's static libunwind instead.
+common --@frustrate//runtime/rust:unwinder=//bazel/cc:libunwind
+
 # macOS 26 is the floor for everything built for or on a Mac, build tools
 # included (the host_ pair). rustc takes its deployment target from
 # MACOSX_DEPLOYMENT_TARGET and the C toolchain from --macos_minimum_os; unless
