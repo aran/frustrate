@@ -1,4 +1,4 @@
-load("@rules_dart//dart:defs.bzl", "dart_binary", "dart_test")
+load("@rules_dart//dart:defs.bzl", "dart_binary", "dart_test", "dart_wasm_binary")
 load(":web_test_inputs.bzl", "web_test_inputs")
 
 # The extern-type fixture's Dart side (a stand-in for a protoc-generated
@@ -132,28 +132,36 @@ dart_binary(
 #    time. Perf gates do not belong in CI, so this must not be able to fail a
 #    test run.
 #
-# `dart_binary` is `rule(..., executable = True)` with no `test = True`, so it
-# is not collected by `bazel test //...` and nothing new enters the default
-# suite by adding it. The page it serves, `bench/web_bench_main.dart`, is
-# compiled by the driver; it is a source here so that analysis covers it. The
-# bindings and the runtime resolve as in `web_test`, through
-# `:web_test_inputs`.
-dart_binary(
-    name = "web_bench",
+# The page `web_bench` serves, as its own program so analysis and the import
+# check cover it. The driver compiles it from the source tree itself, at -O2
+# under the merged package config.
+dart_wasm_binary(
+    name = "web_bench_page",
     srcs = [
         "bench/typing_config.dart",
         "bench/typing_load.dart",
-        "bench/web_bench_main.dart",
-        "tool/web_inputs.dart",
     ],
-    args = ["--inputs=$(rootpath :web_test_inputs)"],
-    data = [":web_test_inputs"],
-    main = "tool/web_bench.dart",
+    main = "bench/web_bench_main.dart",
     deps = [
         "//runtime/dart:frustrate",
         "//tests/test_api:bindings",
         "//tools/bench_harness",
     ],
+)
+
+# `dart_binary` is `rule(..., executable = True)` with no `test = True`, so it
+# is not collected by `bazel test //...` and nothing new enters the default
+# suite by adding it. The bindings and the runtime resolve as in `web_test`,
+# through `:web_test_inputs`.
+dart_binary(
+    name = "web_bench",
+    srcs = [
+        "bench/typing_config.dart",
+        "tool/web_inputs.dart",
+    ],
+    args = ["--inputs=$(rootpath :web_test_inputs)"],
+    data = [":web_test_inputs"],
+    main = "tool/web_bench.dart",
 )
 
 # A bridge loads and answers a few real calls (sync, async, data, error, panic):
