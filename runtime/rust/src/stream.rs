@@ -48,6 +48,14 @@ std::thread_local! {
         const { std::cell::Cell::new(None) };
 }
 
+/// The type name of the handle being finalized on this thread, if any: set
+/// only inside [`finalize_scope`], so only by a handle's finalizer or a
+/// stopping actor executor dropping what nothing disposed.
+#[cfg(frustrate_manual_scheduler)]
+pub(crate) fn finalizing() -> Option<&'static str> {
+    FINALIZING.with(|s| s.get())
+}
+
 /// Run `f` — the drop of a `type_name` handle — as a *finalization*, so any
 /// channel it still holds terminates as leaked rather than as closed.
 ///

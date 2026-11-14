@@ -279,6 +279,7 @@ const RUNTIME_EXPORTS: &[&str] = &[
     "actorRelease",
     "actorReap",
     "manualDrain",
+    "manualUnscheduled",
     "idleNotify",
     "idlePending",
     "idleGeneration",

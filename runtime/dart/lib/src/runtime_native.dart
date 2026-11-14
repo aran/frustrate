@@ -9,6 +9,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io' show Platform;
 import 'dart:isolate';
@@ -96,6 +97,8 @@ typedef _SchemaHashC = Uint64 Function();
 typedef _SchemaHashDart = int Function();
 typedef _ManualDrainC = Uint8 Function();
 typedef _ManualDrainDart = int Function();
+typedef _ManualUnscheduledC = Uint64 Function(Pointer<Uint8>, Uint64);
+typedef _ManualUnscheduledDart = int Function(Pointer<Uint8>, int);
 typedef _IdleNotifyC = Void Function(Int64);
 typedef _IdleNotifyDart = void Function(int);
 typedef _IdleReadC = Uint64 Function();
@@ -123,6 +126,7 @@ abstract final class RuntimeSymbol {
   static const actorRelease = 'frustrate_actor_release';
   static const actorReap = 'frustrate_actor_reap';
   static const manualDrain = 'frustrate_manual_drain';
+  static const manualUnscheduled = 'frustrate_manual_unscheduled';
   static const idleNotify = 'frustrate_idle_notify';
   static const idlePending = 'frustrate_idle_pending';
   static const idleGeneration = 'frustrate_idle_generation';
@@ -154,6 +158,7 @@ enum NativeExport {
   actorRelease(RuntimeSymbol.actorRelease),
   actorReap(RuntimeSymbol.actorReap),
   manualDrain(RuntimeSymbol.manualDrain),
+  manualUnscheduled(RuntimeSymbol.manualUnscheduled),
   idleNotify(RuntimeSymbol.idleNotify),
   idlePending(RuntimeSymbol.idlePending),
   idleGeneration(RuntimeSymbol.idleGeneration),
@@ -333,6 +338,13 @@ class FrustrateNative {
   /// the host is off the queue too. Never call it from inside a Rust task it
   /// is polling.
   ///
+  /// The returned function throws a [StateError], polling nothing more, once
+  /// a handle nobody disposed put work on the queue: it was dropped by its
+  /// finalizer when the garbage collector chose, or by its actor's executor
+  /// as that stopped, and its `Drop` spawned or woke a task. That timing is
+  /// not the run's, so the run would not replay. The error names the handle
+  /// types; dispose those handles. The next drain runs the work as usual.
+  ///
   /// Throws a [StateError] when no bridge was installed through this class, or
   /// when the installed one was built without the manual scheduler: a harness
   /// that asked for manual scheduling and got the pool would replay nothing.
@@ -345,11 +357,16 @@ class FrustrateNative {
       );
     }
     final _ManualDrainDart drain;
+    final _ManualUnscheduledDart unscheduled;
     try {
       drain = transport._primary
           .address(NativeExport.manualDrain)
           .cast<NativeFunction<_ManualDrainC>>()
           .asFunction<_ManualDrainDart>();
+      unscheduled = transport._primary
+          .address(NativeExport.manualUnscheduled)
+          .cast<NativeFunction<_ManualUnscheduledC>>()
+          .asFunction<_ManualUnscheduledDart>();
     } on ArgumentError {
       throw StateError(
         'frustrate: ${_describe(transport._primary)} was built without the '
@@ -359,7 +376,42 @@ class FrustrateNative {
         '(@frustrate//bazel:manual_scheduler.bzl).',
       );
     }
-    return () => drain() != 0;
+    return () {
+      final ran = drain();
+      if (ran == 2) throw StateError(_unscheduledReport(unscheduled));
+      return ran != 0;
+    };
+  }
+
+  /// The [StateError] message for work finalizers scheduled, read (and so
+  /// cleared) from the library's record.
+  static String _unscheduledReport(_ManualUnscheduledDart unscheduled) {
+    var cap = 256;
+    while (true) {
+      final buf = malloc<Uint8>(cap);
+      try {
+        final len = unscheduled(buf, cap);
+        if (len > cap) {
+          cap = len;
+          continue;
+        }
+        final lines = utf8
+            .decode(buf.asTypedList(len))
+            .split('\n')
+            .where((line) => line.isNotEmpty)
+            .map((line) {
+              final [type, count] = line.split('\t');
+              return '  $type: $count';
+            });
+        return 'frustrate: handles that were never disposed scheduled Rust '
+            'work as the garbage collector or a stopping actor dropped them, '
+            'so when it runs is not up to this run, which will not replay. '
+            'Spawns and wakes, by handle type:\n${lines.join('\n')}\n'
+            'Dispose these handles. The next drain runs the work.';
+      } finally {
+        malloc.free(buf);
+      }
+    }
   }
 
   /// The installed bridge's idle barrier, for a test harness that waits for

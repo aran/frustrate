@@ -109,6 +109,34 @@ struct Inner {
     /// its owner, which hears a detached task's panic and owns what the poll
     /// spawns (uncaught.rs).
     ready: VecDeque<(u64, u64, Runnable)>,
+    /// Spawns and wakes a finalizer made since the harness last read them, by
+    /// the finalized handle's type name. See the manual [`arrange_drain`].
+    #[cfg(frustrate_manual_scheduler)]
+    unscheduled: std::collections::BTreeMap<&'static str, u64>,
+}
+
+impl Inner {
+    /// Queue a runnable. Under the manual scheduler a spawn or wake made inside
+    /// a finalizer is recorded in the same critical section that queues it, so
+    /// no drain can pop it before the record shows it.
+    fn enqueue(&mut self, entry: (u64, u64, Runnable)) {
+        #[cfg(frustrate_manual_scheduler)]
+        if let Some(type_name) = crate::stream::finalizing() {
+            *self.unscheduled.entry(type_name).or_insert(0) += 1;
+        }
+        self.ready.push_back(entry);
+    }
+
+    /// The next runnable to poll. Under the manual scheduler, none while the
+    /// finalizers' record is unread: checked in the same critical section as
+    /// the pop, so a drain stops at the first task after a finalizer's.
+    fn next(&mut self) -> Option<(u64, u64, Runnable)> {
+        #[cfg(frustrate_manual_scheduler)]
+        if !self.unscheduled.is_empty() {
+            return None;
+        }
+        self.ready.pop_front()
+    }
 }
 
 struct Shared {
@@ -139,6 +167,8 @@ impl Executor {
                 inner: Lock::new(Inner {
                     tasks: HashMap::new(),
                     ready: VecDeque::new(),
+                    #[cfg(frustrate_manual_scheduler)]
+                    unscheduled: std::collections::BTreeMap::new(),
                 }),
                 schedule: Box::new(schedule),
                 complete: Box::new(complete),
@@ -270,7 +300,7 @@ impl Executor {
         let schedule = move |runnable: Runnable| {
             for_schedule
                 .inner
-                .with(|inner| inner.ready.push_back((call_id, owner, runnable)));
+                .with(|inner| inner.enqueue((call_id, owner, runnable)));
             (for_schedule.schedule)();
         };
         let (runnable, task) = async_task::spawn(future, schedule);
@@ -352,7 +382,7 @@ impl Executor {
         let schedule = move |runnable: Runnable| {
             for_schedule
                 .inner
-                .with(|inner| inner.ready.push_back((DETACHED, owner, runnable)));
+                .with(|inner| inner.enqueue((DETACHED, owner, runnable)));
             (for_schedule.schedule)();
         };
         let (runnable, task) = async_task::spawn(crate::carry::Carried::new(body), schedule);
@@ -378,7 +408,7 @@ impl Executor {
     /// Poll one ready task, if any. Returns whether a task was run — so
     /// [`drain_all`](Self::drain_all) knows when the queue is empty.
     pub fn drain_one(&self) -> bool {
-        let popped = self.shared.inner.with(|inner| inner.ready.pop_front());
+        let popped = self.shared.inner.with(Inner::next);
         let Some((call_id, owner, runnable)) = popped else {
             return false;
         };
@@ -511,8 +541,11 @@ compile_error!(
      builds."
 );
 
-/// Arrange for a drain to happen. This is the *only* per-config code in the
-/// executor — the Scheduler seam. The core above is byte-identical everywhere.
+/// Arrange for a drain to happen. This is the executor's per-config code — the
+/// Scheduler seam. The core above is byte-identical in every build but the
+/// manual scheduler's, which also keeps its finalizer record there
+/// ([`Inner::enqueue`], [`Inner::next`]): that record has to share the run
+/// queue's critical section.
 ///
 ///   - **native**: hand a single-task drain to the thread pool, so ready tasks
 ///     poll in parallel across worker threads. Multiplexing *and* parallelism,
@@ -568,6 +601,21 @@ fn arrange_drain() {
 /// other task, so its future's drop lands on a host drain rather than promptly.
 /// The tests asserting the prompt form are gated to the pool build and named
 /// there.
+///
+/// **Work the garbage collector schedules fails the next drain.** A handle
+/// collected without `dispose()` is dropped by its `NativeFinalizer`, on a
+/// collector thread, at a moment the collector picks. If that drop spawns a
+/// task or wakes one (dropping the last `Arc` of something whose `Drop`
+/// spawns, say), the task enters this queue at that moment, so what the next
+/// drain polls depends on the collector and a seeded run stops replaying.
+/// The same holds for an object an actor's executor drops at its stop because
+/// nothing disposed it. Every such spawn or wake is counted by the handle's
+/// type name ([`crate::stream::finalize_scope`] names it) as it is queued, and
+/// [`frustrate_manual_drain`] polls nothing from then until the harness has
+/// read the count ([`frustrate_manual_unscheduled`]), even partway through a
+/// drain; in Dart the drain throws a `StateError` naming the types. Disposing
+/// those handles is the fix. A wake from a thread your own code runs (a tokio
+/// leaf, a waker you hold) is not counted: its timing is the program's.
 #[cfg(all(not(target_family = "wasm"), frustrate_manual_scheduler))]
 fn arrange_drain() {}
 
@@ -763,7 +811,9 @@ pub extern "C" fn frustrate_drain() {
 
 /// Run every runnable task to completion on the calling thread, and report
 /// whether anything ran. 1 = polled at least one task, 0 = the queue was
-/// already empty ("quiet").
+/// already empty ("quiet"), 2 = stopped, perhaps after polling some, because a
+/// finalizer scheduled work the harness has not read: read which with
+/// [`frustrate_manual_unscheduled`] (see the manual [`arrange_drain`]).
 ///
 /// The host's drain entry under [manual scheduling](arrange_drain); absent from
 /// every other build, so a production export table is unchanged by this feature
@@ -785,7 +835,39 @@ pub extern "C" fn frustrate_drain() {
 #[cfg(frustrate_manual_scheduler)]
 #[unsafe(no_mangle)]
 pub extern "C" fn frustrate_manual_drain() -> u8 {
-    global().drain_all() as u8
+    let ran = global().drain_all();
+    if global()
+        .shared
+        .inner
+        .with(|inner| !inner.unscheduled.is_empty())
+    {
+        return 2;
+    }
+    ran as u8
+}
+
+/// The work finalizers scheduled since the last read, as UTF-8 lines of
+/// `<type name>\t<count>`, one per handle type. Writes them to `out` and
+/// clears the record when they fit in `cap` bytes; returns their length either
+/// way, so a caller whose buffer was short calls again with a larger one.
+///
+/// # Safety
+/// `out` must be valid for `cap` bytes of writes, or `cap` must be 0.
+#[cfg(frustrate_manual_scheduler)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn frustrate_manual_unscheduled(out: *mut u8, cap: u64) -> u64 {
+    global().shared.inner.with(|inner| {
+        let counts = &mut inner.unscheduled;
+        let report: String = counts
+            .iter()
+            .map(|(name, n)| format!("{name}\t{n}\n"))
+            .collect();
+        if !report.is_empty() && report.len() as u64 <= cap {
+            unsafe { std::ptr::copy_nonoverlapping(report.as_ptr(), out, report.len()) };
+            counts.clear();
+        }
+        report.len() as u64
+    })
 }
 
 thread_local! {
@@ -1493,6 +1575,83 @@ mod tests {
             0,
             "and the next drain reports quiet rather than re-running anything"
         );
+    }
+
+    /// Work a finalizer schedules holds up the next drain until the harness has
+    /// read which handle type scheduled it; work scheduled anywhere else does not.
+    #[cfg(frustrate_manual_scheduler)]
+    #[test]
+    fn a_finalizer_that_schedules_work_stops_the_next_drain() {
+        let _serial = crate::post::test_lock();
+        extern "C" fn ignore(_call_id: u64, ptr: *mut u8, len: u64, cap: u64) {
+            drop(unsafe { Vec::from_raw_parts(ptr, len as usize, cap as usize) });
+        }
+        crate::post::init(ignore);
+        while frustrate_manual_drain() == 1 {}
+
+        fn read() -> String {
+            let mut buf = vec![0u8; 64];
+            let len = unsafe { frustrate_manual_unscheduled(buf.as_mut_ptr(), buf.len() as u64) };
+            buf.truncate(len as usize);
+            String::from_utf8(buf).unwrap()
+        }
+
+        super::spawn_detached(async {});
+        assert_eq!(
+            read(),
+            "",
+            "a spawn outside a finalizer is the program's own"
+        );
+        assert_eq!(frustrate_manual_drain(), 1);
+
+        crate::stream::finalize_scope("Fed", || {
+            super::spawn_detached(async {});
+            super::spawn_detached(async {});
+        });
+        assert_eq!(
+            frustrate_manual_drain(),
+            2,
+            "work the collector scheduled stops the drain before it polls"
+        );
+        assert_eq!(
+            unsafe { frustrate_manual_unscheduled(std::ptr::null_mut(), 0) },
+            6
+        );
+        assert_eq!(
+            frustrate_manual_drain(),
+            2,
+            "a short read leaves the record"
+        );
+        assert_eq!(read(), "Fed\t2\n");
+        assert_eq!(
+            frustrate_manual_drain(),
+            1,
+            "once read, the queued work drains as usual"
+        );
+        assert_eq!(frustrate_manual_drain(), 0);
+
+        // A finalizer that schedules work partway through a drain stops it
+        // before the next poll, not on the drain after.
+        static LATER_RAN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        super::spawn_detached(async {
+            crate::stream::finalize_scope("Mid", || super::spawn_detached(async {}));
+        });
+        super::spawn_detached(async {
+            LATER_RAN.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        assert_eq!(
+            frustrate_manual_drain(),
+            2,
+            "the drain stops at the finalizer's work"
+        );
+        assert!(
+            !LATER_RAN.load(std::sync::atomic::Ordering::SeqCst),
+            "nothing queued behind it was polled"
+        );
+        assert_eq!(read(), "Mid\t1\n");
+        assert_eq!(frustrate_manual_drain(), 1);
+        assert!(LATER_RAN.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(frustrate_manual_drain(), 0);
     }
 
     // Not under `--cfg frustrate_manual_scheduler`: this asserts the *pool*

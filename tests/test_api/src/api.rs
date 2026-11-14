@@ -4178,6 +4178,41 @@ pub fn live_probe_count() -> i64 {
     LIVE_PROBES.load(Ordering::SeqCst)
 }
 
+// ------------------------------------------- work scheduled by a Drop --
+//
+// A handle whose `Drop` spawns a detached task. Collected without `dispose()`,
+// it is dropped by its `NativeFinalizer` on a collector thread, so the spawn
+// lands on the run queue when the collector chooses: under the manual
+// scheduler the next drain refuses (manual_scheduler_gc_test). Each spawned task
+// counts itself when it runs.
+
+static DROP_SPAWNS_RUN: AtomicI64 = AtomicI64::new(0);
+
+#[bridge(confined)]
+pub struct SpawnsOnDrop {}
+
+#[bridge]
+impl SpawnsOnDrop {
+    #[bridge(sync)]
+    pub fn new() -> Self {
+        SpawnsOnDrop {}
+    }
+}
+
+impl Drop for SpawnsOnDrop {
+    fn drop(&mut self) {
+        frustrate::runtime::spawn(async {
+            DROP_SPAWNS_RUN.fetch_add(1, Ordering::SeqCst);
+        });
+    }
+}
+
+/// How many tasks `SpawnsOnDrop`'s `Drop` spawned have run.
+#[bridge(sync)]
+pub fn drop_spawns_run() -> i64 {
+    DROP_SPAWNS_RUN.load(Ordering::SeqCst)
+}
+
 // ------------------------------------------------- Dart-object handles --
 // Composition fixtures. Everything here was a
 // codegen error before handles became data: two channels on one call, a
