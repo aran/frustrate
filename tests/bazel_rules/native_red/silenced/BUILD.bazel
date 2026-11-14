@@ -38,5 +38,11 @@ no_block_check_artifacts(
     bridge = ":bridge",
     library = ":silenced_shared",
     platforms = ["//bazel:macos_aarch64"],
+    # Its macOS build compiles C with Xcode, which only a Mac has; native_red_test
+    # runs only there too.
+    target_compatible_with = select({
+        "@platforms//os:macos": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     visibility = ["//tests/bazel_rules/native_red:__pkg__"],
 )
