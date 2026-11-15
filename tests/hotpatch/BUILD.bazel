@@ -155,3 +155,16 @@ frustrate_hot_patchable(
     library = "//tests/test_api:test_api_shared",
     tags = ["manual"],
 )
+
+# A hot-patchable library under a build tool, beside a Rust tool of the same
+# exec configuration: it builds only if the patch builder's configuration
+# stays out of that configuration's output directory.
+genrule(
+    name = "under_build_tool",
+    outs = ["under_build_tool.txt"],
+    cmd = "touch $@",
+    tools = [
+        ":fixture_hot.hot_patch",
+        "//hotpatch:frustrate_hotpatch",
+    ],
+)

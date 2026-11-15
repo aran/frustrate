@@ -259,16 +259,26 @@ def _unit(ctx, name, info, contract, skip = {}):
 
 _HOST_PLATFORM = "//command_line_option:host_platform"
 
+_IS_EXEC = "//command_line_option:is exec configuration"
+_PLATFORMS = "//command_line_option:platforms"
+
 def _host_transition_impl(settings, _attr):
+    # Under a build tool, nothing runs the patch builder, and a platform that
+    # only names the execution platform differently (`--host_platform` is an
+    # alias of the detected `@platforms//host`) would make a second
+    # configuration in the same output directory, whose actions conflict.
+    if settings[_IS_EXEC]:
+        return {_PLATFORMS: settings[_PLATFORMS]}
+
     # `--host_platform` rather than `@platforms//host`: it is the build's own
     # description of this machine, and may carry constraints the detected one
     # lacks that select its C toolchain.
-    return {"//command_line_option:platforms": [settings[_HOST_PLATFORM]]}
+    return {_PLATFORMS: [settings[_HOST_PLATFORM]]}
 
 _host_transition = transition(
     implementation = _host_transition_impl,
-    inputs = [_HOST_PLATFORM],
-    outputs = ["//command_line_option:platforms"],
+    inputs = [_HOST_PLATFORM, _IS_EXEC, _PLATFORMS],
+    outputs = [_PLATFORMS],
 )
 
 _LlcInfo = provider(
