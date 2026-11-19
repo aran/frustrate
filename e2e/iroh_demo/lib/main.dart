@@ -15,7 +15,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:iroh_bridge/init.dart';
 // BridgeException and the other bridge failures come through here: the

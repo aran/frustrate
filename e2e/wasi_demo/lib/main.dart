@@ -11,7 +11,7 @@
 /// `wasi_snapshot_preview1` import frustrate's JS runtime answers.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:wasi_bridge/init.dart';
 import 'package:wasi_bridge/wasi_rust.frustrate.dart';
 

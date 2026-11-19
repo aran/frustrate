@@ -5,6 +5,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  material_ui: ^1.1.0
   # Pure-Dart QR *encoder* (no camera plugin, no permission): the app renders
   # its pairing ticket with a CustomPainter over this. It deliberately does not
   # scan — a camera permission is the one thing rules_flutter cannot express on

@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  material_ui: ^1.1.0
   # Path deps, not hosted: this demo and the runtime it exercises are one
   # source tree. `frustrate` is direct because lib/main.dart imports
   # package:frustrate/workers.dart for the actor race, not only through

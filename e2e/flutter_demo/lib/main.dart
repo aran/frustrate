@@ -15,7 +15,7 @@ import 'package:demo_bridge/demo_rust.frustrate.dart';
 import 'package:demo_bridge/fake_plan.dart';
 import 'package:demo_bridge/init.dart';
 import 'package:demo_bridge/native_features.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:frustrate/frustrate.dart'
     show
         ActorHost,

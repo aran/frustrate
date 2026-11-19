@@ -43,7 +43,7 @@ flutter_application(
         # Direct dep: main.dart imports the ActorPool convenience layer
         # (package:frustrate/workers.dart) for the actor race.
         "@frustrate//runtime/dart:frustrate",
-        "@deps//:flutter",
+        "@deps//:material_ui",
         "@rules_flutter//flutter:material_icons",
     ],
 )

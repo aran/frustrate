@@ -3,7 +3,7 @@
 
 import 'package:compose_ping/compose_ping.frustrate.dart' as ping;
 import 'package:compose_pong/compose_pong.frustrate.dart' as pong;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:frustrate/frustrate.dart';
 
 void main() {

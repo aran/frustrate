@@ -55,7 +55,7 @@ flutter_application(
     deps = [
         "//compose/ping:bindings",
         "//compose/pong:bindings",
-        "@deps//:flutter",
+        "@deps//:material_ui",
         "@frustrate//runtime/dart:frustrate",
     ],
 )
