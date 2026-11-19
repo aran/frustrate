@@ -10,6 +10,8 @@ A transition rather than a flag on the command line, so the flag reaches only
 the library a test loads: the app built in the same invocation keeps the pool.
 """
 
+load("//bazel:dsym.bzl", "dsym_output_groups")
+
 _MANUAL_SCHEDULER_FLAG = str(Label("//bazel:manual_scheduler"))
 
 def _manual_scheduler_transition_impl(_settings, _attr):
@@ -26,7 +28,7 @@ def _impl(ctx):
     return [DefaultInfo(
         files = library[DefaultInfo].files,
         runfiles = library[DefaultInfo].default_runfiles,
-    )]
+    )] + dsym_output_groups(library)
 
 frustrate_manual_scheduler_library = rule(
     implementation = _impl,

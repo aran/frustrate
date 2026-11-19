@@ -31,6 +31,7 @@ compilation read, and it answers each reload with one JSON line. See
 
 load("@rules_rust//rust:defs.bzl", "rust_common")
 load("//bazel:defs.bzl", "FrustrateBridgeInfo", "frustrate_code_asset")
+load("//bazel:dsym.bzl", "dsym_output_groups")
 
 _EXTRA_RUSTC_FLAGS = str(Label("@rules_rust//rust/settings:extra_rustc_flags"))
 _PER_CRATE_RUSTC_FLAG = str(Label("@rules_rust//rust/settings:per_crate_rustc_flag"))
@@ -211,7 +212,7 @@ hot_patch_ir_aspect = aspect(
 
 def _forward_impl(ctx):
     library = ctx.attr.library[0]
-    return [DefaultInfo(files = library[DefaultInfo].files)]
+    return [DefaultInfo(files = library[DefaultInfo].files)] + dsym_output_groups(library)
 
 frustrate_hot_patchable_library = rule(
     implementation = _forward_impl,
@@ -388,7 +389,7 @@ def _hot_patch_impl(ctx):
     # manifest only there. Elsewhere the manifest alone is the output, so a
     # test or release build of `//...` compiles no IR and stages nothing.
     if ctx.var["COMPILATION_MODE"] != "dbg":
-        return [DefaultInfo(files = depset([manifest]))]
+        return [DefaultInfo(files = depset([manifest]))] + dsym_output_groups(library_target)
 
     # The compilations' other inputs, which the patch builder fingerprints and
     # reads from the execution root, are staged too: an intermediate output
@@ -396,7 +397,7 @@ def _hot_patch_impl(ctx):
     # asks for it.
     return [DefaultInfo(files = depset(
         [manifest, ctx.executable._tool, library] + llc.files + files,
-    ))]
+    ))] + dsym_output_groups(library_target)
 
 _frustrate_hot_patch = rule(
     implementation = _hot_patch_impl,

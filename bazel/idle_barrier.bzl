@@ -9,6 +9,8 @@ A transition rather than a flag on the command line, so the flag reaches only
 the library a test loads: the app built in the same invocation carries no count.
 """
 
+load("//bazel:dsym.bzl", "dsym_output_groups")
+
 _IDLE_BARRIER_FLAG = str(Label("//bazel:idle_barrier"))
 
 def _idle_barrier_transition_impl(_settings, _attr):
@@ -25,7 +27,7 @@ def _impl(ctx):
     return [DefaultInfo(
         files = library[DefaultInfo].files,
         runfiles = library[DefaultInfo].default_runfiles,
-    )]
+    )] + dsym_output_groups(library)
 
 frustrate_idle_barrier_library = rule(
     implementation = _impl,

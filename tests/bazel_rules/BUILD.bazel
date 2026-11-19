@@ -5,12 +5,15 @@ load(
     "//bazel:defs.bzl",
     "frustrate_bridge",
     "frustrate_bridge_library",
+    "frustrate_code_asset",
     "frustrate_no_block_check",
     "frustrate_shared_library",
     "frustrate_wasm_module",
     "frustrate_wasm_opt",
 )
 load("//bazel:hot_patch.bzl", "frustrate_hot_patchable")
+load("//bazel:idle_barrier.bzl", "frustrate_idle_barrier_library")
+load(":code_asset_debug_info_test.bzl", "code_asset_debug_info_test")
 load(":fake_app.bzl", "fake_app")
 load(":mispaired_bridge_test.bzl", "mispaired_bridge_test")
 
@@ -665,4 +668,37 @@ mispaired_bridge_test(
 mispaired_bridge_test(
     name = "mispaired_hot_patch_test",
     target_under_test = ":mispaired_hot.hot_patch",
+)
+
+# A Rust library's objects are gone by the time it is bundled: rustc deletes
+# the object it links. On macOS the asset carries the dSYM rustc wrote, behind
+# a wrapping rule as well as directly.
+frustrate_code_asset(
+    name = "fixture_asset",
+    bridge = ":bridge",
+    library = ":fixture_shared",
+    tags = ["manual"],
+)
+
+frustrate_idle_barrier_library(
+    name = "fixture_idle",
+    library = ":fixture_shared",
+    tags = ["manual"],
+)
+
+frustrate_code_asset(
+    name = "fixture_idle_asset",
+    bridge = ":bridge",
+    library = ":fixture_idle",
+    tags = ["manual"],
+)
+
+code_asset_debug_info_test(
+    name = "code_asset_debug_info_test",
+    target_under_test = ":fixture_asset",
+)
+
+code_asset_debug_info_test(
+    name = "wrapped_code_asset_debug_info_test",
+    target_under_test = ":fixture_idle_asset",
 )

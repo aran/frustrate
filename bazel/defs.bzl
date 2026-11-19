@@ -19,6 +19,7 @@ so a bridge crate declared as a bare cdylib had unit tests and nothing else.
 load("@rules_dart//dart:providers.bzl", "DartCodeAssetInfo")
 load("@rules_dart//dart:utils.bzl", "non_dart_transition")
 load("@rules_rust//rust:defs.bzl", "rust_common", "rust_library", "rust_shared_library")
+load(":dsym.bzl", "library_dsym")
 load(":no_block_check.bzl", _frustrate_no_block_check = "frustrate_no_block_check")
 
 FrustrateBridgeInfo = provider(
@@ -184,6 +185,15 @@ _frustrate_bridge = rule(
     },
 )
 
+# rustc compiles the crate to an object file inside its Rustc action, links the
+# library from it and deletes it, so no later dsymutil run can read the crate's
+# line tables. On macOS rustc writes the library's dSYM in that action, and the
+# asset carries it.
+_RUSTC_LINK_INPUTS_GONE = (
+    "a Rust shared library is linked from an object file rustc makes and deletes " +
+    "inside the action that writes it"
+)
+
 def _frustrate_code_asset_impl(ctx):
     libraries = [
         f
@@ -204,6 +214,9 @@ def _frustrate_code_asset_impl(ctx):
             link_mode = "dynamic_loading_bundle",
             file = library,
             uri = "",
+            link_inputs_gone = True,
+            link_inputs_unset_reason = _RUSTC_LINK_INPUTS_GONE,
+            dsym = library_dsym(ctx.attr.library, library),
         ),
     ]
 
