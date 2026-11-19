@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 jobs:
   tag:
-    uses: aran/rules_dart/.github/workflows/overhead-tag.yaml@6868a95fd5b341345c506eef8a19a2564ace65bc
+    uses: aran/rules_dart/.github/workflows/overhead-tag.yaml@f56f8565a29cbabb9f91cda2e5abb5eba347bb26
     permissions:
       contents: write # allow create tag
   release:

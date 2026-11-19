@@ -10,7 +10,7 @@ module(
 )
 
 bazel_dep(name = "rules_rust", version = "0.75.0")
-bazel_dep(name = "rules_dart", version = "0.9.1")
+bazel_dep(name = "rules_dart", version = "0.10.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 
 # The license and package declaration every target of the module carries
@@ -35,7 +35,7 @@ bazel_dep(name = "rules_cc", version = "0.2.28")
 bazel_dep(name = "overhead", version = "0.0.0", dev_dependency = True)
 git_override(
     module_name = "overhead",
-    commit = "6868a95fd5b341345c506eef8a19a2564ace65bc",
+    commit = "f56f8565a29cbabb9f91cda2e5abb5eba347bb26",
     remote = "https://github.com/aran/rules_dart.git",
     strip_prefix = "overhead",
 )
